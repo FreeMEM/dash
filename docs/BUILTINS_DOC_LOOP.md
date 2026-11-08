@@ -46,7 +46,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`), con `tests/test_doc_sysprog.dash`.
 - [x] T9g. Simular teclado y ratón, ventanas de otros programas, gestor de ventanas, con `tests/test_doc_otros.dash`.
 - [x] T9h. Depurador (`DEBUGGER_FUNCTIONS`), con `dashc/tests/depurar/basico.dash` de ejemplo (`dashc/tests/depurar.py`).
-- [ ] T9i. ReAction (`REACTION_FUNCTIONS`, 79), en dos tandas.
+- [x] T9i. ReAction (`REACTION_FUNCTIONS`, 79), con `tests/test_doc_reaction.dash` (en la máquina de 3.2).
 - [x] T9j. RTG, con `tests/test_doc_rtg.dash`.
 - [ ] T9k. DashOS.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
@@ -124,3 +124,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     la paleta (FindColor). `tests/test_doc_rtg.dash` lo comprueba (con el código de antes, rojo y naranja daban 7).
 - 2026-11-08: T9d. Tareas y escritorio (89). Sin fallos en lo probado. `desktop_canvas`, WiFi, USB y las curvas
   del ratón sin ejemplo propio (necesitan el Workbench cargado o hardware); los cubren sus tests.
+- 2026-11-08: T9i. ReAction (79). Los `ra_add_*` devuelven 1 o 0 (no el número del gadget) y `ra_add_label` no
+  tiene número: documentado así. Probado en la máquina de 3.2 por los dos caminos.

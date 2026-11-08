@@ -2638,87 +2638,891 @@ See also: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file)
 
 ## ReAction
 
+Windows with AmigaOS 3.2's ReAction classes (`window.class`, `layout.gadget` and the gadgets): they lay themselves
+out, like MUI's, and come with the system. AmigaOS 3.1 lacks them: for a program that runs everywhere, MUI or the
+numbered gadgets.
+
+**The flow:**
+
+1. `ra_window_create(title, width, height)`: a window, up to 4; it becomes the current one (`ra_window_use` picks
+   another).
+2. The gadgets, in order, inside groups (`ra_layout_hgroup_begin`, `ra_layout_vgroup_begin` and
+   `ra_layout_group_end`). Each `ra_add_*` takes first a gadget number chosen by the program (0 to 63).
+3. The menus, if needed (`ra_menu_*`), before opening.
+4. `ra_window_open()` and the loop: `ra_wait_event()` returns the number of the gadget used, `RA_EVENT_CLOSE()` (-1)
+   if the window was closed or `RA_EVENT_MENU()` if a menu was chosen (`ra_menu_id` says which).
+5. `ra_window_close()`.
+
+Values are read and changed by the gadget's number: `ra_get_value`, `ra_set_value`, `ra_get_string`...
+
+**Example** (`tests/test_doc_reaction.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# ReAction (AmigaOS 3.2): una ventana que se coloca sola, con un formulario y botones, y su bucle.
+
+const NOMBRE = 0
+const SONIDO = 1
+const ACEPTAR = 2
+const CANCELAR = 3
+
+Main
+    v = ra_window_create("Ajustes", 260, 120)
+    if v == 0
+        Print "hace falta AmigaOS 3.2"
+        return
+    end
+    Print "ventana #{v}"
+    ra_add_string(NOMBRE, "Amiga", 40)
+    ra_add_checkbox(SONIDO, "Sonido", true)
+    ra_layout_hgroup_begin()
+        ra_add_button(ACEPTAR, "_Aceptar")
+        ra_add_space()
+        ra_add_button(CANCELAR, "_Cancelar")
+    ra_layout_group_end()
+    ra_window_open()
+
+    ev = ra_handle_events()                        # para la prueba: sin esperar a nadie
+    while ev != RA_EVENT_NONE() and ev != RA_EVENT_CLOSE() and ev != ACEPTAR and ev != CANCELAR
+        ev = ra_handle_events()
+    end
+    Print "nombre: " + ra_get_string(NOMBRE) + ", sonido: #{ra_get_value(SONIDO)}"
+    ra_window_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `ra_window_create(title, width, height)` | Int | Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure |  |
-| `ra_window_use(window)` | — | Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows) |  |
-| `ra_event_window()` | Int | Window of the last event (its number from ra_window_create) |  |
-| `ra_window_open()` | Int | Open the ReAction window |  |
-| `ra_window_close()` | — | Close the current ReAction window and free its gadgets (another open one becomes current) |  |
-| `ra_window_sigmask()` | Int | Get window signal mask for Wait() |  |
-| `ra_handle_events()` | Int | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
-| `ra_wait_event()` | Int | Wait for and handle window events, returns gadget ID or -1 for close |  |
-| `ra_add_button(id, label)` | Int | Add button gadget to layout |  |
-| `ra_add_string(id, initial, maxchars)` | Int | Add string input gadget |  |
-| `ra_add_checkbox(id, label, checked)` | Int | Add checkbox gadget |  |
-| `ra_add_slider(id, min, max, initial)` | Int | Add horizontal slider gadget |  |
-| `ra_add_integer(id, initial, min, max)` | Int | Add integer input gadget |  |
-| `ra_add_label(text)` | Int | Add text label |  |
-| `ra_get_value(id)` | Int | Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller) |  |
-| `ra_get_string(id)` | String | Get string gadget text |  |
-| `ra_set_value(id, value)` | — | Set gadget value (same gadgets as ra_get_value) |  |
-| `ra_refresh_layout()` | — | Refresh window layout after adding gadgets |  |
-| `RA_EVENT_CLOSE()` | Int | Close window event code (-1) |  |
-| `RA_EVENT_NONE()` | Int | No event code (-3) |  |
-| `ra_get_rastport()` | Int (address) | Get RastPort for custom drawing (also sets _dash_rp) |  |
-| `ra_get_inner_left()` | Int | Get inner left border of window |  |
-| `ra_get_inner_top()` | Int | Get inner top border of window |  |
-| `ra_get_inner_width()` | Int | Get inner width of window |  |
-| `ra_get_inner_height()` | Int | Get inner height of window |  |
-| `ra_add_palette(id, depth, initial_color)` | Int | Add color palette gadget |  |
-| `ra_get_palette_color(id)` | Int | Get selected color from palette |  |
-| `ra_set_palette_color(id, color)` | — | Set selected color in palette |  |
-| `ra_add_chooser(id)` | Int | Add dropdown/chooser gadget |  |
-| `ra_chooser_add_item(id, label)` | Int | Add item to chooser |  |
-| `ra_get_chooser_selected(id)` | Int | Get selected index from chooser |  |
-| `ra_set_chooser_selected(id, index)` | — | Set selected index in chooser |  |
-| `ra_add_scroller(id, min, max, visible, initial)` | Int | Add horizontal scroller gadget |  |
-| `ra_add_scroller_vert(id, min, max, visible, initial)` | Int | Add vertical scroller gadget |  |
-| `ra_get_scroller(id)` | Int | Get scroller position |  |
-| `ra_set_scroller(id, pos)` | — | Set scroller position |  |
-| `ra_enable_gadget(id)` | — | Enable a gadget |  |
-| `ra_disable_gadget(id)` | — | Disable a gadget |  |
-| `ra_set_string(id, text)` | — | Set string gadget text |  |
-| `ra_set_text(id, text)` | — | Set button/label text |  |
-| `ra_layout_hgroup_begin()` | Int | Begin horizontal layout group |  |
-| `ra_layout_vgroup_begin()` | Int | Begin vertical layout group |  |
-| `ra_layout_group_end()` | Int | End layout group |  |
-| `ra_add_space()` | — | Add horizontal separator |  |
-| `ra_add_vspace()` | — | Add vertical separator |  |
-| `ra_layout_hgroup_weighted(weight)` | Int | Begin horizontal layout group with weight hint |  |
-| `ra_layout_vgroup_weighted(weight)` | Int | Begin vertical layout group with weight hint |  |
-| `ra_layout_group_end_weighted()` | Int | End weighted layout group |  |
-| `ra_add_drawing_area(id, min_width, min_height)` | Int | Add Space gadget for custom drawing area |  |
-| `ra_get_drawing_bounds(id)` | Int | Query Space gadget bounds (call after window open) |  |
-| `ra_drawing_left()` | Int | Get drawing area left position |  |
-| `ra_drawing_top()` | Int | Get drawing area top position |  |
-| `ra_drawing_width()` | Int | Get drawing area width |  |
-| `ra_drawing_height()` | Int | Get drawing area height |  |
-| `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` | Int | Calculate drawing area from window dimensions (fallback) |  |
-| `ra_refresh_canvas(id)` | — | Trigger canvas Space gadget refresh (calls render hook) |  |
-| `ra_canvas_left()` | Int | Get canvas left position from render hook |  |
-| `ra_canvas_top()` | Int | Get canvas top position from render hook |  |
-| `ra_canvas_width()` | Int | Get canvas width from render hook |  |
-| `ra_canvas_height()` | Int | Get canvas height from render hook |  |
-| `ra_init_canvas_render()` | — | Register render_canvas() as the canvas render callback |  |
-| `ra_canvas_enable()` | — | Enable canvas rendering (call after all init is done) |  |
-| `ra_gadget_exists(id)` | Int | Check if gadget exists |  |
-| `ra_window_width()` | Int | Get window width |  |
-| `ra_window_height()` | Int | Get window height |  |
-| `ra_window_is_open()` | Int | Check if window is open |  |
-| `ra_add_listbrowser(id)` | Int | Add a list of text lines (value: selected line, -1 none) |  |
-| `ra_listbrowser_add(id, text)` | Int | Add a line at the end of a listbrowser |  |
-| `ra_listbrowser_clear(id)` | — | Remove all lines of a listbrowser |  |
-| `ra_listbrowser_count(id)` | Int | Number of lines of a listbrowser |  |
-| `ra_add_radio(id, options)` | Int | Add radio buttons, options separated by \| (value: option) |  |
-| `ra_add_clicktab(id, titles)` | Int | Add tabs, titles separated by \| (value: tab, from 0) |  |
-| `ra_add_fuelgauge(id, max)` | Int | Add a progress bar from 0 to max (value: level) |  |
-| `ra_menu_title(label)` | — | Add a menu to the ReAction window (before ra_window_open) |  |
-| `ra_menu_item(label, key, id)` | — | Add a menu item: key = letter for Amiga+key ("" none); events: RA_EVENT_MENU() and ra_menu_id() |  |
-| `ra_menu_separator()` | — | Add a separator line to the menu |  |
-| `ra_menu_id()` | Int | Id of the menu item of the last RA_EVENT_MENU() |  |
-| `RA_EVENT_MENU()` | Int | Event: a menu item was chosen (ra_menu_id) |  |
-| `ra_add_getfile(id, title)` | Int | Add a button that opens a file requester; ra_get_string(id) gives the file chosen |  |
+| [`ra_window_create(title, width, height)`](#ra_window_create) | Int | Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure |  |
+| [`ra_window_use(window)`](#ra_window_use) | — | Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows) |  |
+| [`ra_event_window()`](#ra_event_window) | Int | Window of the last event (its number from ra_window_create) |  |
+| [`ra_window_open()`](#ra_window_open) | Int | Open the ReAction window |  |
+| [`ra_window_close()`](#ra_window_close) | — | Close the current ReAction window and free its gadgets (another open one becomes current) |  |
+| [`ra_window_sigmask()`](#ra_window_sigmask) | Int | Get window signal mask for Wait() |  |
+| [`ra_handle_events()`](#ra_handle_events) | Int | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
+| [`ra_wait_event()`](#ra_wait_event) | Int | Wait for and handle window events, returns gadget ID or -1 for close |  |
+| [`ra_add_button(id, label)`](#ra_add_button) | Int | Add button gadget to layout |  |
+| [`ra_add_string(id, initial, maxchars)`](#ra_add_string) | Int | Add string input gadget |  |
+| [`ra_add_checkbox(id, label, checked)`](#ra_add_checkbox) | Int | Add checkbox gadget |  |
+| [`ra_add_slider(id, min, max, initial)`](#ra_add_slider) | Int | Add horizontal slider gadget |  |
+| [`ra_add_integer(id, initial, min, max)`](#ra_add_integer) | Int | Add integer input gadget |  |
+| [`ra_add_label(text)`](#ra_add_label) | Int | Add text label |  |
+| [`ra_get_value(id)`](#ra_get_value) | Int | Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller) |  |
+| [`ra_get_string(id)`](#ra_get_string) | String | Get string gadget text |  |
+| [`ra_set_value(id, value)`](#ra_set_value) | — | Set gadget value (same gadgets as ra_get_value) |  |
+| [`ra_refresh_layout()`](#ra_refresh_layout) | — | Refresh window layout after adding gadgets |  |
+| [`RA_EVENT_CLOSE()`](#RA_EVENT_CLOSE) | Int | Close window event code (-1) |  |
+| [`RA_EVENT_NONE()`](#RA_EVENT_NONE) | Int | No event code (-3) |  |
+| [`ra_get_rastport()`](#ra_get_rastport) | Int (address) | Get RastPort for custom drawing (also sets _dash_rp) |  |
+| [`ra_get_inner_left()`](#ra_get_inner_left) | Int | Get inner left border of window |  |
+| [`ra_get_inner_top()`](#ra_get_inner_top) | Int | Get inner top border of window |  |
+| [`ra_get_inner_width()`](#ra_get_inner_width) | Int | Get inner width of window |  |
+| [`ra_get_inner_height()`](#ra_get_inner_height) | Int | Get inner height of window |  |
+| [`ra_add_palette(id, depth, initial_color)`](#ra_add_palette) | Int | Add color palette gadget |  |
+| [`ra_get_palette_color(id)`](#ra_get_palette_color) | Int | Get selected color from palette |  |
+| [`ra_set_palette_color(id, color)`](#ra_set_palette_color) | — | Set selected color in palette |  |
+| [`ra_add_chooser(id)`](#ra_add_chooser) | Int | Add dropdown/chooser gadget |  |
+| [`ra_chooser_add_item(id, label)`](#ra_chooser_add_item) | Int | Add item to chooser |  |
+| [`ra_get_chooser_selected(id)`](#ra_get_chooser_selected) | Int | Get selected index from chooser |  |
+| [`ra_set_chooser_selected(id, index)`](#ra_set_chooser_selected) | — | Set selected index in chooser |  |
+| [`ra_add_scroller(id, min, max, visible, initial)`](#ra_add_scroller) | Int | Add horizontal scroller gadget |  |
+| [`ra_add_scroller_vert(id, min, max, visible, initial)`](#ra_add_scroller_vert) | Int | Add vertical scroller gadget |  |
+| [`ra_get_scroller(id)`](#ra_get_scroller) | Int | Get scroller position |  |
+| [`ra_set_scroller(id, pos)`](#ra_set_scroller) | — | Set scroller position |  |
+| [`ra_enable_gadget(id)`](#ra_enable_gadget) | — | Enable a gadget |  |
+| [`ra_disable_gadget(id)`](#ra_disable_gadget) | — | Disable a gadget |  |
+| [`ra_set_string(id, text)`](#ra_set_string) | — | Set string gadget text |  |
+| [`ra_set_text(id, text)`](#ra_set_text) | — | Set button/label text |  |
+| [`ra_layout_hgroup_begin()`](#ra_layout_hgroup_begin) | Int | Begin horizontal layout group |  |
+| [`ra_layout_vgroup_begin()`](#ra_layout_vgroup_begin) | Int | Begin vertical layout group |  |
+| [`ra_layout_group_end()`](#ra_layout_group_end) | Int | End layout group |  |
+| [`ra_add_space()`](#ra_add_space) | — | Add horizontal separator |  |
+| [`ra_add_vspace()`](#ra_add_vspace) | — | Add vertical separator |  |
+| [`ra_layout_hgroup_weighted(weight)`](#ra_layout_hgroup_weighted) | Int | Begin horizontal layout group with weight hint |  |
+| [`ra_layout_vgroup_weighted(weight)`](#ra_layout_vgroup_weighted) | Int | Begin vertical layout group with weight hint |  |
+| [`ra_layout_group_end_weighted()`](#ra_layout_group_end_weighted) | Int | End weighted layout group |  |
+| [`ra_add_drawing_area(id, min_width, min_height)`](#ra_add_drawing_area) | Int | Add Space gadget for custom drawing area |  |
+| [`ra_get_drawing_bounds(id)`](#ra_get_drawing_bounds) | Int | Query Space gadget bounds (call after window open) |  |
+| [`ra_drawing_left()`](#ra_drawing_left) | Int | Get drawing area left position |  |
+| [`ra_drawing_top()`](#ra_drawing_top) | Int | Get drawing area top position |  |
+| [`ra_drawing_width()`](#ra_drawing_width) | Int | Get drawing area width |  |
+| [`ra_drawing_height()`](#ra_drawing_height) | Int | Get drawing area height |  |
+| [`ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)`](#ra_calc_drawing_area) | Int | Calculate drawing area from window dimensions (fallback) |  |
+| [`ra_refresh_canvas(id)`](#ra_refresh_canvas) | — | Trigger canvas Space gadget refresh (calls render hook) |  |
+| [`ra_canvas_left()`](#ra_canvas_left) | Int | Get canvas left position from render hook |  |
+| [`ra_canvas_top()`](#ra_canvas_top) | Int | Get canvas top position from render hook |  |
+| [`ra_canvas_width()`](#ra_canvas_width) | Int | Get canvas width from render hook |  |
+| [`ra_canvas_height()`](#ra_canvas_height) | Int | Get canvas height from render hook |  |
+| [`ra_init_canvas_render()`](#ra_init_canvas_render) | — | Register render_canvas() as the canvas render callback |  |
+| [`ra_canvas_enable()`](#ra_canvas_enable) | — | Enable canvas rendering (call after all init is done) |  |
+| [`ra_gadget_exists(id)`](#ra_gadget_exists) | Int | Check if gadget exists |  |
+| [`ra_window_width()`](#ra_window_width) | Int | Get window width |  |
+| [`ra_window_height()`](#ra_window_height) | Int | Get window height |  |
+| [`ra_window_is_open()`](#ra_window_is_open) | Int | Check if window is open |  |
+| [`ra_add_listbrowser(id)`](#ra_add_listbrowser) | Int | Add a list of text lines (value: selected line, -1 none) |  |
+| [`ra_listbrowser_add(id, text)`](#ra_listbrowser_add) | Int | Add a line at the end of a listbrowser |  |
+| [`ra_listbrowser_clear(id)`](#ra_listbrowser_clear) | — | Remove all lines of a listbrowser |  |
+| [`ra_listbrowser_count(id)`](#ra_listbrowser_count) | Int | Number of lines of a listbrowser |  |
+| [`ra_add_radio(id, options)`](#ra_add_radio) | Int | Add radio buttons, options separated by \| (value: option) |  |
+| [`ra_add_clicktab(id, titles)`](#ra_add_clicktab) | Int | Add tabs, titles separated by \| (value: tab, from 0) |  |
+| [`ra_add_fuelgauge(id, max)`](#ra_add_fuelgauge) | Int | Add a progress bar from 0 to max (value: level) |  |
+| [`ra_menu_title(label)`](#ra_menu_title) | — | Add a menu to the ReAction window (before ra_window_open) |  |
+| [`ra_menu_item(label, key, id)`](#ra_menu_item) | — | Add a menu item: key = letter for Amiga+key ("" none); events: RA_EVENT_MENU() and ra_menu_id() |  |
+| [`ra_menu_separator()`](#ra_menu_separator) | — | Add a separator line to the menu |  |
+| [`ra_menu_id()`](#ra_menu_id) | Int | Id of the menu item of the last RA_EVENT_MENU() |  |
+| [`RA_EVENT_MENU()`](#RA_EVENT_MENU) | Int | Event: a menu item was chosen (ra_menu_id) |  |
+| [`ra_add_getfile(id, title)`](#ra_add_getfile) | Int | Add a button that opens a file requester; ra_get_string(id) gives the file chosen |  |
+
+<a id="ra_window_create"></a>
+
+### `ra_window_create(title, width, height)` → `Int`
+
+- `title`: the title.
+- `width`, `height`: the initial size.
+
+Creates a ReAction window with its (vertical) layout and makes it the current one. Returns its number (1 to 4), or 0
+if it could not (`window.class` is missing: not AmigaOS 3.2).
+
+See also: [`ra_window_open`](#ra_window_open), [`ra_window_use`](#ra_window_use).
+
+<a id="ra_window_use"></a>
+
+### `ra_window_use(window)`
+
+- `window`: the number from `ra_window_create`.
+
+The following `ra_*` calls work on that window.
+
+See also: [`ra_event_window`](#ra_event_window).
+
+<a id="ra_event_window"></a>
+
+### `ra_event_window()` → `Int`
+
+Returns which window the last event came from: its `ra_window_create` number.
+
+See also: [`ra_window_use`](#ra_window_use).
+
+<a id="ra_window_open"></a>
+
+### `ra_window_open()` → `Int`
+
+Opens the current window, with the gadgets and menus added. Returns 0 if it could not.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="ra_window_close"></a>
+
+### `ra_window_close()`
+
+Closes the current window and frees its gadgets; if another one is open, it becomes current.
+
+See also: [`ra_window_open`](#ra_window_open).
+
+<a id="ra_window_sigmask"></a>
+
+### `ra_window_sigmask()` → `Int`
+
+Returns the window's signal, to wait for other things at the same time with code of your own.
+
+See also: [`ra_handle_events`](#ra_handle_events).
+
+<a id="ra_handle_events"></a>
+
+### `ra_handle_events()` → `Int`
+
+Handles pending events without waiting. Returns the number of the gadget used, `RA_EVENT_CLOSE()` if it was closed or `RA_EVENT_NONE()` if there is nothing.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="ra_wait_event"></a>
+
+### `ra_wait_event()` → `Int`
+
+Waits, using no CPU, and returns the number of the gadget used, `RA_EVENT_CLOSE()` if the window was closed or `RA_EVENT_MENU()` if a menu was chosen.
+
+See also: [`ra_handle_events`](#ra_handle_events), [`ra_menu_id`](#ra_menu_id).
+
+<a id="ra_add_button"></a>
+
+### `ra_add_button(id, label)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the text.
+
+A button.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_wait_event`](#ra_wait_event), [`ra_set_text`](#ra_set_text).
+
+<a id="ra_add_string"></a>
+
+### `ra_add_string(id, initial, maxchars)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `initial`: the starting text.
+- `maxchars`: how many letters fit.
+
+A text field.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_string`](#ra_get_string), [`ra_set_string`](#ra_set_string).
+
+<a id="ra_add_checkbox"></a>
+
+### `ra_add_checkbox(id, label, checked)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the text.
+- `checked`: whether it starts ticked.
+
+A checkbox; `ra_get_value` gives 1 or 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_slider"></a>
+
+### `ra_add_slider(id, min, max, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`: the ends.
+- `initial`: the starting value.
+
+A horizontal slider.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_integer"></a>
+
+### `ra_add_integer(id, initial, min, max)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `initial`: the starting number.
+- `min`, `max`: the limits.
+
+A number field with arrows.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_label"></a>
+
+### `ra_add_label(text)` → `Int`
+
+- `text`: the text.
+
+A fixed label: it has no number and cannot be changed. Returns 1, or 0 if it could not.
+
+<a id="ra_get_value"></a>
+
+### `ra_get_value(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns its value: checkbox 1 or 0, slider, number, palette, chooser, bar, list, radio, tab or progress.
+
+See also: [`ra_set_value`](#ra_set_value).
+
+<a id="ra_get_string"></a>
+
+### `ra_get_string(id)` → `String`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns a text field's text, or a `ra_add_getfile` file.
+
+See also: [`ra_set_string`](#ra_set_string).
+
+<a id="ra_set_value"></a>
+
+### `ra_set_value(id, value)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `value`: the new value, as in `ra_get_value`.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_refresh_layout"></a>
+
+### `ra_refresh_layout()`
+
+Lays the window out again after adding or changing gadgets while it is open.
+
+<a id="RA_EVENT_CLOSE"></a>
+
+### `RA_EVENT_CLOSE()` → `Int`
+
+Returns the close-window event code: -1.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="RA_EVENT_NONE"></a>
+
+### `RA_EVENT_NONE()` → `Int`
+
+Returns the no-event code: -3 (a gadget may have number 0).
+
+See also: [`ra_handle_events`](#ra_handle_events).
+
+<a id="ra_get_rastport"></a>
+
+### `ra_get_rastport()` → `Int (address)`
+
+Returns the current window's RastPort and makes it the `gfx_*` target.
+
+See also: [`ra_get_inner_left`](#ra_get_inner_left).
+
+<a id="ra_get_inner_left"></a>
+
+### `ra_get_inner_left()` → `Int`
+
+Returns where the window's inside starts on the left.
+
+See also: [`ra_get_inner_top`](#ra_get_inner_top).
+
+<a id="ra_get_inner_top"></a>
+
+### `ra_get_inner_top()` → `Int`
+
+Returns where the window's inside starts at the top.
+
+See also: [`ra_get_inner_left`](#ra_get_inner_left).
+
+<a id="ra_get_inner_width"></a>
+
+### `ra_get_inner_width()` → `Int`
+
+Returns the width of the window's inside.
+
+See also: [`ra_get_inner_height`](#ra_get_inner_height).
+
+<a id="ra_get_inner_height"></a>
+
+### `ra_get_inner_height()` → `Int`
+
+Returns the height of the window's inside.
+
+See also: [`ra_get_inner_width`](#ra_get_inner_width).
+
+<a id="ra_add_palette"></a>
+
+### `ra_add_palette(id, depth, initial_color)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `depth`: how many colours: 2 to the power of `depth`.
+- `initial_color`: the one chosen at the start.
+
+A palette gadget.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_palette_color`](#ra_get_palette_color).
+
+<a id="ra_get_palette_color"></a>
+
+### `ra_get_palette_color(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns the chosen colour.
+
+See also: [`ra_set_palette_color`](#ra_set_palette_color).
+
+<a id="ra_set_palette_color"></a>
+
+### `ra_set_palette_color(id, color)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `color`: the colour.
+
+See also: [`ra_get_palette_color`](#ra_get_palette_color).
+
+<a id="ra_add_chooser"></a>
+
+### `ra_add_chooser(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+An empty drop-down list; the options, with `ra_chooser_add_item`.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_chooser_add_item`](#ra_chooser_add_item).
+
+<a id="ra_chooser_add_item"></a>
+
+### `ra_chooser_add_item(id, label)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the option.
+
+Adds it to the end of the drop-down list.
+
+See also: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
+
+<a id="ra_get_chooser_selected"></a>
+
+### `ra_get_chooser_selected(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns the chosen option, from 0.
+
+See also: [`ra_set_chooser_selected`](#ra_set_chooser_selected).
+
+<a id="ra_set_chooser_selected"></a>
+
+### `ra_set_chooser_selected(id, index)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `index`: the option, from 0.
+
+See also: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
+
+<a id="ra_add_scroller"></a>
+
+### `ra_add_scroller(id, min, max, visible, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`: the document.
+- `visible`: how much shows.
+- `initial`: the position.
+
+A horizontal scroll bar.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_scroller`](#ra_get_scroller), [`ra_add_scroller_vert`](#ra_add_scroller_vert).
+
+<a id="ra_add_scroller_vert"></a>
+
+### `ra_add_scroller_vert(id, min, max, visible, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`, `visible`, `initial`: as in `ra_add_scroller`.
+
+A vertical scroll bar.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_add_scroller`](#ra_add_scroller).
+
+<a id="ra_get_scroller"></a>
+
+### `ra_get_scroller(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns its position.
+
+See also: [`ra_set_scroller`](#ra_set_scroller).
+
+<a id="ra_set_scroller"></a>
+
+### `ra_set_scroller(id, pos)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `pos`: the new position.
+
+See also: [`ra_get_scroller`](#ra_get_scroller).
+
+<a id="ra_enable_gadget"></a>
+
+### `ra_enable_gadget(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Lets it be used again.
+
+See also: [`ra_disable_gadget`](#ra_disable_gadget).
+
+<a id="ra_disable_gadget"></a>
+
+### `ra_disable_gadget(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Disables it: grey, not responding.
+
+See also: [`ra_enable_gadget`](#ra_enable_gadget).
+
+<a id="ra_set_string"></a>
+
+### `ra_set_string(id, text)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the field's new text.
+
+See also: [`ra_get_string`](#ra_get_string).
+
+<a id="ra_set_text"></a>
+
+### `ra_set_text(id, text)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the new text of a button.
+
+See also: [`ra_add_button`](#ra_add_button).
+
+<a id="ra_layout_hgroup_begin"></a>
+
+### `ra_layout_hgroup_begin()` → `Int`
+
+Starts a group placing its gadgets side by side, inside the open group. It ends with `ra_layout_group_end`.
+
+See also: [`ra_layout_vgroup_begin`](#ra_layout_vgroup_begin), [`ra_layout_group_end`](#ra_layout_group_end).
+
+<a id="ra_layout_vgroup_begin"></a>
+
+### `ra_layout_vgroup_begin()` → `Int`
+
+Starts a group placing its gadgets one under the other. It ends with `ra_layout_group_end`.
+
+See also: [`ra_layout_group_end`](#ra_layout_group_end).
+
+<a id="ra_layout_group_end"></a>
+
+### `ra_layout_group_end()` → `Int`
+
+Ends the last open group.
+
+See also: [`ra_layout_hgroup_begin`](#ra_layout_hgroup_begin).
+
+<a id="ra_add_space"></a>
+
+### `ra_add_space()`
+
+A space that stretches between gadgets of a horizontal group.
+
+See also: [`ra_add_vspace`](#ra_add_vspace).
+
+<a id="ra_add_vspace"></a>
+
+### `ra_add_vspace()`
+
+A space that stretches between gadgets of a vertical group.
+
+See also: [`ra_add_space`](#ra_add_space).
+
+<a id="ra_layout_hgroup_weighted"></a>
+
+### `ra_layout_hgroup_weighted(weight)` → `Int`
+
+- `weight`: how much space it takes compared with its neighbours.
+
+Like `ra_layout_hgroup_begin`, weighted; it ends with `ra_layout_group_end_weighted`.
+
+See also: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
+
+<a id="ra_layout_vgroup_weighted"></a>
+
+### `ra_layout_vgroup_weighted(weight)` → `Int`
+
+- `weight`: its weight.
+
+Like `ra_layout_vgroup_begin`, weighted.
+
+See also: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
+
+<a id="ra_layout_group_end_weighted"></a>
+
+### `ra_layout_group_end_weighted()` → `Int`
+
+Ends a weighted group.
+
+See also: [`ra_layout_hgroup_weighted`](#ra_layout_hgroup_weighted).
+
+<a id="ra_add_drawing_area"></a>
+
+### `ra_add_drawing_area(id, min_width, min_height)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min_width`, `min_height`: the minimum size.
+
+An area (Space gadget) to draw by hand; it grows with the window.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render), [`ra_get_drawing_bounds`](#ra_get_drawing_bounds).
+
+<a id="ra_get_drawing_bounds"></a>
+
+### `ra_get_drawing_bounds(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Looks up where the drawing area ended up, after opening the window; `ra_drawing_*` give it.
+
+See also: [`ra_drawing_left`](#ra_drawing_left).
+
+<a id="ra_drawing_left"></a>
+
+### `ra_drawing_left()` → `Int`
+
+After `ra_get_drawing_bounds`, returns the drawing area's left.
+
+See also: [`ra_drawing_top`](#ra_drawing_top).
+
+<a id="ra_drawing_top"></a>
+
+### `ra_drawing_top()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its top.
+
+See also: [`ra_drawing_left`](#ra_drawing_left).
+
+<a id="ra_drawing_width"></a>
+
+### `ra_drawing_width()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its width.
+
+See also: [`ra_drawing_height`](#ra_drawing_height).
+
+<a id="ra_drawing_height"></a>
+
+### `ra_drawing_height()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its height.
+
+See also: [`ra_drawing_width`](#ra_drawing_width).
+
+<a id="ra_calc_drawing_area"></a>
+
+### `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` → `Int`
+
+- `toolbar_h`, `timeline_h`: what is taken at the top and the bottom.
+- `left_w`, `right_w`: what is taken at the sides.
+
+Works out the drawing area by taking that away from the window's inside, when the gadget cannot be asked.
+
+See also: [`ra_get_drawing_bounds`](#ra_get_drawing_bounds).
+
+<a id="ra_refresh_canvas"></a>
+
+### `ra_refresh_canvas(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Asks for the canvas to be drawn again (it calls `render_canvas()`).
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render).
+
+<a id="ra_canvas_left"></a>
+
+### `ra_canvas_left()` → `Int`
+
+Inside the canvas drawing function, returns the canvas's left.
+
+See also: [`ra_canvas_top`](#ra_canvas_top).
+
+<a id="ra_canvas_top"></a>
+
+### `ra_canvas_top()` → `Int`
+
+Inside the canvas drawing function, returns its top.
+
+See also: [`ra_canvas_left`](#ra_canvas_left).
+
+<a id="ra_canvas_width"></a>
+
+### `ra_canvas_width()` → `Int`
+
+Inside the canvas drawing function, returns its width.
+
+See also: [`ra_canvas_height`](#ra_canvas_height).
+
+<a id="ra_canvas_height"></a>
+
+### `ra_canvas_height()` → `Int`
+
+Inside the canvas drawing function, returns its height.
+
+See also: [`ra_canvas_width`](#ra_canvas_width).
+
+<a id="ra_init_canvas_render"></a>
+
+### `ra_init_canvas_render()`
+
+Makes the drawing area paint itself with a program function named `render_canvas()`, which draws with the `gfx_*`
+functions: ReAction calls it when needed. Inside, `ra_canvas_*` say where the canvas is.
+
+See also: [`ra_canvas_enable`](#ra_canvas_enable), [`ra_refresh_canvas`](#ra_refresh_canvas).
+
+<a id="ra_canvas_enable"></a>
+
+### `ra_canvas_enable()`
+
+Turns canvas drawing on, once everything `render_canvas()` uses is ready.
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render).
+
+<a id="ra_gadget_exists"></a>
+
+### `ra_gadget_exists(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns 1 if there is a gadget with that number in the current window.
+
+<a id="ra_window_width"></a>
+
+### `ra_window_width()` → `Int`
+
+Returns the current window's width.
+
+See also: [`ra_window_height`](#ra_window_height).
+
+<a id="ra_window_height"></a>
+
+### `ra_window_height()` → `Int`
+
+Returns the current window's height.
+
+See also: [`ra_window_width`](#ra_window_width).
+
+<a id="ra_window_is_open"></a>
+
+### `ra_window_is_open()` → `Int`
+
+Returns 1 if the current window is open.
+
+See also: [`ra_window_open`](#ra_window_open).
+
+<a id="ra_add_listbrowser"></a>
+
+### `ra_add_listbrowser(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+A list of lines; its value is the chosen line, -1 none.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_listbrowser_add"></a>
+
+### `ra_listbrowser_add(id, text)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the line.
+
+Adds it at the end.
+
+See also: [`ra_listbrowser_clear`](#ra_listbrowser_clear).
+
+<a id="ra_listbrowser_clear"></a>
+
+### `ra_listbrowser_clear(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Removes every line.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_listbrowser_count"></a>
+
+### `ra_listbrowser_count(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns how many lines it has.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_add_radio"></a>
+
+### `ra_add_radio(id, options)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `options`: separated by `|`.
+
+Radio buttons; its value is the option, from 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_clicktab"></a>
+
+### `ra_add_clicktab(id, titles)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `titles`: separated by `|`.
+
+Tabs; its value is the tab, from 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_fuelgauge"></a>
+
+### `ra_add_fuelgauge(id, max)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `max`: the value of the full bar.
+
+A progress bar; `ra_set_value` fills it.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_set_value`](#ra_set_value).
+
+<a id="ra_menu_title"></a>
+
+### `ra_menu_title(label)`
+
+- `label`: the title.
+
+Starts a menu of the current window, before `ra_window_open`.
+
+See also: [`ra_menu_item`](#ra_menu_item).
+
+<a id="ra_menu_item"></a>
+
+### `ra_menu_item(label, key, id)`
+
+- `label`: the text.
+- `key`: the letter with Amiga; `""` none.
+- `id`: its number.
+
+Adds an item to the last menu.
+
+See also: [`ra_menu_id`](#ra_menu_id), [`RA_EVENT_MENU`](#RA_EVENT_MENU).
+
+<a id="ra_menu_separator"></a>
+
+### `ra_menu_separator()`
+
+Adds a line between items.
+
+See also: [`ra_menu_item`](#ra_menu_item).
+
+<a id="ra_menu_id"></a>
+
+### `ra_menu_id()` → `Int`
+
+After a `RA_EVENT_MENU()`, returns the chosen item's number.
+
+See also: [`RA_EVENT_MENU`](#RA_EVENT_MENU).
+
+<a id="RA_EVENT_MENU"></a>
+
+### `RA_EVENT_MENU()` → `Int`
+
+Returns the menu event code; `ra_menu_id` says which item.
+
+See also: [`ra_menu_id`](#ra_menu_id).
+
+<a id="ra_add_getfile"></a>
+
+### `ra_add_getfile(id, title)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `title`: the requester's title.
+
+A button that opens the file requester; `ra_get_string(id)` gives the chosen one.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_string`](#ra_get_string).
 
 ## System and memory
 
