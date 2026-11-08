@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `dash.outputFolder`: where the executables go when compiling (empty: `bin/` next to the `.dash`, as before);
+  also the debugger's build. Like Forja's new "Ejecutables en:" preference (an idea of Ferrán García).
+- **Ejecutar en emulador** runs the program in the folder of its `.dash`, mounted as `Proyecto:`: it finds its files
+  with a relative path, as in Forja. Before, the game of **Dash: Nuevo proyecto** could not load its level and
+  sprites in the emulator (`tools/emu_run.py --cd`).
+
 ## 0.5.0 (2026-11-07)
 
 The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4. It brings the game

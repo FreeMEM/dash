@@ -194,6 +194,11 @@
           "default": "",
           "description": "Carpeta del compilador Dash (la que tiene el script ./dash). Vacío: se busca subiendo desde el fichero."
         },
+        "dash.outputFolder": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Carpeta donde se dejan los ejecutables al compilar: una ruta entera, `~/...` o relativa a la carpeta del `.dash`. Vacío: `bin/` al lado de cada `.dash`."
+        },
         "dash.emulator.kickstart": {
           "type": "string",
           "default": "",

@@ -306,7 +306,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
                  model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None,
-                 dbgserver: int = 0, disk: str = None, amiberry_config: Path = None, stall: float = 0):
+                 dbgserver: int = 0, disk: str = None, amiberry_config: Path = None, stall: float = 0,
+                 cd: str = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -324,7 +325,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
     file system allows it) thrown away afterwards; the programs then come from a host directory mounted as DASHRUN:,
     whose Run-Sequence that system's Startup-Sequence runs after LoadWB. amiberry_config: that machine in Amiberry, a
     .uae with {kickstart}, {disk} and {run} in it. stall: seconds without a program ending (once the first one
-    started) after which the run stops, as if the time were up (the runner then boots again from the next one)."""
+    started) after which the run stops, as if the time were up (the runner then boots again from the next one).
+    cd: a directory of the PC mounted as Proyecto: (read and write), the current directory of the programs: they
+    find their files with a relative path, as Forja runs them in the drawer of their .dash."""
     if not shutil.which(emulator):
         raise RuntimeError(f"{emulator} not found")
     if disk and not Path(disk).is_file():
@@ -396,6 +399,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 shutil.copy(prog, exe)
             # the redirection after the command is the program's (before it, only Run's message)
             lines.append(f"Run >NIL: DH0:b{i} >DH0:bg{i}.txt{' ' + bg_args if bg_args else ''}")
+        if cd:
+            lines.append("CD Proyecto:")
         for i, prog in enumerate(programs):
             prog = Path(prog)
             exe = hd / f"p{i}"
@@ -466,6 +471,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             base = base.replace(f"hard_drive_0 = {hd}\nhard_drive_0_label = DH0\n",
                                 f"hard_drive_0 = {disk_copy}\nhard_drive_9 = {hd}\nhard_drive_9_label = DASHRUN\n"
                                 "hard_drive_9_priority = -128\n").replace("fast_memory = 8192\n", "")
+        if cd:   # (DH8: DH0-DH2 can be a disk's partitions and DH9 DASHRUN:)
+            base += f"hard_drive_8 = {Path(cd).resolve()}\nhard_drive_8_label = Proyecto\nhard_drive_8_priority = -128\n"
         if window:   # to be seen and heard
             base = base.replace("volume = 0\n", "").replace("floppy_drive_volume = 0\n", "floppy_drive_volume = 0\n")
         config.write_text(base + extra_config)
@@ -482,7 +489,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             if disk and amiberry_config:
                 uae = tmp / "run.uae"
                 uae.write_text(Path(amiberry_config).read_text().replace("{kickstart}", kickstart)
-                               .replace("{disk}", str(disk_copy)).replace("{run}", str(hd)))
+                               .replace("{disk}", str(disk_copy)).replace("{run}", str(hd)) +
+                               (f"\nfilesystem2=rw,DH8:Proyecto:{Path(cd).resolve()},-128\n" if cd else ""))
                 command = ["amiberry", "-f", str(uae), "-G"]
                 if not window and shutil.which("xvfb-run"):
                     # with SDL's offscreen driver Amiberry leaves out the graphics card (the Workbench stays on AGA):
@@ -493,6 +501,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             else:
                 command = ["amiberry", "-G", "--model", model, "-r", kickstart,
                            "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true", "-s", "fastmem_size=8"]
+                if cd:
+                    command += ["-s", f"filesystem2=rw,DH8:Proyecto:{Path(cd).resolve()},-128"]
             proc = subprocess.Popen(command,
                                     cwd=tmp, env=env, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -590,6 +600,9 @@ def main():
     parser.add_argument("--file", action="append", default=[], metavar="PATH",
                         help="copy a file to the emulated disk, where the programs run (repeatable): the sprites "
                              "and maps a program loads by their name (the VS Code extension's Ver en Amiga)")
+    parser.add_argument("--cd", metavar="DIR",
+                        help="mount DIR as Proyecto: and run the programs there, so they find their files with a "
+                             "relative path (the VS Code extension: the folder of the .dash)")
     parser.add_argument("--screenshot", nargs=2, action="append", metavar=("SECONDS", "FILE.png"),
                         help="save the front screen SECONDS after boot (tools/amiga/shot.c); repeatable "
                              "for several in the same run; use --autoclose so the program is still open then")
@@ -650,7 +663,7 @@ def main():
                                emulator=args.emulator, model=machine["model"] if machine else "A1200",
                                gdbserver=args.gdbserver or 0, relay=not args.no_relay,
                                dbgserver=args.dbgserver or 0, disk=disk,
-                               amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None,
+                               amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None, cd=args.cd,
                                on_disk=(lambda hd: [shutil.copy(f, Path(hd) / Path(f).name) for f in args.file])
                                if args.file else None)
     except RuntimeError as e:

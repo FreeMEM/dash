@@ -723,14 +723,16 @@ async function extensionTests() {
     await check('extension: compile command', () => {
         const c = ext.compileCommand(repo, file);
         assert(c.includes(`'${repo}/dash' '${file}' -o '${repo}/examples/bin/mui_hola'`), c);
+        const o = ext.compileCommand(repo, file, '/tmp/exes');
+        assert(o.startsWith("mkdir -p '/tmp/exes' && ") && o.endsWith(" -o '/tmp/exes/mui_hola'"), o);
     });
     await check('extension: run command with autoclose', () => {
         const c = ext.runCommand(repo, file, 5);
-        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --dash2 --autoclose 5 '${file}'`);
+        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --dash2 --autoclose 5 --cd '${path.dirname(file)}' '${file}'`);
     });
     await check('extension: quotes paths with spaces and quotes', () => {
         const c = ext.runCommand('/a b', "/x/it's.dash", 0);
-        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' --dash2 '/x/it'\\''s.dash'`);
+        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' --dash2 --cd '/x' '/x/it'\\''s.dash'`);
     });
     await check('extension: compile from the active editor', async () => {
         fakeVscode.window.activeTextEditor = { document: { languageId: 'dash', isDirty: false, fileName: file } };
@@ -909,12 +911,19 @@ async function taskTests() {
                            "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
         assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
                            "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
-                           "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
+                           "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --cd '/p' --window '/p/bin/x'");
         assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
                                                                  system: '/s y' }),
                            "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
-                           "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
+                           "python3 '/d/tools/emu_run.py' --follow --cd '/p' --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
+        // dash.outputFolder: absolute, relative to the .dash or ~/...
+        assert.strictEqual(taskCommand('compile', '/d', '/p/x.dash', { outputFolder: '/tmp/exes' }),
+                           "mkdir -p '/tmp/exes' && DASH_FALLBACK_DASH1=1 '/d/dash' -q '/p/x.dash' -o '/tmp/exes/x'");
+        const { outputFile } = require('../tasks.js');
+        assert.strictEqual(outputFile('/p/src/x.dash', '../build'), '/p/build/x');
+        assert.strictEqual(outputFile('/p/x.dash', '  '), '/p/bin/x');
+        assert.strictEqual(outputFile('/p/x.dash', '~/amiga', '.debug'), require('path').join(require('os').homedir(), 'amiga', 'x.debug'));
     });
     await check('tasks: the profile table and the memcheck matcher', () => {
         const { parseProfile } = require('../tasks.js');
