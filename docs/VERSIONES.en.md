@@ -32,6 +32,16 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.6.3 (2026-11-08)
+
+One `./dash --gcc` fix and Forja 0.5.1 in the package. What compiled before still does the same.
+
+- **Fix (`./dash --gcc`):** a program that only used `run_start` and `run_finish` did not link (some runtime string
+  functions were missing). `./dash` already got it right.
+- The Amiga package brings Forja 0.5.1: while debugging, the code no longer jumps or repaints as a whole on every
+  step (reported by David Martínez).
+- Tested on an emulated A1200 (3.1).
+
 ### 2.6.2 (2026-11-08)
 
 One compiler fix and two tool changes. What compiled before still does the same.

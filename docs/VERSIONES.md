@@ -33,6 +33,16 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.6.3 (2026-11-08)
+
+Un arreglo de `./dash --gcc` y Forja 0.5.1 en el paquete. Lo que ya compilaba sigue igual.
+
+- **Arreglo (`./dash --gcc`):** un programa que solo usaba `run_start` y `run_finish` no enlazaba (faltaban
+  funciones de textos del runtime). Con `./dash` ya iba bien.
+- El paquete del Amiga trae Forja 0.5.1: al depurar, el código ya no salta ni se repinta entero en cada paso (lo
+  contó David Martínez).
+- Probado en A1200 (3.1) emulado.
+
 ### 2.6.2 (2026-11-08)
 
 Un arreglo del compilador y dos cosas de las herramientas. Lo que ya compilaba sigue igual.
