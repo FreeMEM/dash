@@ -26551,6 +26551,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_editkeys = True  # its edit hook: pasting with Ctrl or Amiga + V (EDITKEYS_RUNTIME)
         if self.uses_editkeys:
             self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME
+        if self.uses_runcap:
+            self.uses_strings = True   # run_capture, in the same runtime as run_start, makes texts (_dash_str_dup)
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
         if self.uses_icons:
