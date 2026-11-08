@@ -1971,7 +1971,13 @@ static struct TextFont *_dash_fonts[_DASH_FONTS_MAX];
 static struct RastPort _dash_font_mrp;
 static BOOL _dash_font_mrp_ok = FALSE;
 static struct RastPort *_dash_font_rp(void) {
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    /* not the RastPort of a public screen of ours (screen_clone_wb): Intuition draws the titles of the windows on it
+       with its font and style (Tachyon: the title came out in the page's font) */
+    if (_dash_rp && !(_dash_screen && _dash_screen_public && _dash_rp == &_dash_screen->RastPort)) return _dash_rp;
+#else
     if (_dash_rp) return _dash_rp;
+#endif
     if (!_dash_font_mrp_ok) {
         InitRastPort(&_dash_font_mrp);
         if (GfxBase) SetFont(&_dash_font_mrp, GfxBase->DefaultFont);

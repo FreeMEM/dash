@@ -1,0 +1,23 @@
+# Test: with a public screen of the program's (screen_clone_wb) and no window, font_use and font_style leave the
+# screen's RastPort alone: Intuition draws the titles of the windows on it with that font and style (Tachyon: the
+# title of its window came out in the page's font). They work on Dash's own RastPort, as with no screen.
+# expect-out: clon: true
+# expect-out: letra de la pantalla intacta: true
+# expect-out: fin
+
+@native func letra_pantalla() -> Int
+"""
+    return _dash_screen ? (long)_dash_screen->RastPort.Font + _dash_screen->RastPort.AlgoStyle : 0;
+"""
+end
+
+Main
+    ok = screen_clone_wb("DASHLETRA")
+    Print "clon: #{ok}"
+    antes = letra_pantalla()
+    font_use(font_open("topaz.font", 9))
+    font_style(2)
+    Print "letra de la pantalla intacta: #{letra_pantalla() == antes}"
+    screen_close()
+    Print "fin"
+end
