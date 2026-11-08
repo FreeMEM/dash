@@ -16647,28 +16647,30 @@ static BOOL _dash_check_esc(void) {
     return (keycode == 0x45);
 }
 
+/* Wait for a mouse click (press and release), looking 50 times a second: it used to spin, taking all the CPU */
 static LONG _dash_wait_click(void) {
-    /* Wait for mouse click (press and release) */
-    while (!_dash_check_any_mouse()) { }  /* Wait for press */
-    while (_dash_check_any_mouse()) { }   /* Wait for release */
+    while (!_dash_check_any_mouse()) Delay(1);
+    while (_dash_check_any_mouse()) Delay(1);
     return 1;
 }
 
+/* Wait for a key press in the current window. Other messages are let go: it used to return 0 on the first one
+   that was not a key (a click, the window becoming active) */
 static LONG _dash_wait_key(void) {
-    /* Wait for any key using IDCMP if window available */
     if (_dash_win) {
         struct IntuiMessage *msg;
-        ULONG code = 0;
-        WaitPort(_dash_win->UserPort);
-        while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-            if (msg->Class == IDCMP_RAWKEY) {
-                code = msg->Code;
-                _dash_key_record(msg);
+        while (1) {
+            WaitPort(_dash_win->UserPort);
+            while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
+                ULONG code = 0x80;
+                if (msg->Class == IDCMP_RAWKEY) {
+                    code = msg->Code;
+                    _dash_key_record(msg);
+                }
+                ReplyMsg((struct Message *)msg);
+                if (!(code & 0x80)) return code;
             }
-            ReplyMsg((struct Message *)msg);
-            if (code && !(code & 0x80)) return code;
         }
-        return code;
     }
     /* No window - just delay */
     Delay(50);
@@ -17562,28 +17564,39 @@ static BOOL _dash_mouse_button(LONG btn) {
     return FALSE;
 }
 
+/* Joystick: JOY0DAT (port 0, the mouse's) and JOY1DAT (port 1) are words. Right is bit 1, left bit 9, down bit 1
+   xor bit 0, up bit 9 xor bit 8 (a byte read gives only the top half: up and down never showed, and left came
+   with up). The fire buttons are bits 6 (port 0) and 7 (port 1) of CIA-A's PRA, active low; POTGOR has the
+   second buttons. The decoding on its own, for tests/test_joystick.dash */
+static LONG _dash_joy_dir_x(UWORD d) {
+    if (d & 0x0002) return 1;
+    if (d & 0x0200) return -1;
+    return 0;
+}
+
+static LONG _dash_joy_dir_y(UWORD d) {
+    UWORD e = (UWORD)(d ^ (d >> 1));
+    if (e & 0x0001) return 1;
+    if (e & 0x0100) return -1;
+    return 0;
+}
+
+static UWORD _dash_joy_dat(LONG port) {
+    return *(volatile UWORD *)(port == 0 ? 0xDFF00A : 0xDFF00C);
+}
+
 static LONG _dash_joy_x(LONG port) {
-    volatile UBYTE *joy = (port == 0) ? (UBYTE *)0xDFF00A : (UBYTE *)0xDFF00C;
-    UBYTE val = *joy;
-    LONG x = 0;
-    if (val & 2) x = (val & 1) ? 0 : 1;
-    else if (val & 1) x = -1;
-    return x;
+    return (port == 0 || port == 1) ? _dash_joy_dir_x(_dash_joy_dat(port)) : 0;
 }
 
 static LONG _dash_joy_y(LONG port) {
-    volatile UBYTE *joy = (port == 0) ? (UBYTE *)0xDFF00A : (UBYTE *)0xDFF00C;
-    UBYTE val = *joy;
-    LONG y = 0;
-    if (val & 0x200) y = (val & 0x100) ? 0 : 1;
-    else if (val & 0x100) y = -1;
-    return y;
+    return (port == 0 || port == 1) ? _dash_joy_dir_y(_dash_joy_dat(port)) : 0;
 }
 
 static BOOL _dash_joy_button(LONG port) {
-    UWORD potgor = *((volatile UWORD *)0xDFF016);
-    if (port == 0) return !(potgor & (1 << 6));   /* Fire button port 1 */
-    if (port == 1) return !(potgor & (1 << 14));  /* Fire button port 2 */
+    UBYTE pra = *(volatile UBYTE *)0xBFE001;
+    if (port == 0) return !(pra & 0x40);
+    if (port == 1) return !(pra & 0x80);
     return FALSE;
 }
 

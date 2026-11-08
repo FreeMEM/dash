@@ -181,7 +181,7 @@ What is already drawn in that colour changes at once: nothing is drawn again. It
 program's own screen, or of the window's screen if there is none. On the Workbench that changes the colours of
 every program. With no screen or window it does nothing.
 
-See also: [`gfx_rgb8`](#gfx_rgb8), [`gfx_pen`](#gfx_pen), `screen_open_custom`.
+See also: [`gfx_rgb8`](#gfx_rgb8), [`gfx_pen`](#gfx_pen), [`screen_open_custom`](#screen_open_custom).
 
 <a id="gfx_rgb8"></a>
 
@@ -543,45 +543,488 @@ See also: [`gfx_scroll`](#gfx_scroll), `bitmap_draw_to`.
 
 ## Input (keyboard, mouse, joystick)
 
+The keyboard, the mouse and the joystick, and the program's own screens.
+
+**Two ways to read input.**
+
+- **By events**, in a program with windows: the `EventLoop` gets `On Key`, `On Click`, `On Gadget`... and the
+  program uses no CPU while it waits (manual, sections 12 and 14). `key_wait` and `wait_key` wait for a key the
+  same way, without a loop.
+- **By asking**, in a game: every turn of the main loop looks at how the keys (`key_down`), the joystick (`joy_*`)
+  and the mouse buttons (`mouse_button`) are right now. These read the hardware or the system's keyboard: they need
+  no window, but they do not look at which one is active either.
+
+**Key codes.** The keyboard functions use the key's raw code, the same on every keymap: 0x45 Esc, 0x40 space,
+0x44 Return, 0x41 backspace, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x50 to 0x59 F1 to F10. `key_text` says
+which letter a key gives with the keymap in use.
+
+**The joystick** goes in port 1, the usual one. Port 0 is the mouse's: it is only useful with a second joystick
+plugged in there.
+
+**Screens.** A screen of your own has its palette, resolution and depth, without bothering the Workbench. Open one
+(`screen_open`, `screen_open_custom`, `screen_open_mode`), open the windows on it or draw on it directly, and when
+done close the windows and then the screen. There is one at a time. To animate without flicker,
+`screen_double_buffer` and `screen_flip`.
+
+**Example** (`tests/test_doc_entrada.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Entrada: el bucle de un juego que mueve un cuadrado con el joystick o las flechas, en una pantalla propia.
+
+const ESC = 0x45
+const ARRIBA = 0x4C
+const ABAJO = 0x4D
+const DERECHA = 0x4E
+const IZQUIERDA = 0x4F
+
+# v, sin salirse de a..b
+func entre(v: Int, a: Int, b: Int) -> Int
+    if v < a
+        return a
+    elif v > b
+        return b
+    end
+    return v
+end
+
+Main
+    if not screen_open_custom(320, 200, 3, "Entrada")
+        Print "no se pudo abrir la pantalla"
+        return
+    end
+    Print "la A escribe #{key_text(0x20)}"
+    x = 150
+    y = 90
+    fin = time_ms() + 2000                 # para la prueba: acaba sola a los dos segundos
+    while time_ms() < fin and not key_down(ESC) and not joy_fire(1)
+        dx = joy_x(1)                      # -1, 0 o 1
+        dy = joy_y(1)
+        if key_down(IZQUIERDA)
+            dx = -1
+        elif key_down(DERECHA)
+            dx = 1
+        end
+        if key_down(ARRIBA)
+            dy = -1
+        elif key_down(ABAJO)
+            dy = 1
+        end
+        gfx_pen(0)
+        gfx_rect(x, y, x + 19, y + 19)     # borra el cuadrado donde estaba
+        x = entre(x + 2 * dx, 0, 300)
+        y = entre(y + 2 * dy, 12, 180)
+        gfx_pen(1)
+        gfx_rect(x, y, x + 19, y + 19)
+        time_delay(1)                      # una vuelta por fotograma, más o menos
+    end
+    Print "x = #{x}, y = #{y}"
+    screen_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `key_pressed()` | Bool | Check if key is available |  |
-| `key_get()` | Int | Get key code |  |
-| `key_wait()` | Int | Wait for and return key |  |
-| `key_raw()` | Int | Get raw key code (no translation) |  |
-| `key_down(code)` | Bool | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
-| `key_text(keycode)` | String | Convert keycode to text |  |
-| `mouse_x()` | Int | Mouse X position relative to window inner area (0 without a window) |  |
-| `mouse_y()` | Int | Mouse Y position relative to window inner area (0 without a window) |  |
-| `mouse_button(btn)` | Bool | Check mouse button (0=left, 1=right) |  |
-| `event_window()` | Int | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
-| `window_check_close()` | Bool | Check if close button was clicked (non-blocking) |  |
-| `close_window()` | — | Close the current window |  |
-| `screen_open_mode(mode, width, height, depth, title)` | Bool | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
-| `screen_clone_wb(name)` | Bool | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
-| `screen_visitors()` | Int | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
-| `screen_make_default()` | Bool | The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen |  |
-| `screen_open(depth, title)` | Bool | Open a screen cloning Workbench display mode with custom depth |  |
-| `screen_double_buffer()` | Bool | Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0 |  |
-| `screen_flip()` | Bool | Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now |  |
-| `screen_open_custom(width, height, depth, title)` | Bool | Open a custom screen with specific dimensions and depth |  |
-| `screen_close()` | — | Close the screen |  |
-| `screen_width()` | Int | Get the screen width in pixels |  |
-| `screen_height()` | Int | Get the screen height in pixels |  |
-| `check_lmb()` | Bool | Check if left mouse button is pressed (hardware) |  |
-| `check_rmb()` | Bool | Check if right mouse button is pressed (hardware) |  |
-| `check_mouse()` | Bool | Check if any mouse button is pressed (hardware) |  |
-| `check_esc()` | Bool | Check if ESC key is pressed (hardware) |  |
-| `wait_click()` | Int | Wait for mouse click (press and release) |  |
-| `wait_key()` | Int | Wait for any key and return its code |  |
-| `joy_x(port)` | Int | Joystick X direction (-1, 0, 1) |  |
-| `joy_y(port)` | Int | Joystick Y direction (-1, 0, 1) |  |
-| `joy_button(port)` | Bool | Joystick button state |  |
-| `joy_up(port)` | Bool | Joystick up |  |
-| `joy_down(port)` | Bool | Joystick down |  |
-| `joy_left(port)` | Bool | Joystick left |  |
-| `joy_right(port)` | Bool | Joystick right |  |
-| `joy_fire(port)` | Bool | Joystick fire button |  |
+| [`key_pressed()`](#key_pressed) | Bool | Check if key is available |  |
+| [`key_get()`](#key_get) | Int | Get key code |  |
+| [`key_wait()`](#key_wait) | Int | Wait for and return key |  |
+| [`key_raw()`](#key_raw) | Int | Get raw key code (no translation) |  |
+| [`key_down(code)`](#key_down) | Bool | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
+| [`key_text(keycode)`](#key_text) | String | Convert keycode to text |  |
+| [`mouse_x()`](#mouse_x) | Int | Mouse X position relative to window inner area (0 without a window) |  |
+| [`mouse_y()`](#mouse_y) | Int | Mouse Y position relative to window inner area (0 without a window) |  |
+| [`mouse_button(btn)`](#mouse_button) | Bool | Check mouse button (0=left, 1=right) |  |
+| [`event_window()`](#event_window) | Int | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
+| [`window_check_close()`](#window_check_close) | Bool | Check if close button was clicked (non-blocking) |  |
+| [`close_window()`](#close_window) | — | Close the current window |  |
+| [`screen_open_mode(mode, width, height, depth, title)`](#screen_open_mode) | Bool | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
+| [`screen_clone_wb(name)`](#screen_clone_wb) | Bool | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
+| [`screen_visitors()`](#screen_visitors) | Int | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
+| [`screen_make_default()`](#screen_make_default) | Bool | The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen |  |
+| [`screen_open(depth, title)`](#screen_open) | Bool | Open a screen cloning Workbench display mode with custom depth |  |
+| [`screen_double_buffer()`](#screen_double_buffer) | Bool | Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0 |  |
+| [`screen_flip()`](#screen_flip) | Bool | Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now |  |
+| [`screen_open_custom(width, height, depth, title)`](#screen_open_custom) | Bool | Open a custom screen with specific dimensions and depth |  |
+| [`screen_close()`](#screen_close) | — | Close the screen |  |
+| [`screen_width()`](#screen_width) | Int | Get the screen width in pixels |  |
+| [`screen_height()`](#screen_height) | Int | Get the screen height in pixels |  |
+| [`check_lmb()`](#check_lmb) | Bool | Check if left mouse button is pressed (hardware) |  |
+| [`check_rmb()`](#check_rmb) | Bool | Check if right mouse button is pressed (hardware) |  |
+| [`check_mouse()`](#check_mouse) | Bool | Check if any mouse button is pressed (hardware) |  |
+| [`check_esc()`](#check_esc) | Bool | Check if ESC key is pressed (hardware) |  |
+| [`wait_click()`](#wait_click) | Int | Wait for mouse click (press and release) |  |
+| [`wait_key()`](#wait_key) | Int | Wait for any key and return its code |  |
+| [`joy_x(port)`](#joy_x) | Int | Joystick X direction (-1, 0, 1) |  |
+| [`joy_y(port)`](#joy_y) | Int | Joystick Y direction (-1, 0, 1) |  |
+| [`joy_button(port)`](#joy_button) | Bool | Joystick button state |  |
+| [`joy_up(port)`](#joy_up) | Bool | Joystick up |  |
+| [`joy_down(port)`](#joy_down) | Bool | Joystick down |  |
+| [`joy_left(port)`](#joy_left) | Bool | Joystick left |  |
+| [`joy_right(port)`](#joy_right) | Bool | Joystick right |  |
+| [`joy_fire(port)`](#joy_fire) | Bool | Joystick fire button |  |
+
+<a id="key_pressed"></a>
+
+### `key_pressed()` → `Bool`
+
+Returns `true` if a key is waiting in the current window, without taking it: `key_get` or `key_wait` pick it up
+afterwards. Released keys count too. Without a window, `false`. Inside an `EventLoop` keys go to `On Key`.
+
+See also: [`key_get`](#key_get), [`key_wait`](#key_wait), [`key_down`](#key_down).
+
+<a id="key_get"></a>
+
+### `key_get()` → `Int`
+
+Takes the next key from the current window's queue and returns its raw code, or 0 if there is none. Releasing a
+key sends it again with 128 added (0x80): `if k < 128` keeps only the presses. The queue holds 16; when it is full
+the oldest ones are lost.
+
+See also: [`key_pressed`](#key_pressed), [`key_wait`](#key_wait), [`key_text`](#key_text).
+
+<a id="key_wait"></a>
+
+### `key_wait()` → `Int`
+
+Waits for a key press in the current window and returns its raw code. It uses no CPU while it waits. Released keys
+do not count. Without a window it returns 0 at once.
+
+See also: [`key_get`](#key_get), [`wait_key`](#wait_key), [`key_text`](#key_text).
+
+<a id="key_raw"></a>
+
+### `key_raw()` → `Int`
+
+Returns the raw code of the last key read, with `key_get`, `key_wait` or an `On Key`. It does not look at the
+keyboard: to know whether a key is held now, `key_down`.
+
+See also: [`key_get`](#key_get), [`key_down`](#key_down).
+
+<a id="key_down"></a>
+
+### `key_down(code)` → `Bool`
+
+- `code`: the key's raw code, from 0 to 127.
+
+Returns `true` if that key is held right now. It reads the system's keyboard state: it needs no window and takes
+nothing from the queue. It is what goes in a game loop, once per frame. Note: it sees keys even when the program
+is not the active one.
+
+See also: [`joy_x`](#joy_x), [`key_get`](#key_get), [`check_esc`](#check_esc).
+
+<a id="key_text"></a>
+
+### `key_text(keycode)` → `String`
+
+- `keycode`: a raw key code.
+
+Returns the text that key gives with the keymap in use, without Shift: `key_text(0x20)` is `"a"`. `""` for keys
+without a letter, like the arrows or the function keys.
+
+See also: [`key_get`](#key_get), [`key_raw`](#key_raw).
+
+<a id="mouse_x"></a>
+
+### `mouse_x()` → `Int`
+
+Returns the pointer's X counting from the corner inside the current window's borders, like the `gfx_*` functions.
+It can be negative or beyond the width when the pointer is outside. Without a window, 0.
+
+See also: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), `click_x`.
+
+<a id="mouse_y"></a>
+
+### `mouse_y()` → `Int`
+
+Returns the pointer's Y inside the current window, like `mouse_x`. Without a window, 0.
+
+See also: [`mouse_x`](#mouse_x).
+
+<a id="mouse_button"></a>
+
+### `mouse_button(btn)` → `Bool`
+
+- `btn`: 0 the left one, 1 the right one.
+
+Returns `true` if that button is held now. It reads the mouse port's hardware: it needs no window and sees clicks
+anywhere on the screen. In a program with a window, `On Click` is better.
+
+See also: [`mouse_x`](#mouse_x), [`check_lmb`](#check_lmb), [`wait_click`](#wait_click).
+
+<a id="event_window"></a>
+
+### `event_window()` → `Int`
+
+Inside an `EventLoop`, returns which window the event came from: the `window_create` number, or 0 if it was the
+loop's own window. Useful to close only that window in its `On Close`.
+
+See also: [`window_create`](#window_create), [`gadget_id`](#gadget_id).
+
+<a id="window_check_close"></a>
+
+### `window_check_close()` → `Bool`
+
+Returns `true` if the current window's close button was pressed since the last look, without waiting. For a loop
+of your own, without an `EventLoop`: `while not window_check_close()`.
+
+See also: [`close_window`](#close_window), [`key_get`](#key_get).
+
+<a id="close_window"></a>
+
+### `close_window()`
+
+Closes the current window, declared or from `window_create`. Afterwards there is no current window.
+
+See also: [`window_close`](#window_close), [`window_check_close`](#window_check_close).
+
+<a id="screen_open_mode"></a>
+
+### `screen_open_mode(mode, width, height, depth, title)` → `Bool`
+
+- `mode`: the exact mode: the one from `dialog_screen_mode` (`screen_mode_id`), or a known one: 0x21000 PAL low
+  resolution, 0x29000 PAL high.
+- `width`, `height`, `depth`: size and depth.
+- `title`: the title.
+
+Opens the screen in that mode. Returns `false` if the mode does not exist on this machine, does not allow that depth
+or a screen is already open.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_custom`](#screen_open_custom).
+
+<a id="screen_clone_wb"></a>
+
+### `screen_clone_wb(name)` → `Bool`
+
+- `name`: the screen's public name.
+
+Opens a public screen like the Workbench's (mode, size, depth, pens and font) with that name. Other programs can
+open windows on it when told to. Returns `false` if the name already exists or a screen is already open.
+`screen_close` waits for the others to close their windows, a minute at most; if they are still open, it leaves it.
+
+See also: [`screen_visitors`](#screen_visitors), [`screen_make_default`](#screen_make_default), [`screen_close`](#screen_close).
+
+<a id="screen_visitors"></a>
+
+### `screen_visitors()` → `Int`
+
+Returns how many windows and locks of other programs there are on the program's public screen
+(`screen_clone_wb`); a MUI window can count as two. 0 if there are none or there is no public screen.
+
+See also: [`screen_clone_wb`](#screen_clone_wb).
+
+<a id="screen_make_default"></a>
+
+### `screen_make_default()` → `Bool`
+
+Makes the program's public screen (`screen_clone_wb`) the default public one: windows that do not name a screen,
+like those of programs it launches or a console, open there. `screen_close` puts the old one back. Returns `false`
+if there is no public screen.
+
+See also: [`screen_clone_wb`](#screen_clone_wb).
+
+<a id="screen_open"></a>
+
+### `screen_open(depth, title)` → `Bool`
+
+- `depth`: the depth: 1 = 2 colours, 2 = 4, 3 = 8, 4 = 16, 5 = 32, 8 = 256 (AGA or a graphics card).
+- `title`: the title on the screen's bar.
+
+Opens a screen with the Workbench's mode and size and the given depth. Windows opened afterwards go on it and,
+without a window, the `gfx_*` functions draw on the screen. Returns `false` if it could not be opened. One screen at
+a time: close the old one before opening another.
+
+See also: [`screen_open_custom`](#screen_open_custom), [`screen_open_mode`](#screen_open_mode), [`screen_close`](#screen_close).
+
+<a id="screen_double_buffer"></a>
+
+### `screen_double_buffer()` → `Bool`
+
+Sets up two pictures for the program's own screen: from now on the `gfx_*` functions draw on the hidden one and
+`screen_flip` shows it. Each frame is seen whole, without flicker. Drawing goes on the screen, not in windows: it is
+for full-screen games and demos. Returns `false` without a screen of its own, with a public one (`screen_clone_wb`)
+or before AmigaOS 3.0. Calling it again does nothing.
+
+See also: [`screen_flip`](#screen_flip), [`screen_open_custom`](#screen_open_custom).
+
+<a id="screen_flip"></a>
+
+### `screen_flip()` → `Bool`
+
+Shows what was drawn on the hidden picture and moves on to drawing on the other one. It waits for the display, one
+frame at most, so it sets the pace of the loop: 50 turns a second on PAL. The new picture holds what was there two
+frames ago: what moves has to be cleared or repainted. Returns `false` if it could not swap now.
+
+See also: [`screen_double_buffer`](#screen_double_buffer).
+
+<a id="screen_open_custom"></a>
+
+### `screen_open_custom(width, height, depth, title)` → `Bool`
+
+- `width`, `height`: the size in pixels: 320 x 256 is PAL low resolution, 640 x 256 high.
+- `depth`: the depth, as in `screen_open`.
+- `title`: the title.
+
+Opens a screen of that size; the system picks the mode that fits best (no HAM or half-brite). Returns `false` if it
+could not be opened.
+
+See also: [`screen_open`](#screen_open), [`screen_close`](#screen_close), [`gfx_rgb`](#gfx_rgb).
+
+<a id="screen_close"></a>
+
+### `screen_close()`
+
+Closes the program's own screen. Close the windows on it first. Without a screen of its own it does nothing.
+
+See also: [`screen_open`](#screen_open), [`window_close`](#window_close).
+
+<a id="screen_width"></a>
+
+### `screen_width()` → `Int`
+
+Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, 640.
+
+See also: [`screen_height`](#screen_height).
+
+<a id="screen_height"></a>
+
+### `screen_height()` → `Int`
+
+Returns the height in pixels of the program's screen or of the current window's. With neither, 256.
+
+See also: [`screen_width`](#screen_width).
+
+<a id="check_lmb"></a>
+
+### `check_lmb()` → `Bool`
+
+Returns `true` if the left mouse button is held now. It is `mouse_button(0)`.
+
+See also: [`mouse_button`](#mouse_button), [`check_rmb`](#check_rmb).
+
+<a id="check_rmb"></a>
+
+### `check_rmb()` → `Bool`
+
+Returns `true` if the right mouse button is held now. It is `mouse_button(1)`.
+
+See also: [`mouse_button`](#mouse_button), [`check_lmb`](#check_lmb).
+
+<a id="check_mouse"></a>
+
+### `check_mouse()` → `Bool`
+
+Returns `true` if either mouse button is held.
+
+See also: [`mouse_button`](#mouse_button).
+
+<a id="check_esc"></a>
+
+### `check_esc()` → `Bool`
+
+Returns `true` if the last thing the keyboard sent was Esc pressed. If another key is pressed meanwhile it stops
+seeing it: `key_down(0x45)` is more reliable.
+
+See also: [`key_down`](#key_down).
+
+<a id="wait_click"></a>
+
+### `wait_click()` → `Int`
+
+Waits for a mouse button to be pressed and released, anywhere on the screen. It looks at the mouse 50 times a
+second. Returns 1. In a program with a window, `On Click` also says where it was.
+
+See also: [`mouse_button`](#mouse_button), [`wait_key`](#wait_key).
+
+<a id="wait_key"></a>
+
+### `wait_key()` → `Int`
+
+Waits for a key press in the current window and returns its raw code. The window's other messages (the close
+button, for instance) are lost while it waits. Without a window, it waits one second and returns 0.
+
+See also: [`key_wait`](#key_wait), [`wait_click`](#wait_click).
+
+<a id="joy_x"></a>
+
+### `joy_x(port)` → `Int`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns -1 if the joystick is pushed left, 1 right and 0 in the middle. Check it every frame.
+
+See also: [`joy_y`](#joy_y), [`joy_fire`](#joy_fire), [`key_down`](#key_down).
+
+<a id="joy_y"></a>
+
+### `joy_y(port)` → `Int`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns -1 up, 1 down and 0 in the middle.
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_button"></a>
+
+### `joy_button(port)` → `Bool`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns `true` if the fire button is held. On port 0 it is also the left mouse button.
+
+See also: [`joy_fire`](#joy_fire).
+
+<a id="joy_up"></a>
+
+### `joy_up(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed up (diagonals too).
+
+See also: [`joy_y`](#joy_y).
+
+<a id="joy_down"></a>
+
+### `joy_down(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed down (diagonals too).
+
+See also: [`joy_y`](#joy_y).
+
+<a id="joy_left"></a>
+
+### `joy_left(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed left (diagonals too).
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_right"></a>
+
+### `joy_right(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed right (diagonals too).
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_fire"></a>
+
+### `joy_fire(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the fire button is held. It is `joy_button`.
+
+See also: [`joy_button`](#joy_button).
 
 ## GadTools
 
@@ -1494,7 +1937,7 @@ Opens the window on the program's screen, if one was opened, or on the Workbench
 makes it the current window: the `gfx_*` functions draw in it. Returns 0 if it could not be opened or if there are
 already 16.
 
-See also: [`window_close`](#window_close), [`window_use`](#window_use), [`screen_font_height`](#screen_font_height), `event_window`.
+See also: [`window_close`](#window_close), [`window_use`](#window_use), [`screen_font_height`](#screen_font_height), [`event_window`](#event_window).
 
 <a id="window_border_top"></a>
 
@@ -1560,7 +2003,7 @@ See also: [`screen_font_height`](#screen_font_height), [`gfx_text_len`](#gfx_tex
 Closes the window. If it was the current one, there is no current window left: call `window_use` before drawing
 again. Its gadgets stop being drawn. Closing one that is already closed does nothing.
 
-See also: [`window_create`](#window_create), [`window_use`](#window_use), `close_window`.
+See also: [`window_create`](#window_create), [`window_use`](#window_use), [`close_window`](#close_window).
 
 <a id="window_title"></a>
 
@@ -1644,7 +2087,7 @@ See also: [`window_create`](#window_create), [`gfx_pen`](#gfx_pen).
 
 Brings the program's screen (the `screen_open` one) to the front. Without a screen of its own it does nothing.
 
-See also: [`screen_to_back`](#screen_to_back), `screen_open`.
+See also: [`screen_to_back`](#screen_to_back), [`screen_open`](#screen_open).
 
 <a id="screen_to_back"></a>
 
@@ -1661,7 +2104,7 @@ See also: [`screen_to_front`](#screen_to_front).
 Returns the number of the last gadget used. Check it in the `EventLoop`'s `On Gadget` and compare it with what its
 `*_create` returned.
 
-See also: [`button_create`](#button_create), `event_window`.
+See also: [`button_create`](#button_create), [`event_window`](#event_window).
 
 <a id="gadget_width"></a>
 
@@ -2064,7 +2507,7 @@ Opens the system's screen mode requester, starting at the Workbench's mode, and 
 chosen: then `screen_mode_id`, `screen_mode_width`, `screen_mode_height` and `screen_mode_depth` give it, for
 `screen_open_mode`. `false` if it was cancelled.
 
-See also: [`screen_mode_id`](#screen_mode_id), `screen_open_mode`.
+See also: [`screen_mode_id`](#screen_mode_id), [`screen_open_mode`](#screen_open_mode).
 
 <a id="screen_mode_id"></a>
 
@@ -2072,7 +2515,7 @@ See also: [`screen_mode_id`](#screen_mode_id), `screen_open_mode`.
 
 Returns the mode chosen in the last `dialog_screen_mode`, the number `screen_open_mode` takes.
 
-See also: [`dialog_screen_mode`](#dialog_screen_mode), `screen_open_mode`.
+See also: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_mode`](#screen_open_mode).
 
 <a id="screen_mode_width"></a>
 

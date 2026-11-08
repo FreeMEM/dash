@@ -1,0 +1,55 @@
+# Entrada: el bucle de un juego que mueve un cuadrado con el joystick o las flechas, en una pantalla propia.
+# expect-out: la A escribe a
+# expect-out: x = 150, y = 90
+# expect-out: fin
+
+const ESC = 0x45
+const ARRIBA = 0x4C
+const ABAJO = 0x4D
+const DERECHA = 0x4E
+const IZQUIERDA = 0x4F
+
+# v, sin salirse de a..b
+func entre(v: Int, a: Int, b: Int) -> Int
+    if v < a
+        return a
+    elif v > b
+        return b
+    end
+    return v
+end
+
+Main
+    if not screen_open_custom(320, 200, 3, "Entrada")
+        Print "no se pudo abrir la pantalla"
+        return
+    end
+    Print "la A escribe #{key_text(0x20)}"
+    x = 150
+    y = 90
+    fin = time_ms() + 2000                 # para la prueba: acaba sola a los dos segundos
+    while time_ms() < fin and not key_down(ESC) and not joy_fire(1)
+        dx = joy_x(1)                      # -1, 0 o 1
+        dy = joy_y(1)
+        if key_down(IZQUIERDA)
+            dx = -1
+        elif key_down(DERECHA)
+            dx = 1
+        end
+        if key_down(ARRIBA)
+            dy = -1
+        elif key_down(ABAJO)
+            dy = 1
+        end
+        gfx_pen(0)
+        gfx_rect(x, y, x + 19, y + 19)     # borra el cuadrado donde estaba
+        x = entre(x + 2 * dx, 0, 300)
+        y = entre(y + 2 * dy, 12, 180)
+        gfx_pen(1)
+        gfx_rect(x, y, x + 19, y + 19)
+        time_delay(1)                      # una vuelta por fotograma, más o menos
+    end
+    Print "x = #{x}, y = #{y}"
+    screen_close()
+    Print "fin"
+end

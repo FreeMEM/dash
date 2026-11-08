@@ -1,0 +1,38 @@
+# El joystick se lee de la palabra JOYxDAT entera: derecha el bit 1, izquierda el 9, abajo el 1 xor el 0, arriba
+# el 9 xor el 8. Antes se leía un byte (la mitad de arriba): arriba y abajo no salían nunca y la izquierda llegaba
+# con arriba. Aquí, la descodificación con valores conocidos del registro; sin joystick, todo en reposo.
+# expect-out: reposo 0 0
+# expect-out: derecha 1 0
+# expect-out: izquierda -1 0
+# expect-out: abajo 0 1
+# expect-out: arriba 0 -1
+# expect-out: derecha y abajo 1 1
+# expect-out: izquierda y arriba -1 -1
+# expect-out: puerto 1: 0 0 false
+
+@native func dir_x(d: Int) -> Int
+"""
+    return _dash_joy_dir_x((UWORD)d);
+"""
+end
+
+@native func dir_y(d: Int) -> Int
+"""
+    return _dash_joy_dir_y((UWORD)d);
+"""
+end
+
+func ver(nombre: String, d: Int)
+    Print "#{nombre} #{dir_x(d)} #{dir_y(d)}"
+end
+
+Main
+    ver("reposo", 0x0000)
+    ver("derecha", 0x0003)          # bit 1 y bit 0: derecha sin abajo
+    ver("izquierda", 0x0300)        # bit 9 y bit 8: izquierda sin arriba
+    ver("abajo", 0x0001)
+    ver("arriba", 0x0100)
+    ver("derecha y abajo", 0x0002)
+    ver("izquierda y arriba", 0x0200)
+    Print "puerto 1: #{joy_x(1)} #{joy_y(1)} #{joy_fire(1)}"
+end

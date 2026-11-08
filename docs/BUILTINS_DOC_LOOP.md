@@ -19,11 +19,11 @@ ejemplo la de built-in es demasiado escueta".
 
 Primero los grupos que más usa la gente del grupo de Telegram.
 
-- [x] T1. Infraestructura: `builtins_doc.py`, el generador, la tabla con tipos de Dash.
+- [x] T1. Infraestructura: `compiler/builtins_doc/`, el generador, la tabla con tipos de Dash.
 - [x] T2. Gráficos básicos (`GRAPHICS_BASIC`, 30), con `tests/test_doc_graficos.dash`.
 - [x] T3. Ventanas, gadgets y peticiones (`INTUITION_EXPANDED`, 59), con `tests/test_doc_ventanas.dash`.
-- [ ] T3b. Pantallas (`screen_open*`, `screen_close`, `close_window`... de `GRAPHICS_ADVANCED`).
-- [ ] T4. Entrada (`INPUT_FUNCTIONS`, 37).
+- [x] T4. Entrada y pantallas (`INPUT_FUNCTIONS`, 37: las `screen_*` están en este grupo), con
+  `tests/test_doc_entrada.dash`.
 - [ ] T5. Ficheros (`DOS_FUNCTIONS`, 29, y `ASL_FUNCTIONS`, 5).
 - [ ] T6. MUI (`MUI_FUNCTIONS`, 108), en dos o tres tandas.
 - [ ] T7. Gráficos avanzados (`GRAPHICS_ADVANCED`, 85): sprites, bobs, bitmaps, copper.
@@ -42,3 +42,15 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     Documentado. Podría admitirlas: pendiente de decidir.
   - La fuente del sistema del emulador no es topaz 8 (`gfx_text_len("Hola")` da 40): los ejemplos no dependen
     del ancho del texto.
+- 2026-11-08: T4. Entrada y pantallas.
+  - Arreglo: el joystick. `joy_x`/`joy_y` leían un byte de JOYxDAT (la mitad de arriba): arriba y abajo no salían
+    nunca, la izquierda llegaba con arriba y la derecha no. `joy_button`/`joy_fire` miraban POTGOR (el segundo
+    botón) en vez del disparo (CIA-A PRA, bits 6 y 7). Lo usa la plantilla de juego de la extensión.
+    `tests/test_joystick.dash` prueba la descodificación con valores del registro; con un joystick de verdad no
+    se ha probado (FS-UAE sin entrada).
+  - Arreglo: `wait_key` volvía con 0 si llegaba antes otro mensaje que una tecla; `wait_click` gastaba toda la CPU
+    esperando (ahora mira 50 veces por segundo). `tests/test_wait_key.dash` (no reproduce el caso de antes: las
+    dos cosas llegan juntas). Visto de paso: un `input_click` en el botón de cerrar y un `input_key` desde otra
+    tarea (`task_start`) cuelgan el programa; sin investigar.
+  - `screen_open` y `screen_open_custom` no miran si ya hay una pantalla abierta (abrirían otra y perderían la
+    primera); `screen_open_mode` sí. Documentado: una a la vez.
