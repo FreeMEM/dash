@@ -1866,7 +1866,7 @@ See also: [`key_get`](#key_get), [`key_raw`](#key_raw).
 Returns the pointer's X counting from the corner inside the current window's borders, like the `gfx_*` functions.
 It can be negative or beyond the width when the pointer is outside. Without a window, 0.
 
-See also: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), `click_x`.
+See also: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), [`click_x`](#click_x).
 
 <a id="mouse_y"></a>
 
@@ -4888,45 +4888,374 @@ See also: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decode
 
 ## Arguments
 
+What the program gets when it starts: the Shell arguments, or the project icons it was opened with from the
+Workbench. And two more things from that stage of the language: where the last click was and the program's clock.
+
+**Example** (`tests/test_doc_varios.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Utilidades: argumentos, comprimir y descomprimir, SHA-1, UTF-8, Double, expresiones regulares, comodines, JSON y el
+# portapapeles.
+
+Main
+    Print "argumentos: #{arg_count()}"
+
+    a = buffer_alloc(3000)
+    buffer_fill(a, 0, 3000, 65)                    # 3000 letras A: se comprime mucho
+    c = buffer_alloc(3100)
+    n = deflate(a, 3000, c, 3100, 9)
+    d = buffer_alloc(3000)
+    m = inflate(c, n, d, 3000)
+    iguales = crc32(a, 3000, 0) == crc32(d, m, 0)
+    Print "3000 bytes -> menos de 100: #{n < 100}, vuelta: #{m}, mismo crc: #{iguales}"
+    buffer_free(a)
+    buffer_free(c)
+    buffer_free(d)
+
+    Print "sha1 de abc: " + sha1_text("abc")
+
+    u = latin1_to_utf8("Ñu")
+    Print "Ñu en UTF-8: #{u.length} bytes, #{utf8_length(u)} caracteres, vuelta: " + utf8_to_latin1(u)
+
+    var r: Double = sqrt(2.0)
+    var med: Double = round(2.5)
+    Print "raíz de 2: " + str_from_double(r, 4) + ", redondeo de 2.5: #{Int(med)}"
+
+    texto = "pedido 4521 listo"
+    p = regex_find("\\d+", texto, 0, false)        # en un literal de Dash, "\\d" es \d
+    Print "número en \"#{texto}\": " + texto[p:p + regex_length()]
+    Print "comodín: #{wildcard_match("*.IFF", "dibujo.iff", true)}"
+
+    nodos = json_scan("{\"nombre\": \"Lorraine\", \"chips\": [1]}")
+    Print "JSON: #{nodos} nodos, #{json_scan_name(1)} = #{json_scan_text(1)}"
+
+    clip_write_text("Amiga")
+    Print "portapapeles: " + clip_read_text()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `arg_count()` | Int | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
-| `arg(i)` | String | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
-| `click_x()` | Int | X of the last On Click, in the window (inside its borders) |  |
-| `click_y()` | Int | Y of the last On Click, in the window (inside its borders) |  |
-| `time_ms()` | Int | Milliseconds since the program started (EClock of timer.device) |  |
+| [`arg_count()`](#arg_count) | Int | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
+| [`arg(i)`](#arg) | String | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
+| [`click_x()`](#click_x) | Int | X of the last On Click, in the window (inside its borders) |  |
+| [`click_y()`](#click_y) | Int | Y of the last On Click, in the window (inside its borders) |  |
+| [`time_ms()`](#time_ms) | Int | Milliseconds since the program started (EClock of timer.device) |  |
+
+<a id="arg_count"></a>
+
+### `arg_count()` → `Int`
+
+Returns how many arguments it got: the words after the name in the Shell, or the project icons it was opened with
+from the Workbench (a double click on a document, or Shift and click on several).
+
+See also: [`arg`](#arg).
+
+<a id="arg"></a>
+
+### `arg(i)` → `String`
+
+- `i`: the argument, from 0.
+
+Returns that argument, or `""` if there is none. From the Workbench, the icon's full path. An argument in quotes in
+the Shell arrives without them, as a single one.
+
+See also: [`arg_count`](#arg_count).
+
+<a id="click_x"></a>
+
+### `click_x()` → `Int`
+
+Inside an `On Click`, returns the click's X inside the window's borders.
+
+See also: [`click_y`](#click_y).
+
+<a id="click_y"></a>
+
+### `click_y()` → `Int`
+
+Inside an `On Click`, returns the click's Y inside the window's borders.
+
+See also: [`click_x`](#click_x).
+
+<a id="time_ms"></a>
+
+### `time_ms()` → `Int`
+
+Returns the milliseconds since the program started, with the system's fine clock. To time something or move a
+game's things at the same pace on any machine.
+
+See also: [`time_delay`](#time_delay).
 
 ## Compression (zlib)
 
+Compressing and decompressing deflate, gzip and zlib (what ZIP, PNG and HTTP use), checksums (CRC-32, Adler-32) and
+SHA-1, all on buffers. It is the usual zlib inside the program: no library needs to be installed.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `inflate(src, n, dest, max)` | Int | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
-| `inflate_auto(src, n, dest, max)` | Int | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
-| `deflate(src, n, dest, max, level)` | Int | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
-| `crc32(buffer, n, crc)` | Int | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
-| `adler32(buffer, n, a)` | Int | Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to start) |  |
-| `inflate_used()` | Int | The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 too): where the next object starts in a git pack |  |
-| `sha1(buffer, n)` | String | SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so) |  |
-| `sha1_text(s)` | String | SHA-1 of a text, in 40 hex digits |  |
-| `sha1_new()` | Int | A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if all are in use. sha1_hex or sha1_bytes end it |  |
-| `sha1_add(sha, buffer, n)` | — | Adds n bytes of a buffer to a SHA-1 of sha1_new |  |
-| `sha1_add_text(sha, s)` | — | Adds a text to a SHA-1 of sha1_new |  |
-| `sha1_add_byte(sha, b)` | — | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
-| `sha1_hex(sha)` | String | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
-| `sha1_bytes(sha, out)` | Bool | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
+| [`inflate(src, n, dest, max)`](#inflate) | Int | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
+| [`inflate_auto(src, n, dest, max)`](#inflate_auto) | Int | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
+| [`deflate(src, n, dest, max, level)`](#deflate) | Int | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
+| [`crc32(buffer, n, crc)`](#crc32) | Int | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
+| [`adler32(buffer, n, a)`](#adler32) | Int | Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to start) |  |
+| [`inflate_used()`](#inflate_used) | Int | The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 too): where the next object starts in a git pack |  |
+| [`sha1(buffer, n)`](#sha1) | String | SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so) |  |
+| [`sha1_text(s)`](#sha1_text) | String | SHA-1 of a text, in 40 hex digits |  |
+| [`sha1_new()`](#sha1_new) | Int | A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if all are in use. sha1_hex or sha1_bytes end it |  |
+| [`sha1_add(sha, buffer, n)`](#sha1_add) | — | Adds n bytes of a buffer to a SHA-1 of sha1_new |  |
+| [`sha1_add_text(sha, s)`](#sha1_add_text) | — | Adds a text to a SHA-1 of sha1_new |  |
+| [`sha1_add_byte(sha, b)`](#sha1_add_byte) | — | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
+| [`sha1_hex(sha)`](#sha1_hex) | String | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
+| [`sha1_bytes(sha, out)`](#sha1_bytes) | Bool | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
+
+<a id="inflate"></a>
+
+### `inflate(src, n, dest, max)` → `Int`
+
+- `src`, `n`: the compressed buffer and how many bytes it has.
+- `dest`, `max`: where to decompress to and how much fits.
+
+Decompresses headerless deflate (what is inside a ZIP). Returns the bytes written, -1 if it is not deflate or is
+cut short, -2 if it does not fit in `max`, -3 without memory.
+
+See also: [`inflate_auto`](#inflate_auto), [`deflate`](#deflate), [`inflate_used`](#inflate_used).
+
+<a id="inflate_auto"></a>
+
+### `inflate_auto(src, n, dest, max)` → `Int`
+
+- `src`, `n`, `dest`, `max`: as in `inflate`.
+
+Like `inflate`, but it looks at the first bytes and handles gzip, zlib or headerless deflate: what arrives over HTTP
+with `Content-Encoding: gzip`.
+
+See also: [`inflate`](#inflate).
+
+<a id="deflate"></a>
+
+### `deflate(src, n, dest, max, level)` → `Int`
+
+- `src`, `n`: what to compress.
+- `dest`, `max`: where and how much fits.
+- `level`: 0 (uncompressed, fast) to 9 (smallest); -1 = 6.
+
+Compresses as headerless deflate. Returns the bytes written, -2 if they do not fit, -3 without memory. While working
+it uses about 260 KB.
+
+See also: [`inflate`](#inflate).
+
+<a id="crc32"></a>
+
+### `crc32(buffer, n, crc)` → `Int`
+
+- `buffer`, `n`: the bytes.
+- `crc`: the CRC so far, to go on in parts; 0 to start.
+
+Returns the CRC-32, the one ZIP and PNG use.
+
+See also: [`adler32`](#adler32).
+
+<a id="adler32"></a>
+
+### `adler32(buffer, n, a)` → `Int`
+
+- `buffer`, `n`: the bytes.
+- `a`: the value so far; 1 to start.
+
+Returns the Adler-32, the checksum at the end of a zlib stream.
+
+See also: [`crc32`](#crc32).
+
+<a id="inflate_used"></a>
+
+### `inflate_used()` → `Int`
+
+Returns how many input bytes the last `inflate` or `inflate_auto` used: where the next one starts if several
+compressed things come one after another (as in a git pack).
+
+See also: [`inflate`](#inflate).
+
+<a id="sha1"></a>
+
+### `sha1(buffer, n)` → `String`
+
+- `buffer`, `n`: the bytes.
+
+Returns their SHA-1 as 40 hex digits.
+
+See also: [`sha1_text`](#sha1_text), [`sha1_new`](#sha1_new).
+
+<a id="sha1_text"></a>
+
+### `sha1_text(s)` → `String`
+
+- `s`: the text.
+
+Returns its SHA-1 as 40 hex digits.
+
+See also: [`sha1`](#sha1).
+
+<a id="sha1_new"></a>
+
+### `sha1_new()` → `Int`
+
+Starts a SHA-1 in parts, for data not all in one place. Returns its number (1 to 8), or 0 if all are in use. Add to
+it with `sha1_add*` and finish with `sha1_hex` or `sha1_bytes`.
+
+See also: [`sha1_add`](#sha1_add), [`sha1_hex`](#sha1_hex).
+
+<a id="sha1_add"></a>
+
+### `sha1_add(sha, buffer, n)`
+
+- `sha`: the number from `sha1_new`.
+- `buffer`, `n`: the bytes to add.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_text"></a>
+
+### `sha1_add_text(sha, s)`
+
+- `sha`: the number from `sha1_new`.
+- `s`: the text to add.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_byte"></a>
+
+### `sha1_add_byte(sha, b)`
+
+- `sha`: the number from `sha1_new`.
+- `b`: the byte, 0 to 255.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_hex"></a>
+
+### `sha1_hex(sha)` → `String`
+
+- `sha`: the number from `sha1_new`.
+
+Finishes it and returns the 40 hex digits; `""` if that number is not in use. The number becomes free.
+
+See also: [`sha1_bytes`](#sha1_bytes).
+
+<a id="sha1_bytes"></a>
+
+### `sha1_bytes(sha, out)` → `Bool`
+
+- `sha`: the number from `sha1_new`.
+- `out`: a 20-byte buffer.
+
+Finishes it and writes its 20 bytes to `out`. Returns `false` if that number is not in use.
+
+See also: [`sha1_hex`](#sha1_hex).
 
 ## UTF-8
 
+Dash's texts are Latin-1, but what comes from the network is usually UTF-8, where a character takes 1 to 4 bytes.
+These functions walk a UTF-8 text character by character (positions are bytes) and convert it to Latin-1 and back.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `utf8_next(s, i)` | Int | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
-| `utf8_prev(s, i)` | Int | Position of the UTF-8 character before byte i (0 at the start) |  |
-| `utf8_code(s, i)` | Int | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
-| `utf8_char(code)` | String | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
-| `utf8_length(s)` | Int | How many UTF-8 characters s has (each invalid byte counts as one) |  |
-| `utf8_to_latin1(s)` | String | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
-| `latin1_to_utf8(s)` | String | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
-| `utf8_check(buffer, from, to)` | Int | Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a sequence cut by to), -1 if all are valid |  |
+| [`utf8_next(s, i)`](#utf8_next) | Int | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
+| [`utf8_prev(s, i)`](#utf8_prev) | Int | Position of the UTF-8 character before byte i (0 at the start) |  |
+| [`utf8_code(s, i)`](#utf8_code) | Int | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
+| [`utf8_char(code)`](#utf8_char) | String | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
+| [`utf8_length(s)`](#utf8_length) | Int | How many UTF-8 characters s has (each invalid byte counts as one) |  |
+| [`utf8_to_latin1(s)`](#utf8_to_latin1) | String | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
+| [`latin1_to_utf8(s)`](#latin1_to_utf8) | String | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
+| [`utf8_check(buffer, from, to)`](#utf8_check) | Int | Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a sequence cut by to), -1 if all are valid |  |
+
+<a id="utf8_next"></a>
+
+### `utf8_next(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: a character's position, in bytes.
+
+Returns where the next character starts; at the end, the text's length.
+
+See also: [`utf8_prev`](#utf8_prev), [`utf8_code`](#utf8_code).
+
+<a id="utf8_prev"></a>
+
+### `utf8_prev(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: a position in bytes.
+
+Returns where the previous character starts; 0 at the beginning.
+
+See also: [`utf8_next`](#utf8_next).
+
+<a id="utf8_code"></a>
+
+### `utf8_code(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: the character's position.
+
+Returns its Unicode number; 65533 for a byte that is not valid UTF-8, 0 outside the text.
+
+See also: [`utf8_char`](#utf8_char).
+
+<a id="utf8_char"></a>
+
+### `utf8_char(code)` → `String`
+
+- `code`: a Unicode number.
+
+Returns that character in UTF-8; `""` for 0.
+
+See also: [`utf8_code`](#utf8_code).
+
+<a id="utf8_length"></a>
+
+### `utf8_length(s)` → `Int`
+
+- `s`: the UTF-8 text.
+
+Returns how many characters it has (not bytes).
+
+See also: [`utf8_next`](#utf8_next).
+
+<a id="utf8_to_latin1"></a>
+
+### `utf8_to_latin1(s)` → `String`
+
+- `s`: the UTF-8 text.
+
+Returns the text in Latin-1, to show it with Amiga fonts. What Latin-1 lacks becomes something close (curly quotes
+to straight ones, € to EUR) or `?`.
+
+See also: [`latin1_to_utf8`](#latin1_to_utf8).
+
+<a id="latin1_to_utf8"></a>
+
+### `latin1_to_utf8(s)` → `String`
+
+- `s`: a Dash text (Latin-1).
+
+Returns the text in UTF-8, to send it over the network or store it for other systems.
+
+See also: [`utf8_to_latin1`](#utf8_to_latin1).
+
+<a id="utf8_check"></a>
+
+### `utf8_check(buffer, from, to)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: from `from` to `to - 1`.
+
+Returns the position of the first byte that is not valid UTF-8 (or starts a character cut by `to`); -1 if it is all valid.
+
+See also: [`utf8_to_latin1`](#utf8_to_latin1).
 
 ## Comparing and searching in a buffer
 
@@ -4978,45 +5307,324 @@ See also: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Double and text
 
+Turning a `Double` (64 bits) into a text with the decimals you want, and a text into a `Double`, without losing
+digits.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_from_double(d, decimals)` | String | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
-| `str_to_double(s)` | Double | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+| [`str_from_double(d, decimals)`](#str_from_double) | String | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
+| [`str_to_double(s)`](#str_to_double) | Double | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+
+<a id="str_from_double"></a>
+
+### `str_from_double(d, decimals)` → `String`
+
+- `d`: the number.
+- `decimals`: how many decimals; 0 none; negative, just enough to read back the same.
+
+Returns the number as a text, rounding halves away from zero: `str_from_double(2.675, 2)` is `"2.68"`.
+
+See also: [`str_to_double`](#str_to_double).
+
+<a id="str_to_double"></a>
+
+### `str_to_double(s)` → `Double`
+
+- `s`: the text.
+
+Returns the number at the start of the text, exact to 17 digits; 0.0 if there is no number. It is `Double(s)`.
+
+See also: [`str_from_double`](#str_from_double).
 
 ## Double math
 
+The usual maths functions with `Double`. Angles are in radians (180 degrees is 3.14159...). An impossible result
+does not stop the program: it gives `nan` (not a number) or `inf`, checked with `is_nan` and `is_inf`.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `sqrt(x)` | Double | Square root (nan for a negative) |  |
-| `pow(x, y)` | Double | x to the power y |  |
-| `exp(x)` | Double | e to the power x |  |
-| `log(x)` | Double | Natural logarithm (-inf for 0, nan for a negative) |  |
-| `log10(x)` | Double | Base 10 logarithm |  |
-| `sin(x)` | Double | Sine of x radians |  |
-| `cos(x)` | Double | Cosine of x radians |  |
-| `tan(x)` | Double | Tangent of x radians |  |
-| `asin(x)` | Double | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
-| `acos(x)` | Double | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
-| `atan(x)` | Double | Arc tangent in radians, -pi/2 to pi/2 |  |
-| `atan2(y, x)` | Double | Angle of the point (x, y) in radians, -pi to pi |  |
-| `floor(x)` | Double | The largest whole number not above x (a Double) |  |
-| `ceil(x)` | Double | The smallest whole number not below x (a Double) |  |
-| `round(x)` | Double | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
-| `trunc(x)` | Double | The whole part, toward zero (-2.7 is -2.0) |  |
-| `fmod(x, y)` | Double | Remainder of x / y with the sign of x (nan if y is 0) |  |
-| `abs(x)` | Double | Absolute value, a Double |  |
-| `is_nan(x)` | Bool | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
-| `is_inf(x)` | Bool | True if x is inf or -inf |  |
+| [`sqrt(x)`](#sqrt) | Double | Square root (nan for a negative) |  |
+| [`pow(x, y)`](#pow) | Double | x to the power y |  |
+| [`exp(x)`](#exp) | Double | e to the power x |  |
+| [`log(x)`](#log) | Double | Natural logarithm (-inf for 0, nan for a negative) |  |
+| [`log10(x)`](#log10) | Double | Base 10 logarithm |  |
+| [`sin(x)`](#sin) | Double | Sine of x radians |  |
+| [`cos(x)`](#cos) | Double | Cosine of x radians |  |
+| [`tan(x)`](#tan) | Double | Tangent of x radians |  |
+| [`asin(x)`](#asin) | Double | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
+| [`acos(x)`](#acos) | Double | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
+| [`atan(x)`](#atan) | Double | Arc tangent in radians, -pi/2 to pi/2 |  |
+| [`atan2(y, x)`](#atan2) | Double | Angle of the point (x, y) in radians, -pi to pi |  |
+| [`floor(x)`](#floor) | Double | The largest whole number not above x (a Double) |  |
+| [`ceil(x)`](#ceil) | Double | The smallest whole number not below x (a Double) |  |
+| [`round(x)`](#round) | Double | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
+| [`trunc(x)`](#trunc) | Double | The whole part, toward zero (-2.7 is -2.0) |  |
+| [`fmod(x, y)`](#fmod) | Double | Remainder of x / y with the sign of x (nan if y is 0) |  |
+| [`abs(x)`](#abs) | Double | Absolute value, a Double |  |
+| [`is_nan(x)`](#is_nan) | Bool | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
+| [`is_inf(x)`](#is_inf) | Bool | True if x is inf or -inf |  |
+
+<a id="sqrt"></a>
+
+### `sqrt(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the square root; `nan` for a negative.
+
+See also: [`pow`](#pow).
+
+<a id="pow"></a>
+
+### `pow(x, y)` → `Double`
+
+- `x`: the base.
+- `y`: the exponent.
+
+Returns `x` to the power of `y`.
+
+See also: [`sqrt`](#sqrt), [`exp`](#exp).
+
+<a id="exp"></a>
+
+### `exp(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns e to the power of `x`.
+
+See also: [`log`](#log).
+
+<a id="log"></a>
+
+### `log(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the natural logarithm; `-inf` for 0, `nan` for a negative.
+
+See also: [`log10`](#log10), [`exp`](#exp).
+
+<a id="log10"></a>
+
+### `log10(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the base-10 logarithm.
+
+See also: [`log`](#log).
+
+<a id="sin"></a>
+
+### `sin(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the sine of `x` radians.
+
+See also: [`cos`](#cos), [`asin`](#asin).
+
+<a id="cos"></a>
+
+### `cos(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the cosine of `x` radians.
+
+See also: [`sin`](#sin).
+
+<a id="tan"></a>
+
+### `tan(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the tangent of `x` radians.
+
+See also: [`atan`](#atan).
+
+<a id="asin"></a>
+
+### `asin(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arcsine in radians, -pi/2 to pi/2; `nan` outside -1..1.
+
+See also: [`sin`](#sin).
+
+<a id="acos"></a>
+
+### `acos(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arccosine in radians, 0 to pi; `nan` outside -1..1.
+
+See also: [`cos`](#cos).
+
+<a id="atan"></a>
+
+### `atan(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arctangent in radians, -pi/2 to pi/2.
+
+See also: [`atan2`](#atan2).
+
+<a id="atan2"></a>
+
+### `atan2(y, x)` → `Double`
+
+- `y`, `x`: the point (mind the order).
+
+Returns the point's angle in radians, -pi to pi: where it points, to turn a sprite towards a target.
+
+See also: [`atan`](#atan).
+
+<a id="floor"></a>
+
+### `floor(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the largest whole number not above `x`, as a `Double`: `floor(-2.5)` is -3.0.
+
+See also: [`ceil`](#ceil), [`round`](#round), [`trunc`](#trunc).
+
+<a id="ceil"></a>
+
+### `ceil(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the smallest whole number not below `x`, as a `Double`.
+
+See also: [`floor`](#floor).
+
+<a id="round"></a>
+
+### `round(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the nearest whole number, halves away from zero: 2.5 gives 3.0 and -2.5 gives -3.0.
+
+See also: [`floor`](#floor), [`trunc`](#trunc).
+
+<a id="trunc"></a>
+
+### `trunc(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the whole part, towards zero: -2.7 gives -2.0.
+
+See also: [`floor`](#floor).
+
+<a id="fmod"></a>
+
+### `fmod(x, y)` → `Double`
+
+- `x`, `y`: the two numbers.
+
+Returns the remainder of `x / y` with the sign of `x`; `nan` if `y` is 0.
+
+<a id="abs"></a>
+
+### `abs(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the absolute value, a `Double`.
+
+<a id="is_nan"></a>
+
+### `is_nan(x)` → `Bool`
+
+- `x`: the number, a `Double`.
+
+Returns `true` if `x` is `nan`: the result of something impossible, like `sqrt(-1.0)` or `0.0 / 0.0`.
+
+See also: [`is_inf`](#is_inf).
+
+<a id="is_inf"></a>
+
+### `is_inf(x)` → `Bool`
+
+- `x`: the number, a `Double`.
+
+Returns `true` if `x` is `inf` or `-inf`, like `1.0 / 0.0`.
+
+See also: [`is_nan`](#is_nan).
 
 ## Regular expressions and wildcards
 
+Regular expressions (ICU's common syntax) and spreadsheet wildcards on UTF-8 texts; positions and lengths are in
+bytes. A badly written pattern does not stop the program: it gives `false` or -1 and `regex_error` says why. The
+full syntax is in the manual (section 5).
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `regex_match(pattern, text, ignore_case)` | Bool | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
-| `regex_find(pattern, text, from, ignore_case)` | Int | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
-| `regex_length()` | Int | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
-| `regex_error()` | String | Why the last pattern is wrong, "" if it is right |  |
-| `wildcard_match(pattern, text, ignore_case)` | Bool | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
+| [`regex_match(pattern, text, ignore_case)`](#regex_match) | Bool | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
+| [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
+| [`regex_length()`](#regex_length) | Int | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
+| [`regex_error()`](#regex_error) | String | Why the last pattern is wrong, "" if it is right |  |
+| [`wildcard_match(pattern, text, ignore_case)`](#wildcard_match) | Bool | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
+
+<a id="regex_match"></a>
+
+### `regex_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: the regular expression.
+- `text`: the text, in UTF-8.
+- `ignore_case`: `true` to ignore case.
+
+Returns `true` if the whole text matches. Also `false` if the pattern is wrong (`regex_error`).
+
+See also: [`regex_find`](#regex_find), [`wildcard_match`](#wildcard_match).
+
+<a id="regex_find"></a>
+
+### `regex_find(pattern, text, from, ignore_case)` → `Int`
+
+- `pattern`, `text`, `ignore_case`: as in `regex_match`.
+- `from`: the byte to start searching at.
+
+Returns where the first match starts, or -1. `regex_length` gives its length.
+
+See also: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
+
+<a id="regex_length"></a>
+
+### `regex_length()` → `Int`
+
+Returns the length in bytes of the last match; 0 if none.
+
+See also: [`regex_find`](#regex_find).
+
+<a id="regex_error"></a>
+
+### `regex_error()` → `String`
+
+Returns why the last pattern is wrong, or `""` if it is fine.
+
+See also: [`regex_match`](#regex_match).
+
+<a id="wildcard_match"></a>
+
+### `wildcard_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: with spreadsheet wildcards: `*` anything, `?` one character, `~` before one takes it literally
+  (`~*`).
+- `text`, `ignore_case`: as in `regex_match`.
+
+Returns `true` if the whole text matches. For AmigaDOS wildcards (`#?`), `dialog_file`.
+
+See also: [`regex_match`](#regex_match).
 
 ## Simulated keyboard and mouse
 
@@ -5035,19 +5643,86 @@ See also: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Clipboard
 
+The system clipboard: copying and pasting text with other programs, and blocks of your own that only the program
+understands (some cells, a drawing) tied to that text.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `clip_write_text(s)` | Bool | Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 (€ to EUR); false if the clipboard cannot be written |  |
-| `clip_read_text()` | String | The text in the clipboard (unit 0) in UTF-8; "" if it is empty or holds no text |  |
-| `clip_write_block(unit, type, buffer, n)` | Bool | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
-| `clip_block_size(unit, type)` | Int | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
-| `clip_read_block(unit, type, dest, max)` | Int | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+| [`clip_write_text(s)`](#clip_write_text) | Bool | Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 (€ to EUR); false if the clipboard cannot be written |  |
+| [`clip_read_text()`](#clip_read_text) | String | The text in the clipboard (unit 0) in UTF-8; "" if it is empty or holds no text |  |
+| [`clip_write_block(unit, type, buffer, n)`](#clip_write_block) | Bool | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
+| [`clip_block_size(unit, type)`](#clip_block_size) | Int | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
+| [`clip_read_block(unit, type, dest, max)`](#clip_read_block) | Int | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+
+<a id="clip_write_text"></a>
+
+### `clip_write_text(s)` → `Bool`
+
+- `s`: the text, in UTF-8 (a plain Dash text works if it has no accents; if it does, `latin1_to_utf8` first).
+
+Copies it to the clipboard the way other programs read it. Returns `false` if it cannot.
+
+See also: [`clip_read_text`](#clip_read_text).
+
+<a id="clip_read_text"></a>
+
+### `clip_read_text()` → `String`
+
+Returns the clipboard text in UTF-8 (`utf8_to_latin1` to show it); `""` if it is empty or holds no text.
+
+See also: [`clip_write_text`](#clip_write_text).
+
+<a id="clip_write_block"></a>
+
+### `clip_write_block(unit, type, buffer, n)` → `Bool`
+
+- `unit`: a clipboard unit, 1 to 255.
+- `type`: a 4-letter type of your own (`"CELL"`).
+- `buffer`, `n`: the bytes.
+
+After `clip_write_text`, stores a block of your own tied to that text: if something else is copied later, the block
+is no longer valid. That way the same program pastes some cells with their format and others paste the text.
+
+See also: [`clip_read_block`](#clip_read_block), [`clip_block_size`](#clip_block_size).
+
+<a id="clip_block_size"></a>
+
+### `clip_block_size(unit, type)` → `Int`
+
+- `unit`, `type`: as in `clip_write_block`.
+
+Returns the block's size, or -1 if there is none or something else was copied since.
+
+See also: [`clip_read_block`](#clip_read_block).
+
+<a id="clip_read_block"></a>
+
+### `clip_read_block(unit, type, dest, max)` → `Int`
+
+- `unit`, `type`: as in `clip_write_block`.
+- `dest`, `max`: where and how much fits.
+
+Copies the block. Returns its bytes, -1 if there is none, -2 if it does not fit.
+
+See also: [`clip_block_size`](#clip_block_size).
 
 ## Sorting texts by language
 
+Sorting texts the way the user's language does, not by each letter's code.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_compare_locale(a, b, ignore_case)` | Int | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+| [`str_compare_locale(a, b, ignore_case)`](#str_compare_locale) | Int | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+
+<a id="str_compare_locale"></a>
+
+### `str_compare_locale(a, b, ignore_case)` → `Int`
+
+- `a`, `b`: the two texts, in UTF-8.
+- `ignore_case`: `true` to ignore case.
+
+Returns -1 if `a` goes first, 0 if they are equal and 1 if `b` goes first, in the user's language order: accents and
+case only count after the letters ("árbol" before "barco").
 
 ## System and program
 
@@ -5098,14 +5773,76 @@ See also: [`buffer_find_byte`](#buffer_find_byte).
 
 ## JSON read in C (for lib/json.dash)
 
+The C part of the JSON reader. To use JSON in a program, the `lib/json.dash` module is better: it builds an
+easy-to-walk tree from this.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `json_scan(text)` | Int | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
-| `json_scan_error()` | String | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
-| `json_scan_kind(i)` | Int | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
-| `json_scan_count(i)` | Int | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
-| `json_scan_text(i)` | String | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
-| `json_scan_name(i)` | String | The name of node i inside its object ("" in an array or at the top) |  |
+| [`json_scan(text)`](#json_scan) | Int | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
+| [`json_scan_error()`](#json_scan_error) | String | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
+| [`json_scan_kind(i)`](#json_scan_kind) | Int | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
+| [`json_scan_count(i)`](#json_scan_count) | Int | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
+| [`json_scan_text(i)`](#json_scan_text) | String | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
+| [`json_scan_name(i)`](#json_scan_name) | String | The name of node i inside its object ("" in an array or at the top) |  |
+
+<a id="json_scan"></a>
+
+### `json_scan(text)` → `Int`
+
+- `text`: the JSON.
+
+Reads it into a table of nodes in order, each followed by what it contains. Returns how many nodes, or -1 if it is
+not JSON (`json_scan_error`).
+
+See also: [`json_scan_kind`](#json_scan_kind), [`json_scan_error`](#json_scan_error).
+
+<a id="json_scan_error"></a>
+
+### `json_scan_error()` → `String`
+
+Returns why the last `json_scan` gave -1 and at which byte.
+
+See also: [`json_scan`](#json_scan).
+
+<a id="json_scan_kind"></a>
+
+### `json_scan_kind(i)` → `Int`
+
+- `i`: the node, from 0.
+
+Returns its kind: 0 null, 1 true or false, 2 number, 3 text, 4 list, 5 object.
+
+See also: [`json_scan_count`](#json_scan_count).
+
+<a id="json_scan_count"></a>
+
+### `json_scan_count(i)` → `Int`
+
+- `i`: the node, from 0.
+
+For a list or object, how many elements it has (they follow it); for a boolean, 1 if true.
+
+See also: [`json_scan_kind`](#json_scan_kind).
+
+<a id="json_scan_text"></a>
+
+### `json_scan_text(i)` → `String`
+
+- `i`: the node, from 0.
+
+Returns the text of a text node, unescaped and in UTF-8, or a number as written.
+
+See also: [`json_scan_name`](#json_scan_name).
+
+<a id="json_scan_name"></a>
+
+### `json_scan_name(i)` → `String`
+
+- `i`: the node, from 0.
+
+Returns its name inside its object; `""` in a list or at the top.
+
+See also: [`json_scan_text`](#json_scan_text).
 
 ## Debugger (the debugged program, built with dash --debug)
 

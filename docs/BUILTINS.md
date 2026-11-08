@@ -1869,7 +1869,7 @@ Ver también: [`key_get`](#key_get), [`key_raw`](#key_raw).
 Devuelve la X del puntero contando desde la esquina de dentro de los bordes de la ventana actual, como los
 `gfx_*`. Puede ser negativa o pasar del ancho si el puntero está fuera. Sin ventana, 0.
 
-Ver también: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), `click_x`.
+Ver también: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), [`click_x`](#click_x).
 
 <a id="mouse_y"></a>
 
@@ -4890,45 +4890,375 @@ Ver también: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_de
 
 ## Argumentos
 
+Lo que recibe el programa al arrancar: los argumentos del Shell, o los iconos de proyecto con los que se abrió
+desde el Workbench. Y dos cosas más de esa época del lenguaje: dónde fue el último clic y el reloj del programa.
+
+**Ejemplo** (`tests/test_doc_varios.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Utilidades: argumentos, comprimir y descomprimir, SHA-1, UTF-8, Double, expresiones regulares, comodines, JSON y el
+# portapapeles.
+
+Main
+    Print "argumentos: #{arg_count()}"
+
+    a = buffer_alloc(3000)
+    buffer_fill(a, 0, 3000, 65)                    # 3000 letras A: se comprime mucho
+    c = buffer_alloc(3100)
+    n = deflate(a, 3000, c, 3100, 9)
+    d = buffer_alloc(3000)
+    m = inflate(c, n, d, 3000)
+    iguales = crc32(a, 3000, 0) == crc32(d, m, 0)
+    Print "3000 bytes -> menos de 100: #{n < 100}, vuelta: #{m}, mismo crc: #{iguales}"
+    buffer_free(a)
+    buffer_free(c)
+    buffer_free(d)
+
+    Print "sha1 de abc: " + sha1_text("abc")
+
+    u = latin1_to_utf8("Ñu")
+    Print "Ñu en UTF-8: #{u.length} bytes, #{utf8_length(u)} caracteres, vuelta: " + utf8_to_latin1(u)
+
+    var r: Double = sqrt(2.0)
+    var med: Double = round(2.5)
+    Print "raíz de 2: " + str_from_double(r, 4) + ", redondeo de 2.5: #{Int(med)}"
+
+    texto = "pedido 4521 listo"
+    p = regex_find("\\d+", texto, 0, false)        # en un literal de Dash, "\\d" es \d
+    Print "número en \"#{texto}\": " + texto[p:p + regex_length()]
+    Print "comodín: #{wildcard_match("*.IFF", "dibujo.iff", true)}"
+
+    nodos = json_scan("{\"nombre\": \"Lorraine\", \"chips\": [1]}")
+    Print "JSON: #{nodos} nodos, #{json_scan_name(1)} = #{json_scan_text(1)}"
+
+    clip_write_text("Amiga")
+    Print "portapapeles: " + clip_read_text()
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `arg_count()` | Int | Cuántos argumentos recibió el programa del Shell, o iconos de proyecto del Workbench (un doble clic en un documento, mayúsculas + clic en varios) |  |
-| `arg(i)` | String | El argumento i, desde 0 ("" si no hay); desde el Workbench, la ruta entera del icono |  |
-| `click_x()` | Int | La X del último On Click, en la ventana (dentro de sus bordes) |  |
-| `click_y()` | Int | La Y del último On Click, en la ventana (dentro de sus bordes) |  |
-| `time_ms()` | Int | Los milisegundos desde que empezó el programa (EClock de timer.device) |  |
+| [`arg_count()`](#arg_count) | Int | Cuántos argumentos recibió el programa del Shell, o iconos de proyecto del Workbench (un doble clic en un documento, mayúsculas + clic en varios) |  |
+| [`arg(i)`](#arg) | String | El argumento i, desde 0 ("" si no hay); desde el Workbench, la ruta entera del icono |  |
+| [`click_x()`](#click_x) | Int | La X del último On Click, en la ventana (dentro de sus bordes) |  |
+| [`click_y()`](#click_y) | Int | La Y del último On Click, en la ventana (dentro de sus bordes) |  |
+| [`time_ms()`](#time_ms) | Int | Los milisegundos desde que empezó el programa (EClock de timer.device) |  |
+
+<a id="arg_count"></a>
+
+### `arg_count()` → `Int`
+
+Devuelve cuántos argumentos recibió: las palabras tras el nombre en el Shell, o los iconos de proyecto con los que
+se abrió desde el Workbench (un doble clic en un documento, o Mayúsculas y clic en varios).
+
+Ver también: [`arg`](#arg).
+
+<a id="arg"></a>
+
+### `arg(i)` → `String`
+
+- `i`: el argumento, desde 0.
+
+Devuelve ese argumento, o `""` si no lo hay. Desde el Workbench, la ruta entera del icono. Un argumento entre
+comillas en el Shell llega sin ellas, como uno solo.
+
+Ver también: [`arg_count`](#arg_count).
+
+<a id="click_x"></a>
+
+### `click_x()` → `Int`
+
+Dentro de un `On Click`, devuelve la X del clic dentro de los bordes de la ventana.
+
+Ver también: [`click_y`](#click_y).
+
+<a id="click_y"></a>
+
+### `click_y()` → `Int`
+
+Dentro de un `On Click`, devuelve la Y del clic dentro de los bordes de la ventana.
+
+Ver también: [`click_x`](#click_x).
+
+<a id="time_ms"></a>
+
+### `time_ms()` → `Int`
+
+Devuelve los milisegundos desde que empezó el programa, con el reloj fino del sistema. Para medir cuánto tarda
+algo o mover las cosas de un juego al mismo ritmo en cualquier máquina.
+
+Ver también: [`time_delay`](#time_delay).
 
 ## Compresión (zlib)
 
+Comprimir y descomprimir deflate, gzip y zlib (lo de ZIP, PNG y HTTP), sumas de comprobación (CRC-32, Adler-32) y
+SHA-1, todo sobre búferes. Es la zlib de siempre dentro del programa: no hace falta ninguna librería instalada.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `inflate(src, n, dest, max)` | Int | Descomprime n bytes de deflate sin cabecera (como en un ZIP) del búfer src a dest: los bytes escritos, o -1 si no es deflate o está cortado, -2 si no cabe en max, -3 si no hay memoria (zlib) |  |
-| `inflate_auto(src, n, dest, max)` | Int | inflate para gzip, zlib o deflate sin cabecera, según sus primeros bytes (un cuerpo HTTP con Content-Encoding gzip o deflate): los bytes escritos, o lo mismo que inflate |  |
-| `deflate(src, n, dest, max, level)` | Int | Comprime n bytes del búfer src a dest como deflate sin cabecera, nivel 0 (sin comprimir) a 9 (lo más pequeño; -1: 6): los bytes escritos, -2 si no caben en max, -3 si no hay memoria (zlib; unos 260 KB mientras trabaja, con cualquier nivel) |  |
-| `crc32(buffer, n, crc)` | Int | El CRC-32 (como en ZIP y PNG) de n bytes de un búfer, siguiendo desde crc (0 para empezar) |  |
-| `adler32(buffer, n, a)` | Int | El Adler-32 (la suma del final de un zlib) de n bytes de un búfer, siguiendo desde a (1 para empezar) |  |
-| `inflate_used()` | Int | Los bytes de entrada que usó el último inflate o inflate_auto (con cabecera zlib, también su adler32): dónde empieza el siguiente objeto en un pack de git |  |
-| `sha1(buffer, n)` | String | El SHA-1 de n bytes de un búfer, en 40 cifras hexadecimales (así nombra git sus objetos) |  |
-| `sha1_text(s)` | String | El SHA-1 de un texto, en 40 cifras hexadecimales |  |
-| `sha1_new()` | Int | Un SHA-1 hecho por partes con sha1_add, sha1_add_text y sha1_add_byte: su número (1-8), 0 si están todos en uso. Lo acaban sha1_hex o sha1_bytes |  |
-| `sha1_add(sha, buffer, n)` | — | Añade n bytes de un búfer a un SHA-1 de sha1_new |  |
-| `sha1_add_text(sha, s)` | — | Añade un texto a un SHA-1 de sha1_new |  |
-| `sha1_add_byte(sha, b)` | — | Añade un byte (0-255) a un SHA-1 de sha1_new (el 0 tras el "blob 6" de git) |  |
-| `sha1_hex(sha)` | String | Acaba un SHA-1 de sha1_new: sus 40 cifras hexadecimales ("" si ese número no está en uso) |  |
-| `sha1_bytes(sha, out)` | Bool | Acaba un SHA-1 de sha1_new: sus 20 bytes a un búfer (como los guarda git en los árboles y el índice); false si ese número no está en uso |  |
+| [`inflate(src, n, dest, max)`](#inflate) | Int | Descomprime n bytes de deflate sin cabecera (como en un ZIP) del búfer src a dest: los bytes escritos, o -1 si no es deflate o está cortado, -2 si no cabe en max, -3 si no hay memoria (zlib) |  |
+| [`inflate_auto(src, n, dest, max)`](#inflate_auto) | Int | inflate para gzip, zlib o deflate sin cabecera, según sus primeros bytes (un cuerpo HTTP con Content-Encoding gzip o deflate): los bytes escritos, o lo mismo que inflate |  |
+| [`deflate(src, n, dest, max, level)`](#deflate) | Int | Comprime n bytes del búfer src a dest como deflate sin cabecera, nivel 0 (sin comprimir) a 9 (lo más pequeño; -1: 6): los bytes escritos, -2 si no caben en max, -3 si no hay memoria (zlib; unos 260 KB mientras trabaja, con cualquier nivel) |  |
+| [`crc32(buffer, n, crc)`](#crc32) | Int | El CRC-32 (como en ZIP y PNG) de n bytes de un búfer, siguiendo desde crc (0 para empezar) |  |
+| [`adler32(buffer, n, a)`](#adler32) | Int | El Adler-32 (la suma del final de un zlib) de n bytes de un búfer, siguiendo desde a (1 para empezar) |  |
+| [`inflate_used()`](#inflate_used) | Int | Los bytes de entrada que usó el último inflate o inflate_auto (con cabecera zlib, también su adler32): dónde empieza el siguiente objeto en un pack de git |  |
+| [`sha1(buffer, n)`](#sha1) | String | El SHA-1 de n bytes de un búfer, en 40 cifras hexadecimales (así nombra git sus objetos) |  |
+| [`sha1_text(s)`](#sha1_text) | String | El SHA-1 de un texto, en 40 cifras hexadecimales |  |
+| [`sha1_new()`](#sha1_new) | Int | Un SHA-1 hecho por partes con sha1_add, sha1_add_text y sha1_add_byte: su número (1-8), 0 si están todos en uso. Lo acaban sha1_hex o sha1_bytes |  |
+| [`sha1_add(sha, buffer, n)`](#sha1_add) | — | Añade n bytes de un búfer a un SHA-1 de sha1_new |  |
+| [`sha1_add_text(sha, s)`](#sha1_add_text) | — | Añade un texto a un SHA-1 de sha1_new |  |
+| [`sha1_add_byte(sha, b)`](#sha1_add_byte) | — | Añade un byte (0-255) a un SHA-1 de sha1_new (el 0 tras el "blob 6" de git) |  |
+| [`sha1_hex(sha)`](#sha1_hex) | String | Acaba un SHA-1 de sha1_new: sus 40 cifras hexadecimales ("" si ese número no está en uso) |  |
+| [`sha1_bytes(sha, out)`](#sha1_bytes) | Bool | Acaba un SHA-1 de sha1_new: sus 20 bytes a un búfer (como los guarda git en los árboles y el índice); false si ese número no está en uso |  |
+
+<a id="inflate"></a>
+
+### `inflate(src, n, dest, max)` → `Int`
+
+- `src`, `n`: el búfer comprimido y cuántos bytes tiene.
+- `dest`, `max`: dónde se descomprime y cuánto cabe.
+
+Descomprime deflate sin cabecera (el de dentro de un ZIP). Devuelve los bytes escritos, -1 si no es deflate o está
+cortado, -2 si no cabe en `max`, -3 sin memoria.
+
+Ver también: [`inflate_auto`](#inflate_auto), [`deflate`](#deflate), [`inflate_used`](#inflate_used).
+
+<a id="inflate_auto"></a>
+
+### `inflate_auto(src, n, dest, max)` → `Int`
+
+- `src`, `n`, `dest`, `max`: como en `inflate`.
+
+Como `inflate`, pero mira los primeros bytes y sirve para gzip, zlib o deflate sin cabecera: lo que llega por HTTP
+con `Content-Encoding: gzip`.
+
+Ver también: [`inflate`](#inflate).
+
+<a id="deflate"></a>
+
+### `deflate(src, n, dest, max, level)` → `Int`
+
+- `src`, `n`: lo que se comprime.
+- `dest`, `max`: dónde y cuánto cabe.
+- `level`: de 0 (sin comprimir, rápido) a 9 (lo más pequeño); -1 = 6.
+
+Comprime como deflate sin cabecera. Devuelve los bytes escritos, -2 si no caben, -3 sin memoria. Mientras trabaja
+usa unos 260 KB.
+
+Ver también: [`inflate`](#inflate).
+
+<a id="crc32"></a>
+
+### `crc32(buffer, n, crc)` → `Int`
+
+- `buffer`, `n`: los bytes.
+- `crc`: el CRC de lo anterior, para seguir por partes; 0 para empezar.
+
+Devuelve el CRC-32, el de ZIP y PNG.
+
+Ver también: [`adler32`](#adler32).
+
+<a id="adler32"></a>
+
+### `adler32(buffer, n, a)` → `Int`
+
+- `buffer`, `n`: los bytes.
+- `a`: lo anterior; 1 para empezar.
+
+Devuelve el Adler-32, la suma del final de un zlib.
+
+Ver también: [`crc32`](#crc32).
+
+<a id="inflate_used"></a>
+
+### `inflate_used()` → `Int`
+
+Devuelve cuántos bytes de entrada usó el último `inflate` o `inflate_auto`: dónde empieza lo siguiente si van
+varias cosas comprimidas seguidas (como en un pack de git).
+
+Ver también: [`inflate`](#inflate).
+
+<a id="sha1"></a>
+
+### `sha1(buffer, n)` → `String`
+
+- `buffer`, `n`: los bytes.
+
+Devuelve su SHA-1 en 40 cifras hexadecimales.
+
+Ver también: [`sha1_text`](#sha1_text), [`sha1_new`](#sha1_new).
+
+<a id="sha1_text"></a>
+
+### `sha1_text(s)` → `String`
+
+- `s`: el texto.
+
+Devuelve su SHA-1 en 40 cifras hexadecimales.
+
+Ver también: [`sha1`](#sha1).
+
+<a id="sha1_new"></a>
+
+### `sha1_new()` → `Int`
+
+Empieza un SHA-1 por partes, para datos que no están todos juntos. Devuelve su número (1 a 8), o 0 si están todos
+en uso. Se le añade con `sha1_add*` y se acaba con `sha1_hex` o `sha1_bytes`.
+
+Ver también: [`sha1_add`](#sha1_add), [`sha1_hex`](#sha1_hex).
+
+<a id="sha1_add"></a>
+
+### `sha1_add(sha, buffer, n)`
+
+- `sha`: el número de `sha1_new`.
+- `buffer`, `n`: los bytes que se añaden.
+
+Ver también: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_text"></a>
+
+### `sha1_add_text(sha, s)`
+
+- `sha`: el número de `sha1_new`.
+- `s`: el texto que se añade.
+
+Ver también: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_byte"></a>
+
+### `sha1_add_byte(sha, b)`
+
+- `sha`: el número de `sha1_new`.
+- `b`: el byte, de 0 a 255.
+
+Ver también: [`sha1_new`](#sha1_new).
+
+<a id="sha1_hex"></a>
+
+### `sha1_hex(sha)` → `String`
+
+- `sha`: el número de `sha1_new`.
+
+Lo acaba y devuelve las 40 cifras hexadecimales; `""` si ese número no está en uso. El número queda libre.
+
+Ver también: [`sha1_bytes`](#sha1_bytes).
+
+<a id="sha1_bytes"></a>
+
+### `sha1_bytes(sha, out)` → `Bool`
+
+- `sha`: el número de `sha1_new`.
+- `out`: un búfer de 20 bytes.
+
+Lo acaba y escribe sus 20 bytes en `out`. Devuelve `false` si ese número no está en uso.
+
+Ver también: [`sha1_hex`](#sha1_hex).
 
 ## UTF-8
 
+Los textos de Dash son Latin-1, pero lo que llega de la red suele ser UTF-8, donde un carácter ocupa de 1 a 4
+bytes. Estas funciones recorren un texto UTF-8 carácter a carácter (las posiciones son bytes) y lo pasan a
+Latin-1 y al revés.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `utf8_next(s, i)` | Int | La posición del carácter UTF-8 que sigue al del byte i (el largo, al final) |  |
-| `utf8_prev(s, i)` | Int | La posición del carácter UTF-8 anterior al byte i (0 al principio) |  |
-| `utf8_code(s, i)` | Int | El punto de código del carácter UTF-8 en el byte i (65533 para un byte no válido, 0 fuera del texto) |  |
-| `utf8_char(code)` | String | Un texto con el carácter de ese punto de código en UTF-8 ("" para 0; U+FFFD si no es uno) |  |
-| `utf8_length(s)` | Int | Cuántos caracteres UTF-8 tiene s (cada byte no válido cuenta como uno) |  |
-| `utf8_to_latin1(s)` | String | Un texto UTF-8 en Latin-1: lo que Latin-1 no tiene pasa a algo parecido (“ a ", € a EUR, … a ...) o a ?, igual que los bytes no válidos |  |
-| `latin1_to_utf8(s)` | String | Un texto Latin-1 en UTF-8 (los bytes desde 128 ocupan dos) |  |
-| `utf8_check(buffer, from, to)` | Int | La posición del primer byte, de from a to - 1 de un búfer, que no es UTF-8 válido (o empieza una secuencia cortada por to); -1 si todos lo son |  |
+| [`utf8_next(s, i)`](#utf8_next) | Int | La posición del carácter UTF-8 que sigue al del byte i (el largo, al final) |  |
+| [`utf8_prev(s, i)`](#utf8_prev) | Int | La posición del carácter UTF-8 anterior al byte i (0 al principio) |  |
+| [`utf8_code(s, i)`](#utf8_code) | Int | El punto de código del carácter UTF-8 en el byte i (65533 para un byte no válido, 0 fuera del texto) |  |
+| [`utf8_char(code)`](#utf8_char) | String | Un texto con el carácter de ese punto de código en UTF-8 ("" para 0; U+FFFD si no es uno) |  |
+| [`utf8_length(s)`](#utf8_length) | Int | Cuántos caracteres UTF-8 tiene s (cada byte no válido cuenta como uno) |  |
+| [`utf8_to_latin1(s)`](#utf8_to_latin1) | String | Un texto UTF-8 en Latin-1: lo que Latin-1 no tiene pasa a algo parecido (“ a ", € a EUR, … a ...) o a ?, igual que los bytes no válidos |  |
+| [`latin1_to_utf8(s)`](#latin1_to_utf8) | String | Un texto Latin-1 en UTF-8 (los bytes desde 128 ocupan dos) |  |
+| [`utf8_check(buffer, from, to)`](#utf8_check) | Int | La posición del primer byte, de from a to - 1 de un búfer, que no es UTF-8 válido (o empieza una secuencia cortada por to); -1 si todos lo son |  |
+
+<a id="utf8_next"></a>
+
+### `utf8_next(s, i)` → `Int`
+
+- `s`: el texto UTF-8.
+- `i`: la posición de un carácter, en bytes.
+
+Devuelve dónde empieza el siguiente carácter; al final, el largo del texto.
+
+Ver también: [`utf8_prev`](#utf8_prev), [`utf8_code`](#utf8_code).
+
+<a id="utf8_prev"></a>
+
+### `utf8_prev(s, i)` → `Int`
+
+- `s`: el texto UTF-8.
+- `i`: una posición en bytes.
+
+Devuelve dónde empieza el carácter anterior; 0 al principio.
+
+Ver también: [`utf8_next`](#utf8_next).
+
+<a id="utf8_code"></a>
+
+### `utf8_code(s, i)` → `Int`
+
+- `s`: el texto UTF-8.
+- `i`: la posición del carácter.
+
+Devuelve su número Unicode; 65533 para un byte que no es UTF-8 válido, 0 fuera del texto.
+
+Ver también: [`utf8_char`](#utf8_char).
+
+<a id="utf8_char"></a>
+
+### `utf8_char(code)` → `String`
+
+- `code`: un número Unicode.
+
+Devuelve ese carácter en UTF-8; `""` para 0.
+
+Ver también: [`utf8_code`](#utf8_code).
+
+<a id="utf8_length"></a>
+
+### `utf8_length(s)` → `Int`
+
+- `s`: el texto UTF-8.
+
+Devuelve cuántos caracteres tiene (no bytes).
+
+Ver también: [`utf8_next`](#utf8_next).
+
+<a id="utf8_to_latin1"></a>
+
+### `utf8_to_latin1(s)` → `String`
+
+- `s`: el texto UTF-8.
+
+Devuelve el texto en Latin-1, para enseñarlo con las fuentes del Amiga. Lo que Latin-1 no tiene pasa a algo
+parecido (las comillas curvas a rectas, € a EUR) o a `?`.
+
+Ver también: [`latin1_to_utf8`](#latin1_to_utf8).
+
+<a id="latin1_to_utf8"></a>
+
+### `latin1_to_utf8(s)` → `String`
+
+- `s`: un texto de Dash (Latin-1).
+
+Devuelve el texto en UTF-8, para mandarlo por la red o guardarlo para otros sistemas.
+
+Ver también: [`utf8_to_latin1`](#utf8_to_latin1).
+
+<a id="utf8_check"></a>
+
+### `utf8_check(buffer, from, to)` → `Int`
+
+- `buffer`: el búfer.
+- `from`, `to`: de `from` a `to - 1`.
+
+Devuelve la posición del primer byte que no es UTF-8 válido (o empieza un carácter cortado por `to`); -1 si todo vale.
+
+Ver también: [`utf8_to_latin1`](#utf8_to_latin1).
 
 ## Comparar y buscar en un búfer
 
@@ -4980,45 +5310,323 @@ Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Double y texto
 
+Pasar un `Double` (64 bits) a texto con los decimales que se quieran, y un texto a `Double`, sin perder cifras.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `str_from_double(d, decimals)` | String | Un Double con tantos decimales (0: ninguno), su decimal más corto redondeado alejándose del cero (2.675 con 2 da 2.68); decimales < 0: el más corto que se lee igual |  |
-| `str_to_double(s)` | Double | El Double del principio del texto, como Double(s): exacto hasta 17 cifras significativas; 0.0 si no hay número |  |
+| [`str_from_double(d, decimals)`](#str_from_double) | String | Un Double con tantos decimales (0: ninguno), su decimal más corto redondeado alejándose del cero (2.675 con 2 da 2.68); decimales < 0: el más corto que se lee igual |  |
+| [`str_to_double(s)`](#str_to_double) | Double | El Double del principio del texto, como Double(s): exacto hasta 17 cifras significativas; 0.0 si no hay número |  |
+
+<a id="str_from_double"></a>
+
+### `str_from_double(d, decimals)` → `String`
+
+- `d`: el número.
+- `decimals`: cuántos decimales; 0 ninguno; negativo, los justos para que se lea igual.
+
+Devuelve el número como texto, redondeando las mitades lejos del cero: `str_from_double(2.675, 2)` es `"2.68"`.
+
+Ver también: [`str_to_double`](#str_to_double).
+
+<a id="str_to_double"></a>
+
+### `str_to_double(s)` → `Double`
+
+- `s`: el texto.
+
+Devuelve el número del principio del texto, exacto hasta 17 cifras; 0.0 si no hay número. Es `Double(s)`.
+
+Ver también: [`str_from_double`](#str_from_double).
 
 ## Matemáticas de Double
 
+Las funciones matemáticas de siempre con `Double`. Los ángulos van en radianes (180 grados son 3.14159...). Un
+resultado imposible no para el programa: da `nan` (no es un número) o `inf`, que se miran con `is_nan` e `is_inf`.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `sqrt(x)` | Double | La raíz cuadrada (nan para un negativo) |  |
-| `pow(x, y)` | Double | x elevado a y |  |
-| `exp(x)` | Double | e elevado a x |  |
-| `log(x)` | Double | El logaritmo neperiano (-inf para 0, nan para un negativo) |  |
-| `log10(x)` | Double | El logaritmo en base 10 |  |
-| `sin(x)` | Double | El seno de x radianes |  |
-| `cos(x)` | Double | El coseno de x radianes |  |
-| `tan(x)` | Double | La tangente de x radianes |  |
-| `asin(x)` | Double | El arcoseno en radianes, de -pi/2 a pi/2 (nan fuera de -1..1) |  |
-| `acos(x)` | Double | El arcocoseno en radianes, de 0 a pi (nan fuera de -1..1) |  |
-| `atan(x)` | Double | El arcotangente en radianes, de -pi/2 a pi/2 |  |
-| `atan2(y, x)` | Double | El ángulo del punto (x, y) en radianes, de -pi a pi |  |
-| `floor(x)` | Double | El mayor número entero que no pasa de x (un Double) |  |
-| `ceil(x)` | Double | El menor número entero que no es menor que x (un Double) |  |
-| `round(x)` | Double | El número entero más cercano, las mitades alejándose del cero (2.5 da 3.0, -2.5 da -3.0) |  |
-| `trunc(x)` | Double | La parte entera, hacia el cero (-2.7 da -2.0) |  |
-| `fmod(x, y)` | Double | El resto de x / y con el signo de x (nan si y es 0) |  |
-| `abs(x)` | Double | El valor absoluto, un Double |  |
-| `is_nan(x)` | Bool | True si x es nan (no es un número: sqrt(-1.0), 0.0 / 0.0) |  |
-| `is_inf(x)` | Bool | True si x es inf o -inf |  |
+| [`sqrt(x)`](#sqrt) | Double | La raíz cuadrada (nan para un negativo) |  |
+| [`pow(x, y)`](#pow) | Double | x elevado a y |  |
+| [`exp(x)`](#exp) | Double | e elevado a x |  |
+| [`log(x)`](#log) | Double | El logaritmo neperiano (-inf para 0, nan para un negativo) |  |
+| [`log10(x)`](#log10) | Double | El logaritmo en base 10 |  |
+| [`sin(x)`](#sin) | Double | El seno de x radianes |  |
+| [`cos(x)`](#cos) | Double | El coseno de x radianes |  |
+| [`tan(x)`](#tan) | Double | La tangente de x radianes |  |
+| [`asin(x)`](#asin) | Double | El arcoseno en radianes, de -pi/2 a pi/2 (nan fuera de -1..1) |  |
+| [`acos(x)`](#acos) | Double | El arcocoseno en radianes, de 0 a pi (nan fuera de -1..1) |  |
+| [`atan(x)`](#atan) | Double | El arcotangente en radianes, de -pi/2 a pi/2 |  |
+| [`atan2(y, x)`](#atan2) | Double | El ángulo del punto (x, y) en radianes, de -pi a pi |  |
+| [`floor(x)`](#floor) | Double | El mayor número entero que no pasa de x (un Double) |  |
+| [`ceil(x)`](#ceil) | Double | El menor número entero que no es menor que x (un Double) |  |
+| [`round(x)`](#round) | Double | El número entero más cercano, las mitades alejándose del cero (2.5 da 3.0, -2.5 da -3.0) |  |
+| [`trunc(x)`](#trunc) | Double | La parte entera, hacia el cero (-2.7 da -2.0) |  |
+| [`fmod(x, y)`](#fmod) | Double | El resto de x / y con el signo de x (nan si y es 0) |  |
+| [`abs(x)`](#abs) | Double | El valor absoluto, un Double |  |
+| [`is_nan(x)`](#is_nan) | Bool | True si x es nan (no es un número: sqrt(-1.0), 0.0 / 0.0) |  |
+| [`is_inf(x)`](#is_inf) | Bool | True si x es inf o -inf |  |
+
+<a id="sqrt"></a>
+
+### `sqrt(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve la raíz cuadrada; `nan` para un negativo.
+
+Ver también: [`pow`](#pow).
+
+<a id="pow"></a>
+
+### `pow(x, y)` → `Double`
+
+- `x`: la base.
+- `y`: el exponente.
+
+Devuelve `x` elevado a `y`.
+
+Ver también: [`sqrt`](#sqrt), [`exp`](#exp).
+
+<a id="exp"></a>
+
+### `exp(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve e elevado a `x`.
+
+Ver también: [`log`](#log).
+
+<a id="log"></a>
+
+### `log(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el logaritmo neperiano; `-inf` para 0, `nan` para un negativo.
+
+Ver también: [`log10`](#log10), [`exp`](#exp).
+
+<a id="log10"></a>
+
+### `log10(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el logaritmo en base 10.
+
+Ver también: [`log`](#log).
+
+<a id="sin"></a>
+
+### `sin(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el seno de `x` radianes.
+
+Ver también: [`cos`](#cos), [`asin`](#asin).
+
+<a id="cos"></a>
+
+### `cos(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el coseno de `x` radianes.
+
+Ver también: [`sin`](#sin).
+
+<a id="tan"></a>
+
+### `tan(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve la tangente de `x` radianes.
+
+Ver también: [`atan`](#atan).
+
+<a id="asin"></a>
+
+### `asin(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el arcoseno en radianes, de -pi/2 a pi/2; `nan` fuera de -1..1.
+
+Ver también: [`sin`](#sin).
+
+<a id="acos"></a>
+
+### `acos(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el arcocoseno en radianes, de 0 a pi; `nan` fuera de -1..1.
+
+Ver también: [`cos`](#cos).
+
+<a id="atan"></a>
+
+### `atan(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el arcotangente en radianes, de -pi/2 a pi/2.
+
+Ver también: [`atan2`](#atan2).
+
+<a id="atan2"></a>
+
+### `atan2(y, x)` → `Double`
+
+- `y`, `x`: el punto (fíjate en el orden).
+
+Devuelve el ángulo del punto en radianes, de -pi a pi: hacia dónde apunta, para girar un sprite hacia un objetivo.
+
+Ver también: [`atan`](#atan).
+
+<a id="floor"></a>
+
+### `floor(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el mayor entero que no pasa de `x`, como `Double`: `floor(-2.5)` es -3.0.
+
+Ver también: [`ceil`](#ceil), [`round`](#round), [`trunc`](#trunc).
+
+<a id="ceil"></a>
+
+### `ceil(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el menor entero que no es menor que `x`, como `Double`.
+
+Ver también: [`floor`](#floor).
+
+<a id="round"></a>
+
+### `round(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el entero más cercano, las mitades lejos del cero: 2.5 da 3.0 y -2.5 da -3.0.
+
+Ver también: [`floor`](#floor), [`trunc`](#trunc).
+
+<a id="trunc"></a>
+
+### `trunc(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve la parte entera, hacia el cero: -2.7 da -2.0.
+
+Ver también: [`floor`](#floor).
+
+<a id="fmod"></a>
+
+### `fmod(x, y)` → `Double`
+
+- `x`, `y`: los dos números.
+
+Devuelve el resto de `x / y` con el signo de `x`; `nan` si `y` es 0.
+
+<a id="abs"></a>
+
+### `abs(x)` → `Double`
+
+- `x`: el número, un `Double`.
+
+Devuelve el valor absoluto, un `Double`.
+
+<a id="is_nan"></a>
+
+### `is_nan(x)` → `Bool`
+
+- `x`: el número, un `Double`.
+
+Devuelve `true` si `x` es `nan`: el resultado de algo imposible, como `sqrt(-1.0)` o `0.0 / 0.0`.
+
+Ver también: [`is_inf`](#is_inf).
+
+<a id="is_inf"></a>
+
+### `is_inf(x)` → `Bool`
+
+- `x`: el número, un `Double`.
+
+Devuelve `true` si `x` es `inf` o `-inf`, como `1.0 / 0.0`.
+
+Ver también: [`is_nan`](#is_nan).
 
 ## Expresiones regulares y comodines
 
+Expresiones regulares (la sintaxis común de ICU) y comodines de hoja de cálculo sobre textos UTF-8; las
+posiciones y largos van en bytes. Un patrón mal escrito no para el programa: da `false` o -1 y `regex_error`
+dice por qué. La sintaxis entera, en el manual (sección 5).
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `regex_match(pattern, text, ignore_case)` | Bool | True si el texto entero encaja con la expresión regular (la sintaxis común de ICU: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| grupos); false también si el patrón está mal (regex_error dice por qué) |  |
-| `regex_find(pattern, text, from, ignore_case)` | Int | La posición en bytes donde empieza lo primero que encaja desde el byte from; -1 si no hay (o el patrón está mal); regex_length da su largo |  |
-| `regex_length()` | Int | El largo en bytes de lo último que encajó con regex_find o regex_match (0 si nada) |  |
-| `regex_error()` | String | Por qué está mal el último patrón; "" si está bien |  |
-| `wildcard_match(pattern, text, ignore_case)` | Bool | True si el texto entero encaja con los comodines de Excel: * cualquier cosa, ? un carácter, ~ delante de un carácter lo toma tal cual (~* ~? ~~) |  |
+| [`regex_match(pattern, text, ignore_case)`](#regex_match) | Bool | True si el texto entero encaja con la expresión regular (la sintaxis común de ICU: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| grupos); false también si el patrón está mal (regex_error dice por qué) |  |
+| [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | La posición en bytes donde empieza lo primero que encaja desde el byte from; -1 si no hay (o el patrón está mal); regex_length da su largo |  |
+| [`regex_length()`](#regex_length) | Int | El largo en bytes de lo último que encajó con regex_find o regex_match (0 si nada) |  |
+| [`regex_error()`](#regex_error) | String | Por qué está mal el último patrón; "" si está bien |  |
+| [`wildcard_match(pattern, text, ignore_case)`](#wildcard_match) | Bool | True si el texto entero encaja con los comodines de Excel: * cualquier cosa, ? un carácter, ~ delante de un carácter lo toma tal cual (~* ~? ~~) |  |
+
+<a id="regex_match"></a>
+
+### `regex_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: la expresión regular.
+- `text`: el texto, en UTF-8.
+- `ignore_case`: `true` para no distinguir mayúsculas.
+
+Devuelve `true` si el texto entero encaja. `false` también si el patrón está mal (`regex_error`).
+
+Ver también: [`regex_find`](#regex_find), [`wildcard_match`](#wildcard_match).
+
+<a id="regex_find"></a>
+
+### `regex_find(pattern, text, from, ignore_case)` → `Int`
+
+- `pattern`, `text`, `ignore_case`: como en `regex_match`.
+- `from`: desde qué byte se busca.
+
+Devuelve dónde empieza lo primero que encaja, o -1. `regex_length` da cuánto mide.
+
+Ver también: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
+
+<a id="regex_length"></a>
+
+### `regex_length()` → `Int`
+
+Devuelve el largo en bytes de lo último que encajó; 0 si nada.
+
+Ver también: [`regex_find`](#regex_find).
+
+<a id="regex_error"></a>
+
+### `regex_error()` → `String`
+
+Devuelve por qué está mal el último patrón, o `""` si está bien.
+
+Ver también: [`regex_match`](#regex_match).
+
+<a id="wildcard_match"></a>
+
+### `wildcard_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: con comodines de hoja de cálculo: `*` cualquier cosa, `?` un carácter, `~` delante de uno lo toma tal
+  cual (`~*`).
+- `text`, `ignore_case`: como en `regex_match`.
+
+Devuelve `true` si el texto entero encaja. Para los comodines de AmigaDOS (`#?`), `dialog_file`.
+
+Ver también: [`regex_match`](#regex_match).
 
 ## Simular teclado y ratón
 
@@ -5037,19 +5645,86 @@ Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Portapapeles
 
+El portapapeles del sistema: copiar y pegar texto con los demás programas, y bloques propios que solo entiende el
+programa (unas celdas, un dibujo) unidos a ese texto.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `clip_write_text(s)` | Bool | Copia un texto UTF-8 al portapapeles (unidad 0, IFF FTXT en Latin-1, como lo leen los demás programas): lo que Latin-1 no tiene pasa a algo parecido, como utf8_to_latin1 (€ a EUR); false si no se puede escribir |  |
-| `clip_read_text()` | String | El texto del portapapeles (unidad 0) en UTF-8; "" si está vacío o no tiene texto |  |
-| `clip_write_block(unit, type, buffer, n)` | Bool | Copia n bytes de un búfer a la unidad 1-255 del portapapeles como un FORM de un tipo propio (4 caracteres, "LCLC"), después de clip_write_text: queda unido a ese texto, y si se copia otra cosa a la unidad 0, el bloque se da por perdido |  |
-| `clip_block_size(unit, type)` | Int | Los bytes del bloque de ese tipo en una unidad del portapapeles; -1 si no hay o se copió otra cosa después |  |
-| `clip_read_block(unit, type, dest, max)` | Int | Copia el bloque de ese tipo de una unidad del portapapeles al búfer dest: sus bytes, -1 si no hay o se copió otra cosa después, -2 si no cabe en max |  |
+| [`clip_write_text(s)`](#clip_write_text) | Bool | Copia un texto UTF-8 al portapapeles (unidad 0, IFF FTXT en Latin-1, como lo leen los demás programas): lo que Latin-1 no tiene pasa a algo parecido, como utf8_to_latin1 (€ a EUR); false si no se puede escribir |  |
+| [`clip_read_text()`](#clip_read_text) | String | El texto del portapapeles (unidad 0) en UTF-8; "" si está vacío o no tiene texto |  |
+| [`clip_write_block(unit, type, buffer, n)`](#clip_write_block) | Bool | Copia n bytes de un búfer a la unidad 1-255 del portapapeles como un FORM de un tipo propio (4 caracteres, "LCLC"), después de clip_write_text: queda unido a ese texto, y si se copia otra cosa a la unidad 0, el bloque se da por perdido |  |
+| [`clip_block_size(unit, type)`](#clip_block_size) | Int | Los bytes del bloque de ese tipo en una unidad del portapapeles; -1 si no hay o se copió otra cosa después |  |
+| [`clip_read_block(unit, type, dest, max)`](#clip_read_block) | Int | Copia el bloque de ese tipo de una unidad del portapapeles al búfer dest: sus bytes, -1 si no hay o se copió otra cosa después, -2 si no cabe en max |  |
+
+<a id="clip_write_text"></a>
+
+### `clip_write_text(s)` → `Bool`
+
+- `s`: el texto, en UTF-8 (un texto normal de Dash vale si no tiene acentos; si los tiene, `latin1_to_utf8` antes).
+
+Lo copia al portapapeles como lo leen los demás programas. Devuelve `false` si no se puede.
+
+Ver también: [`clip_read_text`](#clip_read_text).
+
+<a id="clip_read_text"></a>
+
+### `clip_read_text()` → `String`
+
+Devuelve el texto del portapapeles en UTF-8 (`utf8_to_latin1` para enseñarlo); `""` si está vacío o no tiene texto.
+
+Ver también: [`clip_write_text`](#clip_write_text).
+
+<a id="clip_write_block"></a>
+
+### `clip_write_block(unit, type, buffer, n)` → `Bool`
+
+- `unit`: una unidad del portapapeles, de 1 a 255.
+- `type`: un tipo de 4 letras propio (`"CELD"`).
+- `buffer`, `n`: los bytes.
+
+Después de `clip_write_text`, guarda un bloque propio unido a ese texto: si luego se copia otra cosa, el bloque deja
+de valer. Así se pegan en el mismo programa unas celdas con su formato y en otros, el texto.
+
+Ver también: [`clip_read_block`](#clip_read_block), [`clip_block_size`](#clip_block_size).
+
+<a id="clip_block_size"></a>
+
+### `clip_block_size(unit, type)` → `Int`
+
+- `unit`, `type`: como en `clip_write_block`.
+
+Devuelve el tamaño del bloque, o -1 si no hay o se copió otra cosa después.
+
+Ver también: [`clip_read_block`](#clip_read_block).
+
+<a id="clip_read_block"></a>
+
+### `clip_read_block(unit, type, dest, max)` → `Int`
+
+- `unit`, `type`: como en `clip_write_block`.
+- `dest`, `max`: dónde y cuánto cabe.
+
+Copia el bloque. Devuelve sus bytes, -1 si no hay, -2 si no cabe.
+
+Ver también: [`clip_block_size`](#clip_block_size).
 
 ## Ordenar textos según el idioma
 
+Ordenar textos como lo hace el idioma del usuario, no por el código de cada letra.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `str_compare_locale(a, b, ignore_case)` | Int | Compara dos textos UTF-8 en el orden del idioma del usuario (locale.library): -1 si a va antes, 0 si son iguales, 1 si va antes b; los acentos y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco", "apple" antes que "Banana"), y nada con ignore_case. Sin locale.library, por sus bytes Latin-1 |  |
+| [`str_compare_locale(a, b, ignore_case)`](#str_compare_locale) | Int | Compara dos textos UTF-8 en el orden del idioma del usuario (locale.library): -1 si a va antes, 0 si son iguales, 1 si va antes b; los acentos y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco", "apple" antes que "Banana"), y nada con ignore_case. Sin locale.library, por sus bytes Latin-1 |  |
+
+<a id="str_compare_locale"></a>
+
+### `str_compare_locale(a, b, ignore_case)` → `Int`
+
+- `a`, `b`: los dos textos, en UTF-8.
+- `ignore_case`: `true` para no distinguir mayúsculas.
+
+Devuelve -1 si `a` va antes, 0 si son iguales y 1 si va antes `b`, en el orden del idioma del usuario: los acentos
+y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco").
 
 ## Sistema y programa
 
@@ -5100,14 +5775,76 @@ Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
 ## JSON leído en C (para lib/json.dash)
 
+La parte en C del lector de JSON. Para usar JSON en un programa, mejor el módulo `lib/json.dash`, que hace con
+esto un árbol cómodo de recorrer.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `json_scan(text)` | Int | Lee un texto JSON a una tabla de nodos en orden, cada uno seguido de lo que contiene (lib/json.dash hace su árbol con ella): cuántos, -1 si no es JSON (json_scan_error dice por qué y dónde) |  |
-| `json_scan_error()` | String | Por qué el último json_scan dio -1, y en qué byte ("unexpected end at byte 1") |  |
-| `json_scan_kind(i)` | Int | El tipo del nodo i: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto |  |
-| `json_scan_count(i)` | Int | Cuántos elementos tiene un nodo de lista u objeto (van detrás); 1 si es true, 0 si es false |  |
-| `json_scan_text(i)` | String | El texto de un nodo de texto (sin sus escapes, \uXXXX en UTF-8) o de número (como está escrito) |  |
-| `json_scan_name(i)` | String | El nombre del nodo i dentro de su objeto ("" en una lista o arriba del todo) |  |
+| [`json_scan(text)`](#json_scan) | Int | Lee un texto JSON a una tabla de nodos en orden, cada uno seguido de lo que contiene (lib/json.dash hace su árbol con ella): cuántos, -1 si no es JSON (json_scan_error dice por qué y dónde) |  |
+| [`json_scan_error()`](#json_scan_error) | String | Por qué el último json_scan dio -1, y en qué byte ("unexpected end at byte 1") |  |
+| [`json_scan_kind(i)`](#json_scan_kind) | Int | El tipo del nodo i: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto |  |
+| [`json_scan_count(i)`](#json_scan_count) | Int | Cuántos elementos tiene un nodo de lista u objeto (van detrás); 1 si es true, 0 si es false |  |
+| [`json_scan_text(i)`](#json_scan_text) | String | El texto de un nodo de texto (sin sus escapes, \uXXXX en UTF-8) o de número (como está escrito) |  |
+| [`json_scan_name(i)`](#json_scan_name) | String | El nombre del nodo i dentro de su objeto ("" en una lista o arriba del todo) |  |
+
+<a id="json_scan"></a>
+
+### `json_scan(text)` → `Int`
+
+- `text`: el JSON.
+
+Lo lee a una tabla de nodos en orden, cada uno seguido de lo que contiene. Devuelve cuántos nodos, o -1 si no es
+JSON (`json_scan_error`).
+
+Ver también: [`json_scan_kind`](#json_scan_kind), [`json_scan_error`](#json_scan_error).
+
+<a id="json_scan_error"></a>
+
+### `json_scan_error()` → `String`
+
+Devuelve por qué el último `json_scan` dio -1 y en qué byte.
+
+Ver también: [`json_scan`](#json_scan).
+
+<a id="json_scan_kind"></a>
+
+### `json_scan_kind(i)` → `Int`
+
+- `i`: el nodo, desde 0.
+
+Devuelve su tipo: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto.
+
+Ver también: [`json_scan_count`](#json_scan_count).
+
+<a id="json_scan_count"></a>
+
+### `json_scan_count(i)` → `Int`
+
+- `i`: el nodo, desde 0.
+
+En una lista u objeto, cuántos elementos tiene (van detrás); en un booleano, 1 si es true.
+
+Ver también: [`json_scan_kind`](#json_scan_kind).
+
+<a id="json_scan_text"></a>
+
+### `json_scan_text(i)` → `String`
+
+- `i`: el nodo, desde 0.
+
+Devuelve el texto de un nodo de texto, sin escapes y en UTF-8, o un número tal como está escrito.
+
+Ver también: [`json_scan_name`](#json_scan_name).
+
+<a id="json_scan_name"></a>
+
+### `json_scan_name(i)` → `String`
+
+- `i`: el nodo, desde 0.
+
+Devuelve su nombre dentro de su objeto; `""` en una lista o arriba del todo.
+
+Ver también: [`json_scan_text`](#json_scan_text).
 
 ## Depurador (el programa depurado, con dash --debug)
 
