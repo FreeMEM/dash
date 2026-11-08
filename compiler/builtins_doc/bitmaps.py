@@ -80,13 +80,17 @@ own). It goes through the system, without taking it over. An installed list does
     # ------------------------------------------------------------ bitmaps
     "bitmap_create": _f(_B_ES + """\
 - `width`, `height`: el tamaño en píxeles.
-- `depth`: la profundidad, de 1 a 8.
+- `depth`: la profundidad, de 1 a 8. Con 0, la de la pantalla donde se dibuja y en su formato, también el de una
+  tarjeta gráfica: para preparar algo sin que se vea (imágenes, iconos y colores RGB incluidos) y copiarlo a la
+  ventana de una vez, sin parpadeo.
 
 Crea un bitmap vacío (todo color 0) fuera de pantalla; el que hubiera en ese número se libera. Devuelve `false` con
 medidas fuera de rango o sin memoria.
 """, _B_EN + """\
 - `width`, `height`: the size in pixels.
-- `depth`: the depth, 1 to 8.
+- `depth`: the depth, 1 to 8. With 0, that of the screen being drawn on and in its format, a graphics card's too:
+  to prepare something out of sight (pictures, icons and RGB colours included) and copy it to the window at once,
+  without flicker.
 
 Creates an empty bitmap (all colour 0) off screen; any bitmap at that number is freed. Returns `false` with sizes
 out of range or without memory.
@@ -106,12 +110,14 @@ Returns `false` if it cannot be read or is not an ILBM.
 - `filename`: el fichero.
 
 Lo guarda como IFF ILBM sin comprimir, con la paleta de la pantalla del programa o de la ventana. Devuelve `false`
-si no se puede escribir.
+si no se puede escribir, o si el bitmap es de más de 8 planos (uno de `bitmap_create` con profundidad 0 en una
+tarjeta gráfica).
 """, _B_EN + """\
 - `filename`: the file.
 
 Saves it as an uncompressed IFF ILBM, with the palette of the program's screen or the window's. Returns `false` if
-it cannot be written.
+it cannot be written, or if the bitmap has more than 8 planes (one from `bitmap_create` with depth 0 on a graphics
+card).
 """, ["bitmap_load"]),
     "bitmap_free": _f(_B_ES + "\nLibera el bitmap. Si se estaba dibujando en él, se vuelve a dibujar en la pantalla.\n",
                       _B_EN + "\nFrees the bitmap. If drawing was going to it, drawing goes back to the screen.\n",
