@@ -122,7 +122,7 @@ end
 El color de las líneas, los puntos, los rellenos y el texto que vienen después. Sigue puesto hasta el siguiente
 `gfx_pen`. Llamarlo con el color que ya tiene no cuesta nada, así que se puede poner en cada vuelta de un bucle.
 
-Ver también: [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_rgb`](#gfx_rgb), `color_pen`.
+Ver también: [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_rgb`](#gfx_rgb), [`color_pen`](#color_pen).
 
 <a id="gfx_pen_bg"></a>
 
@@ -339,7 +339,7 @@ Escribe el texto en el cursor con la fuente actual y el lápiz. El cursor marca 
 su parte de arriba: con la fuente topaz de 8 puntos, el texto ocupa desde `y - 6` hasta `y + 1`. Después, el cursor
 queda al final del texto. No parte líneas: un texto largo se corta en el borde.
 
-Ver también: [`gfx_text_at`](#gfx_text_at), [`gfx_text_len`](#gfx_text_len), `font_use`, `font_baseline`.
+Ver también: [`gfx_text_at`](#gfx_text_at), [`gfx_text_len`](#gfx_text_len), [`font_use`](#font_use), [`font_baseline`](#font_baseline).
 
 <a id="gfx_text_at"></a>
 
@@ -351,7 +351,7 @@ Ver también: [`gfx_text_at`](#gfx_text_at), [`gfx_text_len`](#gfx_text_len), `f
 Es `gfx_move(x, y)` y `gfx_text(str)`. Para escribir con la esquina de arriba en `y`, suma la línea de base de la
 fuente: `gfx_text_at(x, y + font_baseline(), "Hola")`.
 
-Ver también: [`gfx_text`](#gfx_text), [`gfx_text_len`](#gfx_text_len), `font_baseline`.
+Ver también: [`gfx_text`](#gfx_text), [`gfx_text_len`](#gfx_text_len), [`font_baseline`](#font_baseline).
 
 <a id="gfx_text_len"></a>
 
@@ -362,7 +362,7 @@ Ver también: [`gfx_text`](#gfx_text), [`gfx_text_len`](#gfx_text_len), `font_ba
 Devuelve cuántos píxeles de ancho ocupa el texto con la fuente actual, sin dibujarlo. Sirve para centrar:
 `gfx_text_at((ancho - gfx_text_len(t)) / 2, y, t)`.
 
-Ver también: [`gfx_text`](#gfx_text), `font_height`.
+Ver también: [`gfx_text`](#gfx_text), [`font_height`](#font_height).
 
 <a id="gfx_clear"></a>
 
@@ -436,7 +436,7 @@ Ver también: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_add`](#gfx_poly_ad
 Dibuja la imagen entera en una llamada, mucho más rápido que un `gfx_pixel` por píxel. Va bien para imágenes que
 el programa calcula (un fractal, un mapa) o que lee de un fichero.
 
-Ver también: [`gfx_pixel`](#gfx_pixel), [`buffer_alloc`](#buffer_alloc), `gfx_rgb_draw`.
+Ver también: [`gfx_pixel`](#gfx_pixel), [`buffer_alloc`](#buffer_alloc), [`gfx_rgb_draw`](#gfx_rgb_draw).
 
 <a id="gfx_copy"></a>
 
@@ -1608,7 +1608,7 @@ Ver también: [`bitmap_draw_to`](#bitmap_draw_to), [`bitmap_blit`](#bitmap_blit)
 La carga en el bitmap. En una pantalla propia, la paleta pasa a ser la de la imagen; el Workbench se queda con la
 suya. Devuelve `false` si no se puede leer o no es un ILBM.
 
-Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_colors), `image_load`.
+Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_colors), [`image_load`](#image_load).
 
 <a id="bitmap_save"></a>
 
@@ -4012,33 +4012,262 @@ Ver también: [`str_from_buffer`](#str_from_buffer).
 
 ## Fuentes y colores
 
+Escribir con otras fuentes y elegir colores por su valor RGB.
+
+**Fuentes.** `font_open` abre una fuente del sistema (de `FONTS:`) de un tamaño; `font_use` hace que `gfx_text` y
+`gfx_text_at` escriban con ella en el destino actual. `font_height`, `font_baseline` y `font_text_width` miden con
+la fuente puesta. Para fuentes TrueType, `font_from_ttf`.
+
+**Colores RGB.** En una pantalla de paleta solo hay unos pocos colores. `color_pen(r, g, b)` busca el más parecido
+de la pantalla (o reserva uno libre) y devuelve su número, para `gfx_pen`. Cuando ya no hace falta,
+`color_pen_free`.
+
+**Ejemplo** (`tests/test_doc_fuentes.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Fuentes y colores: escribir con una fuente del sistema, colores por su valor RGB, una sombra translúcida y una
+# imagen RGB hecha en un búfer.
+
+Main
+    screen_open_custom(320, 200, 4, "Fuentes")
+    gfx_rgb8(5, 255, 0, 0)
+
+    f = font_open("topaz.font", 8)
+    if f == 0
+        Print "no hay topaz"
+        return
+    end
+    font_use(f)
+    t = "Hola"
+    Print "topaz de #{font_size(f)}: #{t} mide #{font_text_width(t)}"
+    gfx_pen(1)
+    gfx_text_at(20, 30 + font_baseline(), t)       # con la parte de arriba en y = 30
+    font_style(2)                                  # negrita
+    gfx_text_at(20, 45 + font_baseline(), t)
+    font_style(0)
+
+    rojo = color_pen(255, 0, 0)                    # el color de la pantalla más parecido
+    gfx_pen(rojo)
+    gfx_rect(100, 20, 140, 60)
+    rgb = gfx_pixel_rgb(120, 40)
+    Print "rojo puro: 0x#{str_from_int(rgb, 16)}"
+    color_pen_free(rojo)
+    gfx_blend_rect(110, 30, 160, 70, 0x000000, 128)   # una sombra a medias
+
+    b = buffer_alloc(16 * 16 * 3)                  # 16 x 16 píxeles RGB, todos verdes
+    i = 0
+    while i < 16 * 16
+        buffer_set_byte(b, i * 3 + 1, 255)
+        i = i + 1
+    end
+    gfx_rgb_draw(b, 16, 16, 200, 30)
+    buffer_free(b)
+    verde = gfx_pixel_rgb(208, 38)
+    Print "el centro de la imagen es verde: #{(verde >> 8) & 255 > 128}"
+
+    time_delay(50)
+    font_close(f)
+    screen_close()
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `font_open(name, size)` | Int | Abre una fuente ("helvetica.font", tamaño en píxeles, 2 como poco): la fuente, o 0 si no hay |  |
-| `font_use(font)` | — | Escribe con esta fuente |  |
-| `font_close(font)` | — | Cierra una fuente (las abiertas se cierran al acabar) |  |
-| `font_style(style)` | — | El estilo del texto: 0 normal, +1 subrayado, +2 negrita, +4 cursiva |  |
-| `font_height()` | Int | El alto de la fuente actual |  |
-| `font_baseline()` | Int | Los píxeles de arriba del texto a su línea base |  |
-| `font_text_width(text)` | Int | El ancho de un texto en píxeles con la fuente y el estilo actuales |  |
-| `font_size(font)` | Int | El tamaño que dio el sistema para esta fuente (el más cercano que tiene) |  |
-| `color_pen(r, g, b)` | Int | El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen |  |
-| `color_pen_free(pen)` | — | Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen) |  |
+| [`font_open(name, size)`](#font_open) | Int | Abre una fuente ("helvetica.font", tamaño en píxeles, 2 como poco): la fuente, o 0 si no hay |  |
+| [`font_use(font)`](#font_use) | — | Escribe con esta fuente |  |
+| [`font_close(font)`](#font_close) | — | Cierra una fuente (las abiertas se cierran al acabar) |  |
+| [`font_style(style)`](#font_style) | — | El estilo del texto: 0 normal, +1 subrayado, +2 negrita, +4 cursiva |  |
+| [`font_height()`](#font_height) | Int | El alto de la fuente actual |  |
+| [`font_baseline()`](#font_baseline) | Int | Los píxeles de arriba del texto a su línea base |  |
+| [`font_text_width(text)`](#font_text_width) | Int | El ancho de un texto en píxeles con la fuente y el estilo actuales |  |
+| [`font_size(font)`](#font_size) | Int | El tamaño que dio el sistema para esta fuente (el más cercano que tiene) |  |
+| [`color_pen(r, g, b)`](#color_pen) | Int | El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen |  |
+| [`color_pen_free(pen)`](#color_pen_free) | — | Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen) |  |
+
+<a id="font_open"></a>
+
+### `font_open(name, size)` → `Int`
+
+- `name`: el nombre de la fuente con `.font`: `"helvetica.font"`, `"topaz.font"`.
+- `size`: el alto en píxeles, 2 como poco.
+
+Abre la fuente; si no tiene ese tamaño, el sistema da el más cercano (`font_size` dice cuál). Devuelve la fuente, o
+0 si no existe.
+
+Ver también: [`font_use`](#font_use), [`font_close`](#font_close), [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_use"></a>
+
+### `font_use(font)`
+
+- `font`: una fuente de `font_open` o `font_from_ttf`.
+
+Desde ahora `gfx_text` escribe con ella en el destino actual.
+
+Ver también: [`font_open`](#font_open), [`font_style`](#font_style), [`gfx_text`](#gfx_text).
+
+<a id="font_close"></a>
+
+### `font_close(font)`
+
+- `font`: la fuente.
+
+La cierra. Las abiertas se cierran solas al acabar.
+
+Ver también: [`font_open`](#font_open).
+
+<a id="font_style"></a>
+
+### `font_style(style)`
+
+- `style`: sumados: 0 normal, 1 subrayado, 2 negrita, 4 cursiva (`2 + 4` negrita y cursiva).
+
+El estilo del texto que viene. Si la fuente no tiene ese estilo dibujado, el sistema lo imita.
+
+Ver también: [`font_use`](#font_use).
+
+<a id="font_height"></a>
+
+### `font_height()` → `Int`
+
+Devuelve el alto en píxeles de la fuente puesta: lo que hay entre una línea de texto y la siguiente.
+
+Ver también: [`font_baseline`](#font_baseline), [`font_text_width`](#font_text_width).
+
+<a id="font_baseline"></a>
+
+### `font_baseline()` → `Int`
+
+Devuelve cuántos píxeles hay desde arriba de las letras hasta su línea de base. `gfx_text_at` escribe con la línea
+de base en `y`: para que la parte de arriba quede en `y`, se le suma esto.
+
+Ver también: [`gfx_text_at`](#gfx_text_at), [`font_height`](#font_height).
+
+<a id="font_text_width"></a>
+
+### `font_text_width(text)` → `Int`
+
+- `text`: el texto.
+
+Devuelve su ancho en píxeles con la fuente y el estilo puestos.
+
+Ver también: [`gfx_text_len`](#gfx_text_len).
+
+<a id="font_size"></a>
+
+### `font_size(font)` → `Int`
+
+- `font`: la fuente.
+
+Devuelve el tamaño que dio el sistema, que puede no ser el pedido.
+
+Ver también: [`font_open`](#font_open).
+
+<a id="color_pen"></a>
+
+### `color_pen(r, g, b)` → `Int`
+
+- `r`, `g`, `b`: el color, de 0 a 255.
+
+Devuelve el número del color de la pantalla de dibujo más parecido, para `gfx_pen`. En el Workbench o en otra
+pantalla compartida, reserva el color para el programa (uno exacto, si hay sitio) y cada `color_pen` necesita su
+`color_pen_free`. En una pantalla propia, toda su paleta es del programa: da el más parecido de los que tiene.
+
+Ver también: [`color_pen_free`](#color_pen_free), [`gfx_pen`](#gfx_pen).
+
+<a id="color_pen_free"></a>
+
+### `color_pen_free(pen)`
+
+- `pen`: lo que dio `color_pen`.
+
+Avisa de que ese color ya no hace falta. Cuando no queda ningún uso, el sistema puede dárselo a otro programa.
+
+Ver también: [`color_pen`](#color_pen).
 
 ## Transparencia y degradados
 
+Color semitransparente sobre lo ya dibujado. En pantallas de color verdadero (RTG de 15 bits o más) se mezcla de
+verdad; en las de paleta se imita con un tramado de puntos del color más cercano.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)` | — | Mezcla el color 0xRRGGBB con lo dibujado, alfa 0-255 (pantallas de paleta: un tramado 4x4 del color más cercano) |  |
-| `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)` | — | Un degradado de (rgb1, alpha1) a (rgb2, alpha2), de arriba abajo si vertical, si no de izquierda a derecha, mezclado con lo dibujado |  |
-| `gfx_pixel_rgb(x, y)` | Int | El color de un píxel como 0xRRGGBB (en una pantalla de paleta, el de su color) |  |
+| [`gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`](#gfx_blend_rect) | — | Mezcla el color 0xRRGGBB con lo dibujado, alfa 0-255 (pantallas de paleta: un tramado 4x4 del color más cercano) |  |
+| [`gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`](#gfx_gradient_rect) | — | Un degradado de (rgb1, alpha1) a (rgb2, alpha2), de arriba abajo si vertical, si no de izquierda a derecha, mezclado con lo dibujado |  |
+| [`gfx_pixel_rgb(x, y)`](#gfx_pixel_rgb) | Int | El color de un píxel como 0xRRGGBB (en una pantalla de paleta, el de su color) |  |
+
+<a id="gfx_blend_rect"></a>
+
+### `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`
+
+- `x1`, `y1`, `x2`, `y2`: el rectángulo, esquinas incluidas.
+- `rgb`: el color, `0xRRGGBB`.
+- `alpha`: cuánto tapa, de 0 (nada) a 255 (del todo).
+
+Mezcla el color con lo que ya hay dentro del rectángulo: para oscurecer un fondo detrás de un texto o un panel
+translúcido.
+
+Ver también: [`gfx_gradient_rect`](#gfx_gradient_rect).
+
+<a id="gfx_gradient_rect"></a>
+
+### `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`
+
+- `x1`, `y1`, `x2`, `y2`: el rectángulo.
+- `rgb1`, `alpha1`: el color y la transparencia del principio.
+- `rgb2`, `alpha2`: los del final.
+- `vertical`: `true` de arriba abajo, `false` de izquierda a derecha.
+
+Un degradado entre los dos, mezclado con lo dibujado.
+
+Ver también: [`gfx_blend_rect`](#gfx_blend_rect).
+
+<a id="gfx_pixel_rgb"></a>
+
+### `gfx_pixel_rgb(x, y)` → `Int`
+
+- `x`, `y`: el punto.
+
+Devuelve el color de ese píxel como `0xRRGGBB`; en una pantalla de paleta, el de su número de color.
+
+Ver también: [`gfx_pixel_read`](#gfx_pixel_read).
 
 ## Imágenes RGB desde un buffer (vídeo)
 
+Dibujar una imagen que el programa tiene en un búfer, con 3 bytes por píxel (rojo, verde, azul), como un fotograma
+de vídeo. En RTG va directa; en una pantalla de paleta cada píxel toma el color más cercano.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `gfx_rgb_draw(buffer, width, height, x, y)` | — | Dibuja un búfer RGB24 (3 bytes por píxel, filas una tras otra) en x, y (RTG: con un WritePixelArray; pantallas de paleta: los colores más cercanos) |  |
-| `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)` | — | Dibuja un búfer RGB24 en x, y a dest_width x dest_height (el píxel más cercano, fila a fila) |  |
+| [`gfx_rgb_draw(buffer, width, height, x, y)`](#gfx_rgb_draw) | — | Dibuja un búfer RGB24 (3 bytes por píxel, filas una tras otra) en x, y (RTG: con un WritePixelArray; pantallas de paleta: los colores más cercanos) |  |
+| [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#gfx_rgb_draw_scaled) | — | Dibuja un búfer RGB24 en x, y a dest_width x dest_height (el píxel más cercano, fila a fila) |  |
+
+<a id="gfx_rgb_draw"></a>
+
+### `gfx_rgb_draw(buffer, width, height, x, y)`
+
+- `buffer`: los píxeles, 3 bytes cada uno (rojo, verde, azul), fila tras fila.
+- `width`, `height`: el tamaño de la imagen.
+- `x`, `y`: dónde va.
+
+La dibuja de una vez. En una pantalla de paleta, cada píxel toma el color más cercano.
+
+Ver también: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_rgb_draw_scaled"></a>
+
+### `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`
+
+- `buffer`, `width`, `height`: como en `gfx_rgb_draw`.
+- `x`, `y`: dónde va.
+- `dest_width`, `dest_height`: el tamaño con el que se dibuja.
+
+La dibuja agrandada o reducida, tomando para cada punto el píxel más cercano.
+
+Ver también: [`gfx_rgb_draw`](#gfx_rgb_draw).
 
 ## Tareas, reloj, traducciones y escritorio
 
@@ -4136,16 +4365,109 @@ Ver también: [`str_from_buffer`](#str_from_buffer).
 
 ## Imágenes (datatypes)
 
+Imágenes de fichero con los datatypes del sistema: ILBM siempre; PNG, GIF o JPEG si están instalados sus
+datatypes. La imagen se adapta a los colores de la pantalla donde se dibuja. Cada imagen es un número que se
+dibuja las veces que haga falta y se libera con `image_free` (al acabar, las que queden). Para decodificar sin
+datatypes, `image_decode`.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `image_load(file)` | Int | Una imagen de un fichero con los datatypes (ILBM; PNG, GIF, JPEG si el sistema los tiene), con los colores de la pantalla en la que se dibuja: la imagen, o 0 |  |
-| `image_width(image)` | Int | El ancho de una imagen |  |
-| `image_height(image)` | Int | El alto de una imagen |  |
-| `image_draw(image, x, y)` | — | Dibuja una imagen en x, y (sus píxeles transparentes no se dibujan) |  |
-| `image_draw_part(image, sx, sy, x, y, w, h)` | — | Dibuja la parte w x h de una imagen que empieza en sx, sy, en x, y |  |
-| `image_scale(image, w, h)` | Int | Una copia de una imagen a w x h píxeles: una imagen nueva, o 0 |  |
-| `image_free(image)` | — | Libera una imagen (las que queden se liberan al acabar) |  |
-| `image_from_rgb(buffer, width, height, alpha)` | Int | Una imagen con los píxeles de un búfer (RGB, o RGBA con alfa: mezclado con lo de debajo en RTG, dibujado desde 128 en una pantalla de paleta), con los colores de la pantalla: la imagen, o 0 (necesita picture.datatype V43, AmigaOS 3.5+, salvo en pantallas RTG) |  |
+| [`image_load(file)`](#image_load) | Int | Una imagen de un fichero con los datatypes (ILBM; PNG, GIF, JPEG si el sistema los tiene), con los colores de la pantalla en la que se dibuja: la imagen, o 0 |  |
+| [`image_width(image)`](#image_width) | Int | El ancho de una imagen |  |
+| [`image_height(image)`](#image_height) | Int | El alto de una imagen |  |
+| [`image_draw(image, x, y)`](#image_draw) | — | Dibuja una imagen en x, y (sus píxeles transparentes no se dibujan) |  |
+| [`image_draw_part(image, sx, sy, x, y, w, h)`](#image_draw_part) | — | Dibuja la parte w x h de una imagen que empieza en sx, sy, en x, y |  |
+| [`image_scale(image, w, h)`](#image_scale) | Int | Una copia de una imagen a w x h píxeles: una imagen nueva, o 0 |  |
+| [`image_free(image)`](#image_free) | — | Libera una imagen (las que queden se liberan al acabar) |  |
+| [`image_from_rgb(buffer, width, height, alpha)`](#image_from_rgb) | Int | Una imagen con los píxeles de un búfer (RGB, o RGBA con alfa: mezclado con lo de debajo en RTG, dibujado desde 128 en una pantalla de paleta), con los colores de la pantalla: la imagen, o 0 (necesita picture.datatype V43, AmigaOS 3.5+, salvo en pantallas RTG) |  |
+
+<a id="image_load"></a>
+
+### `image_load(file)` → `Int`
+
+- `file`: la imagen: ILBM; PNG, GIF o JPEG si están sus datatypes.
+
+La carga ya adaptada a los colores de la pantalla donde se dibuja ahora. Devuelve la imagen, o 0 si no se puede.
+
+Ver también: [`image_draw`](#image_draw), [`image_free`](#image_free), [`image_decode`](#image_decode).
+
+<a id="image_width"></a>
+
+### `image_width(image)` → `Int`
+
+- `image`: la imagen.
+
+Devuelve su ancho en píxeles.
+
+Ver también: [`image_height`](#image_height).
+
+<a id="image_height"></a>
+
+### `image_height(image)` → `Int`
+
+- `image`: la imagen.
+
+Devuelve su alto en píxeles.
+
+Ver también: [`image_width`](#image_width).
+
+<a id="image_draw"></a>
+
+### `image_draw(image, x, y)`
+
+- `image`: la imagen.
+- `x`, `y`: dónde va su esquina.
+
+La dibuja en el destino actual; los píxeles transparentes dejan ver lo de debajo.
+
+Ver también: [`image_draw_part`](#image_draw_part), [`image_scale`](#image_scale).
+
+<a id="image_draw_part"></a>
+
+### `image_draw_part(image, sx, sy, x, y, w, h)`
+
+- `image`: la imagen.
+- `sx`, `sy`: la esquina de la parte, dentro de la imagen.
+- `x`, `y`: dónde va.
+- `w`, `h`: el tamaño de la parte.
+
+Dibuja solo esa parte: para una imagen con varias piezas (iconos, letras).
+
+Ver también: [`image_draw`](#image_draw).
+
+<a id="image_scale"></a>
+
+### `image_scale(image, w, h)` → `Int`
+
+- `image`: la imagen.
+- `w`, `h`: el tamaño nuevo.
+
+Devuelve una copia de ese tamaño, otra imagen que también hay que liberar, o 0.
+
+Ver también: [`image_draw`](#image_draw).
+
+<a id="image_free"></a>
+
+### `image_free(image)`
+
+- `image`: la imagen.
+
+La libera. Las que queden se liberan al acabar.
+
+Ver también: [`image_load`](#image_load).
+
+<a id="image_from_rgb"></a>
+
+### `image_from_rgb(buffer, width, height, alpha)` → `Int`
+
+- `buffer`: los píxeles, fila tras fila: 3 bytes (RGB) o 4 (RGBA).
+- `width`, `height`: el tamaño.
+- `alpha`: `true` si hay 4 bytes por píxel. La transparencia se mezcla en RTG; en una pantalla de paleta, un píxel
+  se dibuja si su alfa es 128 o más.
+
+Devuelve una imagen con esos píxeles, para `image_draw`, o 0. En pantallas de paleta necesita AmigaOS 3.5 o más.
+
+Ver también: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decoded).
 
 ## Argumentos
 
@@ -4406,28 +4728,198 @@ Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Imágenes decodificadas por el programa (sin datatypes)
 
+Decodificar JPEG, WebP, PNG, GIF, BMP y SVG con código del propio programa, sin datatypes: va en cualquier Amiga.
+El resultado son píxeles RGB o RGBA en memoria (`image_decoded_*`); `image_from_decoded` los convierte en una
+imagen para `image_draw`. Decodificar una imagen grande tarda: `image_decode_start` lo hace en otro proceso para
+que la ventana siga respondiendo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `image_decode(file, maxw, maxh)` | Int | Decodifica un JPEG (TJpgDec), WebP (libwebp; los dos ya reducidos al decodificar), PNG, GIF, BMP (stb_image) o SVG (nanosvg: dibujado para cubrir maxw x maxh, RGBA) a píxeles RGB o RGBA, reducidos hasta que no pasen mucho de maxw x maxh (0, 0: su tamaño; negativos, un tope: un SVG va entonces a su tamaño, más pequeño si no cabe): la imagen decodificada, o 0. Sin datatypes, y vale dentro de un task_start |  |
-| `image_decode_start(file, maxw, maxh)` | Int | image_decode en un proceso aparte, uno por debajo de la prioridad del programa, para que la ventana siga respondiendo: un número para image_decode_ready e image_decode_finish, o 0 si no pudo empezar |  |
-| `image_decode_ready(t)` | Bool | Cierto cuando un image_decode_start ha terminado (no espera) |  |
-| `image_decode_finish(t)` | Int | Lo que decodificó un image_decode_start, como image_decode (0 si no pudo); espera si aún no ha acabado y libera su proceso |  |
-| `image_decoded_width(d)` | Int | El ancho de una imagen decodificada |  |
-| `image_decoded_height(d)` | Int | El alto de una imagen decodificada |  |
-| `image_decoded_alpha(d)` | Bool | True si una imagen decodificada tiene alfa (4 bytes por píxel, RGBA; si no, 3, RGB) |  |
-| `image_decoded_pixels(d)` | Int (dirección) | Los píxeles de una imagen decodificada, fila tras fila: un búfer para buffer_get_byte o image_from_rgb |  |
-| `image_decoded_free(d)` | — | Libera una imagen decodificada |  |
-| `image_from_decoded(d)` | Int | Una imagen (como image_from_rgb) de una imagen decodificada, que hay que liberar después |  |
-| `image_from_decoded_size(d, w, h)` | Int | Como image_from_decoded, pero a ancho x alto, con los bordes suaves (cada punto, la media de los que cubre, también la transparencia); la imagen decodificada hay que liberarla después |  |
+| [`image_decode(file, maxw, maxh)`](#image_decode) | Int | Decodifica un JPEG (TJpgDec), WebP (libwebp; los dos ya reducidos al decodificar), PNG, GIF, BMP (stb_image) o SVG (nanosvg: dibujado para cubrir maxw x maxh, RGBA) a píxeles RGB o RGBA, reducidos hasta que no pasen mucho de maxw x maxh (0, 0: su tamaño; negativos, un tope: un SVG va entonces a su tamaño, más pequeño si no cabe): la imagen decodificada, o 0. Sin datatypes, y vale dentro de un task_start |  |
+| [`image_decode_start(file, maxw, maxh)`](#image_decode_start) | Int | image_decode en un proceso aparte, uno por debajo de la prioridad del programa, para que la ventana siga respondiendo: un número para image_decode_ready e image_decode_finish, o 0 si no pudo empezar |  |
+| [`image_decode_ready(t)`](#image_decode_ready) | Bool | Cierto cuando un image_decode_start ha terminado (no espera) |  |
+| [`image_decode_finish(t)`](#image_decode_finish) | Int | Lo que decodificó un image_decode_start, como image_decode (0 si no pudo); espera si aún no ha acabado y libera su proceso |  |
+| [`image_decoded_width(d)`](#image_decoded_width) | Int | El ancho de una imagen decodificada |  |
+| [`image_decoded_height(d)`](#image_decoded_height) | Int | El alto de una imagen decodificada |  |
+| [`image_decoded_alpha(d)`](#image_decoded_alpha) | Bool | True si una imagen decodificada tiene alfa (4 bytes por píxel, RGBA; si no, 3, RGB) |  |
+| [`image_decoded_pixels(d)`](#image_decoded_pixels) | Int (dirección) | Los píxeles de una imagen decodificada, fila tras fila: un búfer para buffer_get_byte o image_from_rgb |  |
+| [`image_decoded_free(d)`](#image_decoded_free) | — | Libera una imagen decodificada |  |
+| [`image_from_decoded(d)`](#image_from_decoded) | Int | Una imagen (como image_from_rgb) de una imagen decodificada, que hay que liberar después |  |
+| [`image_from_decoded_size(d, w, h)`](#image_from_decoded_size) | Int | Como image_from_decoded, pero a ancho x alto, con los bordes suaves (cada punto, la media de los que cubre, también la transparencia); la imagen decodificada hay que liberarla después |  |
+
+<a id="image_decode"></a>
+
+### `image_decode(file, maxw, maxh)` → `Int`
+
+- `file`: la imagen: JPEG, WebP, PNG, GIF, BMP o SVG.
+- `maxw`, `maxh`: el tamaño máximo; se reduce hasta que no pase mucho de él. 0, 0 = su tamaño.
+
+Devuelve la imagen decodificada, o 0 si no se puede. Se lee con `image_decoded_*` y se libera con
+`image_decoded_free`.
+
+Ver también: [`image_decode_start`](#image_decode_start), [`image_from_decoded`](#image_from_decoded), [`image_decoded_free`](#image_decoded_free).
+
+<a id="image_decode_start"></a>
+
+### `image_decode_start(file, maxw, maxh)` → `Int`
+
+- `file`, `maxw`, `maxh`: como en `image_decode`.
+
+Empieza a decodificar en otro proceso y vuelve enseguida. Devuelve un número para `image_decode_ready` e
+`image_decode_finish`, o 0 si no pudo empezar.
+
+Ver también: [`image_decode_ready`](#image_decode_ready), [`image_decode_finish`](#image_decode_finish).
+
+<a id="image_decode_ready"></a>
+
+### `image_decode_ready(t)` → `Bool`
+
+- `t`: el número de `image_decode_start`.
+
+Devuelve `true` cuando ha acabado, sin esperar.
+
+Ver también: [`image_decode_finish`](#image_decode_finish).
+
+<a id="image_decode_finish"></a>
+
+### `image_decode_finish(t)` → `Int`
+
+- `t`: el número de `image_decode_start`.
+
+Devuelve la imagen decodificada, como `image_decode`, o 0. Si aún no acabó, espera. Hay que llamarla siempre: libera
+el proceso.
+
+Ver también: [`image_decode_start`](#image_decode_start).
+
+<a id="image_decoded_width"></a>
+
+### `image_decoded_width(d)` → `Int`
+
+- `d`: la imagen decodificada.
+
+Devuelve su ancho en píxeles.
+
+Ver también: [`image_decoded_height`](#image_decoded_height).
+
+<a id="image_decoded_height"></a>
+
+### `image_decoded_height(d)` → `Int`
+
+- `d`: la imagen decodificada.
+
+Devuelve su alto en píxeles.
+
+Ver también: [`image_decoded_width`](#image_decoded_width).
+
+<a id="image_decoded_alpha"></a>
+
+### `image_decoded_alpha(d)` → `Bool`
+
+- `d`: la imagen decodificada.
+
+Devuelve `true` si tiene transparencia: 4 bytes por píxel (RGBA); si no, 3 (RGB).
+
+Ver también: [`image_decoded_pixels`](#image_decoded_pixels).
+
+<a id="image_decoded_pixels"></a>
+
+### `image_decoded_pixels(d)` → `Int (dirección)`
+
+- `d`: la imagen decodificada.
+
+Devuelve la dirección de sus píxeles, fila tras fila, para `buffer_get_byte` o `image_from_rgb`. Vive hasta `image_decoded_free`.
+
+Ver también: [`image_decoded_alpha`](#image_decoded_alpha).
+
+<a id="image_decoded_free"></a>
+
+### `image_decoded_free(d)`
+
+- `d`: la imagen decodificada.
+
+La libera.
+
+Ver también: [`image_decode`](#image_decode).
+
+<a id="image_from_decoded"></a>
+
+### `image_from_decoded(d)` → `Int`
+
+- `d`: la imagen decodificada.
+
+Devuelve una imagen para `image_draw` con sus píxeles, o 0. Las dos se liberan por separado.
+
+Ver también: [`image_from_decoded_size`](#image_from_decoded_size), [`image_from_rgb`](#image_from_rgb).
+
+<a id="image_from_decoded_size"></a>
+
+### `image_from_decoded_size(d, w, h)` → `Int`
+
+- `d`: la imagen decodificada.
+- `w`, `h`: el tamaño de la imagen nueva.
+
+Como `image_from_decoded`, a ese tamaño y con los bordes suaves: cada punto es la media de los que cubre.
+
+Ver también: [`image_from_decoded`](#image_from_decoded).
 
 ## Fuentes TrueType, WOFF y WOFF2
 
+Fuentes TrueType (TTF, OTF con contornos TrueType, WOFF y WOFF2) convertidas a una fuente del Amiga de un tamaño,
+con sus caracteres Latin-1. Se escribe con ellas con `font_use` como con cualquier otra. Las usa Tachyon para las
+fuentes de las páginas web.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `font_from_ttf(file, size, width)` | Int | Una fuente TrueType (TTF, un OTF con contornos TrueType, o un WOFF o WOFF2 de ellos) a size píxeles de em y al width % de su ancho (0: 100), sus caracteres Latin-1 en un plano de 1 bit (stb_truetype): una fuente para font_use, o 0. Se libera con font_ttf_free, no con font_close |  |
-| `font_ttf_icon(file, size, code)` | Int | Una fuente del fichero cuya "A" es el carácter code (un icono de una fuente web, en la zona privada de Unicode) a size píxeles, con las demás letras vacías: se dibuja "A" con ella; 0 si no se puede |  |
-| `font_ttf_free(font)` | — | Libera una fuente de font_from_ttf (no mientras una ventana siga escribiendo con ella); las que queden se liberan al acabar |  |
-| `font_ttf_forget(file)` | — | font_from_ttf guarda los 8 últimos ficheros leídos para otros tamaños: este se lee otra vez la próxima |  |
+| [`font_from_ttf(file, size, width)`](#font_from_ttf) | Int | Una fuente TrueType (TTF, un OTF con contornos TrueType, o un WOFF o WOFF2 de ellos) a size píxeles de em y al width % de su ancho (0: 100), sus caracteres Latin-1 en un plano de 1 bit (stb_truetype): una fuente para font_use, o 0. Se libera con font_ttf_free, no con font_close |  |
+| [`font_ttf_icon(file, size, code)`](#font_ttf_icon) | Int | Una fuente del fichero cuya "A" es el carácter code (un icono de una fuente web, en la zona privada de Unicode) a size píxeles, con las demás letras vacías: se dibuja "A" con ella; 0 si no se puede |  |
+| [`font_ttf_free(font)`](#font_ttf_free) | — | Libera una fuente de font_from_ttf (no mientras una ventana siga escribiendo con ella); las que queden se liberan al acabar |  |
+| [`font_ttf_forget(file)`](#font_ttf_forget) | — | font_from_ttf guarda los 8 últimos ficheros leídos para otros tamaños: este se lee otra vez la próxima |  |
+
+<a id="font_from_ttf"></a>
+
+### `font_from_ttf(file, size, width)` → `Int`
+
+- `file`: el fichero de la fuente.
+- `size`: el tamaño en píxeles.
+- `width`: el ancho en tanto por ciento del normal; 0 = 100.
+
+Devuelve una fuente con sus caracteres Latin-1 a ese tamaño, para `font_use`, o 0 si no se puede. Se libera con
+`font_ttf_free`.
+
+Ver también: [`font_use`](#font_use), [`font_ttf_free`](#font_ttf_free).
+
+<a id="font_ttf_icon"></a>
+
+### `font_ttf_icon(file, size, code)` → `Int`
+
+- `file`: una fuente de iconos (de las que usan las webs).
+- `size`: el tamaño.
+- `code`: el código Unicode del icono.
+
+Devuelve una fuente cuya letra "A" es ese icono: se dibuja escribiendo "A" con ella. 0 si no se puede.
+
+Ver también: [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_ttf_free"></a>
+
+### `font_ttf_free(font)`
+
+- `font`: una fuente de `font_from_ttf`.
+
+La libera. No mientras una ventana siga escribiendo con ella.
+
+Ver también: [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_ttf_forget"></a>
+
+### `font_ttf_forget(file)`
+
+- `file`: el fichero.
+
+`font_from_ttf` guarda en memoria los 8 últimos ficheros para sacar otros tamaños sin leerlos otra vez; este lo
+olvida. Para cuando el fichero ha cambiado.
+
+Ver también: [`font_from_ttf`](#font_from_ttf).
 
 ## Red en una tarea aparte
 
@@ -5549,7 +6041,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode).
 Abre la petición de fuentes del sistema y espera. Devuelve la fuente elegida como `"nombre.font/tamaño"`
 (`"topaz.font/8"`), o `""` si se canceló. Para abrirla, el nombre y el tamaño van por separado en `font_open`.
 
-Ver también: `font_open`.
+Ver también: [`font_open`](#font_open).
 
 ## RTG (CyberGraphX / Picasso96)
 
@@ -6819,7 +7311,7 @@ Ver también: [`mui_wait_event`](#mui_wait_event).
 
 Una imagen. `mui_set_text` cambia el fichero.
 
-Ver también: [`mui_image_button`](#mui_image_button), `image_load`.
+Ver también: [`mui_image_button`](#mui_image_button), [`image_load`](#image_load).
 
 <a id="mui_image_button"></a>
 

@@ -2080,6 +2080,15 @@ static LONG _dash_color_pen(LONG r, LONG g, LONG b) {
     cm = scr->ViewPort.ColorMap;
     for (i = 0; i < _dash_pens; i++)
         if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) { _dash_pen_refs[i]++; return _dash_pen_num[i]; }
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    /* the program's own screen: every colour is the program's (no SA_SharePens), and ObtainBestPen only looks at the
+       system's shared pens (it gave pen 1, black, for red). The closest colour of its palette; nothing to free */
+    if (scr == _dash_screen && _dash_own_screen && !_dash_screen_public) {
+        LONG depth = scr->RastPort.BitMap->Depth;
+        return FindColor(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
+                         (ULONG)(b & 255) * 0x01010101UL, depth >= 8 ? 255 : (1L << depth) - 1);
+    }
+#endif
     pen = ObtainBestPen(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
                         (ULONG)(b & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
     if (pen < 0) return 1;

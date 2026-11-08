@@ -1,0 +1,22 @@
+# color_pen en una pantalla propia (sin SA_SharePens): todos sus colores son del programa y ObtainBestPen solo mira
+# los lápices compartidos del sistema; daba el 1 (negro) para el rojo. Ahora, el color más parecido de su paleta.
+# expect-out: rojo: 5 0xff0000
+# expect-out: casi azul: 6
+# expect-out: en una ventana de esa pantalla: 5
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 4, "Colores")
+    gfx_rgb8(5, 255, 0, 0)
+    gfx_rgb8(6, 0, 0, 255)
+    rojo = color_pen(255, 0, 0)
+    gfx_pen(rojo)
+    gfx_rect(10, 20, 40, 50)
+    Print "rojo: #{rojo} 0x#{str_from_int(gfx_pixel_rgb(20, 30), 16)}"
+    Print "casi azul: #{color_pen(10, 10, 240)}"
+    v = window_create("Ventana", 0, 12, 200, 100, 8)
+    Print "en una ventana de esa pantalla: #{color_pen(250, 5, 5)}"
+    window_close(v)
+    screen_close()
+    Print "fin"
+end

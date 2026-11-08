@@ -37,7 +37,8 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`), con `tests/test_doc_sistema.dash`.
 - [x] T8c. Audio (`AUDIO_FUNCTIONS`), con `tests/test_doc_audio.dash`.
 - [x] T9a. GadTools y menús (`GADTOOLS_FUNCTIONS`, `MENU_FUNCTIONS`), con `tests/test_doc_gadtools.dash`.
-- [ ] T9b. Fuentes, transparencia, RGB, imágenes, TrueType e imágenes decodificadas.
+- [x] T9b. Fuentes, transparencia, RGB, imágenes, TrueType e imágenes decodificadas, con
+  `tests/test_doc_fuentes.dash`.
 - [ ] T9c. Red, TLS y red en una tarea aparte.
 - [ ] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), en dos tandas.
 - [ ] T9e. Argumentos, zlib, UTF-8, Double, matemáticas, expresiones regulares, portapapeles, ordenar, JSON.
@@ -103,3 +104,9 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   suena) y los `sound_*` durante la música se pisan con ella; documentado.
 - 2026-11-08: T9a. GadTools y menús. Comprobado en el emulador que los `gt_*` cuentan `x`, `y` desde dentro de los
   bordes (el comentario de `_dash_window_border` en el runtime dice lo contrario; sin tocar).
+- 2026-11-08: T9b. Fuentes, imágenes y colores.
+  - Arreglo: `color_pen` en una pantalla propia daba el lápiz 1 (negro) para cualquier color: ObtainBestPen solo
+    mira los lápices compartidos del sistema, y en una pantalla sin SA_SharePens todos los demás son del programa.
+    Ahora busca el más parecido de su paleta (FindColor). `tests/test_color_pen_pantalla.dash`. En el Workbench
+    sigue igual.
+  - `image_decode` y `font_from_ttf` no tienen ejemplo propio (necesitan ficheros); los cubren sus tests de siempre.
