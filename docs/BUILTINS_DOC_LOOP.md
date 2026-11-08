@@ -47,7 +47,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9g. Simular teclado y ratón, ventanas de otros programas, gestor de ventanas, con `tests/test_doc_otros.dash`.
 - [x] T9h. Depurador (`DEBUGGER_FUNCTIONS`), con `dashc/tests/depurar/basico.dash` de ejemplo (`dashc/tests/depurar.py`).
 - [ ] T9i. ReAction (`REACTION_FUNCTIONS`, 79), en dos tandas.
-- [ ] T9j. RTG.
+- [x] T9j. RTG, con `tests/test_doc_rtg.dash`.
 - [ ] T9k. DashOS.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
   explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
@@ -118,3 +118,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - 2026-11-08: T9g. Simular la entrada, otras ventanas y el gestor de ventanas (50). Sin fallos en lo probado. La red
   de T9c también pasa por `./dash` (`emu_run --set bsdsocket_library=1` y un servidor de eco a mano).
 - 2026-11-08: T9h. Depurador (31). El ejemplo es el test que ya había (`dashc/tests/depurar.py basico`: bien).
+- 2026-11-08: T9j. RTG.
+  - Arreglo: en una pantalla de paleta, `rtg_write_pixel` y `rtg_fill_rect` usaban los bits altos de r, g y b como
+    número de color, recortado a 15 (casi todo salía en el 15, o el último de la pantalla); ahora el más parecido de
+    la paleta (FindColor). `tests/test_doc_rtg.dash` lo comprueba (con el código de antes, rojo y naranja daban 7).

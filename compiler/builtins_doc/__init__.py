@@ -15,11 +15,11 @@ Textos llanos, con comillas rectas. Un builtin sin entrada aquí sale solo en la
 Un módulo por grupo (o por unos pocos grupos), cada uno con su GROUPS y su FUNCS; aquí se juntan.
 """
 
-from . import audio, bitmaps, depurador, entrada, ficheros, gadtools, graficos, imagenes, mui, mui_lienzo, otros, red, sistema, sprites, sysprog, texto, tiles, varios, ventanas
+from . import audio, bitmaps, depurador, entrada, ficheros, gadtools, graficos, imagenes, mui, mui_lienzo, otros, red, rtg, sistema, sprites, sysprog, texto, tiles, varios, ventanas
 
 GROUPS = {}
 FUNCS = {}
-for _m in (graficos, ventanas, entrada, ficheros, mui, mui_lienzo, sprites, tiles, bitmaps, texto, sistema, audio, gadtools, imagenes, red, varios, sysprog, otros, depurador):
+for _m in (graficos, ventanas, entrada, ficheros, mui, mui_lienzo, sprites, tiles, bitmaps, texto, sistema, audio, gadtools, imagenes, red, varios, sysprog, otros, depurador, rtg):
     for _k in _m.GROUPS:
         assert _k not in GROUPS, _k
     for _k in _m.FUNCS:

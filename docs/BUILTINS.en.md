@@ -8646,29 +8646,275 @@ See also: [`font_open`](#font_open).
 
 ## RTG (CyberGraphX / Picasso96)
 
+Graphics cards (RTG) with CyberGraphX or Picasso96: 16, 24 or 32-bit screens where each pixel carries its RGB
+colour, without a palette.
+
+`rtg_available` says whether there is an RTG library and `rtg_is_active` whether the drawing screen is true colour.
+Colours go as `0xRRGGBB` (`rtg_rgb` builds them). On a palette screen, `rtg_write_pixel` and `rtg_fill_rect` use the
+palette's closest colour; `rtg_write_array` and `rtg_read_array` only work on RTG. To draw with RGB on any screen,
+there are also `color_pen` and `gfx_rgb_draw`.
+
+**Example** (`tests/test_doc_rtg.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# RTG: colores RGB que valen con tarjeta gráfica y sin ella. Sin tarjeta (como en el emulador de las pruebas),
+# rtg_fill_rect y rtg_write_pixel usan el color más parecido de la paleta.
+
+Main
+    c = rtg_rgb(255, 128, 0)
+    Print "rojo de 0x#{str_from_int(c, 16)}: #{rtg_rgb_r(c)}"
+    screen_open_custom(320, 200, 3, "RTG")         # una pantalla de paleta
+    Print "con color verdadero: #{rtg_is_active()}"
+    gfx_rgb8(5, 255, 0, 0)
+    gfx_rgb8(6, 255, 128, 0)
+    rtg_fill_rect(10, 20, 30, 30, rtg_rgb(250, 10, 0))
+    rtg_write_pixel(100, 50, c)
+    Print "rojo: color #{gfx_pixel_read(20, 30)}, naranja: color #{gfx_pixel_read(100, 50)}"
+    screen_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `rtg_available()` | Bool | Check if CyberGraphX or Picasso96 is available |  |
-| `rtg_is_active()` | Bool | Check if current screen is using RTG |  |
-| `rtg_get_depth()` | Int | Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_get_width()` | Int | Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_get_height()` | Int | Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_alloc_bitmap(width, height, depth)` | Int (address) | Allocate RTG-compatible bitmap |  |
-| `rtg_free_bitmap(bitmap)` | — | Free RTG bitmap |  |
-| `rtg_write_pixel(x, y, rgb)` | — | Write single pixel with 24-bit RGB color |  |
-| `rtg_read_pixel(x, y)` | Int | Read pixel, returns 24-bit RGB color |  |
-| `rtg_fill_rect(x, y, w, h, rgb)` | — | Fill rectangle with 24-bit RGB color |  |
-| `rtg_write_array(buffer, bpr, x, y, w, h)` | — | Write pixel array (buffer is ARGB 32-bit, bpr is bytes per row) |  |
-| `rtg_read_array(buffer, bpr, x, y, w, h)` | — | Read pixel array from screen into buffer |  |
-| `rtg_rgb(r, g, b)` | Int | Create 24-bit RGB color value from components |  |
-| `rtg_argb(a, r, g, b)` | Int | Create 32-bit ARGB color value from components |  |
-| `rtg_rgb_r(color)` | Int | Extract red component from RGB color |  |
-| `rtg_rgb_g(color)` | Int | Extract green component from RGB color |  |
-| `rtg_rgb_b(color)` | Int | Extract blue component from RGB color |  |
-| `rtg_best_mode(width, height, depth)` | Int | Find best RTG display mode for given dimensions |  |
-| `rtg_open_screen(width, height, depth, title)` | Bool | Open RTG screen with specified dimensions |  |
-| `rtg_blit(src, sx, sy, dx, dy, w, h)` | — | Blit from bitmap to screen |  |
-| `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)` | — | Scaled blit from bitmap to screen |  |
+| [`rtg_available()`](#rtg_available) | Bool | Check if CyberGraphX or Picasso96 is available |  |
+| [`rtg_is_active()`](#rtg_is_active) | Bool | Check if current screen is using RTG |  |
+| [`rtg_get_depth()`](#rtg_get_depth) | Int | Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_get_width()`](#rtg_get_width) | Int | Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_get_height()`](#rtg_get_height) | Int | Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_alloc_bitmap(width, height, depth)`](#rtg_alloc_bitmap) | Int (address) | Allocate RTG-compatible bitmap |  |
+| [`rtg_free_bitmap(bitmap)`](#rtg_free_bitmap) | — | Free RTG bitmap |  |
+| [`rtg_write_pixel(x, y, rgb)`](#rtg_write_pixel) | — | Write single pixel with 24-bit RGB color |  |
+| [`rtg_read_pixel(x, y)`](#rtg_read_pixel) | Int | Read pixel, returns 24-bit RGB color |  |
+| [`rtg_fill_rect(x, y, w, h, rgb)`](#rtg_fill_rect) | — | Fill rectangle with 24-bit RGB color |  |
+| [`rtg_write_array(buffer, bpr, x, y, w, h)`](#rtg_write_array) | — | Write pixel array (buffer is ARGB 32-bit, bpr is bytes per row) |  |
+| [`rtg_read_array(buffer, bpr, x, y, w, h)`](#rtg_read_array) | — | Read pixel array from screen into buffer |  |
+| [`rtg_rgb(r, g, b)`](#rtg_rgb) | Int | Create 24-bit RGB color value from components |  |
+| [`rtg_argb(a, r, g, b)`](#rtg_argb) | Int | Create 32-bit ARGB color value from components |  |
+| [`rtg_rgb_r(color)`](#rtg_rgb_r) | Int | Extract red component from RGB color |  |
+| [`rtg_rgb_g(color)`](#rtg_rgb_g) | Int | Extract green component from RGB color |  |
+| [`rtg_rgb_b(color)`](#rtg_rgb_b) | Int | Extract blue component from RGB color |  |
+| [`rtg_best_mode(width, height, depth)`](#rtg_best_mode) | Int | Find best RTG display mode for given dimensions |  |
+| [`rtg_open_screen(width, height, depth, title)`](#rtg_open_screen) | Bool | Open RTG screen with specified dimensions |  |
+| [`rtg_blit(src, sx, sy, dx, dy, w, h)`](#rtg_blit) | — | Blit from bitmap to screen |  |
+| [`rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`](#rtg_scale_blit) | — | Scaled blit from bitmap to screen |  |
+
+<a id="rtg_available"></a>
+
+### `rtg_available()` → `Bool`
+
+Returns `true` if CyberGraphX or Picasso96 is installed (its `cybergraphics.library`).
+
+See also: [`rtg_is_active`](#rtg_is_active).
+
+<a id="rtg_is_active"></a>
+
+### `rtg_is_active()` → `Bool`
+
+Returns `true` if the screen being drawn on belongs to a graphics card and is true colour.
+
+See also: [`rtg_available`](#rtg_available).
+
+<a id="rtg_get_depth"></a>
+
+### `rtg_get_depth()` → `Int`
+
+Returns the depth in bits of the program's screen or, without one, the Workbench's: 8 palette, 16, 24 or 32 true colour.
+
+See also: [`rtg_get_width`](#rtg_get_width).
+
+<a id="rtg_get_width"></a>
+
+### `rtg_get_width()` → `Int`
+
+Returns the width of the program's screen or, without one, the Workbench's.
+
+See also: [`rtg_get_height`](#rtg_get_height).
+
+<a id="rtg_get_height"></a>
+
+### `rtg_get_height()` → `Int`
+
+Returns the height of the program's screen or, without one, the Workbench's.
+
+See also: [`rtg_get_width`](#rtg_get_width).
+
+<a id="rtg_alloc_bitmap"></a>
+
+### `rtg_alloc_bitmap(width, height, depth)` → `Int (address)`
+
+- `width`, `height`: the size.
+- `depth`: the depth in bits.
+
+Asks for an off-screen bitmap in the card's format, for `rtg_blit`. Returns its address, or 0. Free it with
+`rtg_free_bitmap`.
+
+See also: [`rtg_free_bitmap`](#rtg_free_bitmap), [`rtg_blit`](#rtg_blit).
+
+<a id="rtg_free_bitmap"></a>
+
+### `rtg_free_bitmap(bitmap)`
+
+- `bitmap`: the one from `rtg_alloc_bitmap`.
+
+Frees it.
+
+See also: [`rtg_alloc_bitmap`](#rtg_alloc_bitmap).
+
+<a id="rtg_write_pixel"></a>
+
+### `rtg_write_pixel(x, y, rgb)`
+
+- `x`, `y`: the point.
+- `rgb`: the `0xRRGGBB` colour.
+
+Paints the pixel; on a palette screen, with the closest colour.
+
+See also: [`rtg_read_pixel`](#rtg_read_pixel), [`rtg_fill_rect`](#rtg_fill_rect).
+
+<a id="rtg_read_pixel"></a>
+
+### `rtg_read_pixel(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns its `0xRRGGBB` colour.
+
+See also: [`rtg_write_pixel`](#rtg_write_pixel), [`gfx_pixel_rgb`](#gfx_pixel_rgb).
+
+<a id="rtg_fill_rect"></a>
+
+### `rtg_fill_rect(x, y, w, h, rgb)`
+
+- `x`, `y`: the corner.
+- `w`, `h`: the size.
+- `rgb`: the `0xRRGGBB` colour.
+
+Fills the rectangle; on a palette screen, with the closest colour.
+
+See also: [`rtg_write_pixel`](#rtg_write_pixel).
+
+<a id="rtg_write_array"></a>
+
+### `rtg_write_array(buffer, bpr, x, y, w, h)`
+
+- `buffer`: the pixels, 4 bytes each (alpha, red, green, blue).
+- `bpr`: the bytes per buffer row (usually `w * 4`).
+- `x`, `y`, `w`, `h`: where and how much.
+
+Copies the block to the screen in one go. RTG only: on a palette screen it does nothing (for that, `gfx_rgb_draw`).
+
+See also: [`rtg_read_array`](#rtg_read_array), [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="rtg_read_array"></a>
+
+### `rtg_read_array(buffer, bpr, x, y, w, h)`
+
+- `buffer`, `bpr`, `x`, `y`, `w`, `h`: as in `rtg_write_array`.
+
+Reads the block from the screen into the buffer. RTG only.
+
+See also: [`rtg_write_array`](#rtg_write_array).
+
+<a id="rtg_rgb"></a>
+
+### `rtg_rgb(r, g, b)` → `Int`
+
+- `r`, `g`, `b`: 0 to 255.
+
+Returns the `0xRRGGBB` colour.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r), [`rtg_argb`](#rtg_argb).
+
+<a id="rtg_argb"></a>
+
+### `rtg_argb(a, r, g, b)` → `Int`
+
+- `a`, `r`, `g`, `b`: 0 to 255; `a` is the opacity.
+
+Returns the `0xAARRGGBB` colour, for `rtg_write_array` buffers.
+
+See also: [`rtg_rgb`](#rtg_rgb).
+
+<a id="rtg_rgb_r"></a>
+
+### `rtg_rgb_r(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its red, 0 to 255.
+
+See also: [`rtg_rgb_g`](#rtg_rgb_g), [`rtg_rgb_b`](#rtg_rgb_b).
+
+<a id="rtg_rgb_g"></a>
+
+### `rtg_rgb_g(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its green, 0 to 255.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r).
+
+<a id="rtg_rgb_b"></a>
+
+### `rtg_rgb_b(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its blue, 0 to 255.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r).
+
+<a id="rtg_best_mode"></a>
+
+### `rtg_best_mode(width, height, depth)` → `Int`
+
+- `width`, `height`, `depth`: what you want.
+
+Returns the RTG screen mode that fits best, or -1 if none (or no RTG).
+
+See also: [`rtg_open_screen`](#rtg_open_screen), [`screen_open_mode`](#screen_open_mode).
+
+<a id="rtg_open_screen"></a>
+
+### `rtg_open_screen(width, height, depth, title)` → `Bool`
+
+- `width`, `height`: the size.
+- `depth`: 16, 24 or 32 bits.
+- `title`: the title.
+
+Opens a screen of your own on the graphics card; if there is no mode of that size, it tries 640 x 480. It closes any
+screen of your own first. Returns `false` without RTG or without a mode.
+
+See also: [`rtg_best_mode`](#rtg_best_mode), [`screen_close`](#screen_close).
+
+<a id="rtg_blit"></a>
+
+### `rtg_blit(src, sx, sy, dx, dy, w, h)`
+
+- `src`: a bitmap from `rtg_alloc_bitmap`.
+- `sx`, `sy`: the source corner.
+- `dx`, `dy`: where it goes.
+- `w`, `h`: the size.
+
+Copies that part of the bitmap to the `gfx_*` target.
+
+See also: [`rtg_scale_blit`](#rtg_scale_blit).
+
+<a id="rtg_scale_blit"></a>
+
+### `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`
+
+- `src`: a bitmap from `rtg_alloc_bitmap`.
+- `sx`, `sy`, `sw`, `sh`: the source part.
+- `dx`, `dy`, `dw`, `dh`: where it goes and at what size.
+
+Like `rtg_blit`, enlarging or reducing.
+
+See also: [`rtg_blit`](#rtg_blit).
 
 ## MUI
 

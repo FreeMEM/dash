@@ -22472,6 +22472,16 @@ static void _dash_rtg_free_bitmap(struct BitMap *bm) {
     }
 }
 
+/* On a palette screen: the closest colour of its palette (FindColor). It used the top bits of r, g, b as the pen
+   number, clamped to 15: nearly every colour came out as pen 15 */
+static LONG _dash_rtg_pen(LONG rgb) {
+    struct ViewPort *vp = _dash_screen ? &_dash_screen->ViewPort : (_dash_win ? &_dash_win->WScreen->ViewPort : NULL);
+    LONG depth = _dash_rp && _dash_rp->BitMap ? GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH) : 8;
+    if (!vp) return 1;
+    return FindColor(vp->ColorMap, (ULONG)((rgb >> 16) & 255) * 0x01010101UL, (ULONG)((rgb >> 8) & 255) * 0x01010101UL,
+                     (ULONG)(rgb & 255) * 0x01010101UL, depth >= 8 ? 255 : (1L << depth) - 1);
+}
+
 static void _dash_rtg_write_pixel(LONG x, LONG y, LONG rgb) {
     if (!_dash_rp) return;
 
@@ -22479,14 +22489,7 @@ static void _dash_rtg_write_pixel(LONG x, LONG y, LONG rgb) {
         /* Use CyberGraphX for truecolor */
         WriteRGBPixel(_dash_rp, x, y, rgb);
     } else {
-        /* Fallback: find nearest color in palette */
-        LONG r = (rgb >> 16) & 0xFF;
-        LONG g = (rgb >> 8) & 0xFF;
-        LONG b = rgb & 0xFF;
-        /* Simple: use high bits as pen for 4-bit palette */
-        LONG pen = ((r >> 5) << 5) | ((g >> 5) << 2) | (b >> 6);
-        if (pen > 15) pen = 15;
-        SetAPen(_dash_rp, pen);
+        SetAPen(_dash_rp, _dash_rtg_pen(rgb));
         WritePixel(_dash_rp, x, y);
     }
 }
@@ -22510,13 +22513,7 @@ static void _dash_rtg_fill_rect(LONG x, LONG y, LONG w, LONG h, LONG rgb) {
     if (_dash_rtg_available() && _dash_rtg_is_active()) {
         FillPixelArray(_dash_rp, x, y, w, h, rgb);
     } else {
-        /* Fallback: use RectFill with palette color */
-        LONG r = (rgb >> 16) & 0xFF;
-        LONG g = (rgb >> 8) & 0xFF;
-        LONG b = rgb & 0xFF;
-        LONG pen = ((r >> 5) << 5) | ((g >> 5) << 2) | (b >> 6);
-        if (pen > 15) pen = 15;
-        SetAPen(_dash_rp, pen);
+        SetAPen(_dash_rp, _dash_rtg_pen(rgb));
         RectFill(_dash_rp, x, y, x + w - 1, y + h - 1);
     }
 }
