@@ -436,7 +436,7 @@ See also: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_add`](#gfx_poly_add).
 Draws the whole picture in one call, much faster than one `gfx_pixel` per pixel. Good for pictures the program
 computes (a fractal, a map) or reads from a file.
 
-See also: [`gfx_pixel`](#gfx_pixel), `buffer_alloc`, `gfx_rgb_draw`.
+See also: [`gfx_pixel`](#gfx_pixel), [`buffer_alloc`](#buffer_alloc), `gfx_rgb_draw`.
 
 <a id="gfx_copy"></a>
 
@@ -2502,7 +2502,7 @@ end
 Returns the open file, a number passed to the other functions, or 0 if it could not: it does not exist, the drawer
 does not exist, the disk is protected. With 1006 and 1004 no other program can open it at the same time.
 
-See also: [`file_close`](#file_close), [`file_read_line`](#file_read_line), `file_read_text`.
+See also: [`file_close`](#file_close), [`file_read_line`](#file_read_line), [`file_read_text`](#file_read_text).
 
 <a id="file_close"></a>
 
@@ -2536,7 +2536,7 @@ See also: [`file_eof`](#file_eof), [`file_read`](#file_read).
 Returns the next line, with its `"\n"` at the end (`str_trim` removes it), or `nil` at the end of the file. What it
 returns lives in the buffer until the next read; storing it in a variable makes a copy.
 
-See also: [`file_write_line`](#file_write_line), `file_read_text`, `buffer_alloc`.
+See also: [`file_write_line`](#file_write_line), [`file_read_text`](#file_read_text), [`buffer_alloc`](#buffer_alloc).
 
 <a id="file_read"></a>
 
@@ -2548,7 +2548,7 @@ See also: [`file_write_line`](#file_write_line), `file_read_text`, `buffer_alloc
 
 Returns how many bytes it read: fewer than `length` near the end, 0 at the end and -1 on an error.
 
-See also: [`file_write`](#file_write), [`file_load`](#file_load), `buffer_get_byte`.
+See also: [`file_write`](#file_write), [`file_load`](#file_load), [`buffer_get_byte`](#buffer_get_byte).
 
 <a id="file_eof"></a>
 
@@ -2581,7 +2581,7 @@ See also: [`file_read_byte`](#file_read_byte), [`file_write`](#file_write).
 
 Writes the text and a line break. Returns 0 if it went well and -1 on an error (a full disk).
 
-See also: [`file_print`](#file_print), [`file_read_line`](#file_read_line), `file_write_text`.
+See also: [`file_print`](#file_print), [`file_read_line`](#file_read_line), [`file_write_text`](#file_write_text).
 
 <a id="file_write"></a>
 
@@ -2798,7 +2798,7 @@ See also: [`console_read`](#console_read).
 Loads the whole file into the buffer. Returns the bytes read, or -1 if it does not exist or does not fit
 (`file_size` says how much is needed).
 
-See also: [`file_save`](#file_save), [`file_size`](#file_size), `file_read_text`.
+See also: [`file_save`](#file_save), [`file_size`](#file_size), [`file_read_text`](#file_read_text).
 
 <a id="file_save"></a>
 
@@ -2811,45 +2811,418 @@ See also: [`file_save`](#file_save), [`file_size`](#file_size), `file_read_text`
 Saves the buffer as the whole file. Returns the bytes written: if it is not `size`, it failed (0 if it could not
 create it).
 
-See also: [`file_load`](#file_load), `file_write_text`.
+See also: [`file_load`](#file_load), [`file_write_text`](#file_write_text).
 
 ## Buffers
 
+Raw memory for binary data: files that are not text, pictures, what goes over the network. A buffer is the address
+of a block of memory; positions (`offset`) are bytes from its start.
+
+Dash does not check bounds: reading or writing outside the buffer touches other memory and can hang the Amiga. And
+it is not freed on its own: every `buffer_alloc` needs its `buffer_free`, or that memory is lost until a reboot.
+
+16 and 32-bit numbers go as on the 68000, high byte first (big-endian), which is how Amiga files (IFF) store them.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `buffer_alloc(size)` | Int (address) | Allocate memory buffer |  |
-| `buffer_free(buffer)` | — | Free memory buffer |  |
-| `buffer_get_byte(buffer, offset)` | Int | Get byte at offset |  |
-| `buffer_set_byte(buffer, offset, value)` | — | Set byte at offset |  |
-| `buffer_get_word(buffer, offset)` | Int | Get 16-bit word at offset (big-endian) |  |
-| `buffer_set_word(buffer, offset, value)` | — | Set 16-bit word at offset (big-endian) |  |
-| `buffer_get_long(buffer, offset)` | Int | Get 32-bit long at offset (big-endian) |  |
-| `buffer_set_long(buffer, offset, value)` | — | Set 32-bit long at offset (big-endian) |  |
-| `buffer_copy(dest, dest_offset, src, src_offset, length)` | — | Copy bytes between buffers |  |
-| `buffer_fill(buffer, offset, length, value)` | — | Fill buffer region with byte value |  |
+| [`buffer_alloc(size)`](#buffer_alloc) | Int (address) | Allocate memory buffer |  |
+| [`buffer_free(buffer)`](#buffer_free) | — | Free memory buffer |  |
+| [`buffer_get_byte(buffer, offset)`](#buffer_get_byte) | Int | Get byte at offset |  |
+| [`buffer_set_byte(buffer, offset, value)`](#buffer_set_byte) | — | Set byte at offset |  |
+| [`buffer_get_word(buffer, offset)`](#buffer_get_word) | Int | Get 16-bit word at offset (big-endian) |  |
+| [`buffer_set_word(buffer, offset, value)`](#buffer_set_word) | — | Set 16-bit word at offset (big-endian) |  |
+| [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | Get 32-bit long at offset (big-endian) |  |
+| [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Set 32-bit long at offset (big-endian) |  |
+| [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copy bytes between buffers |  |
+| [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Fill buffer region with byte value |  |
+
+<a id="buffer_alloc"></a>
+
+### `buffer_alloc(size)` → `Int (address)`
+
+- `size`: how many bytes.
+
+Asks for a block of memory, filled with zeros. Returns its address, or 0 if there is no memory. It must be freed
+with `buffer_free`.
+
+See also: [`buffer_free`](#buffer_free), [`file_load`](#file_load).
+
+<a id="buffer_free"></a>
+
+### `buffer_free(buffer)`
+
+- `buffer`: the buffer; 0 does nothing.
+
+Gives the memory back. Afterwards the buffer cannot be used.
+
+See also: [`buffer_alloc`](#buffer_alloc).
+
+<a id="buffer_get_byte"></a>
+
+### `buffer_get_byte(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the byte, 0 to 255.
+
+See also: [`buffer_set_byte`](#buffer_set_byte).
+
+<a id="buffer_set_byte"></a>
+
+### `buffer_set_byte(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the byte; its low 8 bits count.
+
+See also: [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="buffer_get_word"></a>
+
+### `buffer_get_word(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the 16-bit number at that position, 0 to 65535, high byte first.
+
+See also: [`buffer_set_word`](#buffer_set_word).
+
+<a id="buffer_set_word"></a>
+
+### `buffer_set_word(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the number; its low 16 bits count.
+
+See also: [`buffer_get_word`](#buffer_get_word).
+
+<a id="buffer_get_long"></a>
+
+### `buffer_get_long(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the signed 32-bit number at that position, high byte first.
+
+See also: [`buffer_set_long`](#buffer_set_long).
+
+<a id="buffer_set_long"></a>
+
+### `buffer_set_long(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the number.
+
+See also: [`buffer_get_long`](#buffer_get_long).
+
+<a id="buffer_copy"></a>
+
+### `buffer_copy(dest, dest_offset, src, src_offset, length)`
+
+- `dest`, `dest_offset`: where to.
+- `src`, `src_offset`: where from.
+- `length`: how many bytes.
+
+Copies bytes from one buffer to another, or within the same one if the areas do not overlap.
+
+See also: [`buffer_fill`](#buffer_fill).
+
+<a id="buffer_fill"></a>
+
+### `buffer_fill(buffer, offset, length, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `length`: how many bytes.
+- `value`: the byte to fill them with.
+
+See also: [`buffer_copy`](#buffer_copy).
 
 ## Text
 
+Find, cut, change and convert texts, and read or write a whole text file.
+
+The functions return a new text: the original does not change. Positions start at 0. Besides these, the language
+has `s.length`, `s[i]` (one character), `s[a:b]` (a slice), `+` to join, `Int(s)` and interpolation `"#{x}"`
+(manual, section 5).
+
+Texts are Latin-1, one byte per character: ñ and accented vowels take one. A text ends at the first 0 byte, so when
+data from a file or a buffer becomes a text, 0 bytes turn into spaces. For binary data, buffers. For UTF-8 text
+(from the network), the UTF-8 group.
+
+**Example** (`tests/test_doc_texto.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Texto y búferes: leer un fichero de ajustes "clave = valor", y la cabecera de un fichero binario en un búfer.
+
+Main
+    file_write_text("RAM:ajustes.txt", "# mis ajustes\nNombre = Lorraine\n\ncolores = 32\n")
+    texto = file_read_text("RAM:ajustes.txt")
+    if texto == nil
+        Print "no se pudo leer"
+        return
+    end
+    for linea in str_split(texto, "\n")
+        linea = str_trim(linea)
+        if linea == "" or str_starts(linea, "#")
+            continue
+        end
+        p = str_find(linea, "=")
+        clave = str_lower(str_trim(linea[:p]))
+        valor = str_trim(linea[p + 1:])
+        if clave == "colores"
+            n = Int(valor)
+            Print "#{clave} -> #{n} (0x#{str_from_int(n, 16)})"
+        else
+            Print "#{clave} -> #{valor}"
+        end
+    end
+
+    b = buffer_alloc(12)                       # una cabecera IFF: "FORM", el largo y el tipo
+    str_to_buffer("FORM", b, 0)
+    buffer_set_long(b, 4, 4)
+    str_to_buffer("ILBM", b, 8)
+    file_save("RAM:cabecera.iff", b, 12)
+    buffer_fill(b, 0, 12, 0)
+    n = file_load("RAM:cabecera.iff", b, 12)
+    es_iff = buffer_equals(b, 0, 4, "FORM")
+    Print "es un IFF de #{n} bytes: #{es_iff}"
+    buffer_free(b)                             # los búferes no se liberan solos
+
+    file_delete("RAM:ajustes.txt")
+    file_delete("RAM:cabecera.iff")
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_code(s, i)` | Int | Code (0-255) of the character at position i, 0 outside the text |  |
-| `str_char(code)` | String | One-character String with that code |  |
-| `str_find(s, sub)` | Int | Position of the first sub in s, -1 if it is not there |  |
-| `str_find_from(s, sub, start)` | Int | Position of the first sub in s from position start, -1 if none |  |
-| `str_starts(s, prefix)` | Bool | Does s start with prefix? |  |
-| `str_ends(s, suffix)` | Bool | Does s end with suffix? |  |
-| `str_lower(s)` | String | Lowercase copy (Latin-1: also accented letters) |  |
-| `str_upper(s)` | String | Uppercase copy (Latin-1: also accented letters) |  |
-| `str_trim(s)` | String | Copy without spaces, tabs and line ends at both ends |  |
-| `str_to_int(s, base)` | Int | Number written in s in that base (2-36); Int(s) is base 10 |  |
-| `str_from_int(n, base)` | String | n written in that base (2-36, lowercase letters) |  |
-| `str_replace(s, from, to)` | String | Copy with every from replaced by to |  |
-| `str_contains(s, sub)` | Bool | Whether sub is in s ("" is in every text) |  |
-| `str_split(s, sep)` | [Int] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
-| `file_read_text(filename)` | String | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
-| `file_write_text(filename, text)` | Bool | Write the text as the whole file; true if it was all written |  |
-| `str_from_buffer(buffer, offset, length)` | String | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
-| `str_to_buffer(s, buffer, offset)` | Int | Copy the bytes of s to buffer + offset; returns how many |  |
+| [`str_code(s, i)`](#str_code) | Int | Code (0-255) of the character at position i, 0 outside the text |  |
+| [`str_char(code)`](#str_char) | String | One-character String with that code |  |
+| [`str_find(s, sub)`](#str_find) | Int | Position of the first sub in s, -1 if it is not there |  |
+| [`str_find_from(s, sub, start)`](#str_find_from) | Int | Position of the first sub in s from position start, -1 if none |  |
+| [`str_starts(s, prefix)`](#str_starts) | Bool | Does s start with prefix? |  |
+| [`str_ends(s, suffix)`](#str_ends) | Bool | Does s end with suffix? |  |
+| [`str_lower(s)`](#str_lower) | String | Lowercase copy (Latin-1: also accented letters) |  |
+| [`str_upper(s)`](#str_upper) | String | Uppercase copy (Latin-1: also accented letters) |  |
+| [`str_trim(s)`](#str_trim) | String | Copy without spaces, tabs and line ends at both ends |  |
+| [`str_to_int(s, base)`](#str_to_int) | Int | Number written in s in that base (2-36); Int(s) is base 10 |  |
+| [`str_from_int(n, base)`](#str_from_int) | String | n written in that base (2-36, lowercase letters) |  |
+| [`str_replace(s, from, to)`](#str_replace) | String | Copy with every from replaced by to |  |
+| [`str_contains(s, sub)`](#str_contains) | Bool | Whether sub is in s ("" is in every text) |  |
+| [`str_split(s, sep)`](#str_split) | [Int] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
+| [`file_read_text(filename)`](#file_read_text) | String | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
+| [`file_write_text(filename, text)`](#file_write_text) | Bool | Write the text as the whole file; true if it was all written |  |
+| [`str_from_buffer(buffer, offset, length)`](#str_from_buffer) | String | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
+| [`str_to_buffer(s, buffer, offset)`](#str_to_buffer) | Int | Copy the bytes of s to buffer + offset; returns how many |  |
+
+<a id="str_code"></a>
+
+### `str_code(s, i)` → `Int`
+
+- `s`: the text.
+- `i`: the position, from 0.
+
+Returns the character's Latin-1 code (0 to 255); 0 outside the text. It is `Int(s[i])`.
+
+See also: [`str_char`](#str_char).
+
+<a id="str_char"></a>
+
+### `str_char(code)` → `String`
+
+- `code`: a Latin-1 code, 1 to 255.
+
+Returns a one-character text: `str_char(65)` is `"A"`.
+
+See also: [`str_code`](#str_code).
+
+<a id="str_find"></a>
+
+### `str_find(s, sub)` → `Int`
+
+- `s`: the text.
+- `sub`: what to look for.
+
+Returns the position of its first appearance, or -1 if it is not there. It is case sensitive.
+
+See also: [`str_find_from`](#str_find_from), [`str_contains`](#str_contains).
+
+<a id="str_find_from"></a>
+
+### `str_find_from(s, sub, start)` → `Int`
+
+- `s`: the text.
+- `sub`: what to look for.
+- `start`: the position to start at.
+
+Like `str_find`, starting at `start`. To find them all, search again from the previous one plus one.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_starts"></a>
+
+### `str_starts(s, prefix)` → `Bool`
+
+- `s`: the text.
+- `prefix`: the beginning.
+
+Returns `true` if `s` starts with `prefix`.
+
+See also: [`str_ends`](#str_ends).
+
+<a id="str_ends"></a>
+
+### `str_ends(s, suffix)` → `Bool`
+
+- `s`: the text.
+- `suffix`: the end.
+
+Returns `true` if `s` ends with `suffix`: `str_ends(name, ".iff")`.
+
+See also: [`str_starts`](#str_starts).
+
+<a id="str_lower"></a>
+
+### `str_lower(s)` → `String`
+
+- `s`: the text.
+
+Returns a lower-case copy, accented letters and Ñ included.
+
+See also: [`str_upper`](#str_upper).
+
+<a id="str_upper"></a>
+
+### `str_upper(s)` → `String`
+
+- `s`: the text.
+
+Returns an upper-case copy, accented letters and ñ included.
+
+See also: [`str_lower`](#str_lower).
+
+<a id="str_trim"></a>
+
+### `str_trim(s)` → `String`
+
+- `s`: the text.
+
+Returns a copy without the spaces, tabs and line breaks at the start and the end.
+
+See also: [`str_split`](#str_split).
+
+<a id="str_to_int"></a>
+
+### `str_to_int(s, base)` → `Int`
+
+- `s`: the text.
+- `base`: the base, 2 to 36; any other counts as 10.
+
+Returns the number written at the start of the text: it skips spaces, takes a sign and reads digits of that base
+(letters in either case) up to the first one that is not. 0 if there are none. `str_to_int("ff", 16)` is 255.
+
+See also: [`str_from_int`](#str_from_int).
+
+<a id="str_from_int"></a>
+
+### `str_from_int(n, base)` → `String`
+
+- `n`: the number.
+- `base`: the base, 2 to 36.
+
+Returns the number written in that base, with lower-case letters: `str_from_int(255, 16)` is `"ff"`. In base 10,
+interpolation is enough: `"#{n}"`.
+
+See also: [`str_to_int`](#str_to_int).
+
+<a id="str_replace"></a>
+
+### `str_replace(s, from, to)` → `String`
+
+- `s`: the text.
+- `from`: what to change.
+- `to`: what to put instead; `""` removes it.
+
+Returns a copy with every appearance of `from` changed to `to`.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_contains"></a>
+
+### `str_contains(s, sub)` → `Bool`
+
+- `s`: the text.
+- `sub`: what to look for.
+
+Returns `true` if `sub` is in `s`. `""` is in every text.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_split"></a>
+
+### `str_split(s, sep)` → `[Int]`
+
+- `s`: the text.
+- `sep`: the separator.
+
+Returns a `[String]` list with the pieces of `s` between each `sep`. Two separators in a row give a `""` piece.
+With an empty `sep`, or if it does not appear, the list holds just `s`. `str_split(text, "\n")` gives the lines.
+
+See also: [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
+
+<a id="file_read_text"></a>
+
+### `file_read_text(filename)` → `String`
+
+- `filename`: the path.
+
+Returns the whole file as a text, or `nil` if it cannot be read. 0 bytes turn into spaces. Large files need memory
+for the whole text.
+
+See also: [`file_write_text`](#file_write_text), [`str_split`](#str_split).
+
+<a id="file_write_text"></a>
+
+### `file_write_text(filename, text)` → `Bool`
+
+- `filename`: the path; if it existed, it is replaced.
+- `text`: the text.
+
+Writes the text as the whole file. Returns `true` if everything was written.
+
+See also: [`file_read_text`](#file_read_text), [`file_write_line`](#file_write_line).
+
+<a id="str_from_buffer"></a>
+
+### `str_from_buffer(buffer, offset, length)` → `String`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `length`: how many bytes.
+
+Returns a text with those bytes of the buffer; 0 bytes turn into spaces.
+
+See also: [`str_to_buffer`](#str_to_buffer).
+
+<a id="str_to_buffer"></a>
+
+### `str_to_buffer(s, buffer, offset)` → `Int`
+
+- `s`: the text.
+- `buffer`: the buffer, with room for the text.
+- `offset`: where to copy it.
+
+Copies the text's bytes, without the final 0, and returns how many it copied.
+
+See also: [`str_from_buffer`](#str_from_buffer).
 
 ## Network (TCP)
 
@@ -3077,11 +3450,51 @@ See also: [`file_load`](#file_load), `file_write_text`.
 
 ## Comparing and searching in a buffer
 
+Compare and search inside a buffer without turning it into a text, to read formats or protocols quickly.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `buffer_equals(buffer, offset, n, s)` | Bool | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
-| `buffer_find_byte(buffer, from, to, byte)` | Int | Position of the first byte equal to byte from from to to - 1, or -1 |  |
-| `buffer_find_any(buffer, from, to, bytes)` | Int | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+| [`buffer_equals(buffer, offset, n, s)`](#buffer_equals) | Bool | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
+| [`buffer_find_byte(buffer, from, to, byte)`](#buffer_find_byte) | Int | Position of the first byte equal to byte from from to to - 1, or -1 |  |
+| [`buffer_find_any(buffer, from, to, bytes)`](#buffer_find_any) | Int | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+
+<a id="buffer_equals"></a>
+
+### `buffer_equals(buffer, offset, n, s)` → `Bool`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `n`: how many bytes.
+- `s`: the text.
+
+Returns `true` if those `n` bytes are exactly the text `s` and `s` has `n` bytes. To check a file's header:
+`buffer_equals(b, 0, 4, "FORM")`.
+
+See also: [`buffer_find_byte`](#buffer_find_byte).
+
+<a id="buffer_find_byte"></a>
+
+### `buffer_find_byte(buffer, from, to, byte)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: where to search, from `from` to `to - 1`.
+- `byte`: the byte to look for.
+
+Returns the position of the first one, or -1. To find the end of a line: `buffer_find_byte(b, i, n, 10)`.
+
+See also: [`buffer_find_any`](#buffer_find_any).
+
+<a id="buffer_find_any"></a>
+
+### `buffer_find_any(buffer, from, to, bytes)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: from `from` to `to - 1`.
+- `bytes`: a text with the bytes that match.
+
+Returns the position of the first byte that is any of those in `bytes`, or -1.
+
+See also: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Double and text
 

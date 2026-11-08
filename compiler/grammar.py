@@ -264,7 +264,9 @@ dash_grammar_minimal = r"""
     // Decimal, hexadecimal (0xDFF000 or $DFF000) and binary (0b1010)
     INT: /0[xX][0-9a-fA-F]+|\$[0-9a-fA-F]+|0[bB][01]+|\d+/
 
-    %import common.ESCAPED_STRING
+    // A string literal. Inside a #{...} it may hold strings of its own ("#{f("x")}") and one level of braces; a
+    // lone # or #{ is plain text. (Lark's ESCAPED_STRING ended at the inner quote; ./dash already took it.)
+    ESCAPED_STRING: /"(?:[^"\\#\n]|\\.|#\{(?:[^{}"\n]|"(?:[^"\\\n]|\\.)*"|\{[^{}"\n]*\})*\}|#)*"/
     %import common.WS
     %ignore WS
 """

@@ -33,7 +33,9 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   `tests/test_doc_sprites.dash`.
 - [x] T7b. Mapas de tiles (`tilemap_*`), con `tests/test_doc_tiles.dash`.
 - [x] T7c. Copper y bitmaps, con `tests/test_doc_bitmaps.dash`.
-- [ ] T8. Texto, buffers, sistema y memoria, audio.
+- [x] T8a. Texto, búferes y buscar en un búfer, con `tests/test_doc_texto.dash`.
+- [ ] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`).
+- [ ] T8c. Audio (`AUDIO_FUNCTIONS`).
 - [ ] T9. El resto de grupos.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
   explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
@@ -76,3 +78,9 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - 2026-11-08: T7c. Copper y bitmaps. `bitmap_load` y `bob_load` ponen la paleta de la imagen en una pantalla
   propia (la descripción corta no lo decía); documentado. El degradado del copper no se ha podido ver: la captura
   (`tools/amiga/shot.c`) lee la imagen y su paleta, no lo que sale por pantalla.
+- 2026-11-08: T8a. Texto y búferes. `buffer_alloc` no se libera al acabar el programa (AllocVec sin apuntar):
+  documentado como aviso.
+  - Arreglo: un texto entre comillas dentro de una interpolación (`"#{f("x")}"`) ya compila con `./dash --gcc`,
+    como con `./dash` (el literal de Lark acababa en la comilla de dentro). `tests/test_interp_comillas.dash`;
+    `./compile_all.sh` 34/34. Sigue distinto un caso raro: un `#{` sin cerrar seguido de otra interpolación en el
+    mismo texto (`./dash --gcc` lo deja todo como texto, `./dash` interpola la segunda).
