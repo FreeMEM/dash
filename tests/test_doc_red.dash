@@ -1,0 +1,33 @@
+# Red: un cliente TCP que manda una línea a un servidor y lee la respuesta (el de las pruebas contesta "eco: ...").
+# emu-net: 40831
+# expect-out: conectado
+# expect-out: respuesta: eco: hola desde el Amiga
+# expect-out: otro puerto: conexión rechazada
+# expect-out: fin
+
+Main
+    if not net_stack_running()
+        Print "no hay pila TCP/IP en marcha"
+        return
+    end
+    s = net_connect("127.0.0.1", 40831, 5000)  # como mucho 5 segundos
+    if s < 0
+        Print "no se pudo conectar: " + net_error()
+        return
+    end
+    Print "conectado"
+    net_send(s, "hola desde el Amiga\r\n")
+    respuesta = ""
+    trozo = net_recv(s, 256, 5000)
+    while trozo != nil and trozo != ""             # nil: el otro lado cerró; "": nada a tiempo
+        respuesta = respuesta + trozo
+        trozo = net_recv(s, 256, 2000)
+    end
+    net_close(s)
+    Print "respuesta: " + str_trim(respuesta)
+
+    if net_connect("127.0.0.1", 40832, 2000) < 0   # nadie escucha ahí
+        Print "otro puerto: " + net_error()
+    end
+    Print "fin"
+end

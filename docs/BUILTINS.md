@@ -3967,48 +3967,467 @@ Ver también: [`str_from_buffer`](#str_from_buffer).
 
 ## Red (TCP)
 
+TCP y UDP con la `bsdsocket.library` de la pila TCP/IP que tenga el Amiga (Roadshow, AmiTCP, Miami, o la del
+emulador). Si no hay pila en marcha, las llamadas fallan y `net_error` lo dice; `net_stack_running` lo mira sin
+cargar nada.
+
+**Un cliente:** `s = net_connect(host, puerto, espera_ms)` da un socket (-1 si falla), `net_send` envía,
+`net_recv` recibe y `net_close` cierra. Los tiempos de espera van en milisegundos; -1 es esperar lo que haga falta.
+`net_recv` devuelve `""` si no llegó nada a tiempo y `nil` cuando el otro lado cierra.
+
+**Sin bloquear la ventana:** `net_connect_start` y `net_connect_poll` conectan poco a poco; `net_signal` con
+`mui_wait_event_signals` despierta al programa cuando hay datos. Para varias descargas a la vez mientras el
+programa hace otra cosa, el grupo "Red en una tarea aparte".
+
+**Un servidor:** `net_listen(puerto)` y `net_accept`. **UDP:** `net_udp_open`, `net_udp_send`, `net_udp_recv`.
+
+**HTTPS** y otros protocolos cifrados: el socket conectado pasa a TLS con `tls_connect` (grupo TLS).
+
+**Ejemplo** (`tests/test_doc_red.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Red: un cliente TCP que manda una línea a un servidor y lee la respuesta (el de las pruebas contesta "eco: ...").
+
+Main
+    if not net_stack_running()
+        Print "no hay pila TCP/IP en marcha"
+        return
+    end
+    s = net_connect("127.0.0.1", 40831, 5000)  # como mucho 5 segundos
+    if s < 0
+        Print "no se pudo conectar: " + net_error()
+        return
+    end
+    Print "conectado"
+    net_send(s, "hola desde el Amiga\r\n")
+    respuesta = ""
+    trozo = net_recv(s, 256, 5000)
+    while trozo != nil and trozo != ""             # nil: el otro lado cerró; "": nada a tiempo
+        respuesta = respuesta + trozo
+        trozo = net_recv(s, 256, 2000)
+    end
+    net_close(s)
+    Print "respuesta: " + str_trim(respuesta)
+
+    if net_connect("127.0.0.1", 40832, 2000) < 0   # nadie escucha ahí
+        Print "otro puerto: " + net_error()
+    end
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `net_connect(host, port, timeout_ms)` | Int | Una conexión TCP a host:port (nombre o dirección): el socket, o -1 (ver net_error) |  |
-| `net_connect_start(host, port, timeout_ms)` | Int | Empieza una conexión TCP sin esperar (el nombre se busca en otro proceso): el socket, o -1 (ver net_error) |  |
-| `net_connect_poll(sock)` | Int | Sigue con net_connect_start sin esperar: 1 conectada, 0 aún no, -1 falló (el socket se cierra; ver net_error) |  |
-| `net_connect_stage(sock)` | Int | Qué está haciendo net_connect_start: 0 buscando el nombre, 1 conectando, 2 hecho |  |
-| `net_send(sock, text)` | Int | Envía el texto entero; los bytes enviados o -1 |  |
-| `net_send_buffer(sock, buffer, length)` | Int | Envía length bytes de un búfer; los bytes enviados o -1 |  |
-| `net_recv(sock, max, timeout_ms)` | String | Hasta max bytes como texto: "" si no llegó nada en timeout_ms (-1: esperar), nil al cerrarse |  |
-| `net_recv_buffer(sock, buffer, max, timeout_ms)` | Int | Hasta max bytes en un búfer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse |  |
-| `net_wait(sock, timeout_ms)` | Int | Espera a que haya algo que leer: 1 sí, 0 se acabó el tiempo, -1 error |  |
-| `net_close(sock)` | — | Cierra la conexión |  |
-| `net_resolve(host)` | String | La dirección IPv4 de un nombre ("a.b.c.d"); nil si no se conoce |  |
-| `net_error()` | String | Qué falló en la última llamada net_ |  |
-| `net_listen(port)` | Int | Un servidor TCP en un puerto (0: uno libre cualquiera, net_port dice cuál): el socket que escucha, o -1 (ver net_error) |  |
-| `net_accept(sock, timeout_ms)` | Int | La siguiente conexión a un servidor de net_listen, esperando como mucho timeout_ms (-1: esperar, 0: solo mirar): su socket (net_send, net_recv...), o -1 si no llegó ninguna |  |
-| `net_peer(sock)` | String | La dirección ("a.b.c.d") del otro lado de una conexión TCP; nil si no hay |  |
-| `net_port(sock)` | Int | El puerto local de un socket (el que tocó con net_listen(0) o net_udp_open(0)); -1 si no hay |  |
-| `net_udp_open(port)` | Int | Un socket UDP en un puerto (0: uno libre cualquiera), con difusión: el socket, o -1 (se cierra con net_close) |  |
-| `net_udp_send(sock, host, port, text)` | Int | Envía el texto como un datagrama a host:port ("255.255.255.255": toda la red local); los bytes enviados o -1 |  |
-| `net_udp_send_buffer(sock, host, port, buffer, length)` | Int | Envía length bytes de un búfer como un datagrama a host:port; los bytes enviados o -1 |  |
-| `net_udp_recv(sock, max, timeout_ms)` | String | El siguiente datagrama como texto (hasta max bytes): "" si no llegó ninguno en timeout_ms, nil si hubo un error; quién lo envió: net_udp_from, net_udp_from_port |  |
-| `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` | Int | El siguiente datagrama en un búfer: su largo, 0 si no llegó a tiempo, -1 si hubo un error |  |
-| `net_udp_from()` | String | La dirección ("a.b.c.d") de quien envió el último datagrama recibido |  |
-| `net_udp_from_port()` | Int | El puerto de quien envió el último datagrama recibido (para contestarle) |  |
-| `net_stack_running()` | Bool | True si hay una pila TCP/IP en marcha (su bsdsocket.library está en memoria), sin cargar nada para saberlo. La de Roadshow sigue en memoria tras NetShutdown: esa se abre y se cierra |  |
-| `net_release()` | — | Suelta la red ya: se cierra bsdsocket.library, con los sockets, las conexiones TLS y las búsquedas de nombres abiertos; la siguiente llamada net_ la abre otra vez (al acabar el programa también) |  |
-| `net_signal()` | Int | La máscara de señal que dan los sockets con cada evento (conectado, datos, cerrado...), 0 si la pila TCP/IP no puede: llamarla antes de cada espera, mui_wait_event_signals(net_signal()) |  |
+| [`net_connect(host, port, timeout_ms)`](#net_connect) | Int | Una conexión TCP a host:port (nombre o dirección): el socket, o -1 (ver net_error) |  |
+| [`net_connect_start(host, port, timeout_ms)`](#net_connect_start) | Int | Empieza una conexión TCP sin esperar (el nombre se busca en otro proceso): el socket, o -1 (ver net_error) |  |
+| [`net_connect_poll(sock)`](#net_connect_poll) | Int | Sigue con net_connect_start sin esperar: 1 conectada, 0 aún no, -1 falló (el socket se cierra; ver net_error) |  |
+| [`net_connect_stage(sock)`](#net_connect_stage) | Int | Qué está haciendo net_connect_start: 0 buscando el nombre, 1 conectando, 2 hecho |  |
+| [`net_send(sock, text)`](#net_send) | Int | Envía el texto entero; los bytes enviados o -1 |  |
+| [`net_send_buffer(sock, buffer, length)`](#net_send_buffer) | Int | Envía length bytes de un búfer; los bytes enviados o -1 |  |
+| [`net_recv(sock, max, timeout_ms)`](#net_recv) | String | Hasta max bytes como texto: "" si no llegó nada en timeout_ms (-1: esperar), nil al cerrarse |  |
+| [`net_recv_buffer(sock, buffer, max, timeout_ms)`](#net_recv_buffer) | Int | Hasta max bytes en un búfer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse |  |
+| [`net_wait(sock, timeout_ms)`](#net_wait) | Int | Espera a que haya algo que leer: 1 sí, 0 se acabó el tiempo, -1 error |  |
+| [`net_close(sock)`](#net_close) | — | Cierra la conexión |  |
+| [`net_resolve(host)`](#net_resolve) | String | La dirección IPv4 de un nombre ("a.b.c.d"); nil si no se conoce |  |
+| [`net_error()`](#net_error) | String | Qué falló en la última llamada net_ |  |
+| [`net_listen(port)`](#net_listen) | Int | Un servidor TCP en un puerto (0: uno libre cualquiera, net_port dice cuál): el socket que escucha, o -1 (ver net_error) |  |
+| [`net_accept(sock, timeout_ms)`](#net_accept) | Int | La siguiente conexión a un servidor de net_listen, esperando como mucho timeout_ms (-1: esperar, 0: solo mirar): su socket (net_send, net_recv...), o -1 si no llegó ninguna |  |
+| [`net_peer(sock)`](#net_peer) | String | La dirección ("a.b.c.d") del otro lado de una conexión TCP; nil si no hay |  |
+| [`net_port(sock)`](#net_port) | Int | El puerto local de un socket (el que tocó con net_listen(0) o net_udp_open(0)); -1 si no hay |  |
+| [`net_udp_open(port)`](#net_udp_open) | Int | Un socket UDP en un puerto (0: uno libre cualquiera), con difusión: el socket, o -1 (se cierra con net_close) |  |
+| [`net_udp_send(sock, host, port, text)`](#net_udp_send) | Int | Envía el texto como un datagrama a host:port ("255.255.255.255": toda la red local); los bytes enviados o -1 |  |
+| [`net_udp_send_buffer(sock, host, port, buffer, length)`](#net_udp_send_buffer) | Int | Envía length bytes de un búfer como un datagrama a host:port; los bytes enviados o -1 |  |
+| [`net_udp_recv(sock, max, timeout_ms)`](#net_udp_recv) | String | El siguiente datagrama como texto (hasta max bytes): "" si no llegó ninguno en timeout_ms, nil si hubo un error; quién lo envió: net_udp_from, net_udp_from_port |  |
+| [`net_udp_recv_buffer(sock, buffer, max, timeout_ms)`](#net_udp_recv_buffer) | Int | El siguiente datagrama en un búfer: su largo, 0 si no llegó a tiempo, -1 si hubo un error |  |
+| [`net_udp_from()`](#net_udp_from) | String | La dirección ("a.b.c.d") de quien envió el último datagrama recibido |  |
+| [`net_udp_from_port()`](#net_udp_from_port) | Int | El puerto de quien envió el último datagrama recibido (para contestarle) |  |
+| [`net_stack_running()`](#net_stack_running) | Bool | True si hay una pila TCP/IP en marcha (su bsdsocket.library está en memoria), sin cargar nada para saberlo. La de Roadshow sigue en memoria tras NetShutdown: esa se abre y se cierra |  |
+| [`net_release()`](#net_release) | — | Suelta la red ya: se cierra bsdsocket.library, con los sockets, las conexiones TLS y las búsquedas de nombres abiertos; la siguiente llamada net_ la abre otra vez (al acabar el programa también) |  |
+| [`net_signal()`](#net_signal) | Int | La máscara de señal que dan los sockets con cada evento (conectado, datos, cerrado...), 0 si la pila TCP/IP no puede: llamarla antes de cada espera, mui_wait_event_signals(net_signal()) |  |
+
+<a id="net_connect"></a>
+
+### `net_connect(host, port, timeout_ms)` → `Int`
+
+- `host`: el nombre (`"aminet.net"`) o la dirección (`"192.168.1.10"`).
+- `port`: el puerto: 80 web, 443 HTTPS, 21 FTP...
+- `timeout_ms`: cuánto esperar como mucho.
+
+Conecta por TCP y espera a que acabe. Devuelve el socket, o -1 si falló: `net_error` dice por qué.
+
+Ver también: [`net_send`](#net_send), [`net_recv`](#net_recv), [`net_close`](#net_close), [`net_connect_start`](#net_connect_start).
+
+<a id="net_connect_start"></a>
+
+### `net_connect_start(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: como en `net_connect`.
+
+Empieza a conectar sin esperar; el nombre se busca en otro proceso. Devuelve el socket, o -1. Después,
+`net_connect_poll` hasta que dé 1.
+
+Ver también: [`net_connect_poll`](#net_connect_poll), [`net_connect_stage`](#net_connect_stage).
+
+<a id="net_connect_poll"></a>
+
+### `net_connect_poll(sock)` → `Int`
+
+- `sock`: el socket.
+Sigue con la conexión sin esperar. Devuelve 1 si ya está, 0 si aún no y -1 si falló (el socket se cierra solo;
+`net_error` dice por qué).
+
+Ver también: [`net_connect_start`](#net_connect_start).
+
+<a id="net_connect_stage"></a>
+
+### `net_connect_stage(sock)` → `Int`
+
+- `sock`: el socket.
+
+Devuelve en qué está `net_connect_start`: 0 buscando el nombre, 1 conectando, 2 hecho. Para enseñarlo en la ventana.
+
+Ver también: [`net_connect_poll`](#net_connect_poll).
+
+<a id="net_send"></a>
+
+### `net_send(sock, text)` → `Int`
+
+- `sock`: el socket.
+- `text`: lo que se envía, tal cual (los protocolos de texto suelen querer `"\r\n"` al final).
+
+Envía todo el texto. Devuelve los bytes enviados, o -1.
+
+Ver también: [`net_recv`](#net_recv), [`net_send_buffer`](#net_send_buffer).
+
+<a id="net_send_buffer"></a>
+
+### `net_send_buffer(sock, buffer, length)` → `Int`
+
+- `sock`: el socket.
+- `buffer`: los bytes.
+- `length`: cuántos.
+
+Para datos binarios. Devuelve los bytes enviados, o -1.
+
+Ver también: [`net_send`](#net_send).
+
+<a id="net_recv"></a>
+
+### `net_recv(sock, max, timeout_ms)` → `String`
+
+- `sock`: el socket.
+- `max`: cuántos bytes como mucho.
+- `timeout_ms`: cuánto esperar; -1 lo que haga falta.
+
+Devuelve lo que haya llegado, hasta `max` bytes, como texto: puede ser solo parte de lo que mandó el otro lado.
+`""` si no llegó nada a tiempo, `nil` si la conexión se cerró.
+
+Ver también: [`net_recv_buffer`](#net_recv_buffer), [`net_wait`](#net_wait).
+
+<a id="net_recv_buffer"></a>
+
+### `net_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+
+- `sock`: el socket.
+- `buffer`: dónde.
+- `max`: cuántos bytes como mucho.
+- `timeout_ms`: cuánto esperar.
+
+Como `net_recv`, para datos binarios. Devuelve cuántos bytes llegaron, 0 si se acabó el tiempo, -1 si se cerró.
+
+Ver también: [`net_recv`](#net_recv).
+
+<a id="net_wait"></a>
+
+### `net_wait(sock, timeout_ms)` → `Int`
+
+- `sock`: el socket.
+- `timeout_ms`: cuánto esperar.
+
+Espera a que haya algo que leer. Devuelve 1 si lo hay, 0 si se acabó el tiempo, -1 si hubo un error.
+
+Ver también: [`net_recv`](#net_recv).
+
+<a id="net_close"></a>
+
+### `net_close(sock)`
+
+- `sock`: el socket.
+
+Cierra la conexión o el servidor. Los que queden abiertos se cierran al acabar.
+
+Ver también: [`net_connect`](#net_connect).
+
+<a id="net_resolve"></a>
+
+### `net_resolve(host)` → `String`
+
+- `host`: el nombre.
+
+Devuelve su dirección IPv4 (`"a.b.c.d"`), o `nil` si no se encuentra.
+
+Ver también: [`net_connect`](#net_connect).
+
+<a id="net_error"></a>
+
+### `net_error()` → `String`
+
+Devuelve qué falló en la última llamada `net_*` o `tls_*`, en palabras: `"conexión rechazada"`.
+
+Ver también: [`net_connect`](#net_connect).
+
+<a id="net_listen"></a>
+
+### `net_listen(port)` → `Int`
+
+- `port`: el puerto; 0 = uno libre cualquiera (`net_port` dice cuál).
+
+Abre un servidor TCP. Devuelve el socket que escucha, o -1. Las conexiones se recogen con `net_accept`.
+
+Ver también: [`net_accept`](#net_accept), [`net_port`](#net_port).
+
+<a id="net_accept"></a>
+
+### `net_accept(sock, timeout_ms)` → `Int`
+
+- `sock`: el socket de `net_listen`.
+- `timeout_ms`: cuánto esperar; -1 lo que haga falta, 0 solo mirar.
+
+Devuelve el socket de la siguiente conexión, para `net_send` y `net_recv`, o -1 si no llegó ninguna.
+
+Ver también: [`net_listen`](#net_listen), [`net_peer`](#net_peer).
+
+<a id="net_peer"></a>
+
+### `net_peer(sock)` → `String`
+
+- `sock`: el socket.
+
+Devuelve la dirección del otro lado de la conexión, o `nil`.
+
+Ver también: [`net_accept`](#net_accept).
+
+<a id="net_port"></a>
+
+### `net_port(sock)` → `Int`
+
+- `sock`: el socket.
+
+Devuelve su puerto local; el que tocó con `net_listen(0)` o `net_udp_open(0)`. -1 si no hay.
+
+Ver también: [`net_listen`](#net_listen).
+
+<a id="net_udp_open"></a>
+
+### `net_udp_open(port)` → `Int`
+
+- `port`: el puerto donde recibe; 0 = uno libre.
+
+Abre un socket UDP, que puede enviar a toda la red local. Devuelve el socket, o -1. Se cierra con `net_close`.
+
+Ver también: [`net_udp_send`](#net_udp_send), [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_send"></a>
+
+### `net_udp_send(sock, host, port, text)` → `Int`
+
+- `sock`: el socket.
+- `host`, `port`: el destino; `"255.255.255.255"` es toda la red local.
+- `text`: el datagrama.
+
+Lo envía. Devuelve los bytes enviados, o -1. UDP no avisa si se pierde.
+
+Ver también: [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_send_buffer"></a>
+
+### `net_udp_send_buffer(sock, host, port, buffer, length)` → `Int`
+
+- `sock`: el socket.
+- `host`, `port`: el destino.
+- `buffer`, `length`: los bytes.
+
+Como `net_udp_send`, con datos binarios.
+
+Ver también: [`net_udp_send`](#net_udp_send).
+
+<a id="net_udp_recv"></a>
+
+### `net_udp_recv(sock, max, timeout_ms)` → `String`
+
+- `sock`: el socket.
+- `max`: cuántos bytes como mucho.
+- `timeout_ms`: cuánto esperar.
+
+Devuelve el siguiente datagrama como texto, `""` si no llegó ninguno a tiempo o `nil` si hubo un error.
+`net_udp_from` y `net_udp_from_port` dicen quién lo envió.
+
+Ver también: [`net_udp_from`](#net_udp_from).
+
+<a id="net_udp_recv_buffer"></a>
+
+### `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+
+- `sock`: el socket.
+- `buffer`, `max`, `timeout_ms`: dónde, cuánto y cuánto esperar.
+
+Devuelve el largo del datagrama, 0 si no llegó a tiempo, -1 si hubo un error.
+
+Ver también: [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_from"></a>
+
+### `net_udp_from()` → `String`
+
+Devuelve la dirección de quien envió el último datagrama recibido.
+
+Ver también: [`net_udp_from_port`](#net_udp_from_port).
+
+<a id="net_udp_from_port"></a>
+
+### `net_udp_from_port()` → `Int`
+
+Devuelve el puerto de quien envió el último datagrama, para contestarle.
+
+Ver también: [`net_udp_from`](#net_udp_from).
+
+<a id="net_stack_running"></a>
+
+### `net_stack_running()` → `Bool`
+
+Devuelve `true` si hay una pila TCP/IP en marcha, sin cargar nada para saberlo. Para avisar al usuario antes de
+intentar conectar.
+
+Ver también: [`net_connect`](#net_connect).
+
+<a id="net_release"></a>
+
+### `net_release()`
+
+Suelta la red ya: cierra los sockets, las conexiones TLS y la `bsdsocket.library`. La siguiente llamada `net_*` la
+vuelve a abrir. Para que el usuario pueda parar la pila sin cerrar el programa.
+
+<a id="net_signal"></a>
+
+### `net_signal()` → `Int`
+
+Devuelve la señal que dan los sockets con cada novedad (conectado, datos, cerrado), para
+`mui_wait_event_signals(net_signal())`. 0 si la pila no lo permite. Se llama antes de cada espera.
+
+Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
 ## TLS (AmiSSL)
 
+Conexiones cifradas (TLS, lo de HTTPS) con AmiSSL, que tiene que estar instalado. Se conecta el socket con
+`net_connect` y después `tls_connect(socket, host)` negocia la TLS comprobando el certificado del servidor. Desde
+ahí se envía y recibe con `tls_send` y `tls_recv`, y al acabar `tls_close` y `net_close`.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `tls_connect(sock, host)` | Int | TLS sobre un socket conectado, comprobando el certificado de host; -1 si no (net_error) |  |
-| `tls_connect_start(sock, host, timeout_ms)` | Int | TLS sobre un socket conectado sin esperar al saludo: la conexión, o -1 (ver net_error) |  |
-| `tls_connect_poll(tls)` | Int | Sigue con tls_connect_start: 1 hecho (certificado comprobado), 0 aún no, -1 falló (la conexión TLS se libera; ver net_error) |  |
-| `tls_send(tls, text)` | Int | Envía el texto entero; los bytes enviados o -1 |  |
-| `tls_send_buffer(tls, buffer, length)` | Int | Envía length bytes de un búfer; los bytes enviados o -1 |  |
-| `tls_recv(tls, max, timeout_ms)` | String | Como net_recv: "" si no llegó nada a tiempo, nil al cerrarse |  |
-| `tls_recv_buffer(tls, buffer, max, timeout_ms)` | Int | Como net_recv_buffer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse |  |
-| `tls_close(tls)` | — | Acaba la TLS de la conexión (después, net_close del socket) |  |
-| `tls_resumed(tls)` | Bool | True si la conexión retomó una sesión anterior con el mismo servidor (sin intercambiar claves) |  |
+| [`tls_connect(sock, host)`](#tls_connect) | Int | TLS sobre un socket conectado, comprobando el certificado de host; -1 si no (net_error) |  |
+| [`tls_connect_start(sock, host, timeout_ms)`](#tls_connect_start) | Int | TLS sobre un socket conectado sin esperar al saludo: la conexión, o -1 (ver net_error) |  |
+| [`tls_connect_poll(tls)`](#tls_connect_poll) | Int | Sigue con tls_connect_start: 1 hecho (certificado comprobado), 0 aún no, -1 falló (la conexión TLS se libera; ver net_error) |  |
+| [`tls_send(tls, text)`](#tls_send) | Int | Envía el texto entero; los bytes enviados o -1 |  |
+| [`tls_send_buffer(tls, buffer, length)`](#tls_send_buffer) | Int | Envía length bytes de un búfer; los bytes enviados o -1 |  |
+| [`tls_recv(tls, max, timeout_ms)`](#tls_recv) | String | Como net_recv: "" si no llegó nada a tiempo, nil al cerrarse |  |
+| [`tls_recv_buffer(tls, buffer, max, timeout_ms)`](#tls_recv_buffer) | Int | Como net_recv_buffer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse |  |
+| [`tls_close(tls)`](#tls_close) | — | Acaba la TLS de la conexión (después, net_close del socket) |  |
+| [`tls_resumed(tls)`](#tls_resumed) | Bool | True si la conexión retomó una sesión anterior con el mismo servidor (sin intercambiar claves) |  |
+
+<a id="tls_connect"></a>
+
+### `tls_connect(sock, host)` → `Int`
+
+- `sock`: un socket ya conectado con `net_connect`.
+- `host`: el nombre del servidor, para comprobar su certificado.
+
+Negocia la TLS y espera. Devuelve la conexión TLS, o -1 si falló (sin AmiSSL, certificado que no vale...):
+`net_error` dice por qué.
+
+Ver también: [`tls_send`](#tls_send), [`tls_recv`](#tls_recv), [`tls_close`](#tls_close), [`tls_connect_start`](#tls_connect_start).
+
+<a id="tls_connect_start"></a>
+
+### `tls_connect_start(sock, host, timeout_ms)` → `Int`
+
+- `sock`, `host`: como en `tls_connect`.
+- `timeout_ms`: cuánto puede durar el saludo.
+
+Empieza la TLS sin esperar. Devuelve la conexión, o -1. Después, `tls_connect_poll` hasta que dé 1.
+
+Ver también: [`tls_connect_poll`](#tls_connect_poll).
+
+<a id="tls_connect_poll"></a>
+
+### `tls_connect_poll(tls)` → `Int`
+
+- `tls`: la conexión TLS.
+
+Sigue con el saludo. Devuelve 1 si ya está (certificado comprobado), 0 si aún no, -1 si falló.
+
+Ver también: [`tls_connect_start`](#tls_connect_start).
+
+<a id="tls_send"></a>
+
+### `tls_send(tls, text)` → `Int`
+
+- `tls`: la conexión TLS.
+- `text`: lo que se envía.
+
+Devuelve los bytes enviados, o -1.
+
+Ver también: [`tls_recv`](#tls_recv).
+
+<a id="tls_send_buffer"></a>
+
+### `tls_send_buffer(tls, buffer, length)` → `Int`
+
+- `tls`: la conexión TLS.
+- `buffer`, `length`: los bytes.
+
+Devuelve los bytes enviados, o -1.
+
+Ver también: [`tls_send`](#tls_send).
+
+<a id="tls_recv"></a>
+
+### `tls_recv(tls, max, timeout_ms)` → `String`
+
+- `tls`: la conexión TLS.
+- `max`, `timeout_ms`: como en `net_recv`.
+
+Devuelve lo que llegó como texto, `""` si nada a tiempo, `nil` al cerrarse.
+
+Ver también: [`net_recv`](#net_recv).
+
+<a id="tls_recv_buffer"></a>
+
+### `tls_recv_buffer(tls, buffer, max, timeout_ms)` → `Int`
+
+- `tls`: la conexión TLS.
+- `buffer`, `max`, `timeout_ms`: como en `net_recv_buffer`.
+
+Ver también: [`net_recv_buffer`](#net_recv_buffer).
+
+<a id="tls_close"></a>
+
+### `tls_close(tls)`
+
+- `tls`: la conexión TLS.
+
+Acaba la TLS. El socket sigue abierto: después, `net_close`.
+
+Ver también: [`net_close`](#net_close).
+
+<a id="tls_resumed"></a>
+
+### `tls_resumed(tls)` → `Bool`
+
+- `tls`: la conexión TLS.
+
+Devuelve `true` si retomó una sesión anterior con el mismo servidor, sin volver a intercambiar claves (más rápido).
 
 ## Fuentes y colores
 
@@ -4923,20 +5342,148 @@ Ver también: [`font_from_ttf`](#font_from_ttf).
 
 ## Red en una tarea aparte
 
+Conexiones que abre y atiende una tarea propia de Dash, mientras el programa dibuja o espera al usuario: hasta 48 a
+la vez, con o sin TLS. El programa pide la conexión (`net_bg_open`), deja lo que quiere enviar (`net_bg_send`) y
+recoge lo que llega cuando quiere (`net_bg_recv`), sin esperar nunca. `task_signal` despierta al programa cuando
+llega algo. Así carga Tachyon las imágenes de una página.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `net_bg_open(host, port, timeout_ms)` | Int | Pide una conexión TCP que una tarea propia abre, por la que envía y recibe mientras el programa está ocupado (hasta 48): su número, o -1. net_bg_state dice cómo va |  |
-| `net_bg_open_tls(host, port, timeout_ms)` | Int | net_bg_open con TLS (AmiSSL, comprobando su certificado) |  |
-| `net_bg_state(c)` | Int | 1 pedida, 2 conectando, 3 negociando la TLS, 4 abierta, 5 cerrada, 6 error (net_bg_error dice por qué) |  |
-| `net_bg_stage(c)` | Int | Mientras conecta, en qué fase está, como net_connect_stage |  |
-| `net_bg_error(c)` | String | Por qué falló o se cerró una conexión; "" si no |  |
-| `net_bg_send(c, text)` | Bool | Deja un texto para enviar (la tarea lo envía en cuanto la conexión esté abierta); false si no hay memoria |  |
-| `net_bg_send_buffer(c, buffer, n)` | Bool | net_bg_send de n bytes de un búfer |  |
-| `net_bg_recv(c, buffer, max)` | Int | Hasta max bytes de lo que ha llegado, a un búfer, sin esperar: cuántos (0: nada aún), -1 si está cerrada y no queda nada. task_signal despierta al programa cuando llega algo |  |
-| `net_bg_pending(c)` | Int | Cuántos bytes han llegado y no se han leído |  |
-| `net_bg_close(c)` | — | Cierra una conexión y deja libre su número |  |
-| `net_bg_idle(ms)` | — | La tarea acaba sola tras tantos ms sin tráfico (2000; una conexión que el programa sigue leyendo, esperando la respuesta, cuenta como tráfico); cuando hace falta empieza otra |  |
-| `net_bg_stop()` | — | Acaba la tarea ya (cierra lo que esté abierto) y la espera; también al acabar el programa |  |
+| [`net_bg_open(host, port, timeout_ms)`](#net_bg_open) | Int | Pide una conexión TCP que una tarea propia abre, por la que envía y recibe mientras el programa está ocupado (hasta 48): su número, o -1. net_bg_state dice cómo va |  |
+| [`net_bg_open_tls(host, port, timeout_ms)`](#net_bg_open_tls) | Int | net_bg_open con TLS (AmiSSL, comprobando su certificado) |  |
+| [`net_bg_state(c)`](#net_bg_state) | Int | 1 pedida, 2 conectando, 3 negociando la TLS, 4 abierta, 5 cerrada, 6 error (net_bg_error dice por qué) |  |
+| [`net_bg_stage(c)`](#net_bg_stage) | Int | Mientras conecta, en qué fase está, como net_connect_stage |  |
+| [`net_bg_error(c)`](#net_bg_error) | String | Por qué falló o se cerró una conexión; "" si no |  |
+| [`net_bg_send(c, text)`](#net_bg_send) | Bool | Deja un texto para enviar (la tarea lo envía en cuanto la conexión esté abierta); false si no hay memoria |  |
+| [`net_bg_send_buffer(c, buffer, n)`](#net_bg_send_buffer) | Bool | net_bg_send de n bytes de un búfer |  |
+| [`net_bg_recv(c, buffer, max)`](#net_bg_recv) | Int | Hasta max bytes de lo que ha llegado, a un búfer, sin esperar: cuántos (0: nada aún), -1 si está cerrada y no queda nada. task_signal despierta al programa cuando llega algo |  |
+| [`net_bg_pending(c)`](#net_bg_pending) | Int | Cuántos bytes han llegado y no se han leído |  |
+| [`net_bg_close(c)`](#net_bg_close) | — | Cierra una conexión y deja libre su número |  |
+| [`net_bg_idle(ms)`](#net_bg_idle) | — | La tarea acaba sola tras tantos ms sin tráfico (2000; una conexión que el programa sigue leyendo, esperando la respuesta, cuenta como tráfico); cuando hace falta empieza otra |  |
+| [`net_bg_stop()`](#net_bg_stop) | — | Acaba la tarea ya (cierra lo que esté abierto) y la espera; también al acabar el programa |  |
+
+<a id="net_bg_open"></a>
+
+### `net_bg_open(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: como en `net_connect`.
+
+Pide una conexión a la tarea de la red, que la abre por su cuenta. Devuelve su número (hasta 48 a la vez), o -1.
+`net_bg_state` dice cómo va.
+
+Ver también: [`net_bg_state`](#net_bg_state), [`net_bg_send`](#net_bg_send), [`net_bg_recv`](#net_bg_recv), [`net_bg_open_tls`](#net_bg_open_tls).
+
+<a id="net_bg_open_tls"></a>
+
+### `net_bg_open_tls(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: como en `net_connect`.
+
+Como `net_bg_open`, con TLS y su certificado comprobado.
+
+Ver también: [`net_bg_open`](#net_bg_open).
+
+<a id="net_bg_state"></a>
+
+### `net_bg_state(c)` → `Int`
+
+- `c`: el número de la conexión.
+
+Devuelve cómo va: 1 pedida, 2 conectando, 3 negociando la TLS, 4 abierta, 5 cerrada, 6 error (`net_bg_error` dice cuál).
+
+Ver también: [`net_bg_error`](#net_bg_error), [`net_bg_stage`](#net_bg_stage).
+
+<a id="net_bg_stage"></a>
+
+### `net_bg_stage(c)` → `Int`
+
+- `c`: el número de la conexión.
+
+Mientras conecta, en qué fase está, como `net_connect_stage`.
+
+Ver también: [`net_bg_state`](#net_bg_state).
+
+<a id="net_bg_error"></a>
+
+### `net_bg_error(c)` → `String`
+
+- `c`: el número de la conexión.
+
+Devuelve por qué falló o se cerró, o `""`.
+
+Ver también: [`net_bg_state`](#net_bg_state).
+
+<a id="net_bg_send"></a>
+
+### `net_bg_send(c, text)` → `Bool`
+
+- `c`: el número de la conexión.
+- `text`: lo que se envía.
+
+Lo deja en cola: la tarea lo envía en cuanto la conexión esté abierta. Devuelve `false` sin memoria.
+
+Ver también: [`net_bg_recv`](#net_bg_recv).
+
+<a id="net_bg_send_buffer"></a>
+
+### `net_bg_send_buffer(c, buffer, n)` → `Bool`
+
+- `c`: el número de la conexión.
+- `buffer`, `n`: los bytes.
+
+Como `net_bg_send`, con datos binarios.
+
+Ver también: [`net_bg_send`](#net_bg_send).
+
+<a id="net_bg_recv"></a>
+
+### `net_bg_recv(c, buffer, max)` → `Int`
+
+- `c`: el número de la conexión.
+- `buffer`: dónde.
+- `max`: cuántos bytes como mucho.
+
+Copia lo que haya llegado, sin esperar. Devuelve cuántos bytes, 0 si aún nada, -1 si está cerrada y no queda nada.
+
+Ver también: [`net_bg_pending`](#net_bg_pending), `task_signal`.
+
+<a id="net_bg_pending"></a>
+
+### `net_bg_pending(c)` → `Int`
+
+- `c`: el número de la conexión.
+
+Devuelve cuántos bytes han llegado y aún no se han leído.
+
+Ver también: [`net_bg_recv`](#net_bg_recv).
+
+<a id="net_bg_close"></a>
+
+### `net_bg_close(c)`
+
+- `c`: el número de la conexión.
+
+Cierra la conexión y deja libre su número.
+
+Ver también: [`net_bg_open`](#net_bg_open).
+
+<a id="net_bg_idle"></a>
+
+### `net_bg_idle(ms)`
+
+- `ms`: cuántos milisegundos sin tráfico; 2000 si no se dice.
+
+La tarea de la red acaba sola tras ese tiempo sin nada que hacer, y vuelve a empezar cuando hace falta.
+
+Ver también: [`net_bg_stop`](#net_bg_stop).
+
+<a id="net_bg_stop"></a>
+
+### `net_bg_stop()`
+
+Acaba la tarea de la red ya, cerrando lo que esté abierto, y la espera. Al acabar el programa se hace solo.
+
+Ver también: [`net_bg_idle`](#net_bg_idle).
 
 ## Ventanas de otros programas (pruebas)
 

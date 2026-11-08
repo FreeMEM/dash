@@ -39,7 +39,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9a. GadTools y menús (`GADTOOLS_FUNCTIONS`, `MENU_FUNCTIONS`), con `tests/test_doc_gadtools.dash`.
 - [x] T9b. Fuentes, transparencia, RGB, imágenes, TrueType e imágenes decodificadas, con
   `tests/test_doc_fuentes.dash`.
-- [ ] T9c. Red, TLS y red en una tarea aparte.
+- [x] T9c. Red, TLS y red en una tarea aparte, con `tests/test_doc_red.dash` (servidor de eco del runner).
 - [ ] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), en dos tandas.
 - [ ] T9e. Argumentos, zlib, UTF-8, Double, matemáticas, expresiones regulares, portapapeles, ordenar, JSON.
 - [ ] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`).
@@ -110,3 +110,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     Ahora busca el más parecido de su paleta (FindColor). `tests/test_color_pen_pantalla.dash`. En el Workbench
     sigue igual.
   - `image_decode` y `font_from_ttf` no tienen ejemplo propio (necesitan ficheros); los cubren sus tests de siempre.
+- 2026-11-08: T9c. Red. El ejemplo usa el servidor de eco del runner (`# emu-net:`); por `./dash`, con un servidor de
+  eco lanzado a mano. TLS y la red en una tarea, sin ejemplo propio (los cubren sus tests).
