@@ -45,7 +45,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   `tests/test_doc_varios.dash`.
 - [x] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`), con `tests/test_doc_sysprog.dash`.
 - [x] T9g. Simular teclado y ratón, ventanas de otros programas, gestor de ventanas, con `tests/test_doc_otros.dash`.
-- [ ] T9h. Depurador (`DEBUGGER_FUNCTIONS`).
+- [x] T9h. Depurador (`DEBUGGER_FUNCTIONS`), con `dashc/tests/depurar/basico.dash` de ejemplo (`dashc/tests/depurar.py`).
 - [ ] T9i. ReAction (`REACTION_FUNCTIONS`, 79), en dos tandas.
 - [ ] T9j. RTG.
 - [ ] T9k. DashOS.
@@ -117,3 +117,4 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - 2026-11-08: T9f. Sistema y programa (42). Sin fallos en lo probado. El sistema del emulador no trae `Delete`.
 - 2026-11-08: T9g. Simular la entrada, otras ventanas y el gestor de ventanas (50). Sin fallos en lo probado. La red
   de T9c también pasa por `./dash` (`emu_run --set bsdsocket_library=1` y un servidor de eco a mano).
+- 2026-11-08: T9h. Depurador (31). El ejemplo es el test que ya había (`dashc/tests/depurar.py basico`: bien).

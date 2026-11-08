@@ -6432,39 +6432,379 @@ See also: [`json_scan_text`](#json_scan_text).
 
 ## Debugger (the debugged program, built with dash --debug)
 
+For writing a debugger in Dash, like Forja's: load another program compiled with `dash --debug`, set breakpoints on
+it, go line by line and look at its variables.
+
+**The flow:**
+
+1. `dbg_start(program, arguments)`: loads it in a process of its own, paused before its first line.
+2. `dbg_break(file, line)`: the breakpoints.
+3. `dbg_continue()`, `dbg_step()`, `dbg_next()` or `dbg_out()`: set it going, and `dbg_wait` waits for it to stop
+   or end (with MUI, `dbg_signal` with `mui_wait_event_signals`).
+4. Stopped: `dbg_file`, `dbg_line` and `dbg_function` say where; `dbg_frames` and `dbg_frame_*`, the call stack;
+   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables.
+5. When it ends (`dbg_state()` 4), `dbg_rc` and `dbg_output`.
+
+There is one debugged program at a time. Calls are numbered from the stopping point: 0 where it stopped, 1 its
+caller...
+
+**Example** (`dashc/tests/depurar/basico.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# El depurador: cargar un programa en pausa, un punto de parada, seguir hasta él, dónde está, registros y memoria,
+# seguir hasta el final con su salida y su código; y un programa sin --debug.
+
+Main
+    if not dbg_start("DH0:depurado", "")
+        Print "error: #{dbg_error()}"
+    end
+    Print "estado: #{dbg_state()}"
+    ok = dbg_break("depurado.dash", 10)
+    no = dbg_break("depurado.dash", 2)
+    Print "punto: #{ok} #{no}"
+    dbg_continue()
+    e = dbg_wait(10000)
+    f = dbg_file()
+    es = str_ends(f, "depurado.dash")
+    Print "parado: #{e} #{dbg_function()} #{dbg_line()} #{es}"
+    pc = dbg_reg(16)
+    Print "pc en la línea: #{dbg_peek(pc, 2) == 0x4E4F}"
+    s = dbg_output()
+    Print "salida hasta aquí: [#{str_trim(s)}]"
+    dbg_unbreak("depurado.dash", 10)
+    dbg_continue()
+    e = dbg_wait(10000)
+    Print "acabado: #{e} #{dbg_rc()}"
+    Print str_trim(dbg_output())
+    ok = dbg_start("DH0:sin_debug", "")
+    Print "sin debug: #{ok} [#{dbg_error()}]"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `dbg_start(program, args)` | Bool | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
-| `dbg_error()` | String | Why the last dbg_start failed |  |
-| `dbg_state()` | Int | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
-| `dbg_signal()` | Int | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
-| `dbg_wait(ms)` | Int | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
-| `dbg_break(file, line)` | Bool | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
-| `dbg_unbreak(file, line)` | Bool | Take the breakpoint out of that line |  |
-| `dbg_continue()` | Bool | Go on (from the start or a stop) until a breakpoint or the end |  |
-| `dbg_step()` | Bool | Go on to the next line, into the functions it calls |  |
-| `dbg_next()` | Bool | Go on to the next line of this function (or of the one that called it) |  |
-| `dbg_out()` | Bool | Go on until the function returns: the next line of the one that called it |  |
-| `dbg_pause()` | Bool | Stop the running program at the next line it runs |  |
-| `dbg_end(ms)` | Bool | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
-| `dbg_rc()` | Int | The return code of the ended program |  |
-| `dbg_file()` | String | The file of the line where the program stopped (its full path) |  |
-| `dbg_line()` | Int | The line where the program stopped (0 if it is not stopped) |  |
-| `dbg_function()` | String | The function where the program stopped ("Main", "Punto.mover"...) |  |
-| `dbg_frames()` | Int | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
-| `dbg_frame_function(i)` | String | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
-| `dbg_frame_line(i)` | Int | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
-| `dbg_frame_file(i)` | String | The file of call i (its full path) |  |
-| `dbg_vars(i)` | Int | How many variables call i sees: its parameters and the variables declared up to its line |  |
-| `dbg_var_name(i, k)` | String | Name of variable k (from 0) of call i |  |
-| `dbg_var_type(i, k)` | String | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
-| `dbg_globals()` | Int | How many global variables the program has |  |
-| `dbg_global_name(g)` | String | Name of global g (from 0) |  |
-| `dbg_value(i, expr)` | String | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
-| `dbg_value_type(i, expr)` | String | The type of expr in call i ("" if it cannot) |  |
-| `dbg_reg(n)` | Int | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
-| `dbg_peek(addr, size)` | Int | 1, 2 or 4 bytes of memory at addr, without sign |  |
-| `dbg_output()` | String | What the program has written so far (output and error output) |  |
+| [`dbg_start(program, args)`](#dbg_start) | Bool | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
+| [`dbg_error()`](#dbg_error) | String | Why the last dbg_start failed |  |
+| [`dbg_state()`](#dbg_state) | Int | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
+| [`dbg_signal()`](#dbg_signal) | Int | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
+| [`dbg_wait(ms)`](#dbg_wait) | Int | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
+| [`dbg_break(file, line)`](#dbg_break) | Bool | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
+| [`dbg_unbreak(file, line)`](#dbg_unbreak) | Bool | Take the breakpoint out of that line |  |
+| [`dbg_continue()`](#dbg_continue) | Bool | Go on (from the start or a stop) until a breakpoint or the end |  |
+| [`dbg_step()`](#dbg_step) | Bool | Go on to the next line, into the functions it calls |  |
+| [`dbg_next()`](#dbg_next) | Bool | Go on to the next line of this function (or of the one that called it) |  |
+| [`dbg_out()`](#dbg_out) | Bool | Go on until the function returns: the next line of the one that called it |  |
+| [`dbg_pause()`](#dbg_pause) | Bool | Stop the running program at the next line it runs |  |
+| [`dbg_end(ms)`](#dbg_end) | Bool | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
+| [`dbg_rc()`](#dbg_rc) | Int | The return code of the ended program |  |
+| [`dbg_file()`](#dbg_file) | String | The file of the line where the program stopped (its full path) |  |
+| [`dbg_line()`](#dbg_line) | Int | The line where the program stopped (0 if it is not stopped) |  |
+| [`dbg_function()`](#dbg_function) | String | The function where the program stopped ("Main", "Punto.mover"...) |  |
+| [`dbg_frames()`](#dbg_frames) | Int | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
+| [`dbg_frame_function(i)`](#dbg_frame_function) | String | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
+| [`dbg_frame_line(i)`](#dbg_frame_line) | Int | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
+| [`dbg_frame_file(i)`](#dbg_frame_file) | String | The file of call i (its full path) |  |
+| [`dbg_vars(i)`](#dbg_vars) | Int | How many variables call i sees: its parameters and the variables declared up to its line |  |
+| [`dbg_var_name(i, k)`](#dbg_var_name) | String | Name of variable k (from 0) of call i |  |
+| [`dbg_var_type(i, k)`](#dbg_var_type) | String | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
+| [`dbg_globals()`](#dbg_globals) | Int | How many global variables the program has |  |
+| [`dbg_global_name(g)`](#dbg_global_name) | String | Name of global g (from 0) |  |
+| [`dbg_value(i, expr)`](#dbg_value) | String | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
+| [`dbg_value_type(i, expr)`](#dbg_value_type) | String | The type of expr in call i ("" if it cannot) |  |
+| [`dbg_reg(n)`](#dbg_reg) | Int | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
+| [`dbg_peek(addr, size)`](#dbg_peek) | Int | 1, 2 or 4 bytes of memory at addr, without sign |  |
+| [`dbg_output()`](#dbg_output) | String | What the program has written so far (output and error output) |  |
+
+<a id="dbg_start"></a>
+
+### `dbg_start(program, args)` → `Bool`
+
+- `program`: the executable, compiled with `dash --debug`.
+- `args`: its arguments, as in the Shell.
+
+Loads it and leaves it paused before its first line, to set the breakpoints. Returns `false` if it could not;
+`dbg_error` says why (a program without `--debug`, for instance).
+
+See also: [`dbg_break`](#dbg_break), [`dbg_continue`](#dbg_continue), [`dbg_error`](#dbg_error).
+
+<a id="dbg_error"></a>
+
+### `dbg_error()` → `String`
+
+Returns why the last `dbg_start` failed.
+
+See also: [`dbg_start`](#dbg_start).
+
+<a id="dbg_state"></a>
+
+### `dbg_state()` → `Int`
+
+Returns the program's state: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 finished.
+
+See also: [`dbg_wait`](#dbg_wait).
+
+<a id="dbg_signal"></a>
+
+### `dbg_signal()` → `Int`
+
+Returns the signal the debugger gets when the program stops or ends, for `mui_wait_event_signals`.
+
+See also: [`dbg_wait`](#dbg_wait), [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="dbg_wait"></a>
+
+### `dbg_wait(ms)` → `Int`
+
+- `ms`: the longest to wait; 0 no limit.
+
+Waits for the program to stop or end and returns its state, like `dbg_state`.
+
+See also: [`dbg_state`](#dbg_state).
+
+<a id="dbg_break"></a>
+
+### `dbg_break(file, line)` → `Bool`
+
+- `file`: the file, by the end of its path: `"game.dash"`.
+- `line`: the line.
+
+Sets a breakpoint. Returns `false` if that line has no code (a comment, an empty line).
+
+See also: [`dbg_unbreak`](#dbg_unbreak), [`dbg_continue`](#dbg_continue).
+
+<a id="dbg_unbreak"></a>
+
+### `dbg_unbreak(file, line)` → `Bool`
+
+- `file`, `line`: as in `dbg_break`.
+
+Removes that breakpoint.
+
+See also: [`dbg_break`](#dbg_break).
+
+<a id="dbg_continue"></a>
+
+### `dbg_continue()` → `Bool`
+
+Carries on, from the start or a stop, until a breakpoint or the end. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step), [`dbg_wait`](#dbg_wait).
+
+<a id="dbg_step"></a>
+
+### `dbg_step()` → `Bool`
+
+Carries on to the next line, stepping into the functions it calls. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_next`](#dbg_next), [`dbg_out`](#dbg_out).
+
+<a id="dbg_next"></a>
+
+### `dbg_next()` → `Bool`
+
+Carries on to the next line of this function, without stepping into those it calls (or to its caller if it ends). Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step).
+
+<a id="dbg_out"></a>
+
+### `dbg_out()` → `Bool`
+
+Carries on until the function returns: the next line of its caller. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step).
+
+<a id="dbg_pause"></a>
+
+### `dbg_pause()` → `Bool`
+
+Stops the running program at the next line it executes. Returns `false` if it was not running.
+
+See also: [`dbg_continue`](#dbg_continue).
+
+<a id="dbg_end"></a>
+
+### `dbg_end(ms)` → `Bool`
+
+- `ms`: the longest to wait.
+
+Ends the program: it sends Ctrl-C and, at its next line, it exits with its usual cleanup. Returns `true` if it ended
+in time.
+
+See also: [`dbg_rc`](#dbg_rc).
+
+<a id="dbg_rc"></a>
+
+### `dbg_rc()` → `Int`
+
+Returns the finished program's return code.
+
+See also: [`dbg_output`](#dbg_output).
+
+<a id="dbg_file"></a>
+
+### `dbg_file()` → `String`
+
+Returns the file, with its full path, of the line where it stopped.
+
+See also: [`dbg_line`](#dbg_line).
+
+<a id="dbg_line"></a>
+
+### `dbg_line()` → `Int`
+
+Returns the line where it stopped; 0 if it is not stopped.
+
+See also: [`dbg_file`](#dbg_file), [`dbg_function`](#dbg_function).
+
+<a id="dbg_function"></a>
+
+### `dbg_function()` → `String`
+
+Returns the function where it stopped: `"Main"`, `"Point.move"`.
+
+See also: [`dbg_frames`](#dbg_frames).
+
+<a id="dbg_frames"></a>
+
+### `dbg_frames()` → `Int`
+
+Returns how many calls are open where it stopped: 1 in `Main`, 2 in a function `Main` called...; 0 if not stopped.
+
+See also: [`dbg_frame_function`](#dbg_frame_function).
+
+<a id="dbg_frame_function"></a>
+
+### `dbg_frame_function(i)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns that call's function.
+
+See also: [`dbg_frame_line`](#dbg_frame_line).
+
+<a id="dbg_frame_line"></a>
+
+### `dbg_frame_line(i)` → `Int`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns the line that call is at.
+
+See also: [`dbg_frame_file`](#dbg_frame_file).
+
+<a id="dbg_frame_file"></a>
+
+### `dbg_frame_file(i)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns that call's file, with its full path.
+
+See also: [`dbg_frame_line`](#dbg_frame_line).
+
+<a id="dbg_vars"></a>
+
+### `dbg_vars(i)` → `Int`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns how many variables it sees: its parameters and those declared before its line.
+
+See also: [`dbg_var_name`](#dbg_var_name), [`dbg_value`](#dbg_value).
+
+<a id="dbg_var_name"></a>
+
+### `dbg_var_name(i, k)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `k`: the variable, from 0.
+
+Returns its name.
+
+See also: [`dbg_var_type`](#dbg_var_type).
+
+<a id="dbg_var_type"></a>
+
+### `dbg_var_type(i, k)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `k`: the variable.
+
+Returns its type as written in Dash: `"Int"`, `"[String]"`, `"Point"`.
+
+See also: [`dbg_var_name`](#dbg_var_name).
+
+<a id="dbg_globals"></a>
+
+### `dbg_globals()` → `Int`
+
+Returns how many global variables the program has.
+
+See also: [`dbg_global_name`](#dbg_global_name).
+
+<a id="dbg_global_name"></a>
+
+### `dbg_global_name(g)` → `String`
+
+- `g`: the global, from 0.
+
+Returns its name.
+
+See also: [`dbg_globals`](#dbg_globals).
+
+<a id="dbg_value"></a>
+
+### `dbg_value(i, expr)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `expr`: a variable of that call or a global, with `.field` and `[n]` after it: `"p.children[0].x"`.
+
+Returns its value as a text: `3`, `"hello"`, `Point(x: 3, y: 4)`, `[1, 2]`, `nil`. If it cannot, `"? "` and why.
+
+See also: [`dbg_value_type`](#dbg_value_type), [`dbg_vars`](#dbg_vars).
+
+<a id="dbg_value_type"></a>
+
+### `dbg_value_type(i, expr)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `expr`: as in `dbg_value`.
+
+Returns its type; `""` if it cannot.
+
+See also: [`dbg_value`](#dbg_value).
+
+<a id="dbg_reg"></a>
+
+### `dbg_reg(n)` → `Int`
+
+- `n`: 0 to 7 registers d0 to d7, 8 to 15 a0 to a7, 16 the program counter.
+
+Returns that register of the stopped program.
+
+See also: [`dbg_peek`](#dbg_peek).
+
+<a id="dbg_peek"></a>
+
+### `dbg_peek(addr, size)` → `Int`
+
+- `addr`: the address.
+- `size`: 1, 2 or 4 bytes.
+
+Returns what is in memory, unsigned.
+
+See also: [`dbg_reg`](#dbg_reg).
+
+<a id="dbg_output"></a>
+
+### `dbg_output()` → `String`
+
+Returns everything the program has written so far, its output and its errors.
+
+See also: [`dbg_rc`](#dbg_rc).
 
 ## Pictures decoded by the program (no datatypes)
 
