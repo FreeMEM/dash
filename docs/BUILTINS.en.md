@@ -2162,42 +2162,420 @@ See also: [`joy_button`](#joy_button).
 
 ## GadTools
 
+GadTools gadgets for a single window, with their own event loop. It is Dash's oldest way; for new programs, the
+numbered gadgets of the Intuition group (`button_create`...), which allow several windows and the `EventLoop`, or
+MUI.
+
+**The flow:**
+
+1. Open the window (`Window X ... end` and `X.open`, or `window_create`).
+2. `gt_init()`: sets GadTools up for the current window. The `gt_*` functions and the menus belong to that window.
+3. Create the gadgets: `gt_button`, `gt_string`, `gt_slider`... Each returns its number, from 0 and in order, or -1
+   if it could not. Up to 64. `x`, `y` count from the corner inside the borders.
+4. `gt_attach()`: puts them on the window. Those created afterwards do not show.
+5. The loop: `gt_wait_event()` waits and returns the number of the gadget used, or -2 if the close button was
+   pressed.
+
+`gt_init` again starts from scratch: it frees the previous gadgets and menus. Everything is freed when the program
+ends.
+
+**Example** (`tests/test_doc_gadtools.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# GadTools y menús: una ventana con gadgets, un menú con una opción de marca, y su bucle.
+
+const MENU_SONIDO = 1
+const MENU_SALIR = 2
+
+Window Ajustes
+    title "Ajustes"
+    width 300
+    height 110
+end
+
+Main
+    Ajustes.open
+    gt_init()
+    menu_title("Proyecto")
+    menu_check_item("Sonido", "S", MENU_SONIDO)
+    menu_separator()
+    menu_item("Salir", "Q", MENU_SALIR)
+    menu_attach()
+
+    aceptar = gt_button(40, 70, 80, 16, "_Aceptar")
+    nombre = gt_string(90, 10, 180, 14, "Nombre", "Amiga", 40)
+    volumen = gt_slider(90, 35, 180, 12, "Volumen", 0, 64, 32)
+    gt_attach()
+    Print "botón #{aceptar}, campo #{nombre}, deslizador #{volumen}"
+
+    gt_set_value(volumen, 40)
+    input_click(44 + window_border_left(), 74 + window_border_top(), 0)   # para la prueba: pulsa Aceptar
+    ev = gt_wait_event()
+    while ev != -2 and ev != aceptar
+        ev = gt_wait_event()
+    end
+    Print "pulsado: #{ev}"
+    Print "#{gt_get_string(nombre)}, volumen #{gt_get_value(volumen)}, sonido #{menu_checked(MENU_SONIDO)}"
+    gt_cleanup()
+    Ajustes.close
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `gt_init()` | Bool | Initialize GadTools context (call after window open) |  |
-| `gt_cleanup()` | — | Cleanup GadTools resources |  |
-| `gt_attach()` | — | Attach gadgets to window (call after creating all gadgets) |  |
-| `gt_button(x, y, w, h, label)` | Int | Create a button gadget, returns gadget ID |  |
-| `gt_checkbox(x, y, w, h, label, checked)` | Int | Create a checkbox gadget |  |
-| `gt_string(x, y, w, h, label, initial, maxchars)` | Int | Create a string input gadget |  |
-| `gt_integer(x, y, w, h, label, initial)` | Int | Create an integer input gadget |  |
-| `gt_slider(x, y, w, h, label, min, max, level)` | Int | Create a slider gadget |  |
-| `gt_palette(x, y, w, h, label, depth, color)` | Int | Create a palette selector gadget |  |
-| `gt_text(x, y, w, h, label, text)` | Int | Create a static text gadget |  |
-| `gt_get_value(gad_id)` | Int | Get numeric value from gadget (slider, palette, etc.) |  |
-| `gt_set_value(gad_id, value)` | — | Set numeric value of gadget |  |
-| `gt_get_string(gad_id)` | String | Get string value from string gadget |  |
-| `gt_event()` | Int | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
-| `gt_wait_event()` | Int | Wait for gadget event, returns gadget ID or -2 (close) |  |
-| `gt_cycle(x, y, w, h, label, options)` | Int | Create a cycle gadget; options separated by \| (gt_get_value: option) |  |
-| `gt_enable(gad_id)` | — | Enable a gadget |  |
-| `gt_disable(gad_id)` | — | Disable (ghost) a gadget |  |
-| `gt_set_text(gad_id, text)` | — | Change the text of a gt_text or gt_string gadget |  |
+| [`gt_init()`](#gt_init) | Bool | Initialize GadTools context (call after window open) |  |
+| [`gt_cleanup()`](#gt_cleanup) | — | Cleanup GadTools resources |  |
+| [`gt_attach()`](#gt_attach) | — | Attach gadgets to window (call after creating all gadgets) |  |
+| [`gt_button(x, y, w, h, label)`](#gt_button) | Int | Create a button gadget, returns gadget ID |  |
+| [`gt_checkbox(x, y, w, h, label, checked)`](#gt_checkbox) | Int | Create a checkbox gadget |  |
+| [`gt_string(x, y, w, h, label, initial, maxchars)`](#gt_string) | Int | Create a string input gadget |  |
+| [`gt_integer(x, y, w, h, label, initial)`](#gt_integer) | Int | Create an integer input gadget |  |
+| [`gt_slider(x, y, w, h, label, min, max, level)`](#gt_slider) | Int | Create a slider gadget |  |
+| [`gt_palette(x, y, w, h, label, depth, color)`](#gt_palette) | Int | Create a palette selector gadget |  |
+| [`gt_text(x, y, w, h, label, text)`](#gt_text) | Int | Create a static text gadget |  |
+| [`gt_get_value(gad_id)`](#gt_get_value) | Int | Get numeric value from gadget (slider, palette, etc.) |  |
+| [`gt_set_value(gad_id, value)`](#gt_set_value) | — | Set numeric value of gadget |  |
+| [`gt_get_string(gad_id)`](#gt_get_string) | String | Get string value from string gadget |  |
+| [`gt_event()`](#gt_event) | Int | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
+| [`gt_wait_event()`](#gt_wait_event) | Int | Wait for gadget event, returns gadget ID or -2 (close) |  |
+| [`gt_cycle(x, y, w, h, label, options)`](#gt_cycle) | Int | Create a cycle gadget; options separated by \| (gt_get_value: option) |  |
+| [`gt_enable(gad_id)`](#gt_enable) | — | Enable a gadget |  |
+| [`gt_disable(gad_id)`](#gt_disable) | — | Disable (ghost) a gadget |  |
+| [`gt_set_text(gad_id, text)`](#gt_set_text) | — | Change the text of a gt_text or gt_string gadget |  |
+
+<a id="gt_init"></a>
+
+### `gt_init()` → `Bool`
+
+Sets GadTools up for the current window, which must be open. Frees the gadgets and menus of an earlier `gt_init`.
+Returns `false` without a window or without memory.
+
+See also: [`gt_attach`](#gt_attach), [`gt_cleanup`](#gt_cleanup).
+
+<a id="gt_cleanup"></a>
+
+### `gt_cleanup()`
+
+Removes the gadgets and menus from the window and frees them. It happens on its own when the program ends.
+
+See also: [`gt_init`](#gt_init).
+
+<a id="gt_attach"></a>
+
+### `gt_attach()`
+
+Puts the gadgets created since `gt_init` on the window and draws them. It goes after the last `gt_*`.
+
+See also: [`gt_init`](#gt_init), [`gt_wait_event`](#gt_wait_event).
+
+<a id="gt_button"></a>
+
+### `gt_button(x, y, w, h, label)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+
+Creates a button. Returns its number, or -1. `gt_wait_event` returns it when pressed.
+
+See also: [`gt_wait_event`](#gt_wait_event).
+
+<a id="gt_checkbox"></a>
+
+### `gt_checkbox(x, y, w, h, label, checked)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `checked`: whether it starts ticked.
+
+Creates a checkbox, with the text on its left. `gt_get_value` gives 1 or 0.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_string"></a>
+
+### `gt_string(x, y, w, h, label, initial, maxchars)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `initial`: the starting text.
+- `maxchars`: how many letters fit.
+
+Creates a text field, with the label on its left. Its event arrives on Return or Tab; `gt_get_string` reads it.
+
+See also: [`gt_get_string`](#gt_get_string), [`gt_set_text`](#gt_set_text).
+
+<a id="gt_integer"></a>
+
+### `gt_integer(x, y, w, h, label, initial)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `initial`: the starting number.
+
+Creates a whole-number field. `gt_get_value` reads it.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_slider"></a>
+
+### `gt_slider(x, y, w, h, label, min, max, level)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `min`, `max`: the ends.
+- `level`: the starting value.
+
+Creates a horizontal slider. It sends its event while it moves; `gt_get_value` gives the value.
+
+See also: [`gt_get_value`](#gt_get_value), [`gt_set_value`](#gt_set_value).
+
+<a id="gt_palette"></a>
+
+### `gt_palette(x, y, w, h, label, depth, color)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `depth`: how many colours it shows: 2 to the power of `depth`.
+- `color`: the one chosen at the start.
+
+Creates a picker with the screen's colours. `gt_get_value` gives the chosen one.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_text"></a>
+
+### `gt_text(x, y, w, h, label, text)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `text`: what it shows.
+
+Creates a bordered text that is not edited; `gt_set_text` changes it.
+
+See also: [`gt_set_text`](#gt_set_text).
+
+<a id="gt_get_value"></a>
+
+### `gt_get_value(gad_id)` → `Int`
+
+- `gad_id`: the number its `gt_*` gave.
+Returns its value: 1 or 0 for a checkbox; a slider's level; a palette's colour; a number field's number; a cycle's
+option. 0 for the others.
+
+See also: [`gt_set_value`](#gt_set_value), [`gt_get_string`](#gt_get_string).
+
+<a id="gt_set_value"></a>
+
+### `gt_set_value(gad_id, value)`
+
+- `gad_id`: the number its `gt_*` gave.
+- `value`: the new value, as in `gt_get_value`.
+
+It sends no event.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_get_string"></a>
+
+### `gt_get_string(gad_id)` → `String`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Returns the text of a `gt_string`.
+
+See also: [`gt_set_text`](#gt_set_text).
+
+<a id="gt_event"></a>
+
+### `gt_event()` → `Int`
+
+Looks, without waiting, whether a gadget was used. Returns its number, -1 if there is nothing or -2 if the close
+button was pressed. It leaves menu events for `menu_event`.
+
+See also: [`gt_wait_event`](#gt_wait_event), [`menu_event`](#menu_event).
+
+<a id="gt_wait_event"></a>
+
+### `gt_wait_event()` → `Int`
+
+Waits, using no CPU, for a gadget to be used and returns its number, or -2 if the close button was pressed.
+
+See also: [`gt_event`](#gt_event).
+
+<a id="gt_cycle"></a>
+
+### `gt_cycle(x, y, w, h, label, options)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `options`: the options separated by `|`.
+
+Creates a gadget that moves to the next option with each click. `gt_get_value` gives the chosen one, from 0.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_enable"></a>
+
+### `gt_enable(gad_id)`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Lets a disabled gadget be used again.
+
+See also: [`gt_disable`](#gt_disable).
+
+<a id="gt_disable"></a>
+
+### `gt_disable(gad_id)`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Disables it: it shows grey and does not respond.
+
+See also: [`gt_enable`](#gt_enable).
+
+<a id="gt_set_text"></a>
+
+### `gt_set_text(gad_id, text)`
+
+- `gad_id`: the number its `gt_*` gave.
+- `text`: the new text.
+
+Changes what a `gt_text` or a `gt_string` shows.
+
+See also: [`gt_get_string`](#gt_get_string).
 
 ## Menus
 
+The screen bar's menus for the `gt_init` window. They are described in order (`menu_title`, its `menu_item`s, the
+next `menu_title`...) and `menu_attach()` puts them up. Each item has a number of the program's. Read them with
+`menu_event()` in a loop of your own, or in an `EventLoop`'s `On Menu` with `menu_id()`. MUI's menus are separate
+(`mui_menu_*`).
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `menu_title(label)` | — | Add a menu title |  |
-| `menu_item(label, shortcut, id)` | — | Add a menu item with keyboard shortcut and ID |  |
-| `menu_sub(label, shortcut, id)` | — | Add a submenu item |  |
-| `menu_separator()` | — | Add a menu separator bar |  |
-| `menu_attach()` | Bool | Attach menus to window (call after defining all menus) |  |
-| `menu_event()` | Int | Check for menu event, returns menu item ID or -1/-2 |  |
-| `menu_id()` | Int | In an EventLoop's On Menu: id of the menu item chosen |  |
-| `menu_check_item(label, shortcut, id)` | — | Add a menu item with a check mark that each choice toggles |  |
-| `menu_checked(id)` | Int | 1 if the check mark of that menu item is on |  |
-| `menu_enable(id, enabled)` | — | Enable or disable (ghost) a menu item after menu_attach |  |
+| [`menu_title(label)`](#menu_title) | — | Add a menu title |  |
+| [`menu_item(label, shortcut, id)`](#menu_item) | — | Add a menu item with keyboard shortcut and ID |  |
+| [`menu_sub(label, shortcut, id)`](#menu_sub) | — | Add a submenu item |  |
+| [`menu_separator()`](#menu_separator) | — | Add a menu separator bar |  |
+| [`menu_attach()`](#menu_attach) | Bool | Attach menus to window (call after defining all menus) |  |
+| [`menu_event()`](#menu_event) | Int | Check for menu event, returns menu item ID or -1/-2 |  |
+| [`menu_id()`](#menu_id) | Int | In an EventLoop's On Menu: id of the menu item chosen |  |
+| [`menu_check_item(label, shortcut, id)`](#menu_check_item) | — | Add a menu item with a check mark that each choice toggles |  |
+| [`menu_checked(id)`](#menu_checked) | Int | 1 if the check mark of that menu item is on |  |
+| [`menu_enable(id, enabled)`](#menu_enable) | — | Enable or disable (ghost) a menu item after menu_attach |  |
+
+<a id="menu_title"></a>
+
+### `menu_title(label)`
+
+- `label`: the title on the bar.
+
+Starts a new menu; the items that follow go in it.
+
+See also: [`menu_item`](#menu_item), [`menu_attach`](#menu_attach).
+
+<a id="menu_item"></a>
+
+### `menu_item(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item to the last menu.
+
+See also: [`menu_sub`](#menu_sub), [`menu_check_item`](#menu_check_item), [`menu_separator`](#menu_separator).
+
+<a id="menu_sub"></a>
+
+### `menu_sub(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item to a submenu of the last item: that item now opens the submenu.
+
+See also: [`menu_item`](#menu_item).
+
+<a id="menu_separator"></a>
+
+### `menu_separator()`
+
+Adds a line between items.
+
+See also: [`menu_item`](#menu_item).
+
+<a id="menu_attach"></a>
+
+### `menu_attach()` → `Bool`
+
+Puts the described menus on the window. It goes after `gt_init` and the last `menu_*`. Another `menu_attach`
+replaces the menus. Returns `false` if it could not.
+
+See also: [`menu_title`](#menu_title), [`menu_event`](#menu_event).
+
+<a id="menu_event"></a>
+
+### `menu_event()` → `Int`
+
+Looks, without waiting, whether an item was chosen. Returns its number, -1 if there is nothing or -2 if the close
+button was pressed. If several were chosen at once, they come one by one.
+
+See also: [`menu_id`](#menu_id), [`gt_event`](#gt_event).
+
+<a id="menu_id"></a>
+
+### `menu_id()` → `Int`
+
+Inside an `EventLoop`'s `On Menu`, returns the number of the chosen item.
+
+See also: [`menu_event`](#menu_event).
+
+<a id="menu_check_item"></a>
+
+### `menu_check_item(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item with a check mark: each time it is chosen the mark toggles. `menu_checked` reads it.
+
+See also: [`menu_checked`](#menu_checked).
+
+<a id="menu_checked"></a>
+
+### `menu_checked(id)` → `Int`
+
+- `id`: the item's number.
+
+Returns 1 if its mark is set, otherwise 0.
+
+See also: [`menu_check_item`](#menu_check_item).
+
+<a id="menu_enable"></a>
+
+### `menu_enable(id, enabled)`
+
+- `id`: the item's number.
+- `enabled`: `false` disables it (grey), `true` enables it.
+
+It goes after `menu_attach`.
+
+See also: [`menu_attach`](#menu_attach).
 
 ## ASL requesters
 

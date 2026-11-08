@@ -36,7 +36,17 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T8a. Texto, búferes y buscar en un búfer, con `tests/test_doc_texto.dash`.
 - [x] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`), con `tests/test_doc_sistema.dash`.
 - [x] T8c. Audio (`AUDIO_FUNCTIONS`), con `tests/test_doc_audio.dash`.
-- [ ] T9. El resto de grupos.
+- [x] T9a. GadTools y menús (`GADTOOLS_FUNCTIONS`, `MENU_FUNCTIONS`), con `tests/test_doc_gadtools.dash`.
+- [ ] T9b. Fuentes, transparencia, RGB, imágenes, TrueType e imágenes decodificadas.
+- [ ] T9c. Red, TLS y red en una tarea aparte.
+- [ ] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), en dos tandas.
+- [ ] T9e. Argumentos, zlib, UTF-8, Double, matemáticas, expresiones regulares, portapapeles, ordenar, JSON.
+- [ ] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`).
+- [ ] T9g. Simular teclado y ratón, ventanas de otros programas, gestor de ventanas.
+- [ ] T9h. Depurador (`DEBUGGER_FUNCTIONS`).
+- [ ] T9i. ReAction (`REACTION_FUNCTIONS`, 79), en dos tandas.
+- [ ] T9j. RTG.
+- [ ] T9k. DashOS.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
   explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
 
@@ -91,3 +101,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     tras un `arena_reset`; documentado.
 - 2026-11-08: T8c. Audio. `music_play` empieza siempre desde el principio (`music_position` solo vale mientras
   suena) y los `sound_*` durante la música se pisan con ella; documentado.
+- 2026-11-08: T9a. GadTools y menús. Comprobado en el emulador que los `gt_*` cuentan `x`, `y` desde dentro de los
+  bordes (el comentario de `_dash_window_border` en el runtime dice lo contrario; sin tocar).

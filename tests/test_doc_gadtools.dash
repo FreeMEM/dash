@@ -1,0 +1,42 @@
+# GadTools y menús: una ventana con gadgets, un menú con una opción de marca, y su bucle.
+# expect-out: botón 0, campo 1, deslizador 2
+# expect-out: pulsado: 0
+# expect-out: Amiga, volumen 40, sonido 0
+# expect-out: fin
+
+const MENU_SONIDO = 1
+const MENU_SALIR = 2
+
+Window Ajustes
+    title "Ajustes"
+    width 300
+    height 110
+end
+
+Main
+    Ajustes.open
+    gt_init()
+    menu_title("Proyecto")
+    menu_check_item("Sonido", "S", MENU_SONIDO)
+    menu_separator()
+    menu_item("Salir", "Q", MENU_SALIR)
+    menu_attach()
+
+    aceptar = gt_button(40, 70, 80, 16, "_Aceptar")
+    nombre = gt_string(90, 10, 180, 14, "Nombre", "Amiga", 40)
+    volumen = gt_slider(90, 35, 180, 12, "Volumen", 0, 64, 32)
+    gt_attach()
+    Print "botón #{aceptar}, campo #{nombre}, deslizador #{volumen}"
+
+    gt_set_value(volumen, 40)
+    input_click(44 + window_border_left(), 74 + window_border_top(), 0)   # para la prueba: pulsa Aceptar
+    ev = gt_wait_event()
+    while ev != -2 and ev != aceptar
+        ev = gt_wait_event()
+    end
+    Print "pulsado: #{ev}"
+    Print "#{gt_get_string(nombre)}, volumen #{gt_get_value(volumen)}, sonido #{menu_checked(MENU_SONIDO)}"
+    gt_cleanup()
+    Ajustes.close
+    Print "fin"
+end
