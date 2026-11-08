@@ -132,3 +132,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   `BUILTINS.md`; los recuentos del README y de DOCUMENTACION_LENGUAJE, a 961. Las secciones 11 a 16, GadTools,
   ReAction y MUI del manual enlazan con su grupo (cada grupo tiene ahora un ancla sin acentos, `#graphics_basic`).
   Revisado que todos los enlaces a `BUILTINS.md` llevan a un ancla que existe. SINTAXIS ya enlazaba. Plan terminado.
+- 2026-11-08: batería entera (1503 resultados, más `make -C dashc test`): falló solo el ejemplo de tareas en 3.2,
+  porque allí el disco se llama "RAM Disk" y en 3.1 "Ram Disk". El ejemplo compara en mayúsculas.

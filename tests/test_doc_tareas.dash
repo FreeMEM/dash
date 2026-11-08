@@ -36,7 +36,7 @@ Main
     n = disks_read(2000)
     i = 0
     while i < n
-        if disk_name(i) == "Ram Disk"
+        if str_upper(disk_name(i)) == "RAM DISK"     # "Ram Disk" en OS 3.1, "RAM Disk" en 3.2
             hay_ram = true
         end
         i = i + 1
