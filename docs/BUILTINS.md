@@ -3503,7 +3503,7 @@ Ver también: [`dir_read`](#dir_read).
 Devuelve la fecha de su último cambio en segundos desde el 1 de enero de 1970, como `time_unix`. 0 si no hay
 entrada `i`.
 
-Ver también: [`dir_read`](#dir_read), `time_unix`.
+Ver también: [`dir_read`](#dir_read), [`time_unix`](#time_unix).
 
 <a id="console_read"></a>
 
@@ -5728,50 +5728,489 @@ y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco
 
 ## Sistema y programa
 
+El programa y el sistema que lo rodea: la hora, el procesador, las librerías, ejecutar órdenes, variables de
+entorno, ARexx y listas de lo que hay en marcha (puertos, tareas, asignaciones).
+
+**Ejecutar órdenes.** `run_command` ejecuta y espera, con la salida de la orden en la del programa. `run_capture`
+la recoge en un texto. `run_start` hace lo mismo sin esperar, para que la ventana siga respondiendo; después
+`run_ready` y `run_finish`.
+
+**ARexx.** `rexx_send` manda una orden al puerto de otro programa y espera su respuesta. Para que otros programas
+manden órdenes al propio: `rexx_port`, `rexx_get` y `rexx_reply` (con MUI, `mui_app_rexx` es más cómodo).
+
+**Listas.** `ports_read`, `tasks_read` y `assigns_read` leen una foto de lo que hay ahora y devuelven cuántos;
+las funciones de cada uno los dan por número, desde 0, hasta la siguiente lectura.
+
+**Ejemplo** (`tests/test_doc_sysprog.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Sistema y programa: el procesador, una librería, ejecutar una orden y recoger lo que escribe, una variable de
+# entorno y las asignaciones.
+
+Main
+    cpu = cpu_model()                              # 68000 en un A500, 68020 en un A1200...
+    Print "exec.library 40 o más: #{library_version("exec.library") >= 40}"
+
+    salida = run_capture("Echo hola", 5000)
+    Print "la orden dijo: #{str_trim(salida)}, código #{run_rc()}"
+
+    env_set("DashPrueba", "azul", false)           # en ENV:, sin guardar en ENVARC:
+    Print "variable: " + env_get("DashPrueba")
+    file_delete("ENV:DashPrueba")
+
+    hay_c = false
+    n = assigns_read()
+    i = 0
+    while i < n
+        if assign_name(i) == "C"
+            hay_c = true
+        end
+        i = i + 1
+    end
+    Print "hay C:: #{hay_c}"
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `time_unix()` | Int | El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies) |  |
-| `clock_days()` | Int | Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp) |  |
-| `mem_largest()` | Int | El bloque de memoria libre más grande, chip o fast, en bytes |  |
-| `program_exit(rc)` | — | Acaba el programa ya con ese código de retorno (5 aviso, 10 error, 20 fallo), tras la limpieza de siempre: ventanas, ficheros y memoria |  |
-| `run_command(command)` | Int | Ejecuta una orden y espera a que acabe, con su salida en la del programa: su código de retorno, -1 si no pudo empezar |  |
-| `wb_open(path)` | Bool | Abre un cajón, un programa o un proyecto como un doble clic en su icono (workbench.library 44, OS 3.5+); false si no pudo |  |
-| `program_path()` | String | La ruta entera del programa ("Work:Tachyon/Tachyon"), desde un Shell o desde el Workbench |  |
-| `locale_language()` | String | El primer idioma preferido del usuario en las preferencias de Locale ("español"); "" si no hay |  |
-| `cpu_model()` | Int | El procesador: 68000, 68010, 68020, 68030, 68040 o 68060 |  |
-| `fpu_model()` | Int | La FPU: 68881, 68882, 68040 o 68060 (la del procesador); 0 si no hay |  |
-| `library_version(name)` | Int | La versión de una librería ("muimaster.library"), cargándola si no está en memoria; -1 si no está |  |
-| `library_revision(name)` | Int | La revisión de una librería (el 3 de 47.3), como library_version; -1 si no está |  |
-| `resident_version(name)` | Int | La versión de un módulo residente del sistema (FindResident: "MorphOS" dice que el programa corre en MorphOS); -1 si no hay |  |
-| `task_priority(n)` | Int | Pone la prioridad del programa (-128 a 127; el Shell da 0): la que tenía |  |
-| `build_date()` | String | La fecha en que se compiló el programa, "2026-10-28" |  |
-| `build_time()` | String | La hora en que se compiló el programa, "20:45:10" |  |
-| `console_flush()` | — | Saca ya lo que Print dejó en el búfer de la salida (una línea de progreso sin su final) |  |
-| `run_capture(command, timeout_ms)` | String | Ejecuta una orden y espera a que acabe: lo que escribió, con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba). Solo su salida: AmigaOS no da canal de errores a una orden lanzada así (el stderr de un programa en C va a la consola; dashc escribe sus errores por su salida en el Amiga) |  |
-| `run_start(command, timeout_ms)` | Int | run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El programa espera al acabar a las que no terminó |  |
-| `run_ready(run)` | Bool | Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo) |  |
-| `run_break(run)` | — | Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba) |  |
-| `run_finish(run)` | String | Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida |  |
-| `run_rc()` | Int | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
-| `env_get(name)` | String | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
-| `env_set(name, value, save)` | Bool | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
-| `rexx_send(port, command)` | String | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
-| `rexx_rc()` | Int | El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin rexxsyslib.library |  |
-| `rexx_port(name)` | Bool | Abre el puerto ARexx propio del programa con ese nombre ("ADDRESS NOMBRE" desde ARexx): false si ya hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get |  |
-| `rexx_get()` | String | La siguiente orden que llegó al puerto de rexx_port ("" si ninguna): espera su rexx_reply (el siguiente rexx_get la contesta con RC 0) |  |
-| `rexx_reply(rc, result)` | — | Contesta la orden de rexx_get: rc (0 bien, 5, 10, 20) y, con 0, result como RESULT ("": ninguno) |  |
-| `notify(title, text)` | Bool | Un aviso para el escritorio, con el nombre del programa: a la barra de Trasfondo por ARexx (puerto TRASFONDO) o, sin ella, a su lista (ENV:Trasfondo.avisos), que enseña al arrancar. False si no llegó a ninguno de los dos |  |
-| `ports_read()` | Int | Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, hasta el siguiente ports_read |  |
-| `port_name(i)` | String | El nombre del puerto i (desde 0) del último ports_read |  |
-| `tasks_read()` | Int | Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, hasta el siguiente tasks_read |  |
-| `task_entry_name(i)` | String | El nombre de la tarea i del último tasks_read ("Shell Process", "input.device"...) |  |
-| `task_entry_command(i)` | String | La orden que ejecuta un proceso de Shell del último tasks_read ("" si ninguna) |  |
-| `task_entry_state(i)` | String | El estado de la tarea i: "running" (el programa), "ready" o "waiting" |  |
-| `task_entry_priority(i)` | Int | La prioridad de la tarea i del último tasks_read |  |
-| `task_entry_cli(i)` | Int | El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell |  |
-| `assigns_read()` | Int | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
-| `assign_name(i)` | String | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
-| `assign_path(i)` | String | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+| [`time_unix()`](#time_unix) | Int | El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies) |  |
+| [`clock_days()`](#clock_days) | Int | Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp) |  |
+| [`mem_largest()`](#mem_largest) | Int | El bloque de memoria libre más grande, chip o fast, en bytes |  |
+| [`program_exit(rc)`](#program_exit) | — | Acaba el programa ya con ese código de retorno (5 aviso, 10 error, 20 fallo), tras la limpieza de siempre: ventanas, ficheros y memoria |  |
+| [`run_command(command)`](#run_command) | Int | Ejecuta una orden y espera a que acabe, con su salida en la del programa: su código de retorno, -1 si no pudo empezar |  |
+| [`wb_open(path)`](#wb_open) | Bool | Abre un cajón, un programa o un proyecto como un doble clic en su icono (workbench.library 44, OS 3.5+); false si no pudo |  |
+| [`program_path()`](#program_path) | String | La ruta entera del programa ("Work:Tachyon/Tachyon"), desde un Shell o desde el Workbench |  |
+| [`locale_language()`](#locale_language) | String | El primer idioma preferido del usuario en las preferencias de Locale ("español"); "" si no hay |  |
+| [`cpu_model()`](#cpu_model) | Int | El procesador: 68000, 68010, 68020, 68030, 68040 o 68060 |  |
+| [`fpu_model()`](#fpu_model) | Int | La FPU: 68881, 68882, 68040 o 68060 (la del procesador); 0 si no hay |  |
+| [`library_version(name)`](#library_version) | Int | La versión de una librería ("muimaster.library"), cargándola si no está en memoria; -1 si no está |  |
+| [`library_revision(name)`](#library_revision) | Int | La revisión de una librería (el 3 de 47.3), como library_version; -1 si no está |  |
+| [`resident_version(name)`](#resident_version) | Int | La versión de un módulo residente del sistema (FindResident: "MorphOS" dice que el programa corre en MorphOS); -1 si no hay |  |
+| [`task_priority(n)`](#task_priority) | Int | Pone la prioridad del programa (-128 a 127; el Shell da 0): la que tenía |  |
+| [`build_date()`](#build_date) | String | La fecha en que se compiló el programa, "2026-10-28" |  |
+| [`build_time()`](#build_time) | String | La hora en que se compiló el programa, "20:45:10" |  |
+| [`console_flush()`](#console_flush) | — | Saca ya lo que Print dejó en el búfer de la salida (una línea de progreso sin su final) |  |
+| [`run_capture(command, timeout_ms)`](#run_capture) | String | Ejecuta una orden y espera a que acabe: lo que escribió, con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba). Solo su salida: AmigaOS no da canal de errores a una orden lanzada así (el stderr de un programa en C va a la consola; dashc escribe sus errores por su salida en el Amiga) |  |
+| [`run_start(command, timeout_ms)`](#run_start) | Int | run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El programa espera al acabar a las que no terminó |  |
+| [`run_ready(run)`](#run_ready) | Bool | Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo) |  |
+| [`run_break(run)`](#run_break) | — | Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba) |  |
+| [`run_finish(run)`](#run_finish) | String | Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida |  |
+| [`run_rc()`](#run_rc) | Int | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
+| [`env_get(name)`](#env_get) | String | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
+| [`env_set(name, value, save)`](#env_set) | Bool | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
+| [`rexx_send(port, command)`](#rexx_send) | String | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
+| [`rexx_rc()`](#rexx_rc) | Int | El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin rexxsyslib.library |  |
+| [`rexx_port(name)`](#rexx_port) | Bool | Abre el puerto ARexx propio del programa con ese nombre ("ADDRESS NOMBRE" desde ARexx): false si ya hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get |  |
+| [`rexx_get()`](#rexx_get) | String | La siguiente orden que llegó al puerto de rexx_port ("" si ninguna): espera su rexx_reply (el siguiente rexx_get la contesta con RC 0) |  |
+| [`rexx_reply(rc, result)`](#rexx_reply) | — | Contesta la orden de rexx_get: rc (0 bien, 5, 10, 20) y, con 0, result como RESULT ("": ninguno) |  |
+| [`notify(title, text)`](#notify) | Bool | Un aviso para el escritorio, con el nombre del programa: a la barra de Trasfondo por ARexx (puerto TRASFONDO) o, sin ella, a su lista (ENV:Trasfondo.avisos), que enseña al arrancar. False si no llegó a ninguno de los dos |  |
+| [`ports_read()`](#ports_read) | Int | Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, hasta el siguiente ports_read |  |
+| [`port_name(i)`](#port_name) | String | El nombre del puerto i (desde 0) del último ports_read |  |
+| [`tasks_read()`](#tasks_read) | Int | Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, hasta el siguiente tasks_read |  |
+| [`task_entry_name(i)`](#task_entry_name) | String | El nombre de la tarea i del último tasks_read ("Shell Process", "input.device"...) |  |
+| [`task_entry_command(i)`](#task_entry_command) | String | La orden que ejecuta un proceso de Shell del último tasks_read ("" si ninguna) |  |
+| [`task_entry_state(i)`](#task_entry_state) | String | El estado de la tarea i: "running" (el programa), "ready" o "waiting" |  |
+| [`task_entry_priority(i)`](#task_entry_priority) | Int | La prioridad de la tarea i del último tasks_read |  |
+| [`task_entry_cli(i)`](#task_entry_cli) | Int | El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell |  |
+| [`assigns_read()`](#assigns_read) | Int | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
+| [`assign_name(i)`](#assign_name) | String | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
+| [`assign_path(i)`](#assign_path) | String | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+
+<a id="time_unix"></a>
+
+### `time_unix()` → `Int`
+
+Devuelve la hora del reloj del sistema en segundos desde el 1 de enero de 1970, como las fechas de Internet.
+
+Ver también: [`clock_days`](#clock_days), [`dir_entry_date`](#dir_entry_date).
+
+<a id="clock_days"></a>
+
+### `clock_days()` → `Int`
+
+Devuelve los días desde el 1 de enero de 1978, la fecha cero del Amiga, según el reloj del sistema.
+
+Ver también: [`time_unix`](#time_unix).
+
+<a id="mem_largest"></a>
+
+### `mem_largest()` → `Int`
+
+Devuelve el bloque de memoria libre más grande, chip o fast. Lo más grande que se puede pedir de una vez.
+
+Ver también: [`mem_total`](#mem_total).
+
+<a id="program_exit"></a>
+
+### `program_exit(rc)`
+
+- `rc`: el código de retorno: 0 bien, 5 aviso, 10 error, 20 fallo.
+
+Acaba el programa ya, desde cualquier sitio, con la limpieza de siempre: cierra ventanas y ficheros y devuelve la
+memoria. Un script del Shell puede mirar el código con `If WARN` o `If ERROR`.
+
+<a id="run_command"></a>
+
+### `run_command(command)` → `Int`
+
+- `command`: la orden, como en el Shell: `"Copy RAM:a TO RAM:b"`.
+
+La ejecuta y espera a que acabe; lo que escriba sale en la salida del programa. Devuelve su código de retorno, o -1
+si no pudo empezar.
+
+Ver también: [`run_capture`](#run_capture), [`run_start`](#run_start).
+
+<a id="wb_open"></a>
+
+### `wb_open(path)` → `Bool`
+
+- `path`: un cajón, un programa o un documento.
+
+Lo abre como un doble clic en su icono: un documento se abre con su programa. Necesita AmigaOS 3.5 o más. Devuelve
+`false` si no pudo.
+
+Ver también: [`run_command`](#run_command).
+
+<a id="program_path"></a>
+
+### `program_path()` → `String`
+
+Devuelve la ruta entera del programa (`"Work:Juegos/Nave"`), arranque desde el Shell o desde el Workbench.
+
+<a id="locale_language"></a>
+
+### `locale_language()` → `String`
+
+Devuelve el primer idioma de las preferencias de Locale del usuario (`"español"`), o `""` si no hay.
+
+<a id="cpu_model"></a>
+
+### `cpu_model()` → `Int`
+
+Devuelve el procesador: 68000, 68010, 68020, 68030, 68040 o 68060.
+
+Ver también: [`fpu_model`](#fpu_model).
+
+<a id="fpu_model"></a>
+
+### `fpu_model()` → `Int`
+
+Devuelve el coprocesador matemático: 68881, 68882, 68040 o 68060 (el del procesador); 0 si no hay.
+
+Ver también: [`cpu_model`](#cpu_model).
+
+<a id="library_version"></a>
+
+### `library_version(name)` → `Int`
+
+- `name`: el nombre de la librería: `"muimaster.library"`.
+
+Devuelve su versión, cargándola del disco si no está en memoria, o -1 si no está instalada. Para avisar antes de
+usar algo que necesita una versión concreta.
+
+Ver también: [`library_revision`](#library_revision).
+
+<a id="library_revision"></a>
+
+### `library_revision(name)` → `Int`
+
+- `name`: el nombre de la librería.
+
+Devuelve su revisión (el 3 de 47.3), o -1.
+
+Ver también: [`library_version`](#library_version).
+
+<a id="resident_version"></a>
+
+### `resident_version(name)` → `Int`
+
+- `name`: el nombre de un módulo residente.
+
+Devuelve su versión, o -1. `resident_version("MorphOS")` mayor que 0 dice que el programa corre en MorphOS.
+
+Ver también: [`library_version`](#library_version).
+
+<a id="task_priority"></a>
+
+### `task_priority(n)` → `Int`
+
+- `n`: la prioridad nueva, de -128 a 127; el Shell da 0.
+
+Cambia la prioridad del programa y devuelve la que tenía. Con -1, un trabajo largo deja ir fluido a lo demás.
+
+<a id="build_date"></a>
+
+### `build_date()` → `String`
+
+Devuelve la fecha en que se compiló el programa: `"2026-10-28"`.
+
+Ver también: [`build_time`](#build_time).
+
+<a id="build_time"></a>
+
+### `build_time()` → `String`
+
+Devuelve la hora en que se compiló: `"20:45:10"`.
+
+Ver también: [`build_date`](#build_date).
+
+<a id="console_flush"></a>
+
+### `console_flush()`
+
+Saca ya lo que `Print` dejó en el búfer de la salida: para una línea de progreso que se escribe a trozos.
+
+Ver también: [`console_write`](#console_write).
+
+<a id="run_capture"></a>
+
+### `run_capture(command, timeout_ms)` → `String`
+
+- `command`: la orden.
+- `timeout_ms`: tiempo máximo; al pasarlo la orden recibe Ctrl-C (y otro cada segundo hasta que acaba). 0 = sin
+  tope.
+
+La ejecuta, espera y devuelve todo lo que escribió. Su código de retorno, en `run_rc()`. Solo la salida normal:
+AmigaOS no da un canal de errores aparte.
+
+Ver también: [`run_rc`](#run_rc), [`run_start`](#run_start).
+
+<a id="run_start"></a>
+
+### `run_start(command, timeout_ms)` → `Int`
+
+- `command`, `timeout_ms`: como en `run_capture`.
+
+La empieza sin esperar. Devuelve un número para `run_ready`, `run_break` y `run_finish`, o 0 si no pudo empezar.
+Al acabar el programa se espera a las que sigan.
+
+Ver también: [`run_ready`](#run_ready), [`run_finish`](#run_finish).
+
+<a id="run_ready"></a>
+
+### `run_ready(run)` → `Bool`
+
+- `run`: el número de `run_start`.
+
+Devuelve `true` cuando ha acabado, sin esperar.
+
+Ver también: [`run_finish`](#run_finish).
+
+<a id="run_break"></a>
+
+### `run_break(run)`
+
+- `run`: el número de `run_start`.
+
+Le manda Ctrl-C, y otro cada segundo hasta que acaba.
+
+Ver también: [`run_start`](#run_start).
+
+<a id="run_finish"></a>
+
+### `run_finish(run)` → `String`
+
+- `run`: el número de `run_start`.
+
+Devuelve lo que escribió, como `run_capture`; si sigue en marcha, espera. Hay que llamarla siempre: libera su número.
+
+Ver también: [`run_rc`](#run_rc).
+
+<a id="run_rc"></a>
+
+### `run_rc()` → `Int`
+
+Devuelve el código de retorno del último `run_capture` o `run_finish`; -1 si no pudo empezar, -2 si se le acabó el tiempo.
+
+Ver también: [`run_capture`](#run_capture).
+
+<a id="env_get"></a>
+
+### `env_get(name)` → `String`
+
+- `name`: el nombre: `"Language"`, `"Forja/ejecutables"`.
+
+Devuelve su valor, de la Shell del programa o de `ENV:`, hasta el primer fin de línea; `""` si no existe.
+
+Ver también: [`env_set`](#env_set).
+
+<a id="env_set"></a>
+
+### `env_set(name, value, save)` → `Bool`
+
+- `name`: el nombre; con `/` va en un cajón de `ENV:`.
+- `value`: el valor.
+- `save`: `true` lo guarda también en `ENVARC:`, para que siga tras reiniciar.
+
+Devuelve `false` si no pudo.
+
+Ver también: [`env_get`](#env_get).
+
+<a id="rexx_send"></a>
+
+### `rexx_send(port, command)` → `String`
+
+- `port`: el puerto ARexx de otro programa (`"MULTIVIEW.1"`); `"REXX"` ejecuta un script.
+- `command`: la orden.
+
+La manda y espera la respuesta. Devuelve su RESULT (`""` si no hay); el RC, en `rexx_rc()`. No al puerto del propio
+programa: se esperaría a sí mismo.
+
+Ver también: [`rexx_rc`](#rexx_rc), [`ports_read`](#ports_read).
+
+<a id="rexx_rc"></a>
+
+### `rexx_rc()` → `Int`
+
+Devuelve el RC del último `rexx_send`: 0 bien, 5, 10, 20 los del programa; -1 si no existe el puerto, -2 sin `rexxsyslib.library`.
+
+Ver también: [`rexx_send`](#rexx_send).
+
+<a id="rexx_port"></a>
+
+### `rexx_port(name)` → `Bool`
+
+- `name`: el nombre del puerto, en mayúsculas.
+
+Abre el puerto ARexx del programa: desde ARexx, `ADDRESS NOMBRE`. Devuelve `false` si ese nombre ya existe o falta
+`rexxsyslib.library`. Las órdenes se leen con `rexx_get`.
+
+Ver también: [`rexx_get`](#rexx_get), [`rexx_reply`](#rexx_reply).
+
+<a id="rexx_get"></a>
+
+### `rexx_get()` → `String`
+
+Devuelve la siguiente orden que llegó al puerto de `rexx_port`, o `""` si ninguna. No espera. Quien la mandó espera
+la respuesta: `rexx_reply` (si no, el siguiente `rexx_get` la contesta con RC 0).
+
+Ver también: [`rexx_reply`](#rexx_reply).
+
+<a id="rexx_reply"></a>
+
+### `rexx_reply(rc, result)`
+
+- `rc`: 0 bien, 5 aviso, 10 error, 20 fallo.
+- `result`: con `rc` 0, el RESULT que recibe quien la mandó; `""` ninguno.
+
+Ver también: [`rexx_get`](#rexx_get).
+
+<a id="notify"></a>
+
+### `notify(title, text)` → `Bool`
+
+- `title`: el título del aviso.
+- `text`: el texto.
+
+Manda un aviso al escritorio, con el nombre del programa: a la barra de Trasfondo si está en marcha; si no, a su
+lista, que enseña al arrancar. Devuelve `false` si no llegó a ninguno de los dos.
+
+<a id="ports_read"></a>
+
+### `ports_read()` → `Int`
+
+Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos) y devuelve cuántos hay.
+
+Ver también: [`port_name`](#port_name).
+
+<a id="port_name"></a>
+
+### `port_name(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve el nombre de ese puerto del último `ports_read`.
+
+Ver también: [`ports_read`](#ports_read).
+
+<a id="tasks_read"></a>
+
+### `tasks_read()` → `Int`
+
+Lee las tareas y procesos del sistema (el primero, el propio programa) y devuelve cuántos hay.
+
+Ver también: [`task_entry_name`](#task_entry_name).
+
+<a id="task_entry_name"></a>
+
+### `task_entry_name(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve su nombre: `"Shell Process"`, `"input.device"`.
+
+Ver también: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_command"></a>
+
+### `task_entry_command(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve la orden que ejecuta un proceso de Shell; `""` si ninguna.
+
+Ver también: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_state"></a>
+
+### `task_entry_state(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve su estado: `"running"` (el programa), `"ready"` o `"waiting"`.
+
+Ver también: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_priority"></a>
+
+### `task_entry_priority(i)` → `Int`
+
+- `i`: el número, desde 0.
+
+Devuelve su prioridad.
+
+Ver también: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_cli"></a>
+
+### `task_entry_cli(i)` → `Int`
+
+- `i`: el número, desde 0.
+
+Devuelve su número de Shell (el que da `Status`, para `Break`); 0 si no es un proceso de Shell.
+
+Ver también: [`tasks_read`](#tasks_read).
+
+<a id="assigns_read"></a>
+
+### `assigns_read()` → `Int`
+
+Lee las asignaciones (`C:`, `LIBS:`, las de `Assign`) y devuelve cuántas hay.
+
+Ver también: [`assign_name`](#assign_name).
+
+<a id="assign_name"></a>
+
+### `assign_name(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve su nombre, sin los dos puntos.
+
+Ver también: [`assign_path`](#assign_path).
+
+<a id="assign_path"></a>
+
+### `assign_path(i)` → `String`
+
+- `i`: el número, desde 0.
+
+Devuelve adónde apunta: un cajón (`"Workbench:C"`), varios separados por `;`, o el nombre que buscará una asignación diferida.
+
+Ver también: [`assign_name`](#assign_name).
 
 ## JSON leído en C (para lib/json.dash)
 

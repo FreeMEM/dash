@@ -1,0 +1,31 @@
+# Sistema y programa: el procesador, una librería, ejecutar una orden y recoger lo que escribe, una variable de
+# entorno y las asignaciones.
+# expect-out: exec.library 40 o más: true
+# expect-out: la orden dijo: hola, código 0
+# expect-out: variable: azul
+# expect-out: hay C:: true
+# expect-out: fin
+
+Main
+    cpu = cpu_model()                              # 68000 en un A500, 68020 en un A1200...
+    Print "exec.library 40 o más: #{library_version("exec.library") >= 40}"
+
+    salida = run_capture("Echo hola", 5000)
+    Print "la orden dijo: #{str_trim(salida)}, código #{run_rc()}"
+
+    env_set("DashPrueba", "azul", false)           # en ENV:, sin guardar en ENVARC:
+    Print "variable: " + env_get("DashPrueba")
+    file_delete("ENV:DashPrueba")
+
+    hay_c = false
+    n = assigns_read()
+    i = 0
+    while i < n
+        if assign_name(i) == "C"
+            hay_c = true
+        end
+        i = i + 1
+    end
+    Print "hay C:: #{hay_c}"
+    Print "fin"
+end

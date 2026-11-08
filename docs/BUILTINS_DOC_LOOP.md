@@ -43,7 +43,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [ ] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), en dos tandas.
 - [x] T9e. Argumentos, zlib, UTF-8, Double, matemáticas, expresiones regulares, portapapeles, ordenar, JSON, con
   `tests/test_doc_varios.dash`.
-- [ ] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`).
+- [x] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`), con `tests/test_doc_sysprog.dash`.
 - [ ] T9g. Simular teclado y ratón, ventanas de otros programas, gestor de ventanas.
 - [ ] T9h. Depurador (`DEBUGGER_FUNCTIONS`).
 - [ ] T9i. ReAction (`REACTION_FUNCTIONS`, 79), en dos tandas.
@@ -114,3 +114,4 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - 2026-11-08: T9c. Red. El ejemplo usa el servidor de eco del runner (`# emu-net:`); por `./dash`, con un servidor de
   eco lanzado a mano. TLS y la red en una tarea, sin ejemplo propio (los cubren sus tests).
 - 2026-11-08: T9e. Utilidades (66 funciones). Sin fallos en lo probado.
+- 2026-11-08: T9f. Sistema y programa (42). Sin fallos en lo probado. El sistema del emulador no trae `Delete`.
