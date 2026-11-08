@@ -3116,6 +3116,53 @@ Main
 end
 ```
 
+**Ejemplo** (`tests/test_doc_mui_lienzo.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# MUI: una zona de dibujo que MUI repinta cuando hace falta, con los gfx_, y que responde a los clics.
+
+const ID_CLIC = 1
+const ID_FIN = 2
+
+var centro: Int = -1
+
+# MUI la llama al abrir, al cambiar de tamaño y con mui_canvas_redraw; x, y es la esquina de la zona
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(0)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(2)
+    gfx_circle_fill(x + ancho / 2, y + alto / 2, alto / 3)
+    centro = gfx_pixel_read(x + ancho / 2, y + alto / 2)
+end
+
+Main
+    if mui_app_begin("Lienzo", "LIENZO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Lienzo", 0)
+        lienzo = mui_canvas(160, 100)
+    mui_window_end()
+    mui_canvas_on_draw(lienzo, pinta)
+    mui_canvas_on_input(lienzo, ID_CLIC)       # antes de abrir la ventana
+    mui_window_open(win)
+    Print "dibujada, el centro es del color #{centro}"
+
+    mui_timer(1500, ID_FIN)                    # para la prueba: acaba sola
+    ev = mui_wait_event()
+    while ev != -1 and ev != ID_FIN
+        if ev == ID_CLIC and mui_canvas_key(lienzo) == -1
+            Print "clic en #{mui_canvas_mouse_x(lienzo)}, #{mui_canvas_mouse_y(lienzo)}"
+            mui_canvas_redraw(lienzo)
+        end
+        ev = mui_wait_event()
+    end
+    Print "clic: botón #{mui_canvas_button(lienzo)}"
+    mui_app_end()
+    Print "fin"
+end
+```
+
 **Índice.** Las que tienen enlace están explicadas más abajo.
 
 | Función | Devuelve | Descripción | Estado |
@@ -3185,38 +3232,38 @@ end
 | [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (dirección) | Empieza un menú contextual (en cualquier sitio, no solo en una ventana): sus opciones como en un menú (mui_menu_item, mui_menu_check, mui_submenu_begin...) hasta mui_menu_end; se da a un objeto con mui_set_context_menu (Lorraine D15) |  |
 | [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | El botón derecho sobre el objeto abre ese menú contextual (0: ninguno); sus opciones dan sus eventos; en un lienzo, mui_canvas_mouse_x/_y dicen dónde se pulsó y mui_canvas_button es 2 |  |
 | [`mui_menu_end()`](#mui_menu_end) | — | Acaba el menú |  |
-| `mui_canvas(min_width, min_height)` | Int (dirección) | Una zona de dibujo (crece con la ventana); se dibuja desde mui_canvas_on_draw |  |
-| `mui_canvas_on_draw(canvas, func)` | — | La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (MUI la llama cuando hace falta) |  |
-| `mui_canvas_on_input(canvas, id)` | — | mui_wait_event da id con un clic, la rueda o una tecla sobre la zona (llamarla antes de abrir la ventana) |  |
-| `mui_canvas_redraw(canvas)` | — | Dibuja otra vez la zona ya |  |
-| `mui_canvas_buffered(canvas, on)` | — | Dibuja la zona en un bitmap propio y la enseña de golpe al acabar (sin zona a medio dibujar; las mismas coordenadas; mui_canvas_update sigue dibujando en la ventana) |  |
-| `mui_canvas_update(canvas)` | — | Llama ya a la función de dibujo sin borrar la zona (pinta solo lo que cambió) |  |
-| `mui_canvas_update_area(canvas, x, y, w, h)` | — | Como mui_canvas_update, solo en la parte w x h en x, y de la zona (desde su esquina): el dibujo se recorta a ella y, con mui_canvas_buffered, solo ella pasa del búfer a la ventana |  |
-| `mui_canvas_updating()` | Bool | En la función de dibujo: true si corre por un mui_canvas_update (lo demás sigue ahí) |  |
-| `mui_canvas_on_move(canvas, id)` | — | mui_wait_event da id cuando el puntero se mueve sobre la zona o sale de ella, sin clic (los movimientos que lleguen entretanto hacen uno; llamarla antes de abrir la ventana) |  |
-| `mui_canvas_pointer_x(canvas)` | Int | La X del puntero ahora, desde el borde izquierdo de la zona (con clic o sin él) |  |
-| `mui_canvas_pointer_y(canvas)` | Int | La Y del puntero ahora, desde el borde de arriba de la zona (con clic o sin él) |  |
-| `mui_canvas_pointer_inside(canvas)` | Bool | True si el puntero está ahora sobre la zona |  |
-| `mui_canvas_set_pointer(canvas, shape)` | — | La forma del puntero sobre la zona: 0 normal, 1 texto (I), 2 cambiar de tamaño a los lados, 3 arriba y abajo, 4 ocupado; cambia ya si el puntero está sobre la zona (o arrastrándola) y vuelve a la normal fuera de ella (Lorraine D16) |  |
-| `mui_canvas_take_tab(canvas, on)` | — | Con el puntero sobre la zona, Tab y Mayúsculas+Tab son teclas para ella (mui_canvas_key 66, Mayúsculas en mui_canvas_qualifiers; necesita mui_canvas_on_input) y no el gadget siguiente y anterior de la ventana; fuera de ella pasan de gadget en gadget como siempre (Lorraine D48) |  |
-| `mui_canvas_mouse_x(canvas)` | Int | La X del último clic o de la rueda, desde el borde izquierdo de la zona |  |
-| `mui_canvas_mouse_y(canvas)` | Int | La Y del último clic o de la rueda, desde el borde de arriba de la zona |  |
-| `mui_canvas_button(canvas)` | Int | 1 si lo último fue un clic izquierdo; si no, 0 |  |
-| `mui_canvas_wheel(canvas)` | Int | +1 / -1 si lo último fue la rueda del ratón (arriba/abajo); si no, 0 |  |
-| `mui_canvas_key(canvas)` | Int | El código en bruto de la última tecla; -1 si lo último no fue una tecla |  |
-| `mui_canvas_on_drag(canvas, id)` | — | El id del evento cuando se arrastra la zona (moverse con el botón izquierdo pulsado tras pulsarlo en ella) y cuando se suelta; mui_canvas_drag dice cuál, mui_canvas_mouse_x/y dónde (puede ser fuera de la zona). Llamarla antes de abrir la ventana |  |
-| `mui_canvas_drag(canvas)` | Int | El último evento de arrastre: 1 moviéndose con el botón pulsado, 2 soltado (0 antes de ninguno) |  |
-| `mui_canvas_qualifiers(canvas)` | Int | Las teclas pulsadas en la última tecla, clic o rueda: 1 Mayúsculas, 2 Ctrl, 4 Alt, 8 Amiga, sumadas (Mayúsculas + Ctrl = 3); q & 1 dice si había Mayúsculas |  |
-| `mui_canvas_char(canvas)` | String | El carácter de la última tecla en la zona, con las mayúsculas y el mapa de teclado ("" si no hay; dashweb D31) |  |
-| `mui_scrollbar(vertical)` | Int (dirección) | Una barra de desplazamiento; su valor es la primera línea que se ve |  |
-| `mui_set_range(scrollbar, total, visible)` | — | El tamaño del documento y de la parte que cabe |  |
+| [`mui_canvas(min_width, min_height)`](#mui_canvas) | Int (dirección) | Una zona de dibujo (crece con la ventana); se dibuja desde mui_canvas_on_draw |  |
+| [`mui_canvas_on_draw(canvas, func)`](#mui_canvas_on_draw) | — | La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (MUI la llama cuando hace falta) |  |
+| [`mui_canvas_on_input(canvas, id)`](#mui_canvas_on_input) | — | mui_wait_event da id con un clic, la rueda o una tecla sobre la zona (llamarla antes de abrir la ventana) |  |
+| [`mui_canvas_redraw(canvas)`](#mui_canvas_redraw) | — | Dibuja otra vez la zona ya |  |
+| [`mui_canvas_buffered(canvas, on)`](#mui_canvas_buffered) | — | Dibuja la zona en un bitmap propio y la enseña de golpe al acabar (sin zona a medio dibujar; las mismas coordenadas; mui_canvas_update sigue dibujando en la ventana) |  |
+| [`mui_canvas_update(canvas)`](#mui_canvas_update) | — | Llama ya a la función de dibujo sin borrar la zona (pinta solo lo que cambió) |  |
+| [`mui_canvas_update_area(canvas, x, y, w, h)`](#mui_canvas_update_area) | — | Como mui_canvas_update, solo en la parte w x h en x, y de la zona (desde su esquina): el dibujo se recorta a ella y, con mui_canvas_buffered, solo ella pasa del búfer a la ventana |  |
+| [`mui_canvas_updating()`](#mui_canvas_updating) | Bool | En la función de dibujo: true si corre por un mui_canvas_update (lo demás sigue ahí) |  |
+| [`mui_canvas_on_move(canvas, id)`](#mui_canvas_on_move) | — | mui_wait_event da id cuando el puntero se mueve sobre la zona o sale de ella, sin clic (los movimientos que lleguen entretanto hacen uno; llamarla antes de abrir la ventana) |  |
+| [`mui_canvas_pointer_x(canvas)`](#mui_canvas_pointer_x) | Int | La X del puntero ahora, desde el borde izquierdo de la zona (con clic o sin él) |  |
+| [`mui_canvas_pointer_y(canvas)`](#mui_canvas_pointer_y) | Int | La Y del puntero ahora, desde el borde de arriba de la zona (con clic o sin él) |  |
+| [`mui_canvas_pointer_inside(canvas)`](#mui_canvas_pointer_inside) | Bool | True si el puntero está ahora sobre la zona |  |
+| [`mui_canvas_set_pointer(canvas, shape)`](#mui_canvas_set_pointer) | — | La forma del puntero sobre la zona: 0 normal, 1 texto (I), 2 cambiar de tamaño a los lados, 3 arriba y abajo, 4 ocupado; cambia ya si el puntero está sobre la zona (o arrastrándola) y vuelve a la normal fuera de ella (Lorraine D16) |  |
+| [`mui_canvas_take_tab(canvas, on)`](#mui_canvas_take_tab) | — | Con el puntero sobre la zona, Tab y Mayúsculas+Tab son teclas para ella (mui_canvas_key 66, Mayúsculas en mui_canvas_qualifiers; necesita mui_canvas_on_input) y no el gadget siguiente y anterior de la ventana; fuera de ella pasan de gadget en gadget como siempre (Lorraine D48) |  |
+| [`mui_canvas_mouse_x(canvas)`](#mui_canvas_mouse_x) | Int | La X del último clic o de la rueda, desde el borde izquierdo de la zona |  |
+| [`mui_canvas_mouse_y(canvas)`](#mui_canvas_mouse_y) | Int | La Y del último clic o de la rueda, desde el borde de arriba de la zona |  |
+| [`mui_canvas_button(canvas)`](#mui_canvas_button) | Int | 1 si lo último fue un clic izquierdo; si no, 0 |  |
+| [`mui_canvas_wheel(canvas)`](#mui_canvas_wheel) | Int | +1 / -1 si lo último fue la rueda del ratón (arriba/abajo); si no, 0 |  |
+| [`mui_canvas_key(canvas)`](#mui_canvas_key) | Int | El código en bruto de la última tecla; -1 si lo último no fue una tecla |  |
+| [`mui_canvas_on_drag(canvas, id)`](#mui_canvas_on_drag) | — | El id del evento cuando se arrastra la zona (moverse con el botón izquierdo pulsado tras pulsarlo en ella) y cuando se suelta; mui_canvas_drag dice cuál, mui_canvas_mouse_x/y dónde (puede ser fuera de la zona). Llamarla antes de abrir la ventana |  |
+| [`mui_canvas_drag(canvas)`](#mui_canvas_drag) | Int | El último evento de arrastre: 1 moviéndose con el botón pulsado, 2 soltado (0 antes de ninguno) |  |
+| [`mui_canvas_qualifiers(canvas)`](#mui_canvas_qualifiers) | Int | Las teclas pulsadas en la última tecla, clic o rueda: 1 Mayúsculas, 2 Ctrl, 4 Alt, 8 Amiga, sumadas (Mayúsculas + Ctrl = 3); q & 1 dice si había Mayúsculas |  |
+| [`mui_canvas_char(canvas)`](#mui_canvas_char) | String | El carácter de la última tecla en la zona, con las mayúsculas y el mapa de teclado ("" si no hay; dashweb D31) |  |
+| [`mui_scrollbar(vertical)`](#mui_scrollbar) | Int (dirección) | Una barra de desplazamiento; su valor es la primera línea que se ve |  |
+| [`mui_set_range(scrollbar, total, visible)`](#mui_set_range) | — | El tamaño del documento y de la parte que cabe |  |
 | [`mui_wait_event_signals(mask)`](#mui_wait_event_signals) | Int | Como mui_wait_event, pero también da 0 cuando llega una de las señales de mask (sockets...); mui_signals dice cuál |  |
 | [`mui_signals()`](#mui_signals) | Int | Las señales de la máscara que despertaron al último mui_wait_event_signals |  |
 | [`mui_timer(ms, id)`](#mui_timer) | — | Dentro de ms milisegundos mui_wait_event da id, una vez (otra: llamarla otra vez; 0 la cancela) |  |
-| `mui_image(file)` | Int (dirección) | Una imagen de un fichero con los datatypes (ILBM; PNG, JPEG, GIF si están sus datatypes); mui_set_text cambia el fichero |  |
-| `mui_image_button(file)` | Int (dirección) | Un botón con una imagen (un icono de barra de herramientas; ILBM, o lo que lean los datatypes): mui_on_press como un botón, mui_set_text cambia la imagen |  |
-| `mui_image_toggle(file, group, selected)` | Int (dirección) | Un botón con imagen que se queda pulsado (negrita, cursiva): valor 1/0 con mui_get_value / mui_set_value, mui_on_change cuando cambia; group > 0: pulsar uno suelta los demás de ese grupo (alineación), y mui_on_change solo salta en el pulsado |  |
-| `mui_combo(text, options)` | Int (dirección) | Un campo de texto con una lista que se despliega (fuente, tamaño; opciones "A\|B"): se escribe o se elige una línea (doble clic); mui_get_text / mui_set_text, mui_list_* cambian las líneas, mui_on_ack con Return o al elegir una línea |  |
+| [`mui_image(file)`](#mui_image) | Int (dirección) | Una imagen de un fichero con los datatypes (ILBM; PNG, JPEG, GIF si están sus datatypes); mui_set_text cambia el fichero |  |
+| [`mui_image_button(file)`](#mui_image_button) | Int (dirección) | Un botón con una imagen (un icono de barra de herramientas; ILBM, o lo que lean los datatypes): mui_on_press como un botón, mui_set_text cambia la imagen |  |
+| [`mui_image_toggle(file, group, selected)`](#mui_image_toggle) | Int (dirección) | Un botón con imagen que se queda pulsado (negrita, cursiva): valor 1/0 con mui_get_value / mui_set_value, mui_on_change cuando cambia; group > 0: pulsar uno suelta los demás de ese grupo (alineación), y mui_on_change solo salta en el pulsado |  |
+| [`mui_combo(text, options)`](#mui_combo) | Int (dirección) | Un campo de texto con una lista que se despliega (fuente, tamaño; opciones "A\|B"): se escribe o se elige una línea (doble clic); mui_get_text / mui_set_text, mui_list_* cambian las líneas, mui_on_ack con Return o al elegir una línea |  |
 | [`mui_help(obj, text)`](#mui_help) | — | Una ayuda en burbuja que sale cuando el puntero se para sobre el objeto |  |
 | [`mui_window_move(win, dx, dy)`](#mui_window_move) | — | Mueve una ventana abierta dx, dy píxeles (las ventanas de un .dashui se abren en el mismo sitio) |  |
 | [`mui_set_active(win, obj)`](#mui_set_active) | — | Hace de obj el objeto activo de la ventana: el cursor va a ese campo de texto (Amiga-L) |  |
@@ -3460,7 +3507,7 @@ Ver también: [`mui_label`](#mui_label), [`mui_set_text`](#mui_set_text).
 
 Un botón. Al pulsarlo, el evento de `mui_on_press`.
 
-Ver también: [`mui_on_press`](#mui_on_press), `mui_image_button`.
+Ver también: [`mui_on_press`](#mui_on_press), [`mui_image_button`](#mui_image_button).
 
 <a id="mui_on_press"></a>
 
@@ -3912,6 +3959,282 @@ Acaba el menú abierto, o el menú contextual.
 
 Ver también: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#mui_context_menu_begin).
 
+<a id="mui_canvas"></a>
+
+### `mui_canvas(min_width, min_height)` → `Int (dirección)`
+
+- `min_width`, `min_height`: el tamaño mínimo en píxeles; crece con la ventana.
+
+Una zona donde el programa dibuja con los `gfx_*`. No se dibuja en ella cuando se quiere: MUI llama a la función de
+`mui_canvas_on_draw` cada vez que hace falta (al abrir, al cambiar de tamaño, al destaparse) y cuando el programa
+lo pide con `mui_canvas_redraw`. Para que responda al ratón y al teclado, `mui_canvas_on_input`.
+
+Ver también: [`mui_canvas_on_draw`](#mui_canvas_on_draw), [`mui_canvas_redraw`](#mui_canvas_redraw), [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_on_draw"></a>
+
+### `mui_canvas_on_draw(canvas, func)`
+
+- `canvas`: la zona de dibujo.
+- `func`: una función `f(x: Int, y: Int, ancho: Int, alto: Int)`.
+
+La función que dibuja la zona. `x`, `y` es la esquina de la zona dentro de la ventana y `ancho`, `alto` su tamaño
+ahora: se dibuja de `x` a `x + ancho - 1`. Lo que se salga queda recortado. Dentro, los `gfx_*` dibujan en la zona.
+
+Ver también: [`mui_canvas`](#mui_canvas), [`mui_canvas_redraw`](#mui_canvas_redraw), [`mui_canvas_updating`](#mui_canvas_updating).
+
+<a id="mui_canvas_on_input"></a>
+
+### `mui_canvas_on_input(canvas, id)`
+
+- `canvas`: la zona de dibujo.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` con un clic, la rueda del ratón o una tecla sobre la zona. Después,
+`mui_canvas_button`, `mui_canvas_wheel` o `mui_canvas_key` dicen qué fue, y `mui_canvas_mouse_x`, `_y` dónde. Se
+llama antes de abrir la ventana.
+
+Ver también: [`mui_canvas_button`](#mui_canvas_button), [`mui_canvas_key`](#mui_canvas_key), [`mui_canvas_mouse_x`](#mui_canvas_mouse_x).
+
+<a id="mui_canvas_redraw"></a>
+
+### `mui_canvas_redraw(canvas)`
+
+- `canvas`: la zona de dibujo.
+
+Pide a MUI que la borre y la vuelva a dibujar ya, llamando a su función. Se llama desde el programa principal,
+nunca desde otra tarea.
+
+Ver también: [`mui_canvas_update`](#mui_canvas_update), [`mui_canvas_on_draw`](#mui_canvas_on_draw).
+
+<a id="mui_canvas_buffered"></a>
+
+### `mui_canvas_buffered(canvas, on)`
+
+- `canvas`: la zona de dibujo.
+- `on`: `true` lo enciende.
+
+La zona se dibuja en una imagen aparte y se enseña de golpe al acabar la función: no se ve a medio dibujar. Las
+coordenadas son las mismas. Gasta la memoria de una imagen del tamaño de la zona.
+
+Ver también: [`mui_canvas_update_area`](#mui_canvas_update_area).
+
+<a id="mui_canvas_update"></a>
+
+### `mui_canvas_update(canvas)`
+
+- `canvas`: la zona de dibujo.
+
+Llama a la función de dibujo sin borrar la zona antes: dentro, `mui_canvas_updating()` es `true` y basta pintar lo
+que cambió. Más rápido que `mui_canvas_redraw` para un cursor o un contador.
+
+Ver también: [`mui_canvas_updating`](#mui_canvas_updating), [`mui_canvas_update_area`](#mui_canvas_update_area).
+
+<a id="mui_canvas_update_area"></a>
+
+### `mui_canvas_update_area(canvas, x, y, w, h)`
+
+- `canvas`: la zona de dibujo.
+- `x`, `y`, `w`, `h`: la parte que se repinta, contando desde la esquina de la zona.
+
+Como `mui_canvas_update`, pero el dibujo se recorta a esa parte. Con `mui_canvas_buffered`, solo esa parte pasa a
+la ventana.
+
+Ver también: [`mui_canvas_update`](#mui_canvas_update).
+
+<a id="mui_canvas_updating"></a>
+
+### `mui_canvas_updating()` → `Bool`
+
+Dentro de la función de dibujo, devuelve `true` si la llamó `mui_canvas_update` (lo de antes sigue en la zona) y
+`false` si hay que dibujarla entera.
+
+Ver también: [`mui_canvas_update`](#mui_canvas_update).
+
+<a id="mui_canvas_on_move"></a>
+
+### `mui_canvas_on_move(canvas, id)`
+
+- `canvas`: la zona de dibujo.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando el puntero se mueve sobre la zona, o sale de ella, sin pulsar. Si llegan
+varios movimientos mientras el programa está ocupado, cuentan como uno. Se llama antes de abrir la ventana.
+
+Ver también: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x), [`mui_canvas_pointer_inside`](#mui_canvas_pointer_inside).
+
+<a id="mui_canvas_pointer_x"></a>
+
+### `mui_canvas_pointer_x(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve la X del puntero ahora mismo, desde el borde izquierdo de la zona, haya clic o no.
+
+Ver también: [`mui_canvas_pointer_y`](#mui_canvas_pointer_y), [`mui_canvas_on_move`](#mui_canvas_on_move).
+
+<a id="mui_canvas_pointer_y"></a>
+
+### `mui_canvas_pointer_y(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve la Y del puntero ahora mismo, desde el borde de arriba de la zona.
+
+Ver también: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x).
+
+<a id="mui_canvas_pointer_inside"></a>
+
+### `mui_canvas_pointer_inside(canvas)` → `Bool`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve `true` si el puntero está ahora sobre la zona.
+
+Ver también: [`mui_canvas_on_move`](#mui_canvas_on_move).
+
+<a id="mui_canvas_set_pointer"></a>
+
+### `mui_canvas_set_pointer(canvas, shape)`
+
+- `canvas`: la zona de dibujo.
+- `shape`: 0 normal, 1 texto (una I), 2 cambiar de tamaño a los lados, 3 arriba y abajo, 4 ocupado.
+
+La forma del puntero cuando está sobre la zona. Cambia al momento si ya está encima y vuelve a la normal al salir.
+
+Ver también: [`mui_canvas_pointer_inside`](#mui_canvas_pointer_inside).
+
+<a id="mui_canvas_take_tab"></a>
+
+### `mui_canvas_take_tab(canvas, on)`
+
+- `canvas`: la zona de dibujo.
+- `on`: `true` lo enciende.
+
+Con el puntero sobre la zona, Tab y Mayúsculas+Tab llegan a la zona como teclas (código 66) en vez de pasar al
+siguiente objeto de la ventana. Necesita `mui_canvas_on_input`.
+
+Ver también: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_canvas_mouse_x"></a>
+
+### `mui_canvas_mouse_x(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve la X del último clic, rueda o arrastre, contando desde el borde izquierdo de la zona.
+
+Ver también: [`mui_canvas_mouse_y`](#mui_canvas_mouse_y), [`mui_canvas_pointer_x`](#mui_canvas_pointer_x).
+
+<a id="mui_canvas_mouse_y"></a>
+
+### `mui_canvas_mouse_y(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve la Y del último clic, rueda o arrastre, contando desde el borde de arriba de la zona.
+
+Ver también: [`mui_canvas_mouse_x`](#mui_canvas_mouse_x).
+
+<a id="mui_canvas_button"></a>
+
+### `mui_canvas_button(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve 1 si lo último fue un clic izquierdo, 2 si fue el derecho con un menú contextual y 0 si no fue un clic.
+
+Ver también: [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_wheel"></a>
+
+### `mui_canvas_wheel(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve 1 si lo último fue la rueda del ratón hacia arriba, -1 hacia abajo y 0 si no fue la rueda.
+
+Ver también: [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_key"></a>
+
+### `mui_canvas_key(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve el código en bruto de la última tecla pulsada sobre la zona, o -1 si lo último no fue una tecla.
+`mui_canvas_char` da la letra.
+
+Ver también: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#mui_canvas_qualifiers).
+
+<a id="mui_canvas_on_drag"></a>
+
+### `mui_canvas_on_drag(canvas, id)`
+
+- `canvas`: la zona de dibujo.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` mientras se arrastra (se pulsa en la zona y se mueve con el botón pulsado) y al
+soltar. `mui_canvas_drag` dice cuál de los dos y `mui_canvas_mouse_x`, `_y` dónde, aunque sea fuera de la zona. Se
+llama antes de abrir la ventana.
+
+Ver también: [`mui_canvas_drag`](#mui_canvas_drag).
+
+<a id="mui_canvas_drag"></a>
+
+### `mui_canvas_drag(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve el último evento de arrastre: 1 moviéndose con el botón pulsado, 2 al soltarlo, 0 antes de ninguno.
+
+Ver también: [`mui_canvas_on_drag`](#mui_canvas_on_drag).
+
+<a id="mui_canvas_qualifiers"></a>
+
+### `mui_canvas_qualifiers(canvas)` → `Int`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve las teclas que estaban pulsadas en la última tecla, clic o rueda, sumadas: 1 Mayúsculas, 2 Ctrl, 4 Alt,
+8 Amiga. `q & 2` dice si había Ctrl.
+
+Ver también: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_canvas_char"></a>
+
+### `mui_canvas_char(canvas)` → `String`
+
+- `canvas`: la zona de dibujo.
+
+Devuelve el carácter de la última tecla, con Mayúsculas y el mapa de teclado puestos (`"A"`, `"ñ"`); `""` si la
+tecla no da ninguno.
+
+Ver también: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_scrollbar"></a>
+
+### `mui_scrollbar(vertical)` → `Int (dirección)`
+
+- `vertical`: `true` vertical, `false` horizontal.
+
+Una barra de desplazamiento suelta, para ir junto a una zona de dibujo. `mui_set_range` dice cuánto mide el
+documento; su valor (`mui_get_value`) es la primera línea que se ve, y `mui_on_change` avisa al moverla.
+
+Ver también: [`mui_set_range`](#mui_set_range), [`mui_canvas`](#mui_canvas).
+
+<a id="mui_set_range"></a>
+
+### `mui_set_range(scrollbar, total, visible)`
+
+- `scrollbar`: la barra.
+- `total`: el tamaño del documento (líneas, píxeles...).
+- `visible`: cuánto de él cabe a la vista.
+
+El tamaño del tirador sale de los dos.
+
+Ver también: [`mui_scrollbar`](#mui_scrollbar).
+
 <a id="mui_wait_event_signals"></a>
 
 ### `mui_wait_event_signals(mask)` → `Int`
@@ -3941,6 +4264,52 @@ Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
 `mui_wait_event` devolverá `id` una vez pasado ese tiempo. Para que se repita, se vuelve a llamar al recibirlo.
 
 Ver también: [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_image"></a>
+
+### `mui_image(file)` → `Int (dirección)`
+
+- `file`: el fichero de la imagen: ILBM siempre; PNG, JPEG o GIF si están sus datatypes.
+
+Una imagen. `mui_set_text` cambia el fichero.
+
+Ver también: [`mui_image_button`](#mui_image_button), `image_load`.
+
+<a id="mui_image_button"></a>
+
+### `mui_image_button(file)` → `Int (dirección)`
+
+- `file`: el fichero de la imagen.
+
+Un botón con una imagen, como los de una barra de herramientas. Responde a `mui_on_press` como un botón;
+`mui_set_text` cambia la imagen.
+
+Ver también: [`mui_image_toggle`](#mui_image_toggle), [`mui_on_press`](#mui_on_press).
+
+<a id="mui_image_toggle"></a>
+
+### `mui_image_toggle(file, group, selected)` → `Int (dirección)`
+
+- `file`: el fichero de la imagen.
+- `group`: 0 = suelto; mayor que 0 = pulsar uno suelta los demás del mismo grupo (como la alineación).
+- `selected`: si empieza pulsado.
+
+Un botón con imagen que se queda pulsado, como negrita o cursiva. `mui_get_value` da 1 o 0 y `mui_on_change`
+avisa al cambiar; en un grupo, solo salta en el que se pulsa.
+
+Ver también: [`mui_image_button`](#mui_image_button), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_combo"></a>
+
+### `mui_combo(text, options)` → `Int (dirección)`
+
+- `text`: el texto con el que empieza.
+- `options`: las líneas de la lista, separadas por `|`.
+
+Un campo de texto con una lista que se despliega: se escribe o se elige una línea. `mui_get_text` lo lee,
+`mui_list_add` y las demás `mui_list_*` cambian la lista, y `mui_on_ack` avisa con Return o al elegir.
+
+Ver también: [`mui_string`](#mui_string), [`mui_on_ack`](#mui_on_ack), [`mui_list_add`](#mui_list_add).
 
 <a id="mui_help"></a>
 

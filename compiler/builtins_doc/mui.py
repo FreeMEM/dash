@@ -51,7 +51,7 @@ option, the chosen line...); `mui_get_text` and `mui_set_text`, its text.
 `.dashui`; the program uses it with `import "window.dashui"` (see `docs/MUI_EDITOR.md`). The API's design is in
 `docs/MUI_DISEÑO.md`.
 """,
-        "example": "tests/test_doc_mui.dash",
+        "example": ["tests/test_doc_mui.dash", "tests/test_doc_mui_lienzo.dash"],
     },
 }
 

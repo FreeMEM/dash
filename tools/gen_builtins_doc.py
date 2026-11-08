@@ -135,19 +135,21 @@ def check_doc():
     groups = {attr for attr, _, _ in GROUPS}
     for attr, doc in builtins_doc.GROUPS.items():
         if attr not in groups:
-            raise SystemExit(f"compiler/builtins_doc.py: {attr} is not a group of GROUPS")
+            raise SystemExit(f"compiler/builtins_doc: {attr} is not a group of GROUPS")
         if not (doc.get("es") and doc.get("en")):
-            raise SystemExit(f"compiler/builtins_doc.py: the group {attr} needs es and en")
-        if doc.get("example") and not (PROJECT_ROOT / doc["example"]).exists():
-            raise SystemExit(f"compiler/builtins_doc.py: {doc['example']} does not exist")
+            raise SystemExit(f"compiler/builtins_doc: the group {attr} needs es and en")
+        examples = doc.get("example") or []
+        for path in [examples] if isinstance(examples, str) else examples:
+            if not (PROJECT_ROOT / path).exists():
+                raise SystemExit(f"compiler/builtins_doc: {path} does not exist")
     for name, doc in builtins_doc.FUNCS.items():
         if name not in builtins_module.ALL_BUILTINS:
-            raise SystemExit(f"compiler/builtins_doc.py: {name} is not a builtin")
+            raise SystemExit(f"compiler/builtins_doc: {name} is not a builtin")
         if not (doc.get("es") and doc.get("en")):
-            raise SystemExit(f"compiler/builtins_doc.py: {name} needs es and en")
+            raise SystemExit(f"compiler/builtins_doc: {name} needs es and en")
         for s in doc.get("see", []):
             if s not in builtins_module.ALL_BUILTINS:
-                raise SystemExit(f"compiler/builtins_doc.py: {name} sees {s}, which is not a builtin")
+                raise SystemExit(f"compiler/builtins_doc: {name} sees {s}, which is not a builtin")
 
 
 def render(lang: str) -> str:
@@ -182,9 +184,11 @@ def render(lang: str) -> str:
         gdoc = builtins_doc.GROUPS.get(attr)
         if gdoc:
             sections += [gdoc[lang].strip(), ""]
-            if gdoc.get("example"):
-                sections += [t["example"].format(path=gdoc["example"]), "", "```dash", example(gdoc["example"]),
-                             "```", "", t["index"], ""]
+            examples = gdoc.get("example") or []
+            for path in [examples] if isinstance(examples, str) else examples:
+                sections += [t["example"].format(path=path), "", "```dash", example(path), "```", ""]
+            if examples:
+                sections += [t["index"], ""]
         sections += [t["header"], "|---|---|---|---|", *rows, ""]
         sections += details(lang, group, t)
     # every builtin must be in a group: a new group missing from GROUPS would be left out silently
