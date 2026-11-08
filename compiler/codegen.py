@@ -22925,6 +22925,29 @@ def runtime_signatures() -> Dict[str, tuple]:
     return _runtime_signatures_cache
 
 
+_STRING_C_TYPES = ("STRPTR", "CONST_STRPTR", "char *", "const char *", "CONST char *")
+
+
+def builtin_string_params(builtin) -> set:
+    """The parameters of a builtin that are a String (a text pointer in its runtime function): only for a template
+    that is a plain call to a _dash_ function, each ${p} one argument. A char (t[i]) given there goes as a
+    one-character String (str_char), not as a number taken for a pointer."""
+    import re
+    m = re.fullmatch(r"\s*(_dash_\w+)\((.*)\)\s*", builtin.c_template)
+    if not m:
+        return set()
+    sig = runtime_signatures().get(m.group(1))
+    if not sig:
+        return set()
+    args = [a.strip() for a in m.group(2).split(",")] if m.group(2).strip() else []
+    out = set()
+    for pos, a in enumerate(args):
+        am = re.fullmatch(r"\$\{(\w+)\}", a)
+        if am and am.group(1) in builtin.params and pos < len(sig[1]) and sig[1][pos] in _STRING_C_TYPES:
+            out.add(builtin.params.index(am.group(1)))
+    return out
+
+
 _GRAPHICS_FUNCS_FALLBACK = {
     "SetAPen", "SetBPen", "SetDrMd", "SetRast", "Move", "Draw", "RectFill", "WritePixel",
     "ReadPixel", "Text", "TextLength", "SetFont", "OpenFont", "CloseFont", "BltBitMap",
@@ -26696,10 +26719,18 @@ static {ret_type} {method_name}({params_str}) {{
                                        builtin.c_template.strip())) and \
             all(builtin.c_template.count("${%s}" % name) <= 1 for name in builtin.params)
         doubles = self._double_params(builtin)
+        strings = builtin_string_params(builtin)
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
                 code = (self._double_value(arguments[i]) if param_name in doubles     # str_from_double(0.1, 2)
                         else self._generate_expression(arguments[i]))
+                if i in strings and self._is_char_expr(arguments[i]):
+                    # a char (t[i]) where a String goes: a one-character String, not a number as a pointer
+                    self.uses_strings = True
+                    flag = runtime_index().get("_dash_str_char")
+                    if flag:
+                        setattr(self, flag, True)
+                    code = f"_dash_str_char({code})"
                 if builtin.name not in self._STRING_READERS and not builtin.reads_only:
                     code = self._escape_any(arguments[i], code)
                 if not self._is_plain_value(arguments[i]) and not plain_call:

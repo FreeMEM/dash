@@ -1,0 +1,20 @@
+# Un carácter (t[i]) donde va un String (str_find, str_replace...) va como texto de una letra, por los dos caminos.
+# Antes iba el código como si fuera un puntero: -1 o un número raro, sin aviso (lo vi haciendo el cliente de Hangar).
+# expect-out: x -1
+# expect-out: 0: 0
+# expect-out: 1: -1
+# expect-out: 2: 9
+# expect-out: 3: -1
+# expect-out: 4: 2
+# expect-out: a-b-c
+
+Main
+    t = "0.9.2"
+    x = str_find("abc", t[0])
+    Print "x #{x}"
+    for i in (0..t.length - 1)
+        k = str_find("0123456789", t[i])
+        Print "#{i}: #{k}"
+    end
+    Print str_replace("a.b.c", t[1], "-")
+end
