@@ -25,7 +25,9 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T4. Entrada y pantallas (`INPUT_FUNCTIONS`, 37: las `screen_*` están en este grupo), con
   `tests/test_doc_entrada.dash`.
 - [x] T5. Ficheros (`DOS_FUNCTIONS`, 29, y `ASL_FUNCTIONS`, 5), con `tests/test_doc_ficheros.dash`.
-- [ ] T6. MUI (`MUI_FUNCTIONS`, 108), en dos o tres tandas.
+- [x] T6a. MUI: aplicación, ventanas, grupos, objetos, valores, listas, eventos y menús, con
+  `tests/test_doc_mui.dash`.
+- [ ] T6b. MUI: la zona de dibujo (`mui_canvas*`), imágenes, combo, barra de desplazamiento.
 - [ ] T7. Gráficos avanzados (`GRAPHICS_ADVANCED`, 85): sprites, bobs, bitmaps, copper.
 - [ ] T8. Texto, buffers, sistema y memoria, audio.
 - [ ] T9. El resto de grupos.
@@ -58,3 +60,4 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   borrar un cajón vacío).
   - Visto: una llamada con un texto entre comillas dentro de una interpolación (`"#{file_size("RAM:x")}"`) compila
     con `./dash` y no con `./dash --gcc` (error de sintaxis). Los dos caminos deberían hacer lo mismo; sin tocar.
+- 2026-11-08: T6a. MUI, primera tanda (75 funciones). Sin fallos en lo probado.

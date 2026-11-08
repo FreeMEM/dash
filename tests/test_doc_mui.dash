@@ -1,0 +1,59 @@
+# MUI: una ventana con un formulario, una lista y botones, y su bucle de eventos.
+# emu-needs: muimaster.library
+# expect-out: elegida: Lorraine
+# expect-out: guardado: Amiga, 2 colores, sonido 1
+# expect-out: fin
+
+const ID_GUARDAR = 1
+const ID_LISTA = 2
+
+Main
+    if mui_app_begin("Ejemplo", "EJEMPLO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Preferencias", 0)
+        mui_columns_begin(2)                       # un formulario: etiqueta y campo en cada fila
+            mui_label("Nombre:")
+            nombre = mui_string("Amiga", 40)
+            mui_label("Colores:")
+            colores = mui_cycle("2|4|8|16")
+            mui_label("Sonido:")
+            sonido = mui_checkbox(true)
+        mui_group_end()
+        maquinas = mui_list()
+        mui_hgroup_begin()
+            guardar = mui_button("_Guardar")
+            mui_space()
+            cancelar = mui_button("_Cancelar")
+        mui_group_end()
+    mui_window_end()
+    mui_list_add(maquinas, "A500")
+    mui_list_add(maquinas, "Lorraine")
+    mui_list_add(maquinas, "A1200")
+    cuantos = [2, 4, 8, 16]
+    mui_on_press(guardar, ID_GUARDAR)
+    mui_on_change(maquinas, ID_LISTA)
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+
+    mui_set_value(maquinas, 1)                     # para la prueba: elige una línea y pulsa Guardar
+    mui_press(guardar)
+    ev = mui_wait_event()
+    while ev != -1
+        if ev == ID_LISTA
+            Print "elegida: " + mui_list_get(maquinas, mui_get_value(maquinas))
+        elif ev == ID_GUARDAR
+            n = cuantos[mui_get_value(colores)]    # la opción elegida, desde 0
+            Print "guardado: " + mui_get_text(nombre) + ", #{n} colores, sonido #{mui_get_value(sonido)}"
+            ev = -1
+        end
+        if ev != -1
+            ev = mui_wait_event()
+        end
+    end
+    mui_app_end()
+    Print "fin"
+end

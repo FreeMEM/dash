@@ -3033,73 +3033,158 @@ Ver también: `font_open`.
 
 ## MUI
 
+Interfaces con MUI: ventanas que se colocan solas, se adaptan a la fuente y al tamaño, y que el usuario configura
+desde las preferencias de MUI. Funciona con MUI 3.8 o MUI 5, en un 68020 o mejor.
+
+**Cómo se construye.** Los objetos de MUI son números que se guardan en variables. La ventana se describe de
+arriba abajo, como un árbol, con una pila de grupos:
+
+1. `mui_app_begin(título, base)`: la aplicación. Devuelve 0 si no hay MUI: el programa tiene que decirlo y acabar.
+2. `win = mui_window_begin(título, id)` ... `mui_window_end()`: una ventana. Dentro, grupos
+   (`mui_vgroup_begin`, `mui_hgroup_begin`, `mui_columns_begin`, `mui_frame_begin`... hasta su `mui_group_end`) y
+   objetos (`mui_button`, `mui_string`, `mui_list`...). Cada objeto entra en el grupo abierto.
+3. Los eventos: `mui_on_press(boton, 1)`, `mui_on_change(casilla, 2)`... dan un número a cada cosa que interesa.
+   Los números son del programa, mayores que 0.
+4. `mui_window_open(win)` y el bucle: `ev = mui_wait_event()` espera y devuelve el número del evento, o -1 para
+   salir (el botón de cerrar de la primera ventana, por defecto).
+5. `mui_app_end()` al acabar (si no, se hace solo).
+
+**Valores.** `mui_get_value` y `mui_set_value` leen y cambian el valor de un objeto (la casilla, el deslizador, la
+opción, la línea elegida...); `mui_get_text` y `mui_set_text`, su texto.
+
+**El editor visual.** Las ventanas se pueden dibujar con el editor de Forja o de la extensión de VS Code, que
+guarda un `.dashui`; el programa lo usa con `import "ventana.dashui"` (ver `docs/MUI_EDITOR.md`). El diseño de la
+API está en `docs/MUI_DISEÑO.md`.
+
+**Ejemplo** (`tests/test_doc_mui.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# MUI: una ventana con un formulario, una lista y botones, y su bucle de eventos.
+
+const ID_GUARDAR = 1
+const ID_LISTA = 2
+
+Main
+    if mui_app_begin("Ejemplo", "EJEMPLO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Preferencias", 0)
+        mui_columns_begin(2)                       # un formulario: etiqueta y campo en cada fila
+            mui_label("Nombre:")
+            nombre = mui_string("Amiga", 40)
+            mui_label("Colores:")
+            colores = mui_cycle("2|4|8|16")
+            mui_label("Sonido:")
+            sonido = mui_checkbox(true)
+        mui_group_end()
+        maquinas = mui_list()
+        mui_hgroup_begin()
+            guardar = mui_button("_Guardar")
+            mui_space()
+            cancelar = mui_button("_Cancelar")
+        mui_group_end()
+    mui_window_end()
+    mui_list_add(maquinas, "A500")
+    mui_list_add(maquinas, "Lorraine")
+    mui_list_add(maquinas, "A1200")
+    cuantos = [2, 4, 8, 16]
+    mui_on_press(guardar, ID_GUARDAR)
+    mui_on_change(maquinas, ID_LISTA)
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+
+    mui_set_value(maquinas, 1)                     # para la prueba: elige una línea y pulsa Guardar
+    mui_press(guardar)
+    ev = mui_wait_event()
+    while ev != -1
+        if ev == ID_LISTA
+            Print "elegida: " + mui_list_get(maquinas, mui_get_value(maquinas))
+        elif ev == ID_GUARDAR
+            n = cuantos[mui_get_value(colores)]    # la opción elegida, desde 0
+            Print "guardado: " + mui_get_text(nombre) + ", #{n} colores, sonido #{mui_get_value(sonido)}"
+            ev = -1
+        end
+        if ev != -1
+            ev = mui_wait_event()
+        end
+    end
+    mui_app_end()
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `mui_app_begin(title, base)` | Int (dirección) | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
-| `mui_text_editor(lines)` | Int (dirección) | Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el evento de mandarlo (Amiga+Return en su ventana) |  |
-| `mui_window_open_back(win)` | Int | Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo abrirse |  |
-| `mui_window_activate(win)` | — | Hace activa una ventana, delante de las demás (si está cerrada, la abre) |  |
-| `mui_window_dispose(window)` | — | Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después |  |
-| `mui_request(window, title, text, buttons)` | Int | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
-| `mui_set_background(obj, r, g, b)` | — | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |
-| `mui_set_text_pen(obj, r, g, b)` | — | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |
-| `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)` | — | El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, 104 y 120, 120, 128 |  |
-| `mui_app_rexx(app, func)` | — | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |
-| `mui_rexx_fail(rc)` | — | Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin RESULT) |  |
-| `mui_app_end()` | — | Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar) |  |
-| `mui_window_begin(title, id)` | Int (dirección) | Empieza una ventana (id 1-255: MUI recuerda su tamaño y su sitio; 0 ninguno) con un grupo raíz vertical |  |
-| `mui_window_end()` | — | Acaba la ventana empezada con mui_window_begin |  |
-| `mui_window_open(win)` | Int | Abre una ventana; false si no se pudo |  |
-| `mui_window_close(win)` | — | Cierra una ventana (sigue existiendo) |  |
-| `mui_window_active(win)` | Int | 1 si la ventana es la activa (varias ventanas de un .dashui comparten números de evento; dashweb D32) |  |
-| `mui_vgroup_begin()` | Int (dirección) | Empieza un grupo vertical dentro del grupo abierto |  |
-| `mui_hgroup_begin()` | Int (dirección) | Empieza un grupo horizontal dentro del grupo abierto |  |
-| `mui_group_end()` | — | Acaba el grupo abierto |  |
-| `mui_text(text)` | Int (dirección) | Un texto (con los códigos de texto de MUI) |  |
-| `mui_button(label)` | Int (dirección) | Un botón (un guion bajo delante de una letra la hace su atajo de teclado) |  |
-| `mui_on_press(obj, id)` | — | mui_wait_event da id cuando se pulsa el botón |  |
-| `mui_on_close(win, id)` | — | mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por defecto: -1) |  |
-| `mui_on_drop(obj, id)` | — | mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron |  |
-| `mui_press(obj)` | — | Envía el evento mui_on_press de un botón como si se hubiera pulsado |  |
-| `mui_label(text)` | Int (dirección) | La etiqueta de una fila de un formulario (alineada a la derecha) |  |
-| `mui_string(initial, maxlen)` | Int (dirección) | Un campo de texto de hasta maxlen caracteres |  |
-| `mui_checkbox(checked)` | Int (dirección) | Una casilla |  |
-| `mui_cycle(options)` | Int (dirección) | Un gadget de opciones que cambian al pulsarlo; opciones separadas por \| ("Uno\|Dos\|Tres") |  |
-| `mui_slider(min, max, value)` | Int (dirección) | Un deslizador horizontal |  |
-| `mui_gauge(max)` | Int (dirección) | Una barra de progreso de 0 a max |  |
-| `mui_get_value(obj)` | Int | El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0 |  |
-| `mui_set_value(obj, value)` | — | Cambia el valor (dispara mui_on_change como lo haría el usuario) |  |
-| `mui_get_text(obj)` | String | El texto de un campo de texto, un texto, un botón o el título de una ventana |  |
-| `mui_set_text(obj, text)` | — | Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una ventana |  |
-| `mui_set_enabled(obj, enabled)` | — | Activa o desactiva (en gris) un objeto, una opción de menú o un menú entero |  |
-| `mui_on_change(obj, id)` | — | mui_wait_event da id cuando cambia el valor o el texto |  |
-| `mui_on_ack(obj, id)` | — | mui_wait_event da id cuando se pulsa Return en un campo de texto (en un mui_combo, también al elegir una línea) |  |
-| `mui_list()` | Int (dirección) | Una lista de textos con barra de desplazamiento; su valor es la línea elegida (-1 ninguna) |  |
-| `mui_list_add(list, text)` | — | Añade una línea al final |  |
-| `mui_list_insert(list, pos, text)` | — | Mete una línea en pos (0 = la primera) |  |
-| `mui_list_remove(list, pos)` | — | Quita la línea de pos |  |
-| `mui_list_clear(list)` | — | Quita todas las líneas |  |
-| `mui_list_count(list)` | Int | Cuántas líneas hay |  |
-| `mui_list_get(list, pos)` | String | El texto de la línea de pos ("" fuera de la lista) |  |
-| `mui_list_quiet(list, quiet)` | — | Mientras está callada, la lista no se redibuja (para añadir muchas líneas) |  |
-| `mui_on_double(list, id)` | — | mui_wait_event da id con un doble clic en la lista |  |
-| `mui_frame_begin(title, horizontal)` | Int (dirección) | Empieza un grupo con marco y un título ("" = ninguno) |  |
-| `mui_columns_begin(columns)` | Int (dirección) | Empieza un grupo en rejilla con tantas columnas (formularios: etiqueta, campo...) |  |
-| `mui_register_begin(titles)` | Int (dirección) | Empieza unas pestañas ("Una\|Dos"); cada hijo es una página; valor = la página que se ve |  |
-| `mui_scroll_begin()` | Int (dirección) | Empieza una zona con barras de desplazamiento (contenido más grande que la ventana) |  |
-| `mui_space()` | Int (dirección) | Un espacio vacío que ocupa lo que sobra |  |
-| `mui_balance()` | Int (dirección) | Una barra que el usuario arrastra para repartir el sitio entre sus vecinos |  |
-| `mui_weight(obj, weight)` | — | La parte del espacio libre que se lleva un objeto (100 por defecto) |  |
-| `mui_set_visible(obj, visible)` | — | Enseña u oculta un objeto (la ventana se recoloca) |  |
-| `mui_menu_begin(title)` | Int (dirección) | Empieza un menú de la ventana que se está haciendo |  |
-| `mui_menu_item(title, key, id)` | Int (dirección) | Una opción de menú: key = la letra de Amiga+tecla ("" ninguna); mui_wait_event da id |  |
-| `mui_menu_check(title, key, id, checked)` | Int (dirección) | Una opción de menú con marca: elegirla cambia la marca y mui_wait_event da id; mui_get_value / mui_set_value leen y ponen la marca |  |
-| `mui_submenu_begin(title)` | Int (dirección) | Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta mui_submenu_end |  |
-| `mui_submenu_end()` | — | Acaba el submenú |  |
-| `mui_menu_separator()` | — | Una raya de separación en el menú |  |
-| `mui_context_menu_begin(title)` | Int (dirección) | Empieza un menú contextual (en cualquier sitio, no solo en una ventana): sus opciones como en un menú (mui_menu_item, mui_menu_check, mui_submenu_begin...) hasta mui_menu_end; se da a un objeto con mui_set_context_menu (Lorraine D15) |  |
-| `mui_set_context_menu(object, menu)` | — | El botón derecho sobre el objeto abre ese menú contextual (0: ninguno); sus opciones dan sus eventos; en un lienzo, mui_canvas_mouse_x/_y dicen dónde se pulsó y mui_canvas_button es 2 |  |
-| `mui_menu_end()` | — | Acaba el menú |  |
+| [`mui_app_begin(title, base)`](#mui_app_begin) | Int (dirección) | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| [`mui_text_editor(lines)`](#mui_text_editor) | Int (dirección) | Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el evento de mandarlo (Amiga+Return en su ventana) |  |
+| [`mui_window_open_back(win)`](#mui_window_open_back) | Int | Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo abrirse |  |
+| [`mui_window_activate(win)`](#mui_window_activate) | — | Hace activa una ventana, delante de las demás (si está cerrada, la abre) |  |
+| [`mui_window_dispose(window)`](#mui_window_dispose) | — | Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después |  |
+| [`mui_request(window, title, text, buttons)`](#mui_request) | Int | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
+| [`mui_set_background(obj, r, g, b)`](#mui_set_background) | — | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |
+| [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |
+| [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, 104 y 120, 120, 128 |  |
+| [`mui_app_rexx(app, func)`](#mui_app_rexx) | — | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |
+| [`mui_rexx_fail(rc)`](#mui_rexx_fail) | — | Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin RESULT) |  |
+| [`mui_app_end()`](#mui_app_end) | — | Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar) |  |
+| [`mui_window_begin(title, id)`](#mui_window_begin) | Int (dirección) | Empieza una ventana (id 1-255: MUI recuerda su tamaño y su sitio; 0 ninguno) con un grupo raíz vertical |  |
+| [`mui_window_end()`](#mui_window_end) | — | Acaba la ventana empezada con mui_window_begin |  |
+| [`mui_window_open(win)`](#mui_window_open) | Int | Abre una ventana; false si no se pudo |  |
+| [`mui_window_close(win)`](#mui_window_close) | — | Cierra una ventana (sigue existiendo) |  |
+| [`mui_window_active(win)`](#mui_window_active) | Int | 1 si la ventana es la activa (varias ventanas de un .dashui comparten números de evento; dashweb D32) |  |
+| [`mui_vgroup_begin()`](#mui_vgroup_begin) | Int (dirección) | Empieza un grupo vertical dentro del grupo abierto |  |
+| [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (dirección) | Empieza un grupo horizontal dentro del grupo abierto |  |
+| [`mui_group_end()`](#mui_group_end) | — | Acaba el grupo abierto |  |
+| [`mui_text(text)`](#mui_text) | Int (dirección) | Un texto (con los códigos de texto de MUI) |  |
+| [`mui_button(label)`](#mui_button) | Int (dirección) | Un botón (un guion bajo delante de una letra la hace su atajo de teclado) |  |
+| [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event da id cuando se pulsa el botón |  |
+| [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por defecto: -1) |  |
+| [`mui_on_drop(obj, id)`](#mui_on_drop) | — | mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron |  |
+| [`mui_press(obj)`](#mui_press) | — | Envía el evento mui_on_press de un botón como si se hubiera pulsado |  |
+| [`mui_label(text)`](#mui_label) | Int (dirección) | La etiqueta de una fila de un formulario (alineada a la derecha) |  |
+| [`mui_string(initial, maxlen)`](#mui_string) | Int (dirección) | Un campo de texto de hasta maxlen caracteres |  |
+| [`mui_checkbox(checked)`](#mui_checkbox) | Int (dirección) | Una casilla |  |
+| [`mui_cycle(options)`](#mui_cycle) | Int (dirección) | Un gadget de opciones que cambian al pulsarlo; opciones separadas por \| ("Uno\|Dos\|Tres") |  |
+| [`mui_slider(min, max, value)`](#mui_slider) | Int (dirección) | Un deslizador horizontal |  |
+| [`mui_gauge(max)`](#mui_gauge) | Int (dirección) | Una barra de progreso de 0 a max |  |
+| [`mui_get_value(obj)`](#mui_get_value) | Int | El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0 |  |
+| [`mui_set_value(obj, value)`](#mui_set_value) | — | Cambia el valor (dispara mui_on_change como lo haría el usuario) |  |
+| [`mui_get_text(obj)`](#mui_get_text) | String | El texto de un campo de texto, un texto, un botón o el título de una ventana |  |
+| [`mui_set_text(obj, text)`](#mui_set_text) | — | Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una ventana |  |
+| [`mui_set_enabled(obj, enabled)`](#mui_set_enabled) | — | Activa o desactiva (en gris) un objeto, una opción de menú o un menú entero |  |
+| [`mui_on_change(obj, id)`](#mui_on_change) | — | mui_wait_event da id cuando cambia el valor o el texto |  |
+| [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event da id cuando se pulsa Return en un campo de texto (en un mui_combo, también al elegir una línea) |  |
+| [`mui_list()`](#mui_list) | Int (dirección) | Una lista de textos con barra de desplazamiento; su valor es la línea elegida (-1 ninguna) |  |
+| [`mui_list_add(list, text)`](#mui_list_add) | — | Añade una línea al final |  |
+| [`mui_list_insert(list, pos, text)`](#mui_list_insert) | — | Mete una línea en pos (0 = la primera) |  |
+| [`mui_list_remove(list, pos)`](#mui_list_remove) | — | Quita la línea de pos |  |
+| [`mui_list_clear(list)`](#mui_list_clear) | — | Quita todas las líneas |  |
+| [`mui_list_count(list)`](#mui_list_count) | Int | Cuántas líneas hay |  |
+| [`mui_list_get(list, pos)`](#mui_list_get) | String | El texto de la línea de pos ("" fuera de la lista) |  |
+| [`mui_list_quiet(list, quiet)`](#mui_list_quiet) | — | Mientras está callada, la lista no se redibuja (para añadir muchas líneas) |  |
+| [`mui_on_double(list, id)`](#mui_on_double) | — | mui_wait_event da id con un doble clic en la lista |  |
+| [`mui_frame_begin(title, horizontal)`](#mui_frame_begin) | Int (dirección) | Empieza un grupo con marco y un título ("" = ninguno) |  |
+| [`mui_columns_begin(columns)`](#mui_columns_begin) | Int (dirección) | Empieza un grupo en rejilla con tantas columnas (formularios: etiqueta, campo...) |  |
+| [`mui_register_begin(titles)`](#mui_register_begin) | Int (dirección) | Empieza unas pestañas ("Una\|Dos"); cada hijo es una página; valor = la página que se ve |  |
+| [`mui_scroll_begin()`](#mui_scroll_begin) | Int (dirección) | Empieza una zona con barras de desplazamiento (contenido más grande que la ventana) |  |
+| [`mui_space()`](#mui_space) | Int (dirección) | Un espacio vacío que ocupa lo que sobra |  |
+| [`mui_balance()`](#mui_balance) | Int (dirección) | Una barra que el usuario arrastra para repartir el sitio entre sus vecinos |  |
+| [`mui_weight(obj, weight)`](#mui_weight) | — | La parte del espacio libre que se lleva un objeto (100 por defecto) |  |
+| [`mui_set_visible(obj, visible)`](#mui_set_visible) | — | Enseña u oculta un objeto (la ventana se recoloca) |  |
+| [`mui_menu_begin(title)`](#mui_menu_begin) | Int (dirección) | Empieza un menú de la ventana que se está haciendo |  |
+| [`mui_menu_item(title, key, id)`](#mui_menu_item) | Int (dirección) | Una opción de menú: key = la letra de Amiga+tecla ("" ninguna); mui_wait_event da id |  |
+| [`mui_menu_check(title, key, id, checked)`](#mui_menu_check) | Int (dirección) | Una opción de menú con marca: elegirla cambia la marca y mui_wait_event da id; mui_get_value / mui_set_value leen y ponen la marca |  |
+| [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (dirección) | Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta mui_submenu_end |  |
+| [`mui_submenu_end()`](#mui_submenu_end) | — | Acaba el submenú |  |
+| [`mui_menu_separator()`](#mui_menu_separator) | — | Una raya de separación en el menú |  |
+| [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (dirección) | Empieza un menú contextual (en cualquier sitio, no solo en una ventana): sus opciones como en un menú (mui_menu_item, mui_menu_check, mui_submenu_begin...) hasta mui_menu_end; se da a un objeto con mui_set_context_menu (Lorraine D15) |  |
+| [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | El botón derecho sobre el objeto abre ese menú contextual (0: ninguno); sus opciones dan sus eventos; en un lienzo, mui_canvas_mouse_x/_y dicen dónde se pulsó y mui_canvas_button es 2 |  |
+| [`mui_menu_end()`](#mui_menu_end) | — | Acaba el menú |  |
 | `mui_canvas(min_width, min_height)` | Int (dirección) | Una zona de dibujo (crece con la ventana); se dibuja desde mui_canvas_on_draw |  |
 | `mui_canvas_on_draw(canvas, func)` | — | La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (MUI la llama cuando hace falta) |  |
 | `mui_canvas_on_input(canvas, id)` | — | mui_wait_event da id con un clic, la rueda o una tecla sobre la zona (llamarla antes de abrir la ventana) |  |
@@ -3125,24 +3210,850 @@ Ver también: `font_open`.
 | `mui_canvas_char(canvas)` | String | El carácter de la última tecla en la zona, con las mayúsculas y el mapa de teclado ("" si no hay; dashweb D31) |  |
 | `mui_scrollbar(vertical)` | Int (dirección) | Una barra de desplazamiento; su valor es la primera línea que se ve |  |
 | `mui_set_range(scrollbar, total, visible)` | — | El tamaño del documento y de la parte que cabe |  |
-| `mui_wait_event_signals(mask)` | Int | Como mui_wait_event, pero también da 0 cuando llega una de las señales de mask (sockets...); mui_signals dice cuál |  |
-| `mui_signals()` | Int | Las señales de la máscara que despertaron al último mui_wait_event_signals |  |
-| `mui_timer(ms, id)` | — | Dentro de ms milisegundos mui_wait_event da id, una vez (otra: llamarla otra vez; 0 la cancela) |  |
+| [`mui_wait_event_signals(mask)`](#mui_wait_event_signals) | Int | Como mui_wait_event, pero también da 0 cuando llega una de las señales de mask (sockets...); mui_signals dice cuál |  |
+| [`mui_signals()`](#mui_signals) | Int | Las señales de la máscara que despertaron al último mui_wait_event_signals |  |
+| [`mui_timer(ms, id)`](#mui_timer) | — | Dentro de ms milisegundos mui_wait_event da id, una vez (otra: llamarla otra vez; 0 la cancela) |  |
 | `mui_image(file)` | Int (dirección) | Una imagen de un fichero con los datatypes (ILBM; PNG, JPEG, GIF si están sus datatypes); mui_set_text cambia el fichero |  |
 | `mui_image_button(file)` | Int (dirección) | Un botón con una imagen (un icono de barra de herramientas; ILBM, o lo que lean los datatypes): mui_on_press como un botón, mui_set_text cambia la imagen |  |
 | `mui_image_toggle(file, group, selected)` | Int (dirección) | Un botón con imagen que se queda pulsado (negrita, cursiva): valor 1/0 con mui_get_value / mui_set_value, mui_on_change cuando cambia; group > 0: pulsar uno suelta los demás de ese grupo (alineación), y mui_on_change solo salta en el pulsado |  |
 | `mui_combo(text, options)` | Int (dirección) | Un campo de texto con una lista que se despliega (fuente, tamaño; opciones "A\|B"): se escribe o se elige una línea (doble clic); mui_get_text / mui_set_text, mui_list_* cambian las líneas, mui_on_ack con Return o al elegir una línea |  |
-| `mui_help(obj, text)` | — | Una ayuda en burbuja que sale cuando el puntero se para sobre el objeto |  |
-| `mui_window_move(win, dx, dy)` | — | Mueve una ventana abierta dx, dy píxeles (las ventanas de un .dashui se abren en el mismo sitio) |  |
-| `mui_set_active(win, obj)` | — | Hace de obj el objeto activo de la ventana: el cursor va a ese campo de texto (Amiga-L) |  |
-| `mui_window_size(win, width_pct, height_pct)` | — | El tamaño de la ventana al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de mui_window_open) |  |
-| `mui_window_fullscreen(win)` | — | La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes de mui_window_open) |  |
-| `mui_window_screen(win, name)` | Bool | La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla |  |
-| `mui_window_own_screen(win)` | Bool | Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: en la pública) |  |
-| `mui_width(obj)` | Int | El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
-| `mui_height(obj)` | Int | El alto de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
-| `mui_wait_event()` | Int | Espera el siguiente evento y da su número; -1 para salir |  |
-| `mui_poll_event()` | Int | Como mui_wait_event sin esperar: 0 si no hay evento |  |
+| [`mui_help(obj, text)`](#mui_help) | — | Una ayuda en burbuja que sale cuando el puntero se para sobre el objeto |  |
+| [`mui_window_move(win, dx, dy)`](#mui_window_move) | — | Mueve una ventana abierta dx, dy píxeles (las ventanas de un .dashui se abren en el mismo sitio) |  |
+| [`mui_set_active(win, obj)`](#mui_set_active) | — | Hace de obj el objeto activo de la ventana: el cursor va a ese campo de texto (Amiga-L) |  |
+| [`mui_window_size(win, width_pct, height_pct)`](#mui_window_size) | — | El tamaño de la ventana al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de mui_window_open) |  |
+| [`mui_window_fullscreen(win)`](#mui_window_fullscreen) | — | La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes de mui_window_open) |  |
+| [`mui_window_screen(win, name)`](#mui_window_screen) | Bool | La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla |  |
+| [`mui_window_own_screen(win)`](#mui_window_own_screen) | Bool | Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: en la pública) |  |
+| [`mui_width(obj)`](#mui_width) | Int | El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
+| [`mui_height(obj)`](#mui_height) | Int | El alto de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
+| [`mui_wait_event()`](#mui_wait_event) | Int | Espera el siguiente evento y da su número; -1 para salir |  |
+| [`mui_poll_event()`](#mui_poll_event) | Int | Como mui_wait_event sin esperar: 0 si no hay evento |  |
+
+<a id="mui_app_begin"></a>
+
+### `mui_app_begin(title, base)` → `Int (dirección)`
+
+- `title`: el nombre de la aplicación, el que enseña MUI en sus preferencias y en Exchange.
+- `base`: el nombre de su puerto ARexx, en mayúsculas (`"MIPROG"`); el puerto es `base` más `.1`.
+
+Abre la `muimaster.library` y crea la aplicación. Va antes de todo lo demás de MUI. Devuelve 0 si no hay MUI o la
+CPU es un 68000: el programa tiene que avisar y acabar.
+
+Ver también: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_text_editor"></a>
+
+### `mui_text_editor(lines)` → `Int (dirección)`
+
+- `lines`: cuántas líneas de alto.
+
+Un campo de texto de varias líneas, con su barra. Return empieza otra línea. `mui_get_text` y `mui_set_text` lo
+leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return.
+
+Ver también: [`mui_string`](#mui_string).
+
+<a id="mui_window_open_back"></a>
+
+### `mui_window_open_back(win)` → `Int`
+
+- `win`: la ventana.
+
+La abre sin hacerla la activa: el teclado se queda donde estaba. Devuelve 0 si no pudo.
+
+Ver también: [`mui_window_open`](#mui_window_open).
+
+<a id="mui_window_activate"></a>
+
+### `mui_window_activate(win)`
+
+- `win`: la ventana.
+
+La pone delante y la hace la activa. Si está cerrada, la abre.
+
+Ver también: [`mui_window_active`](#mui_window_active).
+
+<a id="mui_window_dispose"></a>
+
+### `mui_window_dispose(window)`
+
+- `win`: la ventana.
+
+La cierra, la quita de la aplicación y la libera con todos sus objetos, que ya no se pueden usar. Para ventanas que
+se hacen una y otra vez, como una vista previa. Con 0 o una ventana que ya no está, no hace nada.
+
+Ver también: [`mui_window_close`](#mui_window_close).
+
+<a id="mui_request"></a>
+
+### `mui_request(window, title, text, buttons)` → `Int`
+
+- `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
+- `title`: el título.
+- `text`: la pregunta; admite los códigos de texto de MUI.
+- `buttons`: los botones separados por `|`, con `_` para su tecla: `"_Guardar|_Descartar|_Cancelar"`.
+
+Pregunta y espera; mientras, las ventanas de la aplicación no responden. Devuelve el botón elegido: 1, 2...
+desde la izquierda, y 0 el último (también con Esc).
+
+Ver también: [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_set_background"></a>
+
+### `mui_set_background(obj, r, g, b)`
+
+- `obj`: un grupo, un texto, una etiqueta, un botón, una lista o una ventana.
+- `r`, `g`, `b`: el color, de 0 a 255.
+
+Un fondo de ese color. Los objetos de dentro lo toman si no tienen el suyo.
+
+Ver también: [`mui_set_text_pen`](#mui_set_text_pen).
+
+<a id="mui_set_text_pen"></a>
+
+### `mui_set_text_pen(obj, r, g, b)`
+
+- `obj`: un texto, una etiqueta o un botón.
+- `r`, `g`, `b`: el color, de 0 a 255.
+
+El color de su texto; se mantiene tras un `mui_set_text`.
+
+Ver también: [`mui_set_background`](#mui_set_background).
+
+<a id="mui_app_field_colors"></a>
+
+### `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`
+
+- `r`, `g`, `b`: el fondo de los campos sin el cursor (0 a 255).
+- `active_r`, `active_g`, `active_b`: el fondo del campo con el cursor.
+- `cursor_r`, `cursor_g`, `cursor_b`: el color del cursor.
+
+Los colores de todos los campos de texto de la aplicación (`mui_string`, `mui_text_editor`, `mui_combo`) en las
+ventanas que se abran después. El texto sigue negro: elige fondos claros, o grises en los que se lea.
+
+Ver también: [`mui_set_background`](#mui_set_background).
+
+<a id="mui_app_rexx"></a>
+
+### `mui_app_rexx(app, func)`
+
+- `app`: la aplicación (lo que devolvió `mui_app_begin`).
+- `func`: una función `f(orden: String) -> String`.
+
+Cada orden ARexx que llegue al puerto de la aplicación y que MUI no conteste solo (QUIT, SHOW, HIDE, INFO...)
+llama a `func` con la línea entera. Lo que devuelve es el RESULT. Corre mientras `mui_wait_event` espera.
+
+Ver también: [`mui_rexx_fail`](#mui_rexx_fail).
+
+<a id="mui_rexx_fail"></a>
+
+### `mui_rexx_fail(rc)`
+
+- `rc`: el código: 5 aviso, 10 error, 20 fallo.
+
+Dentro de la función de `mui_app_rexx`, hace que la orden acabe con ese RC. Con un RC no hay RESULT.
+
+Ver también: [`mui_app_rexx`](#mui_app_rexx).
+
+<a id="mui_app_end"></a>
+
+### `mui_app_end()`
+
+Deshace la aplicación con todas sus ventanas y objetos y cierra MUI. Si el programa no la llama, se hace sola al
+acabar. Después ningún objeto de MUI sirve.
+
+Ver también: [`mui_app_begin`](#mui_app_begin).
+
+<a id="mui_window_begin"></a>
+
+### `mui_window_begin(title, id)` → `Int (dirección)`
+
+- `title`: el título.
+- `id`: de 1 a 255 para que MUI recuerde su tamaño y su sitio de una vez a otra (cada ventana el suyo); 0 =
+  ninguno.
+
+Empieza a describir una ventana con un grupo vertical dentro: lo que se cree hasta `mui_window_end` va en ella.
+Devuelve la ventana, para `mui_window_open` y las demás.
+
+Ver también: [`mui_window_end`](#mui_window_end), [`mui_window_open`](#mui_window_open).
+
+<a id="mui_window_end"></a>
+
+### `mui_window_end()`
+
+Acaba la ventana empezada con `mui_window_begin` y la añade a la aplicación. Los grupos abiertos dentro tienen que
+estar cerrados con su `mui_group_end`. La ventana no se ve hasta `mui_window_open`.
+
+Ver también: [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_window_open"></a>
+
+### `mui_window_open(win)` → `Int`
+
+- `win`: la ventana.
+
+La abre y la hace la activa. Devuelve 0 si no pudo: no cabe en la pantalla o falta memoria.
+
+Ver también: [`mui_window_close`](#mui_window_close), [`mui_window_open_back`](#mui_window_open_back).
+
+<a id="mui_window_close"></a>
+
+### `mui_window_close(win)`
+
+- `win`: la ventana.
+
+La cierra. Sigue existiendo con todos sus objetos y valores: `mui_window_open` la vuelve a abrir igual.
+
+Ver también: [`mui_window_open`](#mui_window_open), [`mui_window_dispose`](#mui_window_dispose).
+
+<a id="mui_window_active"></a>
+
+### `mui_window_active(win)` → `Int`
+
+- `win`: la ventana.
+
+Devuelve 1 si es la ventana activa, si no 0. Sirve cuando varias ventanas de un `.dashui` dan el mismo número de
+evento.
+
+Ver también: [`mui_window_activate`](#mui_window_activate).
+
+<a id="mui_vgroup_begin"></a>
+
+### `mui_vgroup_begin()` → `Int (dirección)`
+
+Empieza un grupo que pone sus objetos uno debajo de otro, dentro del grupo abierto. Se acaba con `mui_group_end`.
+Devuelve el grupo, para `mui_set_visible`, `mui_weight` o `mui_set_background`.
+
+Ver también: [`mui_hgroup_begin`](#mui_hgroup_begin), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_hgroup_begin"></a>
+
+### `mui_hgroup_begin()` → `Int (dirección)`
+
+Empieza un grupo que pone sus objetos uno al lado de otro. Se acaba con `mui_group_end`. Devuelve el grupo.
+
+Ver también: [`mui_vgroup_begin`](#mui_vgroup_begin), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_group_end"></a>
+
+### `mui_group_end()`
+
+Acaba el último grupo abierto (de cualquier clase: `mui_vgroup_begin`, `mui_frame_begin`, `mui_register_begin`...).
+Los siguientes objetos van otra vez en el grupo de fuera.
+
+Ver también: [`mui_vgroup_begin`](#mui_vgroup_begin).
+
+<a id="mui_text"></a>
+
+### `mui_text(text)` → `Int (dirección)`
+
+- `text`: el texto. Admite los códigos de MUI: `"\33c"` centrado, `"\33r"` a la derecha, `"\33b"` negrita.
+
+Un texto que no se edita. `mui_set_text` lo cambia.
+
+Ver también: [`mui_label`](#mui_label), [`mui_set_text`](#mui_set_text).
+
+<a id="mui_button"></a>
+
+### `mui_button(label)` → `Int (dirección)`
+
+- `label`: el texto; una `_` delante de una letra la hace su tecla.
+
+Un botón. Al pulsarlo, el evento de `mui_on_press`.
+
+Ver también: [`mui_on_press`](#mui_on_press), `mui_image_button`.
+
+<a id="mui_on_press"></a>
+
+### `mui_on_press(obj, id)`
+
+- `obj`: un botón (o un botón con imagen).
+- `id`: el número de evento, mayor que 0.
+
+Desde ahora, al pulsar el botón `mui_wait_event` devuelve `id`.
+
+Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_press`](#mui_press).
+
+<a id="mui_on_close"></a>
+
+### `mui_on_close(win, id)`
+
+- `win`: la ventana.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` al pulsar el botón de cerrar de esa ventana; la ventana no se cierra sola. Sin
+llamarla, cerrar la primera ventana devuelve -1 (salir) y las demás se cierran sin dar evento.
+
+Ver también: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_on_drop"></a>
+
+### `mui_on_drop(obj, id)`
+
+- `obj`: el objeto, o una ventana (en cualquier sitio de ella).
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando se sueltan iconos del Workbench sobre el objeto. `app_drop` da sus rutas.
+
+Ver también: `app_drop`.
+
+<a id="mui_press"></a>
+
+### `mui_press(obj)`
+
+- `obj`: un botón.
+
+Lanza su evento de `mui_on_press` como si se hubiera pulsado. Para atajos propios y para las pruebas.
+
+Ver también: [`mui_on_press`](#mui_on_press).
+
+<a id="mui_label"></a>
+
+### `mui_label(text)` → `Int (dirección)`
+
+- `text`: el texto.
+
+La etiqueta de una fila de un formulario: alineada a la derecha, para ir delante de su campo en un
+`mui_columns_begin(2)`.
+
+Ver también: [`mui_columns_begin`](#mui_columns_begin), [`mui_text`](#mui_text).
+
+<a id="mui_string"></a>
+
+### `mui_string(initial, maxlen)` → `Int (dirección)`
+
+- `initial`: el texto con el que empieza.
+- `maxlen`: cuántas letras caben como mucho.
+
+Un campo de texto de una línea. `mui_get_text` lo lee; `mui_on_ack` avisa al pulsar Return y `mui_on_change` con
+cada cambio.
+
+Ver también: [`mui_get_text`](#mui_get_text), [`mui_on_ack`](#mui_on_ack), [`mui_text_editor`](#mui_text_editor).
+
+<a id="mui_checkbox"></a>
+
+### `mui_checkbox(checked)` → `Int (dirección)`
+
+- `checked`: si empieza marcada.
+
+Una casilla. `mui_get_value` da 1 marcada y 0 sin marcar; `mui_on_change` avisa al cambiar.
+
+Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_cycle"></a>
+
+### `mui_cycle(options)` → `Int (dirección)`
+
+- `options`: las opciones separadas por `|`: `"Baja|Media|Alta"`.
+
+Un gadget que pasa a la siguiente opción con cada clic. `mui_get_value` da la elegida, desde 0.
+
+Ver también: [`mui_get_value`](#mui_get_value), [`mui_register_begin`](#mui_register_begin).
+
+<a id="mui_slider"></a>
+
+### `mui_slider(min, max, value)` → `Int (dirección)`
+
+- `min`, `max`: los extremos.
+- `value`: el valor con el que empieza.
+
+Un deslizador horizontal. `mui_get_value` da su valor; `mui_on_change` avisa mientras se mueve.
+
+Ver también: [`mui_gauge`](#mui_gauge), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_gauge"></a>
+
+### `mui_gauge(max)` → `Int (dirección)`
+
+- `max`: el valor de la barra llena.
+
+Una barra de progreso, vacía al principio. `mui_set_value(barra, n)` la llena hasta `n`.
+
+Ver también: [`mui_set_value`](#mui_set_value).
+
+<a id="mui_get_value"></a>
+
+### `mui_get_value(obj)` → `Int`
+
+- `obj`: el objeto.
+
+Devuelve su valor: casilla 1 o 0; la opción de un ciclo o la pestaña, desde 0; el nivel de un deslizador o de una
+barra; la línea elegida de una lista (-1 ninguna); la marca de una opción de menú; la posición de una barra de
+desplazamiento. 0 en un objeto sin valor.
+
+Ver también: [`mui_set_value`](#mui_set_value), [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_value"></a>
+
+### `mui_set_value(obj, value)`
+
+- `obj`: el objeto.
+- `value`: el valor nuevo, como en `mui_get_value`.
+
+Cambia el valor. Lanza el evento de `mui_on_change` como si lo hubiera hecho el usuario.
+
+Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_get_text"></a>
+
+### `mui_get_text(obj)` → `String`
+
+- `obj`: un campo de texto, un texto, un botón o una ventana.
+
+Devuelve su texto (en una ventana, el título).
+
+Ver también: [`mui_set_text`](#mui_set_text), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_set_text"></a>
+
+### `mui_set_text(obj, text)`
+
+- `obj`: un campo de texto, un texto, un botón, una opción de menú, una imagen o una ventana.
+- `text`: el texto nuevo (en una imagen, el fichero).
+
+Cambia su texto; en una ventana, el título.
+
+Ver también: [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_enabled"></a>
+
+### `mui_set_enabled(obj, enabled)`
+
+- `obj`: un objeto, una opción de menú o un menú entero.
+- `enabled`: `false` lo desactiva (en gris, no responde); `true` lo vuelve a activar.
+
+Ver también: [`mui_set_visible`](#mui_set_visible).
+
+<a id="mui_on_change"></a>
+
+### `mui_on_change(obj, id)`
+
+- `obj`: el objeto.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando cambia su valor o su texto: una casilla, un ciclo, un deslizador, la línea de
+una lista, la pestaña, un campo de texto.
+
+Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_ack`](#mui_on_ack).
+
+<a id="mui_on_ack"></a>
+
+### `mui_on_ack(obj, id)`
+
+- `obj`: un campo de texto, un `mui_text_editor` o un `mui_combo`.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` al pulsar Return en el campo (Amiga+Return en el de varias líneas; en un combo,
+también al elegir una línea).
+
+Ver también: [`mui_on_change`](#mui_on_change), [`mui_string`](#mui_string).
+
+<a id="mui_list"></a>
+
+### `mui_list()` → `Int (dirección)`
+
+Una lista de textos con su barra de desplazamiento. Su valor (`mui_get_value`) es la línea elegida, desde 0, o -1
+si no hay ninguna; `mui_on_change` avisa al elegir y `mui_on_double` con un doble clic.
+
+Ver también: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double).
+
+<a id="mui_list_add"></a>
+
+### `mui_list_add(list, text)`
+
+- `list`: la lista (o un `mui_combo`).
+- `text`: la línea; la lista guarda su copia.
+
+Añade la línea al final.
+
+Ver también: [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+
+<a id="mui_list_insert"></a>
+
+### `mui_list_insert(list, pos, text)`
+
+- `list`: la lista.
+- `pos`: dónde, desde 0; las de después bajan.
+- `text`: la línea.
+
+Ver también: [`mui_list_add`](#mui_list_add).
+
+<a id="mui_list_remove"></a>
+
+### `mui_list_remove(list, pos)`
+
+- `list`: la lista.
+- `pos`: la línea que se quita, desde 0.
+
+Ver también: [`mui_list_clear`](#mui_list_clear).
+
+<a id="mui_list_clear"></a>
+
+### `mui_list_clear(list)`
+
+- `list`: la lista.
+
+Quita todas las líneas.
+
+Ver también: [`mui_list_remove`](#mui_list_remove).
+
+<a id="mui_list_count"></a>
+
+### `mui_list_count(list)` → `Int`
+
+- `list`: la lista.
+
+Devuelve cuántas líneas tiene.
+
+Ver también: [`mui_list_get`](#mui_list_get).
+
+<a id="mui_list_get"></a>
+
+### `mui_list_get(list, pos)` → `String`
+
+- `list`: la lista.
+- `pos`: la línea, desde 0.
+
+Devuelve su texto; `""` si no existe esa línea.
+
+Ver también: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_list_quiet"></a>
+
+### `mui_list_quiet(list, quiet)`
+
+- `list`: la lista.
+- `quiet`: `true` deja de redibujarla; `false` la redibuja con todo lo nuevo.
+
+Para añadir muchas líneas de golpe sin que se vea cada una.
+
+Ver también: [`mui_list_add`](#mui_list_add).
+
+<a id="mui_on_double"></a>
+
+### `mui_on_double(list, id)`
+
+- `list`: la lista.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` con un doble clic en una línea; `mui_get_value` dice cuál.
+
+Ver también: [`mui_list`](#mui_list).
+
+<a id="mui_frame_begin"></a>
+
+### `mui_frame_begin(title, horizontal)` → `Int (dirección)`
+
+- `title`: el título del marco; `""` = sin título.
+- `horizontal`: `true` pone los objetos uno al lado de otro; `false`, uno debajo de otro.
+
+Empieza un grupo con un marco alrededor. Se acaba con `mui_group_end`.
+
+Ver también: [`mui_group_end`](#mui_group_end).
+
+<a id="mui_columns_begin"></a>
+
+### `mui_columns_begin(columns)` → `Int (dirección)`
+
+- `columns`: cuántas columnas.
+
+Empieza un grupo en rejilla: los objetos llenan las filas de izquierda a derecha. Con 2 columnas, una etiqueta y
+su campo por fila, sale un formulario con todo alineado. Se acaba con `mui_group_end`.
+
+Ver también: [`mui_label`](#mui_label), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_register_begin"></a>
+
+### `mui_register_begin(titles)` → `Int (dirección)`
+
+- `titles`: los títulos de las pestañas separados por `|`: `"General|Avanzado"`.
+
+Empieza un grupo de pestañas: cada hijo directo (normalmente un grupo) es una página. `mui_get_value` dice la
+página que se ve, desde 0, y `mui_set_value` cambia de página. Se acaba con `mui_group_end`.
+
+Ver también: [`mui_group_end`](#mui_group_end), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_scroll_begin"></a>
+
+### `mui_scroll_begin()` → `Int (dirección)`
+
+Empieza una zona con barras de desplazamiento, para un contenido más grande que la ventana. Se acaba con
+`mui_group_end`.
+
+Ver también: [`mui_group_end`](#mui_group_end).
+
+<a id="mui_space"></a>
+
+### `mui_space()` → `Int (dirección)`
+
+Un espacio vacío que se estira y ocupa lo que sobra. Entre dos botones de un grupo horizontal, los separa a los
+extremos.
+
+Ver también: [`mui_weight`](#mui_weight).
+
+<a id="mui_balance"></a>
+
+### `mui_balance()` → `Int (dirección)`
+
+Una barra entre dos objetos que el usuario arrastra para repartir el sitio entre ellos (una lista y un texto, por
+ejemplo).
+
+Ver también: [`mui_weight`](#mui_weight).
+
+<a id="mui_weight"></a>
+
+### `mui_weight(obj, weight)`
+
+- `obj`: el objeto.
+- `weight`: su peso; 100 por defecto.
+
+Qué parte del espacio libre se lleva el objeto frente a sus vecinos: con 200 crece el doble que uno de 100.
+
+Ver también: [`mui_space`](#mui_space), [`mui_balance`](#mui_balance).
+
+<a id="mui_set_visible"></a>
+
+### `mui_set_visible(obj, visible)`
+
+- `obj`: el objeto o el grupo.
+- `visible`: `false` lo oculta, `true` lo enseña.
+
+La ventana se recoloca para dar o quitar su sitio.
+
+Ver también: [`mui_set_enabled`](#mui_set_enabled).
+
+<a id="mui_menu_begin"></a>
+
+### `mui_menu_begin(title)` → `Int (dirección)`
+
+- `title`: el título del menú en la barra.
+
+Empieza un menú de la ventana que se está describiendo (entre `mui_window_begin` y `mui_window_end`). Sus opciones
+van hasta `mui_menu_end`.
+
+Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_end`](#mui_menu_end).
+
+<a id="mui_menu_item"></a>
+
+### `mui_menu_item(title, key, id)` → `Int (dirección)`
+
+- `title`: el texto de la opción.
+- `key`: la letra del atajo con Amiga (`"S"` = Amiga+S); `""` ninguna.
+- `id`: el número de evento que da al elegirla.
+
+Una opción del menú abierto. Devuelve la opción, para `mui_set_enabled` o `mui_set_text`.
+
+Ver también: [`mui_menu_check`](#mui_menu_check), [`mui_menu_separator`](#mui_menu_separator).
+
+<a id="mui_menu_check"></a>
+
+### `mui_menu_check(title, key, id, checked)` → `Int (dirección)`
+
+- `title`, `key`, `id`: como en `mui_menu_item`.
+- `checked`: si empieza marcada.
+
+Una opción con marca: elegirla cambia la marca y da `id`. `mui_get_value` y `mui_set_value` leen y ponen la marca.
+
+Ver también: [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_submenu_begin"></a>
+
+### `mui_submenu_begin(title)` → `Int (dirección)`
+
+- `title`: el texto de la opción que abre el submenú.
+
+Empieza un submenú dentro del menú abierto; sus opciones van hasta `mui_submenu_end`. Un solo nivel.
+
+Ver también: [`mui_submenu_end`](#mui_submenu_end).
+
+<a id="mui_submenu_end"></a>
+
+### `mui_submenu_end()`
+
+Acaba el submenú.
+
+Ver también: [`mui_submenu_begin`](#mui_submenu_begin).
+
+<a id="mui_menu_separator"></a>
+
+### `mui_menu_separator()`
+
+Una raya entre opciones del menú.
+
+Ver también: [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_context_menu_begin"></a>
+
+### `mui_context_menu_begin(title)` → `Int (dirección)`
+
+- `title`: el título del menú.
+
+Empieza un menú contextual, en cualquier sitio del programa; sus opciones como en un menú, hasta `mui_menu_end`.
+Devuelve el menú, para `mui_set_context_menu`.
+
+Ver también: [`mui_set_context_menu`](#mui_set_context_menu), [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_set_context_menu"></a>
+
+### `mui_set_context_menu(object, menu)`
+
+- `object`: el objeto.
+- `menu`: el menú de `mui_context_menu_begin`; 0 = ninguno.
+
+El botón derecho sobre el objeto abre ese menú, y sus opciones dan sus eventos. En una zona de dibujo,
+`mui_canvas_mouse_x` y `_y` dicen dónde se pulsó.
+
+Ver también: [`mui_context_menu_begin`](#mui_context_menu_begin).
+
+<a id="mui_menu_end"></a>
+
+### `mui_menu_end()`
+
+Acaba el menú abierto, o el menú contextual.
+
+Ver también: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#mui_context_menu_begin).
+
+<a id="mui_wait_event_signals"></a>
+
+### `mui_wait_event_signals(mask)` → `Int`
+
+- `mask`: las señales que también despiertan: `net_signal()` (red), `task_signal()` (tareas),
+  `file_notify_signal()` (ficheros vigilados), sumadas con `|`.
+
+Como `mui_wait_event`, pero devuelve 0 cuando llega una de esas señales; `mui_signals()` dice cuáles.
+
+Ver también: [`mui_signals`](#mui_signals), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_signals"></a>
+
+### `mui_signals()` → `Int`
+
+Devuelve las señales de la máscara que despertaron al último `mui_wait_event_signals`: se mira con `&`.
+
+Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="mui_timer"></a>
+
+### `mui_timer(ms, id)`
+
+- `ms`: dentro de cuántos milisegundos; 0 anula el que hubiera.
+- `id`: el número de evento.
+
+`mui_wait_event` devolverá `id` una vez pasado ese tiempo. Para que se repita, se vuelve a llamar al recibirlo.
+
+Ver también: [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_help"></a>
+
+### `mui_help(obj, text)`
+
+- `obj`: el objeto.
+- `text`: la ayuda.
+
+Una burbuja con el texto, que sale cuando el puntero se para un momento sobre el objeto.
+
+<a id="mui_window_move"></a>
+
+### `mui_window_move(win, dx, dy)`
+
+- `win`: una ventana abierta.
+- `dx`, `dy`: cuántos píxeles se mueve.
+
+Desplaza la ventana. Las de un `.dashui` se abren todas en el mismo sitio: así no quedan una encima de otra.
+
+Ver también: [`mui_window_size`](#mui_window_size).
+
+<a id="mui_set_active"></a>
+
+### `mui_set_active(win, obj)`
+
+- `win`: la ventana.
+- `obj`: un objeto de ella, normalmente un campo de texto.
+
+Lo hace el objeto activo: el cursor va a ese campo y se puede escribir sin hacer clic.
+
+Ver también: [`mui_string`](#mui_string).
+
+<a id="mui_window_size"></a>
+
+### `mui_window_size(win, width_pct, height_pct)`
+
+- `win`: la ventana, antes de abrirla.
+- `width_pct`, `height_pct`: su tamaño en tanto por ciento de la pantalla visible.
+
+La ventana se abre de ese tamaño y centrada. Si tiene un `id`, lo que MUI recuerde manda las veces siguientes.
+
+Ver también: [`mui_window_fullscreen`](#mui_window_fullscreen), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_window_fullscreen"></a>
+
+### `mui_window_fullscreen(win)`
+
+- `win`: la ventana, antes de abrirla.
+
+Ocupa toda la pantalla, sin bordes, barra de título ni gadgets, y se abre activa.
+
+Ver también: [`mui_window_own_screen`](#mui_window_own_screen).
+
+<a id="mui_window_screen"></a>
+
+### `mui_window_screen(win, name)` → `Bool`
+
+- `win`: la ventana, antes de abrirla.
+- `name`: el nombre de una pantalla pública: la de `screen_clone_wb` u otra.
+
+La ventana se abre, normal, en esa pantalla. Devuelve `false` si esa pantalla no existe.
+
+Ver también: [`screen_clone_wb`](#screen_clone_wb), [`mui_window_own_screen`](#mui_window_own_screen).
+
+<a id="mui_window_own_screen"></a>
+
+### `mui_window_own_screen(win)` → `Bool`
+
+- `win`: la ventana, antes de abrirla.
+
+La ventana ocupa toda una pantalla propia, igual que la pública. Devuelve `false` si no pudo; entonces se abre en
+la pública.
+
+Ver también: [`mui_window_fullscreen`](#mui_window_fullscreen).
+
+<a id="mui_width"></a>
+
+### `mui_width(obj)` → `Int`
+
+- `obj`: el objeto.
+
+Devuelve su ancho en la pantalla en píxeles; 0 antes de abrirse su ventana.
+
+Ver también: [`mui_height`](#mui_height).
+
+<a id="mui_height"></a>
+
+### `mui_height(obj)` → `Int`
+
+- `obj`: el objeto.
+
+Devuelve su alto en la pantalla en píxeles; 0 antes de abrirse su ventana.
+
+Ver también: [`mui_width`](#mui_width).
+
+<a id="mui_wait_event"></a>
+
+### `mui_wait_event()` → `Int`
+
+Espera, sin gastar CPU, hasta el siguiente evento y devuelve su número; -1 para salir (el botón de cerrar de la
+primera ventana sin `mui_on_close`, la orden ARexx QUIT, Exchange). Va en el bucle principal:
+`while ev != -1`.
+
+Ver también: [`mui_poll_event`](#mui_poll_event), [`mui_wait_event_signals`](#mui_wait_event_signals), [`mui_timer`](#mui_timer).
+
+<a id="mui_poll_event"></a>
+
+### `mui_poll_event()` → `Int`
+
+Como `mui_wait_event` sin esperar: devuelve 0 si no hay evento. Para un bucle que hace otras cosas a la vez; si
+solo espera, `mui_wait_event` o `mui_timer` gastan menos.
+
+Ver también: [`mui_wait_event`](#mui_wait_event).
 
 ## DashOS (solo con ./dash --dashos)
 
