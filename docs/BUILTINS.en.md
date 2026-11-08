@@ -1067,13 +1067,62 @@ See also: [`joy_button`](#joy_button).
 
 ## ASL requesters
 
+The system's file requester in two steps: `file_open_dialog` or `file_save_dialog` show it, and then
+`file_get_path`, `file_get_name` and `file_fullpath` say what was chosen. In one step, `dialog_file` (Intuition
+group) returns the full path at once. The requester remembers the last drawer.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `file_open_dialog(title, pattern)` | Bool | Show file open dialog, returns true if file selected |  |
-| `file_save_dialog(title, pattern)` | Bool | Show file save dialog, returns true if file selected |  |
-| `file_get_path()` | String | Get selected directory path from last dialog |  |
-| `file_get_name()` | String | Get selected filename from last dialog |  |
-| `file_fullpath()` | String | Get full path (dir + filename) from last dialog |  |
+| [`file_open_dialog(title, pattern)`](#file_open_dialog) | Bool | Show file open dialog, returns true if file selected |  |
+| [`file_save_dialog(title, pattern)`](#file_save_dialog) | Bool | Show file save dialog, returns true if file selected |  |
+| [`file_get_path()`](#file_get_path) | String | Get selected directory path from last dialog |  |
+| [`file_get_name()`](#file_get_name) | String | Get selected filename from last dialog |  |
+| [`file_fullpath()`](#file_fullpath) | String | Get full path (dir + filename) from last dialog |  |
+
+<a id="file_open_dialog"></a>
+
+### `file_open_dialog(title, pattern)` → `Bool`
+
+- `title`: the requester's title.
+- `pattern`: which files show, with AmigaDOS wildcards (`"#?.iff"`).
+
+Shows the open requester and waits. Returns `true` if a file was chosen: `file_fullpath()` gives its path.
+
+See also: [`file_fullpath`](#file_fullpath), [`file_save_dialog`](#file_save_dialog), [`dialog_file`](#dialog_file).
+
+<a id="file_save_dialog"></a>
+
+### `file_save_dialog(title, pattern)` → `Bool`
+
+- `title`, `pattern`: as in `file_open_dialog`.
+
+Shows the save requester, where a new name can be typed, and waits. Returns `true` if one was chosen.
+
+See also: [`file_open_dialog`](#file_open_dialog), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_path"></a>
+
+### `file_get_path()` → `String`
+
+Returns the drawer chosen in the last accepted requester: `"Work:Pictures"`.
+
+See also: [`file_get_name`](#file_get_name), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_name"></a>
+
+### `file_get_name()` → `String`
+
+Returns the name of the file chosen in the last accepted requester, without the drawer.
+
+See also: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpath).
+
+<a id="file_fullpath"></a>
+
+### `file_fullpath()` → `String`
+
+Returns the full path of the last accepted requester: the drawer and the name, with a `/` when needed.
+
+See also: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
 
 ## ReAction
 
@@ -1198,37 +1247,437 @@ See also: [`joy_button`](#joy_button).
 
 ## Files (DOS)
 
+Files and drawers with `dos.library`: open, read, write, copy, delete, list a drawer.
+
+**The simplest first.** For a whole text file there is no need to open it: `file_read_text(path)` returns it as a
+text (or `nil` if it cannot be read) and `file_write_text(path, text)` writes it (Text group). `str_split(text,
+"\n")` gives the lines. For whole binary data, `file_load` and `file_save` with a buffer.
+
+**Open and close.** To read or write in pieces:
+
+1. `f = file_open(path, mode)`: 1005 to read a file that exists, 1006 to create a new one (if it existed, it is
+   emptied), 1004 to read and write one that exists. Returns 0 if it cannot.
+2. Read or write: by bytes (`file_read_byte`), by lines (`file_read_line`, `file_write_line`) or by blocks with a
+   buffer (`file_read`, `file_write`).
+3. `file_close(f)`. What was written is not safe on disk until it is closed.
+
+**Paths.** As in AmigaOS: `"RAM:notes.txt"`, `"DH0:Projects/game/level1.map"`, `"PROGDIR:data"` (the program's
+drawer). A path without a volume counts from the current drawer. Case does not matter.
+
+**Buffered and not.** The byte and line functions (`file_read_byte`, `file_read_line`, `file_write_byte`,
+`file_write_line`, `file_print`) use a `dos.library` buffer, fast for small things. `file_read` and `file_write` go
+direct. Do not mix them on the same file without a `file_seek` in between.
+
+**Example** (`tests/test_doc_ficheros.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Ficheros: escribir unas líneas, leerlas una a una, mirar un cajón, renombrar y borrar.
+
+Main
+    cajon = "RAM:Prueba"
+    dir_create(cajon)
+    ruta = cajon + "/notas.txt"
+
+    f = file_open(ruta, 1006)                  # nuevo
+    if f == 0
+        Print "no se pudo crear " + ruta
+        return
+    end
+    file_write_line(f, "uno")
+    file_write_line(f, "dos")
+    file_write_line(f, "tres")
+    file_close(f)
+
+    f = file_open(ruta, 1005)                  # leer
+    linea = buffer_alloc(80)
+    n = 0
+    segunda = ""
+    l = file_read_line(f, linea, 80)
+    while l != nil
+        n = n + 1
+        if n == 2
+            segunda = str_trim(l)              # la línea trae su salto al final
+        end
+        l = file_read_line(f, linea, 80)
+    end
+    file_seek(f, 0, -1)                        # al principio
+    primera = file_read_byte(f)
+    file_close(f)
+    buffer_free(linea)
+    Print "#{n} lineas, la segunda: #{segunda}"
+    Print "notas.txt pesa #{file_size(ruta)} bytes"
+
+    copia = cajon + "/copia.txt"
+    file_copy(ruta, copia)
+    total = dir_read(cajon)
+    Print "Prueba: #{total} entradas"
+    i = 0
+    while i < total
+        Print "- #{dir_entry_name(i)} #{dir_entry_size(i)}"
+        i = i + 1
+    end
+    Print "en el principio otra vez: #{str_char(primera)}"
+
+    Print "borrados: #{file_delete(ruta)} #{file_delete(copia)} #{file_delete(cajon)}"
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `file_open(filename, mode)` | Int | Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails) |  |
-| `file_close(handle)` | — | Close file |  |
-| `file_read_byte(handle)` | Int | Read single byte |  |
-| `file_read_line(handle, buffer, maxlen)` | String | Read line into buffer |  |
-| `file_read(handle, buffer, length)` | Int | Read bytes into buffer |  |
-| `file_eof(handle)` | Bool | True at the end of the file (looks at the next byte without consuming it) |  |
-| `file_write_byte(handle, byte)` | Int | Write single byte |  |
-| `file_write_line(handle, str)` | Int | Write string followed by a newline (0 = ok, -1 = error) |  |
-| `file_write(handle, buffer, length)` | Int | Write bytes from buffer |  |
-| `file_print(handle, str)` | — | Print string to file |  |
-| `file_seek(handle, position, mode)` | Int | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
-| `file_pos(handle)` | Int | Get current position |  |
-| `file_size(filename)` | Int | Get file size |  |
-| `file_exists(filename)` | Bool | Check if file exists |  |
-| `file_delete(filename)` | Bool | Delete file |  |
-| `file_rename(oldname, newname)` | Bool | Rename file |  |
-| `file_copy(src, dest)` | Bool | Copy file |  |
-| `dir_create(path)` | Bool | Create directory |  |
-| `dir_change(path)` | Bool | Change current directory |  |
-| `dir_current()` | String | Full name of the current directory ("Ram Disk:" ...) |  |
-| `dir_read(path)` | Int | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
-| `dir_entry_name(i)` | String | Name of entry i (from 0) of the last dir_read; "" past the end |  |
-| `dir_entry_size(i)` | Int | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
-| `dir_entry_is_dir(i)` | Bool | True if entry i of the last dir_read is a directory |  |
-| `dir_entry_date(i)` | Int | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
-| `console_read(buffer, maxlen)` | Int | Read from console |  |
-| `console_write(str)` | — | Write to console |  |
-| `file_load(filename, buffer, maxsize)` | Int | Load entire file into buffer, returns bytes read or -1 |  |
-| `file_save(filename, buffer, size)` | Int | Save buffer to file, returns bytes written |  |
+| [`file_open(filename, mode)`](#file_open) | Int | Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails) |  |
+| [`file_close(handle)`](#file_close) | — | Close file |  |
+| [`file_read_byte(handle)`](#file_read_byte) | Int | Read single byte |  |
+| [`file_read_line(handle, buffer, maxlen)`](#file_read_line) | String | Read line into buffer |  |
+| [`file_read(handle, buffer, length)`](#file_read) | Int | Read bytes into buffer |  |
+| [`file_eof(handle)`](#file_eof) | Bool | True at the end of the file (looks at the next byte without consuming it) |  |
+| [`file_write_byte(handle, byte)`](#file_write_byte) | Int | Write single byte |  |
+| [`file_write_line(handle, str)`](#file_write_line) | Int | Write string followed by a newline (0 = ok, -1 = error) |  |
+| [`file_write(handle, buffer, length)`](#file_write) | Int | Write bytes from buffer |  |
+| [`file_print(handle, str)`](#file_print) | — | Print string to file |  |
+| [`file_seek(handle, position, mode)`](#file_seek) | Int | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
+| [`file_pos(handle)`](#file_pos) | Int | Get current position |  |
+| [`file_size(filename)`](#file_size) | Int | Get file size |  |
+| [`file_exists(filename)`](#file_exists) | Bool | Check if file exists |  |
+| [`file_delete(filename)`](#file_delete) | Bool | Delete file |  |
+| [`file_rename(oldname, newname)`](#file_rename) | Bool | Rename file |  |
+| [`file_copy(src, dest)`](#file_copy) | Bool | Copy file |  |
+| [`dir_create(path)`](#dir_create) | Bool | Create directory |  |
+| [`dir_change(path)`](#dir_change) | Bool | Change current directory |  |
+| [`dir_current()`](#dir_current) | String | Full name of the current directory ("Ram Disk:" ...) |  |
+| [`dir_read(path)`](#dir_read) | Int | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
+| [`dir_entry_name(i)`](#dir_entry_name) | String | Name of entry i (from 0) of the last dir_read; "" past the end |  |
+| [`dir_entry_size(i)`](#dir_entry_size) | Int | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
+| [`dir_entry_is_dir(i)`](#dir_entry_is_dir) | Bool | True if entry i of the last dir_read is a directory |  |
+| [`dir_entry_date(i)`](#dir_entry_date) | Int | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
+| [`console_read(buffer, maxlen)`](#console_read) | Int | Read from console |  |
+| [`console_write(str)`](#console_write) | — | Write to console |  |
+| [`file_load(filename, buffer, maxsize)`](#file_load) | Int | Load entire file into buffer, returns bytes read or -1 |  |
+| [`file_save(filename, buffer, size)`](#file_save) | Int | Save buffer to file, returns bytes written |  |
+
+<a id="file_open"></a>
+
+### `file_open(filename, mode)` → `Int`
+
+- `filename`: the path.
+- `mode`: 1005 = read one that exists; 1006 = create a new one, emptying it if it existed; 1004 = read and write
+  one that exists, starting at the beginning.
+
+Returns the open file, a number passed to the other functions, or 0 if it could not: it does not exist, the drawer
+does not exist, the disk is protected. With 1006 and 1004 no other program can open it at the same time.
+
+See also: [`file_close`](#file_close), [`file_read_line`](#file_read_line), `file_read_text`.
+
+<a id="file_close"></a>
+
+### `file_close(handle)`
+
+- `handle`: the file from `file_open`.
+
+Closes the file and writes to disk what was left in the buffer. Always close it: an open file stays locked for
+other programs.
+
+See also: [`file_open`](#file_open).
+
+<a id="file_read_byte"></a>
+
+### `file_read_byte(handle)` → `Int`
+
+- `handle`: the file.
+
+Returns the next byte, from 0 to 255, or -1 at the end of the file.
+
+See also: [`file_eof`](#file_eof), [`file_read`](#file_read).
+
+<a id="file_read_line"></a>
+
+### `file_read_line(handle, buffer, maxlen)` → `String`
+
+- `handle`: the file.
+- `buffer`: a `buffer_alloc` buffer the line is read into.
+- `maxlen`: its size in bytes; a longer line comes in pieces.
+
+Returns the next line, with its `"\n"` at the end (`str_trim` removes it), or `nil` at the end of the file. What it
+returns lives in the buffer until the next read; storing it in a variable makes a copy.
+
+See also: [`file_write_line`](#file_write_line), `file_read_text`, `buffer_alloc`.
+
+<a id="file_read"></a>
+
+### `file_read(handle, buffer, length)` → `Int`
+
+- `handle`: the file.
+- `buffer`: where the bytes are read into.
+- `length`: how many at most; the buffer must have room.
+
+Returns how many bytes it read: fewer than `length` near the end, 0 at the end and -1 on an error.
+
+See also: [`file_write`](#file_write), [`file_load`](#file_load), `buffer_get_byte`.
+
+<a id="file_eof"></a>
+
+### `file_eof(handle)` → `Bool`
+
+- `handle`: the file.
+
+Returns `true` if no bytes are left. It looks at the next one without using it up, so it can be asked before each
+read: `while not file_eof(f)`.
+
+See also: [`file_read_byte`](#file_read_byte).
+
+<a id="file_write_byte"></a>
+
+### `file_write_byte(handle, byte)` → `Int`
+
+- `handle`: the file.
+- `byte`: the byte, from 0 to 255.
+
+Returns the byte written, or -1 on an error.
+
+See also: [`file_read_byte`](#file_read_byte), [`file_write`](#file_write).
+
+<a id="file_write_line"></a>
+
+### `file_write_line(handle, str)` → `Int`
+
+- `handle`: the file.
+- `str`: the text.
+
+Writes the text and a line break. Returns 0 if it went well and -1 on an error (a full disk).
+
+See also: [`file_print`](#file_print), [`file_read_line`](#file_read_line), `file_write_text`.
+
+<a id="file_write"></a>
+
+### `file_write(handle, buffer, length)` → `Int`
+
+- `handle`: the file.
+- `buffer`: the bytes.
+- `length`: how many.
+
+Returns how many bytes it wrote; fewer than `length`, or -1, is an error.
+
+See also: [`file_read`](#file_read), [`file_save`](#file_save).
+
+<a id="file_print"></a>
+
+### `file_print(handle, str)`
+
+- `handle`: the file.
+- `str`: the text.
+
+Writes the text as it is, without a line break.
+
+See also: [`file_write_line`](#file_write_line).
+
+<a id="file_seek"></a>
+
+### `file_seek(handle, position, mode)` → `Int`
+
+- `handle`: the file.
+- `position`: how many bytes.
+- `mode`: from where: -1 = the beginning, 0 = the current place, 1 = the end. Dash has no `OFFSET_*` constants: use
+  the number.
+
+Moves the read and write place to that position: `file_seek(f, 0, -1)` goes back to the start. Returns the place
+before, or -1 if it could not.
+
+See also: [`file_pos`](#file_pos).
+
+<a id="file_pos"></a>
+
+### `file_pos(handle)` → `Int`
+
+- `handle`: the file.
+
+Returns the current place, in bytes from the start.
+
+See also: [`file_seek`](#file_seek).
+
+<a id="file_size"></a>
+
+### `file_size(filename)` → `Int`
+
+- `filename`: the path.
+
+Returns the size in bytes, without opening it, or -1 if it does not exist.
+
+See also: [`file_exists`](#file_exists), [`dir_entry_size`](#dir_entry_size).
+
+<a id="file_exists"></a>
+
+### `file_exists(filename)` → `Bool`
+
+- `filename`: the path.
+
+Returns `true` if it exists, file or drawer.
+
+See also: [`file_size`](#file_size).
+
+<a id="file_delete"></a>
+
+### `file_delete(filename)` → `Bool`
+
+- `filename`: the path.
+
+Deletes the file, or the drawer if it is empty. Returns `false` if it could not: it does not exist, it is open, it
+is protected.
+
+See also: [`file_rename`](#file_rename).
+
+<a id="file_rename"></a>
+
+### `file_rename(oldname, newname)` → `Bool`
+
+- `oldname`, `newname`: the old path and the new one.
+
+Renames it or moves it to another drawer on the same disk. Returns `false` if it could not; across different disks
+it cannot: `file_copy` and then `file_delete`.
+
+See also: [`file_copy`](#file_copy), [`file_delete`](#file_delete).
+
+<a id="file_copy"></a>
+
+### `file_copy(src, dest)` → `Bool`
+
+- `src`: the file to copy.
+- `dest`: the copy; if it existed, it is replaced.
+
+Returns `true` if it copied everything.
+
+See also: [`file_rename`](#file_rename).
+
+<a id="dir_create"></a>
+
+### `dir_create(path)` → `Bool`
+
+- `path`: the new drawer's path.
+
+Creates it. Returns `false` if it could not or it already existed. It does not create the ones above.
+
+See also: [`dir_read`](#dir_read), [`dir_change`](#dir_change).
+
+<a id="dir_change"></a>
+
+### `dir_change(path)` → `Bool`
+
+- `path`: the drawer.
+
+Makes it the current drawer: paths without a volume count from it. Returns `false` if it does not exist. When the
+program ends, the old drawer is put back.
+
+See also: [`dir_current`](#dir_current).
+
+<a id="dir_current"></a>
+
+### `dir_current()` → `String`
+
+Returns the full path of the current drawer, with the volume's name: `"Ram Disk:"`, `"Work:Projects"`.
+
+See also: [`dir_change`](#dir_change).
+
+<a id="dir_read"></a>
+
+### `dir_read(path)` → `Int`
+
+- `path`: the drawer.
+
+Reads what is in it, sorted by name ignoring case, and returns how many entries it has; -1 if it is not a drawer
+that can be read. Then `dir_entry_name(i)` and the others give each entry, from 0 to the count minus one, until the
+next `dir_read`.
+
+See also: [`dir_entry_name`](#dir_entry_name), [`dir_entry_is_dir`](#dir_entry_is_dir), [`dir_entry_size`](#dir_entry_size), [`dir_entry_date`](#dir_entry_date).
+
+<a id="dir_entry_name"></a>
+
+### `dir_entry_name(i)` → `String`
+
+- `i`: the entry, from 0.
+
+Returns its name, without the path; `""` if there is no entry `i`.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_size"></a>
+
+### `dir_entry_size(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns its size in bytes; 0 if it is a drawer.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_is_dir"></a>
+
+### `dir_entry_is_dir(i)` → `Bool`
+
+- `i`: the entry, from 0.
+
+Returns `true` if it is a drawer.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_date"></a>
+
+### `dir_entry_date(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns the date of its last change in seconds since 1 January 1970, like `time_unix`. 0 if there is no entry `i`.
+
+See also: [`dir_read`](#dir_read), `time_unix`.
+
+<a id="console_read"></a>
+
+### `console_read(buffer, maxlen)` → `Int`
+
+- `buffer`: where to read into.
+- `maxlen`: how many bytes at most.
+
+Reads from the program's input: the Shell, or what comes in with `<`. In the Shell it waits for Return and returns
+how many bytes it read, line break included; 0 at the end of the input.
+
+See also: [`console_write`](#console_write).
+
+<a id="console_write"></a>
+
+### `console_write(str)`
+
+- `str`: the text.
+
+Writes it to the program's output, without a line break and without a buffer: it shows at once. For a line,
+`Print`.
+
+See also: [`console_read`](#console_read).
+
+<a id="file_load"></a>
+
+### `file_load(filename, buffer, maxsize)` → `Int`
+
+- `filename`: the path.
+- `buffer`: a `buffer_alloc` buffer.
+- `maxsize`: its size.
+
+Loads the whole file into the buffer. Returns the bytes read, or -1 if it does not exist or does not fit
+(`file_size` says how much is needed).
+
+See also: [`file_save`](#file_save), [`file_size`](#file_size), `file_read_text`.
+
+<a id="file_save"></a>
+
+### `file_save(filename, buffer, size)` → `Int`
+
+- `filename`: the path; if it existed, it is replaced.
+- `buffer`: the bytes.
+- `size`: how many.
+
+Saves the buffer as the whole file. Returns the bytes written: if it is not `size`, it failed (0 if it could not
+create it).
+
+See also: [`file_load`](#file_load), `file_write_text`.
 
 ## Buffers
 
@@ -2471,7 +2920,7 @@ See also: [`number_create`](#number_create).
 Opens the system's file requester (ASL) and waits. Returns the full path of the chosen file, or `""` if it was
 cancelled. Next time it opens in the last drawer.
 
-See also: [`dialog_file_at`](#dialog_file_at), `file_open_dialog`.
+See also: [`dialog_file_at`](#dialog_file_at), [`file_open_dialog`](#file_open_dialog).
 
 <a id="dialog_file_at"></a>
 

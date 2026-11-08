@@ -24,7 +24,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T3. Ventanas, gadgets y peticiones (`INTUITION_EXPANDED`, 59), con `tests/test_doc_ventanas.dash`.
 - [x] T4. Entrada y pantallas (`INPUT_FUNCTIONS`, 37: las `screen_*` están en este grupo), con
   `tests/test_doc_entrada.dash`.
-- [ ] T5. Ficheros (`DOS_FUNCTIONS`, 29, y `ASL_FUNCTIONS`, 5).
+- [x] T5. Ficheros (`DOS_FUNCTIONS`, 29, y `ASL_FUNCTIONS`, 5), con `tests/test_doc_ficheros.dash`.
 - [ ] T6. MUI (`MUI_FUNCTIONS`, 108), en dos o tres tandas.
 - [ ] T7. Gráficos avanzados (`GRAPHICS_ADVANCED`, 85): sprites, bobs, bitmaps, copper.
 - [ ] T8. Texto, buffers, sistema y memoria, audio.
@@ -54,3 +54,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     tarea (`task_start`) cuelgan el programa; sin investigar.
   - `screen_open` y `screen_open_custom` no miran si ya hay una pantalla abierta (abrirían otra y perderían la
     primera); `screen_open_mode` sí. Documentado: una a la vez.
+- 2026-11-08: T5. Ficheros. Sin fallos en lo probado (líneas con `file_read_line`, `file_seek`, `dir_read`,
+  borrar un cajón vacío).
+  - Visto: una llamada con un texto entre comillas dentro de una interpolación (`"#{file_size("RAM:x")}"`) compila
+    con `./dash` y no con `./dash --gcc` (error de sintaxis). Los dos caminos deberían hacer lo mismo; sin tocar.

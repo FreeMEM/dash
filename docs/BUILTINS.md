@@ -1069,13 +1069,62 @@ Ver también: [`joy_button`](#joy_button).
 
 ## Requesters ASL
 
+La petición de ficheros del sistema en dos pasos: `file_open_dialog` o `file_save_dialog` la enseñan, y después
+`file_get_path`, `file_get_name` y `file_fullpath` dicen qué se eligió. En un paso, `dialog_file` (grupo Intuition)
+devuelve ya la ruta entera. La petición recuerda el último cajón.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `file_open_dialog(title, pattern)` | Bool | Enseña el diálogo de abrir fichero; true si se eligió uno |  |
-| `file_save_dialog(title, pattern)` | Bool | Enseña el diálogo de guardar fichero; true si se eligió uno |  |
-| `file_get_path()` | String | El cajón elegido en el último diálogo |  |
-| `file_get_name()` | String | El nombre de fichero elegido en el último diálogo |  |
-| `file_fullpath()` | String | La ruta entera (cajón + fichero) del último diálogo |  |
+| [`file_open_dialog(title, pattern)`](#file_open_dialog) | Bool | Enseña el diálogo de abrir fichero; true si se eligió uno |  |
+| [`file_save_dialog(title, pattern)`](#file_save_dialog) | Bool | Enseña el diálogo de guardar fichero; true si se eligió uno |  |
+| [`file_get_path()`](#file_get_path) | String | El cajón elegido en el último diálogo |  |
+| [`file_get_name()`](#file_get_name) | String | El nombre de fichero elegido en el último diálogo |  |
+| [`file_fullpath()`](#file_fullpath) | String | La ruta entera (cajón + fichero) del último diálogo |  |
+
+<a id="file_open_dialog"></a>
+
+### `file_open_dialog(title, pattern)` → `Bool`
+
+- `title`: el título de la petición.
+- `pattern`: qué ficheros se ven, con comodines de AmigaDOS (`"#?.iff"`).
+
+Enseña la petición de abrir y espera. Devuelve `true` si se eligió un fichero: `file_fullpath()` da su ruta.
+
+Ver también: [`file_fullpath`](#file_fullpath), [`file_save_dialog`](#file_save_dialog), [`dialog_file`](#dialog_file).
+
+<a id="file_save_dialog"></a>
+
+### `file_save_dialog(title, pattern)` → `Bool`
+
+- `title`, `pattern`: como en `file_open_dialog`.
+
+Enseña la petición de guardar, donde se puede escribir un nombre nuevo, y espera. Devuelve `true` si se eligió uno.
+
+Ver también: [`file_open_dialog`](#file_open_dialog), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_path"></a>
+
+### `file_get_path()` → `String`
+
+Devuelve el cajón elegido en la última petición que se aceptó: `"Work:Imágenes"`.
+
+Ver también: [`file_get_name`](#file_get_name), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_name"></a>
+
+### `file_get_name()` → `String`
+
+Devuelve el nombre del fichero elegido en la última petición que se aceptó, sin el cajón.
+
+Ver también: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpath).
+
+<a id="file_fullpath"></a>
+
+### `file_fullpath()` → `String`
+
+Devuelve la ruta entera de la última petición aceptada: el cajón y el nombre, con su `/` si hace falta.
+
+Ver también: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
 
 ## ReAction
 
@@ -1200,37 +1249,435 @@ Ver también: [`joy_button`](#joy_button).
 
 ## Ficheros (DOS)
 
+Ficheros y cajones con la `dos.library`: abrir, leer, escribir, copiar, borrar, listar un cajón.
+
+**Lo más sencillo primero.** Para un fichero de texto entero no hace falta abrirlo: `file_read_text(ruta)` lo
+devuelve como un texto (o `nil` si no se puede leer) y `file_write_text(ruta, texto)` lo escribe (grupo Texto).
+Con `str_split(texto, "\n")` salen las líneas. Para datos binarios enteros, `file_load` y `file_save` con un búfer.
+
+**Abrir y cerrar.** Para leer o escribir por partes:
+
+1. `f = file_open(ruta, modo)`: 1005 para leer un fichero que existe, 1006 para crear uno nuevo (si existía, lo
+   vacía), 1004 para leer y escribir uno que existe. Devuelve 0 si no se puede.
+2. Leer o escribir: por bytes (`file_read_byte`), por líneas (`file_read_line`, `file_write_line`) o por bloques
+   con un búfer (`file_read`, `file_write`).
+3. `file_close(f)`. Lo que se escribió no está seguro en el disco hasta cerrarlo.
+
+**Rutas.** Como en AmigaOS: `"RAM:notas.txt"`, `"DH0:Proyectos/juego/nivel1.map"`, `"PROGDIR:datos"` (el cajón del
+programa). Una ruta sin volumen cuenta desde el cajón actual. Las mayúsculas no importan.
+
+**Con búfer y sin él.** Las funciones de bytes y líneas (`file_read_byte`, `file_read_line`, `file_write_byte`,
+`file_write_line`, `file_print`) usan un búfer de la `dos.library`, rápidas para cosas pequeñas. `file_read` y
+`file_write` van directas. No las mezcles en el mismo fichero sin un `file_seek` entre medias.
+
+**Ejemplo** (`tests/test_doc_ficheros.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Ficheros: escribir unas líneas, leerlas una a una, mirar un cajón, renombrar y borrar.
+
+Main
+    cajon = "RAM:Prueba"
+    dir_create(cajon)
+    ruta = cajon + "/notas.txt"
+
+    f = file_open(ruta, 1006)                  # nuevo
+    if f == 0
+        Print "no se pudo crear " + ruta
+        return
+    end
+    file_write_line(f, "uno")
+    file_write_line(f, "dos")
+    file_write_line(f, "tres")
+    file_close(f)
+
+    f = file_open(ruta, 1005)                  # leer
+    linea = buffer_alloc(80)
+    n = 0
+    segunda = ""
+    l = file_read_line(f, linea, 80)
+    while l != nil
+        n = n + 1
+        if n == 2
+            segunda = str_trim(l)              # la línea trae su salto al final
+        end
+        l = file_read_line(f, linea, 80)
+    end
+    file_seek(f, 0, -1)                        # al principio
+    primera = file_read_byte(f)
+    file_close(f)
+    buffer_free(linea)
+    Print "#{n} lineas, la segunda: #{segunda}"
+    Print "notas.txt pesa #{file_size(ruta)} bytes"
+
+    copia = cajon + "/copia.txt"
+    file_copy(ruta, copia)
+    total = dir_read(cajon)
+    Print "Prueba: #{total} entradas"
+    i = 0
+    while i < total
+        Print "- #{dir_entry_name(i)} #{dir_entry_size(i)}"
+        i = i + 1
+    end
+    Print "en el principio otra vez: #{str_char(primera)}"
+
+    Print "borrados: #{file_delete(ruta)} #{file_delete(copia)} #{file_delete(cajon)}"
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `file_open(filename, mode)` | Int | Abre un fichero (modo: 1005 leer, 1006 nuevo, 1004 leer y escribir; 0 si no se puede) |  |
-| `file_close(handle)` | — | Cierra un fichero |  |
-| `file_read_byte(handle)` | Int | Lee un byte |  |
-| `file_read_line(handle, buffer, maxlen)` | String | Lee una línea en un búfer |  |
-| `file_read(handle, buffer, length)` | Int | Lee bytes en un búfer |  |
-| `file_eof(handle)` | Bool | True al final del fichero (mira el byte siguiente sin gastarlo) |  |
-| `file_write_byte(handle, byte)` | Int | Escribe un byte |  |
-| `file_write_line(handle, str)` | Int | Escribe un texto y un salto de línea (0 bien, -1 error) |  |
-| `file_write(handle, buffer, length)` | Int | Escribe bytes de un búfer |  |
-| `file_print(handle, str)` | — | Escribe un texto en un fichero |  |
-| `file_seek(handle, position, mode)` | Int | Va a un sitio del fichero (modo: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
-| `file_pos(handle)` | Int | El sitio actual en el fichero |  |
-| `file_size(filename)` | Int | El tamaño de un fichero |  |
-| `file_exists(filename)` | Bool | Mira si existe un fichero |  |
-| `file_delete(filename)` | Bool | Borra un fichero |  |
-| `file_rename(oldname, newname)` | Bool | Cambia el nombre de un fichero |  |
-| `file_copy(src, dest)` | Bool | Copia un fichero |  |
-| `dir_create(path)` | Bool | Crea un cajón |  |
-| `dir_change(path)` | Bool | Cambia el cajón actual |  |
-| `dir_current()` | String | El nombre entero del cajón actual ("Ram Disk:"...) |  |
-| `dir_read(path)` | Int | Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read |  |
-| `dir_entry_name(i)` | String | El nombre de la entrada i (desde 0) del último dir_read; "" si no la hay |  |
-| `dir_entry_size(i)` | Int | El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón) |  |
-| `dir_entry_is_dir(i)` | Bool | Verdadero si la entrada i del último dir_read es un cajón |  |
-| `dir_entry_date(i)` | Int | La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970 |  |
-| `console_read(buffer, maxlen)` | Int | Lee de la consola |  |
-| `console_write(str)` | — | Escribe en la consola (sin búfer) |  |
-| `file_load(filename, buffer, maxsize)` | Int | Carga un fichero entero en un búfer: los bytes leídos, o -1 |  |
-| `file_save(filename, buffer, size)` | Int | Guarda un búfer en un fichero: los bytes escritos |  |
+| [`file_open(filename, mode)`](#file_open) | Int | Abre un fichero (modo: 1005 leer, 1006 nuevo, 1004 leer y escribir; 0 si no se puede) |  |
+| [`file_close(handle)`](#file_close) | — | Cierra un fichero |  |
+| [`file_read_byte(handle)`](#file_read_byte) | Int | Lee un byte |  |
+| [`file_read_line(handle, buffer, maxlen)`](#file_read_line) | String | Lee una línea en un búfer |  |
+| [`file_read(handle, buffer, length)`](#file_read) | Int | Lee bytes en un búfer |  |
+| [`file_eof(handle)`](#file_eof) | Bool | True al final del fichero (mira el byte siguiente sin gastarlo) |  |
+| [`file_write_byte(handle, byte)`](#file_write_byte) | Int | Escribe un byte |  |
+| [`file_write_line(handle, str)`](#file_write_line) | Int | Escribe un texto y un salto de línea (0 bien, -1 error) |  |
+| [`file_write(handle, buffer, length)`](#file_write) | Int | Escribe bytes de un búfer |  |
+| [`file_print(handle, str)`](#file_print) | — | Escribe un texto en un fichero |  |
+| [`file_seek(handle, position, mode)`](#file_seek) | Int | Va a un sitio del fichero (modo: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
+| [`file_pos(handle)`](#file_pos) | Int | El sitio actual en el fichero |  |
+| [`file_size(filename)`](#file_size) | Int | El tamaño de un fichero |  |
+| [`file_exists(filename)`](#file_exists) | Bool | Mira si existe un fichero |  |
+| [`file_delete(filename)`](#file_delete) | Bool | Borra un fichero |  |
+| [`file_rename(oldname, newname)`](#file_rename) | Bool | Cambia el nombre de un fichero |  |
+| [`file_copy(src, dest)`](#file_copy) | Bool | Copia un fichero |  |
+| [`dir_create(path)`](#dir_create) | Bool | Crea un cajón |  |
+| [`dir_change(path)`](#dir_change) | Bool | Cambia el cajón actual |  |
+| [`dir_current()`](#dir_current) | String | El nombre entero del cajón actual ("Ram Disk:"...) |  |
+| [`dir_read(path)`](#dir_read) | Int | Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read |  |
+| [`dir_entry_name(i)`](#dir_entry_name) | String | El nombre de la entrada i (desde 0) del último dir_read; "" si no la hay |  |
+| [`dir_entry_size(i)`](#dir_entry_size) | Int | El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón) |  |
+| [`dir_entry_is_dir(i)`](#dir_entry_is_dir) | Bool | Verdadero si la entrada i del último dir_read es un cajón |  |
+| [`dir_entry_date(i)`](#dir_entry_date) | Int | La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970 |  |
+| [`console_read(buffer, maxlen)`](#console_read) | Int | Lee de la consola |  |
+| [`console_write(str)`](#console_write) | — | Escribe en la consola (sin búfer) |  |
+| [`file_load(filename, buffer, maxsize)`](#file_load) | Int | Carga un fichero entero en un búfer: los bytes leídos, o -1 |  |
+| [`file_save(filename, buffer, size)`](#file_save) | Int | Guarda un búfer en un fichero: los bytes escritos |  |
+
+<a id="file_open"></a>
+
+### `file_open(filename, mode)` → `Int`
+
+- `filename`: la ruta.
+- `mode`: 1005 = leer uno que existe; 1006 = crear uno nuevo, vaciándolo si existía; 1004 = leer y escribir uno
+  que existe, empezando por el principio.
+
+Devuelve el fichero abierto, un número que se pasa a las demás funciones, o 0 si no se pudo: no existe, el cajón
+no existe, el disco está protegido. Con 1006 y 1004, otro programa no puede abrirlo a la vez.
+
+Ver también: [`file_close`](#file_close), [`file_read_line`](#file_read_line), `file_read_text`.
+
+<a id="file_close"></a>
+
+### `file_close(handle)`
+
+- `handle`: el fichero de `file_open`.
+
+Cierra el fichero y escribe en el disco lo que quedaba en el búfer. Hay que cerrarlo siempre: un fichero abierto
+queda bloqueado para los demás programas.
+
+Ver también: [`file_open`](#file_open).
+
+<a id="file_read_byte"></a>
+
+### `file_read_byte(handle)` → `Int`
+
+- `handle`: el fichero.
+
+Devuelve el siguiente byte, de 0 a 255, o -1 al final del fichero.
+
+Ver también: [`file_eof`](#file_eof), [`file_read`](#file_read).
+
+<a id="file_read_line"></a>
+
+### `file_read_line(handle, buffer, maxlen)` → `String`
+
+- `handle`: el fichero.
+- `buffer`: un búfer de `buffer_alloc` donde se lee la línea.
+- `maxlen`: su tamaño en bytes; una línea más larga sale en trozos.
+
+Devuelve la siguiente línea, con su `"\n"` al final (`str_trim` lo quita), o `nil` al final del fichero. Lo que
+devuelve vive en el búfer hasta la siguiente lectura; guardarlo en una variable hace una copia.
+
+Ver también: [`file_write_line`](#file_write_line), `file_read_text`, `buffer_alloc`.
+
+<a id="file_read"></a>
+
+### `file_read(handle, buffer, length)` → `Int`
+
+- `handle`: el fichero.
+- `buffer`: dónde se leen los bytes.
+- `length`: cuántos, como mucho; el búfer tiene que tener sitio.
+
+Devuelve cuántos bytes leyó: menos que `length` cerca del final, 0 al final y -1 si hubo un error.
+
+Ver también: [`file_write`](#file_write), [`file_load`](#file_load), `buffer_get_byte`.
+
+<a id="file_eof"></a>
+
+### `file_eof(handle)` → `Bool`
+
+- `handle`: el fichero.
+
+Devuelve `true` si ya no quedan bytes. Mira el siguiente sin gastarlo, así que se puede preguntar antes de cada
+lectura: `while not file_eof(f)`.
+
+Ver también: [`file_read_byte`](#file_read_byte).
+
+<a id="file_write_byte"></a>
+
+### `file_write_byte(handle, byte)` → `Int`
+
+- `handle`: el fichero.
+- `byte`: el byte, de 0 a 255.
+
+Devuelve el byte escrito, o -1 si hubo un error.
+
+Ver también: [`file_read_byte`](#file_read_byte), [`file_write`](#file_write).
+
+<a id="file_write_line"></a>
+
+### `file_write_line(handle, str)` → `Int`
+
+- `handle`: el fichero.
+- `str`: el texto.
+
+Escribe el texto y un salto de línea. Devuelve 0 si fue bien y -1 si hubo un error (el disco lleno).
+
+Ver también: [`file_print`](#file_print), [`file_read_line`](#file_read_line), `file_write_text`.
+
+<a id="file_write"></a>
+
+### `file_write(handle, buffer, length)` → `Int`
+
+- `handle`: el fichero.
+- `buffer`: los bytes.
+- `length`: cuántos.
+
+Devuelve cuántos bytes escribió; menos que `length`, o -1, es un error.
+
+Ver también: [`file_read`](#file_read), [`file_save`](#file_save).
+
+<a id="file_print"></a>
+
+### `file_print(handle, str)`
+
+- `handle`: el fichero.
+- `str`: el texto.
+
+Escribe el texto tal cual, sin salto de línea.
+
+Ver también: [`file_write_line`](#file_write_line).
+
+<a id="file_seek"></a>
+
+### `file_seek(handle, position, mode)` → `Int`
+
+- `handle`: el fichero.
+- `position`: cuántos bytes.
+- `mode`: desde dónde: -1 = el principio, 0 = el sitio actual, 1 = el final. Dash no tiene las constantes
+  `OFFSET_*`: se pone el número.
+
+Lleva el sitio de lectura y escritura a esa posición: `file_seek(f, 0, -1)` vuelve al principio. Devuelve el
+sitio de antes, o -1 si no pudo.
+
+Ver también: [`file_pos`](#file_pos).
+
+<a id="file_pos"></a>
+
+### `file_pos(handle)` → `Int`
+
+- `handle`: el fichero.
+
+Devuelve el sitio actual, en bytes desde el principio.
+
+Ver también: [`file_seek`](#file_seek).
+
+<a id="file_size"></a>
+
+### `file_size(filename)` → `Int`
+
+- `filename`: la ruta.
+
+Devuelve el tamaño en bytes, sin abrirlo, o -1 si no existe.
+
+Ver también: [`file_exists`](#file_exists), [`dir_entry_size`](#dir_entry_size).
+
+<a id="file_exists"></a>
+
+### `file_exists(filename)` → `Bool`
+
+- `filename`: la ruta.
+
+Devuelve `true` si existe, sea fichero o cajón.
+
+Ver también: [`file_size`](#file_size).
+
+<a id="file_delete"></a>
+
+### `file_delete(filename)` → `Bool`
+
+- `filename`: la ruta.
+
+Borra el fichero, o el cajón si está vacío. Devuelve `false` si no pudo: no existe, está abierto, está protegido.
+
+Ver también: [`file_rename`](#file_rename).
+
+<a id="file_rename"></a>
+
+### `file_rename(oldname, newname)` → `Bool`
+
+- `oldname`, `newname`: la ruta de antes y la nueva.
+
+Cambia el nombre o lo mueve a otro cajón del mismo disco. Devuelve `false` si no pudo; entre discos distintos no
+se puede: `file_copy` y luego `file_delete`.
+
+Ver también: [`file_copy`](#file_copy), [`file_delete`](#file_delete).
+
+<a id="file_copy"></a>
+
+### `file_copy(src, dest)` → `Bool`
+
+- `src`: el fichero que se copia.
+- `dest`: la copia; si existía, se reemplaza.
+
+Devuelve `true` si copió todo.
+
+Ver también: [`file_rename`](#file_rename).
+
+<a id="dir_create"></a>
+
+### `dir_create(path)` → `Bool`
+
+- `path`: la ruta del cajón nuevo.
+
+Lo crea. Devuelve `false` si no pudo o ya existía. No crea los de encima.
+
+Ver también: [`dir_read`](#dir_read), [`dir_change`](#dir_change).
+
+<a id="dir_change"></a>
+
+### `dir_change(path)` → `Bool`
+
+- `path`: el cajón.
+
+Lo hace el cajón actual: las rutas sin volumen cuentan desde él. Devuelve `false` si no existe. Al acabar el
+programa se deja el cajón de antes.
+
+Ver también: [`dir_current`](#dir_current).
+
+<a id="dir_current"></a>
+
+### `dir_current()` → `String`
+
+Devuelve la ruta entera del cajón actual, con el nombre del volumen: `"Ram Disk:"`, `"Work:Proyectos"`.
+
+Ver también: [`dir_change`](#dir_change).
+
+<a id="dir_read"></a>
+
+### `dir_read(path)` → `Int`
+
+- `path`: el cajón.
+
+Lee lo que hay en él, ordenado por nombre sin mirar mayúsculas, y devuelve cuántas entradas tiene; -1 si no es un
+cajón que se pueda leer. Después, `dir_entry_name(i)` y las demás dan cada entrada, de 0 a la cuenta menos uno,
+hasta el siguiente `dir_read`.
+
+Ver también: [`dir_entry_name`](#dir_entry_name), [`dir_entry_is_dir`](#dir_entry_is_dir), [`dir_entry_size`](#dir_entry_size), [`dir_entry_date`](#dir_entry_date).
+
+<a id="dir_entry_name"></a>
+
+### `dir_entry_name(i)` → `String`
+
+- `i`: la entrada, desde 0.
+
+Devuelve su nombre, sin la ruta; `""` si no hay entrada `i`.
+
+Ver también: [`dir_read`](#dir_read).
+
+<a id="dir_entry_size"></a>
+
+### `dir_entry_size(i)` → `Int`
+
+- `i`: la entrada, desde 0.
+
+Devuelve su tamaño en bytes; 0 si es un cajón.
+
+Ver también: [`dir_read`](#dir_read).
+
+<a id="dir_entry_is_dir"></a>
+
+### `dir_entry_is_dir(i)` → `Bool`
+
+- `i`: la entrada, desde 0.
+
+Devuelve `true` si es un cajón.
+
+Ver también: [`dir_read`](#dir_read).
+
+<a id="dir_entry_date"></a>
+
+### `dir_entry_date(i)` → `Int`
+
+- `i`: la entrada, desde 0.
+
+Devuelve la fecha de su último cambio en segundos desde el 1 de enero de 1970, como `time_unix`. 0 si no hay
+entrada `i`.
+
+Ver también: [`dir_read`](#dir_read), `time_unix`.
+
+<a id="console_read"></a>
+
+### `console_read(buffer, maxlen)` → `Int`
+
+- `buffer`: dónde se lee.
+- `maxlen`: cuántos bytes como mucho.
+
+Lee de la entrada del programa: el Shell, o lo que llegue con `<`. En el Shell espera a que se pulse Return y
+devuelve cuántos bytes leyó, con el salto de línea; 0 al final de la entrada.
+
+Ver también: [`console_write`](#console_write).
+
+<a id="console_write"></a>
+
+### `console_write(str)`
+
+- `str`: el texto.
+
+Lo escribe en la salida del programa, sin salto de línea y sin búfer: sale al momento. Para una línea, `Print`.
+
+Ver también: [`console_read`](#console_read).
+
+<a id="file_load"></a>
+
+### `file_load(filename, buffer, maxsize)` → `Int`
+
+- `filename`: la ruta.
+- `buffer`: un búfer de `buffer_alloc`.
+- `maxsize`: su tamaño.
+
+Carga el fichero entero en el búfer. Devuelve los bytes leídos, o -1 si no existe o no cabe (`file_size` dice
+cuánto hace falta).
+
+Ver también: [`file_save`](#file_save), [`file_size`](#file_size), `file_read_text`.
+
+<a id="file_save"></a>
+
+### `file_save(filename, buffer, size)` → `Int`
+
+- `filename`: la ruta; si existía, se reemplaza.
+- `buffer`: los bytes.
+- `size`: cuántos.
+
+Guarda el búfer como el fichero entero. Devuelve los bytes escritos: si no es `size`, falló (0 si no pudo crearlo).
+
+Ver también: [`file_load`](#file_load), `file_write_text`.
 
 ## Buffers
 
@@ -2476,7 +2923,7 @@ Ver también: [`number_create`](#number_create).
 Abre la petición de ficheros del sistema (ASL) y espera. Devuelve la ruta entera del fichero elegido, o `""` si se
 canceló. La siguiente vez se abre en el cajón de la última.
 
-Ver también: [`dialog_file_at`](#dialog_file_at), `file_open_dialog`.
+Ver también: [`dialog_file_at`](#dialog_file_at), [`file_open_dialog`](#file_open_dialog).
 
 <a id="dialog_file_at"></a>
 
