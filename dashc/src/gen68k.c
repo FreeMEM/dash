@@ -2567,6 +2567,11 @@ static int gen_dash_builtin(Node *n)
                 } else {
                     t = gen_expr(a);
                     need_value(a, t);
+                    if (t == TY_CHAR && (builtin_info[b].smask >> i & 1)) {
+                        push_d0();                     /* un carácter (t[i]) donde va un String: str_char */
+                        rt_call("_db_str_char", 1, 1);
+                        t = TY_STR;
+                    }
                 }
                 if (builtin_info[b].keeps && ((t == TY_STR && a->kind != E_STR) || IS_OBJ(t))) {
                     push_d0();
