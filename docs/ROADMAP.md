@@ -1043,6 +1043,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Para Trasfondo 2.2 (2026-11-04/05): `icon_draw_size` (iconos escalados con bordes suaves, PR #114), un puerto
       ARexx propio (`rexx_port`, `rexx_get`, `rexx_reply`) y `notify` (avisos a la barra de Trasfondo por su puerto
       `TRASFONDO`). `tests/test_rexx_port.dash`, `tests/test_notify.dash`
+- [x] Documentación de los builtins (2026-11-08, `docs/BUILTINS_DOC_LOOP.md`): las 961 explicadas en
+      `docs/BUILTINS.md` (parámetros, qué devuelven, qué pasa si fallan, relacionadas), una introducción y un ejemplo
+      probado por grupo (`tests/test_doc_*.dash`), generadas desde `compiler/builtins_doc/`. Al probar salieron y se
+      arreglaron: `gfx_flood`, el joystick, `wait_key`/`wait_click`, `tilemap_draw` con espejos, comillas en una
+      interpolación por `--gcc`, `random_range`, `color_pen` en una pantalla propia y `rtg_write_pixel`/`rtg_fill_rect`
+      sin RTG
 
 ## Notas y Decisiones
 

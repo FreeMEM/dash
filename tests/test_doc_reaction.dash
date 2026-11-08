@@ -1,0 +1,39 @@
+# ReAction (AmigaOS 3.2): una ventana que se coloca sola, con un formulario y botones, y su bucle.
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: button.gadget
+# emu-needs: string.gadget
+# emu-needs: checkbox.gadget
+# expect-out: ventana 1
+# expect-out: nombre: Amiga, sonido: 1
+# expect-out: fin
+
+const NOMBRE = 0
+const SONIDO = 1
+const ACEPTAR = 2
+const CANCELAR = 3
+
+Main
+    v = ra_window_create("Ajustes", 260, 120)
+    if v == 0
+        Print "hace falta AmigaOS 3.2"
+        return
+    end
+    Print "ventana #{v}"
+    ra_add_string(NOMBRE, "Amiga", 40)
+    ra_add_checkbox(SONIDO, "Sonido", true)
+    ra_layout_hgroup_begin()
+        ra_add_button(ACEPTAR, "_Aceptar")
+        ra_add_space()
+        ra_add_button(CANCELAR, "_Cancelar")
+    ra_layout_group_end()
+    ra_window_open()
+
+    ev = ra_handle_events()                        # para la prueba: sin esperar a nadie
+    while ev != RA_EVENT_NONE() and ev != RA_EVENT_CLOSE() and ev != ACEPTAR and ev != CANCELAR
+        ev = ra_handle_events()
+    end
+    Print "nombre: " + ra_get_string(NOMBRE) + ", sonido: #{ra_get_value(SONIDO)}"
+    ra_window_close()
+    Print "fin"
+end

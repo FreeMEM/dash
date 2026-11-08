@@ -1,0 +1,47 @@
+# tilemap_draw con una celda en espejo: la primera vez que se pinta, al preparar los espejos del BOB se liberaba
+# también su copia entrelazada, que el dibujo estaba usando; las celdas siguientes salían vacías (y el blitter leía
+# de una dirección nula). Con y sin máscara, de lado y de arriba abajo, en una pantalla y en una ventana.
+# expect-out: pantalla 0 false: espejada 3 normal 2
+# expect-out: pantalla 16384 false: espejada 3 normal 2
+# expect-out: pantalla 32768 false: espejada 3 normal 2
+# expect-out: pantalla 16384 true: espejada 3 normal 2
+# expect-out: ventana 16384 false: espejada 3 normal 2
+# expect-out: ventana 16384 true: espejada 3 normal 2
+
+func probar(nombre: String, espejo: Int, enmascarado: Bool)
+    bob_create(0, 32, 16, 3)
+    bitmap_draw_to(0)
+    gfx_pen(2)
+    gfx_rect(0, 0, 15, 15)
+    gfx_pen(3)
+    gfx_rect(16, 0, 31, 15)
+    bitmap_draw_screen()
+    tilemap_create(0, 4, 2, 16, 1)
+    tilemap_set(0, 0, 0, 1, 1)
+    tilemap_set(0, 0, 1, 1, 1)
+    tilemap_set(0, 0, 2, 1, 1)
+    tilemap_set(0, 0, 0, 0, 2 + espejo)
+    gfx_pen(0)
+    gfx_rect(0, 0, 100, 60)
+    if enmascarado
+        tilemap_draw_masked(0, 0, 0, 0, 0, 4, 2, 10, 20)
+    else
+        tilemap_draw(0, 0, 0, 0, 0, 4, 2, 10, 20)
+    end
+    Print "#{nombre} #{espejo} #{enmascarado}: espejada #{gfx_pixel_read(15, 25)} normal #{gfx_pixel_read(35, 45)}"
+    tilemap_free(0)
+    bob_free(0)
+end
+
+Main
+    screen_open_custom(320, 200, 3, "Espejo")
+    probar("pantalla", 0, false)
+    probar("pantalla", 16384, false)
+    probar("pantalla", 32768, false)
+    probar("pantalla", 16384, true)
+    v = window_create("Espejo", 0, 12, 300, 150, 8)
+    probar("ventana", 16384, false)
+    probar("ventana", 16384, true)
+    window_close(v)
+    screen_close()
+end

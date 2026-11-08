@@ -1,0 +1,37 @@
+# Sistema y memoria: cuánta memoria hay, números al azar repetibles, una arena y esperar.
+# expect-out: chip libre de la total: true
+# expect-out: dados iguales con la misma semilla: true
+# expect-out: dentro del rango: true, y con max <= min: 7
+# expect-out: arena: 12 usados, 88 libres
+# expect-out: fin
+
+Main
+    Print "chip libre de la total: #{mem_chip_free() <= mem_chip_total()}"
+
+    random_seed(1234)
+    a = random_range(1, 6)
+    b = random_range(1, 6)
+    random_seed(1234)                          # la misma semilla, la misma serie
+    iguales = random_range(1, 6) == a and random_range(1, 6) == b
+    Print "dados iguales con la misma semilla: #{iguales}"
+    bien = true
+    i = 0
+    while i < 200
+        d = random_range(-3, 3)
+        if d < -3 or d > 3
+            bien = false
+        end
+        i = i + 1
+    end
+    Print "dentro del rango: #{bien}, y con max <= min: #{random_range(7, 2)}"
+
+    ar = arena_new(100)
+    p1 = arena_alloc(ar, 5)                    # se alinea a 4: ocupa 8
+    p2 = arena_alloc(ar, 4)
+    poke_long(p2, 0x12345678)
+    Print "arena: #{arena_used(ar)} usados, #{arena_available(ar)} libres"
+    arena_free(ar)                             # las arenas no se liberan solas
+
+    time_delay(10)                             # una quinta parte de un segundo
+    Print "fin"
+end

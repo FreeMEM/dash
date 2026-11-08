@@ -3,6 +3,8 @@
 *English | [Castellano](QUICK_REFERENCE.md)*
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
+One line per thing. Every builtin explained, with its parameters and tested examples: [BUILTINS.en.md](BUILTINS.en.md).
+
 ## Compile
 ```
 ./dash prog.dash -o prog            # gcc -O2, 68000, 16 KB stack minimum
@@ -372,11 +374,11 @@ mouse_y()                   # Y position
 mouse_button(0)             # Left button (0=left, 1=right)
 
 # Joystick (port 0 or 1)
-joy_x(0)                    # X: -1, 0, or 1
-joy_y(0)                    # Y: -1, 0, or 1
-joy_button(0)               # Fire button (joy_fire(0) too)
-joy_up(0) joy_down(0)       # Direction bools
-joy_left(0) joy_right(0)
+joy_x(1)                    # X: -1, 0, or 1
+joy_y(1)                    # Y: -1, 0, or 1
+joy_button(1)               # Fire button (joy_fire(1) too)
+joy_up(1) joy_down(1)       # Direction bools
+joy_left(1) joy_right(1)
 ```
 
 ## Audio Functions
@@ -568,8 +570,8 @@ gfx_text_at(x, 100, text)
 
 ### Joystick Movement
 ```
-x = x + joy_x(0) * speed
-y = y + joy_y(0) * speed
+x = x + joy_x(1) * speed
+y = y + joy_y(1) * speed
 ```
 
 ### File Read Loop

@@ -1,0 +1,49 @@
+# Utilidades: argumentos, comprimir y descomprimir, SHA-1, UTF-8, Double, expresiones regulares, comodines, JSON y el
+# portapapeles.
+# expect-out: argumentos: 0
+# expect-out: 3000 bytes -> menos de 100: true, vuelta: 3000, mismo crc: true
+# expect-out: sha1 de abc: a9993e364706816aba3e25717850c26c9cd0d89d
+# expect-out: Ñu en UTF-8: 3 bytes, 2 caracteres, vuelta: Ñu
+# expect-out: raíz de 2: 1.4142, redondeo de 2.5: 3
+# expect-out: número en "pedido 4521 listo": 4521
+# expect-out: comodín: true
+# expect-out: JSON: 4 nodos, nombre = Lorraine
+# expect-out: portapapeles: Amiga
+# expect-out: fin
+
+Main
+    Print "argumentos: #{arg_count()}"
+
+    a = buffer_alloc(3000)
+    buffer_fill(a, 0, 3000, 65)                    # 3000 letras A: se comprime mucho
+    c = buffer_alloc(3100)
+    n = deflate(a, 3000, c, 3100, 9)
+    d = buffer_alloc(3000)
+    m = inflate(c, n, d, 3000)
+    iguales = crc32(a, 3000, 0) == crc32(d, m, 0)
+    Print "3000 bytes -> menos de 100: #{n < 100}, vuelta: #{m}, mismo crc: #{iguales}"
+    buffer_free(a)
+    buffer_free(c)
+    buffer_free(d)
+
+    Print "sha1 de abc: " + sha1_text("abc")
+
+    u = latin1_to_utf8("Ñu")
+    Print "Ñu en UTF-8: #{u.length} bytes, #{utf8_length(u)} caracteres, vuelta: " + utf8_to_latin1(u)
+
+    var r: Double = sqrt(2.0)
+    var med: Double = round(2.5)
+    Print "raíz de 2: " + str_from_double(r, 4) + ", redondeo de 2.5: #{Int(med)}"
+
+    texto = "pedido 4521 listo"
+    p = regex_find("\\d+", texto, 0, false)        # en un literal de Dash, "\\d" es \d
+    Print "número en \"#{texto}\": " + texto[p:p + regex_length()]
+    Print "comodín: #{wildcard_match("*.IFF", "dibujo.iff", true)}"
+
+    nodos = json_scan("{\"nombre\": \"Lorraine\", \"chips\": [1]}")
+    Print "JSON: #{nodos} nodos, #{json_scan_name(1)} = #{json_scan_text(1)}"
+
+    clip_write_text("Amiga")
+    Print "portapapeles: " + clip_read_text()
+    Print "fin"
+end

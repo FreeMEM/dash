@@ -1,0 +1,44 @@
+# Texto y búferes: leer un fichero de ajustes "clave = valor", y la cabecera de un fichero binario en un búfer.
+# expect-out: nombre -> Lorraine
+# expect-out: colores -> 32 (0x20)
+# expect-out: es un IFF de 12 bytes: true
+# expect-out: fin
+
+Main
+    file_write_text("RAM:ajustes.txt", "# mis ajustes\nNombre = Lorraine\n\ncolores = 32\n")
+    texto = file_read_text("RAM:ajustes.txt")
+    if texto == nil
+        Print "no se pudo leer"
+        return
+    end
+    for linea in str_split(texto, "\n")
+        linea = str_trim(linea)
+        if linea == "" or str_starts(linea, "#")
+            continue
+        end
+        p = str_find(linea, "=")
+        clave = str_lower(str_trim(linea[:p]))
+        valor = str_trim(linea[p + 1:])
+        if clave == "colores"
+            n = Int(valor)
+            Print "#{clave} -> #{n} (0x#{str_from_int(n, 16)})"
+        else
+            Print "#{clave} -> #{valor}"
+        end
+    end
+
+    b = buffer_alloc(12)                       # una cabecera IFF: "FORM", el largo y el tipo
+    str_to_buffer("FORM", b, 0)
+    buffer_set_long(b, 4, 4)
+    str_to_buffer("ILBM", b, 8)
+    file_save("RAM:cabecera.iff", b, 12)
+    buffer_fill(b, 0, 12, 0)
+    n = file_load("RAM:cabecera.iff", b, 12)
+    es_iff = buffer_equals(b, 0, 4, "FORM")
+    Print "es un IFF de #{n} bytes: #{es_iff}"
+    buffer_free(b)                             # los búferes no se liberan solos
+
+    file_delete("RAM:ajustes.txt")
+    file_delete("RAM:cabecera.iff")
+    Print "fin"
+end

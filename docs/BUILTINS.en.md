@@ -9,1168 +9,12526 @@ using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
 Total: 961 functions, 961 implemented, 0 not implemented.
 
+<a id="graphics_basic"></a>
+
 ## Basic graphics
+
+Drawing with the system's `graphics.library`: points, lines, rectangles, circles, polygons and text, with the
+palette colours (pens).
+
+**Where they draw.** Every `gfx_*` draws on the current target:
+
+- the window opened last, with `Window X ... end` and `X.open` or with `window_create`; `window_use` picks another;
+- the screen opened with `screen_open` or `screen_open_custom`, if there is no window;
+- an off-screen bitmap, between `bitmap_draw_to` and `bitmap_draw_screen`;
+- the MUI drawing area, inside the function given to `mui_canvas_on_draw`.
+
+Open one of those before drawing. Coordinates are pixels from the top left corner of the target. In Dash's
+windows that is the corner inside the borders: (0, 0) does not touch the title bar. What falls outside the target
+is not drawn.
+
+**Colours.** You draw with a palette colour number, the pen: `gfx_pen(2)`. A screen of depth 3 has 8 colours (0
+to 7); one of depth 5, 32. `gfx_rgb` and `gfx_rgb8` change how a palette colour looks. On the Workbench the
+colours belong to every program: to change them without getting in the way, open a screen of your own. To draw
+with any RGB colour without thinking about the palette there are `color_pen` (Fonts and colors) and
+`gfx_pixel_rgb` (Transparency and gradients).
+
+**The usual flow:** open the screen or the window, set the colours, pick the pen, draw, wait (`key_wait`, an
+`EventLoop`) and close.
+
+**Example** (`tests/test_doc_graficos.dash`, which is also a test: it runs with the others):
+
+```dash
+# Gráficos básicos: una pantalla propia con su paleta, una ventana y unas figuras.
+
+Main
+    screen_open_custom(320, 200, 3, "Dibujo")      # profundidad 3: 8 colores, del 0 al 7
+    v = window_create("Figuras", 0, 12, 300, 150, 8)
+    if v == 0
+        Print "no se pudo abrir la ventana"
+        screen_close()
+        return
+    end
+    gfx_rgb(2, 15, 0, 0)           # el color 2, rojo
+    gfx_rgb(3, 0, 0, 15)           # el 3, azul
+    gfx_clear()
+
+    gfx_pen(2)
+    gfx_rect(10, 10, 60, 40)       # un rectángulo relleno
+    gfx_pen(1)
+    gfx_box(10, 10, 60, 40)        # y su borde
+
+    gfx_circle(120, 40, 25)
+    gfx_pen(3)
+    gfx_flood(120, 40, 1)          # rellena el interior del círculo
+    Print "dentro del circulo: #{gfx_pixel_read(120, 40)}"
+
+    gfx_pen(2)
+    gfx_poly_begin(200, 15)        # un triángulo
+    gfx_poly_add(240, 65)
+    gfx_poly_add(160, 65)
+    gfx_poly_end()
+    Print "triangulo: #{gfx_pixel_read(200, 50)}"
+
+    gfx_pen(1)
+    t = "Hola"
+    gfx_text_at((300 - gfx_text_len(t)) / 2, 100, t)    # centrado
+
+    time_delay(100)                # dos segundos para verlo; en un programa, key_wait() o un EventLoop
+    window_close(v)
+    screen_close()
+end
+```
+
+**Index.** The ones with a link are explained further down.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `gfx_pen(color)` | `void` | Set foreground pen color |  |
-| `gfx_pen_bg(color)` | `void` | Set background pen color |  |
-| `gfx_pen_outline(color)` | `void` | Set outline pen color for area fills |  |
-| `gfx_mode(mode)` | `void` | Set drawing mode (JAM1, JAM2, COMPLEMENT, INVERSVID) |  |
-| `gfx_pattern(pattern)` | `void` | Set line pattern (16-bit) |  |
-| `gfx_rgb(index, r, g, b)` | `void` | Set palette color (4-bit components 0-15) |  |
-| `gfx_rgb8(index, r, g, b)` | `void` | Set palette color (8-bit components, AGA) |  |
-| `gfx_move(x, y)` | `void` | Move graphics cursor |  |
-| `gfx_draw(x, y)` | `void` | Draw line from cursor to point |  |
-| `gfx_line(x1, y1, x2, y2)` | `void` | Draw line between two points |  |
-| `gfx_pixel(x, y)` | `void` | Draw single pixel |  |
-| `gfx_pixel_read(x, y)` | `LONG` | Read pixel color |  |
-| `gfx_rect(x1, y1, x2, y2)` | `void` | Draw filled rectangle |  |
-| `gfx_box(x1, y1, x2, y2)` | `void` | Draw rectangle outline |  |
-| `gfx_ellipse(cx, cy, rx, ry)` | `void` | Draw ellipse outline |  |
-| `gfx_circle(cx, cy, r)` | `void` | Draw circle outline |  |
-| `gfx_ellipse_fill(cx, cy, rx, ry)` | `void` | Draw filled ellipse |  |
-| `gfx_circle_fill(cx, cy, r)` | `void` | Draw filled circle |  |
-| `gfx_flood(x, y, mode)` | `void` | Flood fill |  |
-| `gfx_text(str)` | `void` | Draw text at cursor |  |
-| `gfx_text_at(x, y, str)` | `void` | Draw text at position |  |
-| `gfx_text_len(str)` | `LONG` | Get text width in pixels |  |
-| `gfx_clear()` | `void` | Clear with color 0 |  |
-| `gfx_clear_color(color)` | `void` | Clear with specified color |  |
-| `gfx_scroll(dx, dy, x1, y1, x2, y2)` | `void` | Scroll region |  |
-| `gfx_poly_begin(x, y)` | `void` | Begin polygon at point |  |
-| `gfx_poly_add(x, y)` | `void` | Add polygon vertex |  |
-| `gfx_poly_end()` | `void` | Close and fill polygon |  |
-| `gfx_pens_draw(buffer, width, height, x, y, zoom)` | `void` | Draw an image of pens (a byte per pixel, row after row) at x, y, each pixel zoom x zoom: a whole picture in one call (3.1: WriteChunkyPixels) |  |
-| `gfx_copy(sx, sy, w, h, dx, dy)` | `void` | Copy region within window |  |
+| [`gfx_pen(color)`](#gfx_pen) | — | Set foreground pen color |  |
+| [`gfx_pen_bg(color)`](#gfx_pen_bg) | — | Set background pen color |  |
+| [`gfx_pen_outline(color)`](#gfx_pen_outline) | — | Set outline pen color for area fills |  |
+| [`gfx_mode(mode)`](#gfx_mode) | — | Set drawing mode (JAM1, JAM2, COMPLEMENT, INVERSVID) |  |
+| [`gfx_pattern(pattern)`](#gfx_pattern) | — | Set line pattern (16-bit) |  |
+| [`gfx_rgb(index, r, g, b)`](#gfx_rgb) | — | Set palette color (4-bit components 0-15) |  |
+| [`gfx_rgb8(index, r, g, b)`](#gfx_rgb8) | — | Set palette color (8-bit components, AGA) |  |
+| [`gfx_move(x, y)`](#gfx_move) | — | Move graphics cursor |  |
+| [`gfx_draw(x, y)`](#gfx_draw) | — | Draw line from cursor to point |  |
+| [`gfx_line(x1, y1, x2, y2)`](#gfx_line) | — | Draw line between two points |  |
+| [`gfx_pixel(x, y)`](#gfx_pixel) | — | Draw single pixel |  |
+| [`gfx_pixel_read(x, y)`](#gfx_pixel_read) | Int | Read pixel color |  |
+| [`gfx_rect(x1, y1, x2, y2)`](#gfx_rect) | — | Draw filled rectangle |  |
+| [`gfx_box(x1, y1, x2, y2)`](#gfx_box) | — | Draw rectangle outline |  |
+| [`gfx_ellipse(cx, cy, rx, ry)`](#gfx_ellipse) | — | Draw ellipse outline |  |
+| [`gfx_circle(cx, cy, r)`](#gfx_circle) | — | Draw circle outline |  |
+| [`gfx_ellipse_fill(cx, cy, rx, ry)`](#gfx_ellipse_fill) | — | Draw filled ellipse |  |
+| [`gfx_circle_fill(cx, cy, r)`](#gfx_circle_fill) | — | Draw filled circle |  |
+| [`gfx_flood(x, y, mode)`](#gfx_flood) | — | Flood fill |  |
+| [`gfx_text(str)`](#gfx_text) | — | Draw text at cursor |  |
+| [`gfx_text_at(x, y, str)`](#gfx_text_at) | — | Draw text at position |  |
+| [`gfx_text_len(str)`](#gfx_text_len) | Int | Get text width in pixels |  |
+| [`gfx_clear()`](#gfx_clear) | — | Clear with color 0 |  |
+| [`gfx_clear_color(color)`](#gfx_clear_color) | — | Clear with specified color |  |
+| [`gfx_scroll(dx, dy, x1, y1, x2, y2)`](#gfx_scroll) | — | Scroll region |  |
+| [`gfx_poly_begin(x, y)`](#gfx_poly_begin) | — | Begin polygon at point |  |
+| [`gfx_poly_add(x, y)`](#gfx_poly_add) | — | Add polygon vertex |  |
+| [`gfx_poly_end()`](#gfx_poly_end) | — | Close and fill polygon |  |
+| [`gfx_pens_draw(buffer, width, height, x, y, zoom)`](#gfx_pens_draw) | — | Draw an image of pens (a byte per pixel, row after row) at x, y, each pixel zoom x zoom: a whole picture in one call (3.1: WriteChunkyPixels) |  |
+| [`gfx_copy(sx, sy, w, h, dx, dy)`](#gfx_copy) | — | Copy region within window |  |
+
+<a id="gfx_pen"></a>
+
+### `gfx_pen(color)`
+
+- `color`: the palette colour number, from 0 to the screen's last one (7 at depth 3, 31 at depth 5).
+
+The colour of the lines, points, fills and text that come next. It stays set until the next `gfx_pen`. Calling it
+with the colour it already has costs nothing, so it can go in every turn of a loop.
+
+See also: [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_rgb`](#gfx_rgb), [`color_pen`](#color_pen).
+
+<a id="gfx_pen_bg"></a>
+
+### `gfx_pen_bg(color)`
+
+- `color`: a palette colour number.
+
+The background colour. It is used by text in JAM2 mode (`gfx_mode(1)`, the background of each letter) and by the
+gaps of patterned lines (`gfx_pattern`) in that mode.
+
+See also: [`gfx_pen`](#gfx_pen), [`gfx_mode`](#gfx_mode).
+
+<a id="gfx_pen_outline"></a>
+
+### `gfx_pen_outline(color)`
+
+- `color`: a palette colour number.
+
+The outline colour. `gfx_flood` uses it in mode 0: it fills until it meets that colour.
+
+See also: [`gfx_flood`](#gfx_flood).
+
+<a id="gfx_mode"></a>
+
+### `gfx_mode(mode)`
+
+- `mode`: 0 = JAM1, 1 = JAM2, 2 = COMPLEMENT, 4 = INVERSVID. Dash has no such constants: use the number.
+
+How things are painted. With JAM1, the normal one, only the pen is painted: text does not cover what is behind it.
+With JAM2 text carries its background, in the colour of `gfx_pen_bg`. With COMPLEMENT the bits already there are
+inverted: drawing the same thing twice leaves it as it was, handy for a cursor or a selection frame. INVERSVID
+swaps pen and background in text; it adds to the others (`1 + 4`).
+
+See also: [`gfx_pen`](#gfx_pen), [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_pattern`](#gfx_pattern).
+
+<a id="gfx_pattern"></a>
+
+### `gfx_pattern(pattern)`
+
+- `pattern`: 16 bits; each bit set is a painted pixel. `0xFFFF` is a solid line, `0xF0F0` dashed and `0xAAAA`
+  dotted.
+
+The pattern of the lines that come next (`gfx_line`, `gfx_draw`, `gfx_box`). It repeats along the line. Back to
+a solid line: `gfx_pattern(0xFFFF)`.
+
+See also: [`gfx_line`](#gfx_line), [`gfx_mode`](#gfx_mode).
+
+<a id="gfx_rgb"></a>
+
+### `gfx_rgb(index, r, g, b)`
+
+- `index`: the palette colour to change.
+- `r`, `g`, `b`: red, green and blue, from 0 to 15.
+
+What is already drawn in that colour changes at once: nothing is drawn again. It changes the palette of the
+program's own screen, or of the window's screen if there is none. On the Workbench that changes the colours of
+every program. With no screen or window it does nothing.
+
+See also: [`gfx_rgb8`](#gfx_rgb8), [`gfx_pen`](#gfx_pen), [`screen_open_custom`](#screen_open_custom).
+
+<a id="gfx_rgb8"></a>
+
+### `gfx_rgb8(index, r, g, b)`
+
+- `index`: the palette colour to change.
+- `r`, `g`, `b`: red, green and blue, from 0 to 255.
+
+Like `gfx_rgb`, with 8 bits per component. Exact on AGA and graphics cards. On OCS and ECS only the top 4 bits
+count: 192 and 200 look the same.
+
+See also: [`gfx_rgb`](#gfx_rgb).
+
+<a id="gfx_move"></a>
+
+### `gfx_move(x, y)`
+
+- `x`, `y`: the point, in pixels.
+
+Moves the drawing cursor to that point without painting. `gfx_draw` and `gfx_text` start from there.
+
+See also: [`gfx_draw`](#gfx_draw), [`gfx_text`](#gfx_text).
+
+<a id="gfx_draw"></a>
+
+### `gfx_draw(x, y)`
+
+- `x`, `y`: the end of the line.
+
+A line from the cursor to that point, with the pen and the pattern. The cursor stays at the end, so several
+`gfx_draw` in a row make a polyline.
+
+See also: [`gfx_move`](#gfx_move), [`gfx_line`](#gfx_line).
+
+<a id="gfx_line"></a>
+
+### `gfx_line(x1, y1, x2, y2)`
+
+- `x1`, `y1`: the start.
+- `x2`, `y2`: the end.
+
+A line between two points, with the pen and the pattern. Both points are painted. It leaves the cursor at the end.
+
+See also: [`gfx_draw`](#gfx_draw), [`gfx_pattern`](#gfx_pattern), [`gfx_box`](#gfx_box).
+
+<a id="gfx_pixel"></a>
+
+### `gfx_pixel(x, y)`
+
+- `x`, `y`: the point.
+
+Paints one pixel with the pen. For many pixels it is faster to build the picture in a buffer and draw it at once
+with `gfx_pens_draw`.
+
+See also: [`gfx_pixel_read`](#gfx_pixel_read), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_pixel_read"></a>
+
+### `gfx_pixel_read(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns the colour number of that pixel, or -1 if it is outside the target.
+
+See also: [`gfx_pixel`](#gfx_pixel).
+
+<a id="gfx_rect"></a>
+
+### `gfx_rect(x1, y1, x2, y2)`
+
+- `x1`, `y1`: the top left corner.
+- `x2`, `y2`: the bottom right one, included.
+
+A rectangle filled with the pen. `x2` must be greater than or equal to `x1`, and `y2` to `y1`: the other way round
+the system does not promise what it paints. `gfx_rect(0, 0, 9, 9)` paints 10 x 10 pixels.
+
+See also: [`gfx_box`](#gfx_box), [`gfx_clear_color`](#gfx_clear_color).
+
+<a id="gfx_box"></a>
+
+### `gfx_box(x1, y1, x2, y2)`
+
+- `x1`, `y1`, `x2`, `y2`: two opposite corners, included.
+
+The outline of a rectangle, one pixel thick, with the pen and the pattern. It leaves the cursor at `x1`, `y1`.
+
+See also: [`gfx_rect`](#gfx_rect), [`gfx_line`](#gfx_line).
+
+<a id="gfx_ellipse"></a>
+
+### `gfx_ellipse(cx, cy, rx, ry)`
+
+- `cx`, `cy`: the centre.
+- `rx`, `ry`: the horizontal and vertical radius, in pixels.
+
+The outline of an ellipse with the pen. On screen modes with tall pixels (640 x 256 PAL) a circle looks stretched:
+with `ry` half of `rx` it looks round.
+
+See also: [`gfx_ellipse_fill`](#gfx_ellipse_fill), [`gfx_circle`](#gfx_circle).
+
+<a id="gfx_circle"></a>
+
+### `gfx_circle(cx, cy, r)`
+
+- `cx`, `cy`: the centre.
+- `r`: the radius, in pixels.
+
+The outline of a circle with the pen. It is `gfx_ellipse(cx, cy, r, r)`.
+
+See also: [`gfx_circle_fill`](#gfx_circle_fill), [`gfx_ellipse`](#gfx_ellipse).
+
+<a id="gfx_ellipse_fill"></a>
+
+### `gfx_ellipse_fill(cx, cy, rx, ry)`
+
+- `cx`, `cy`: the centre.
+- `rx`, `ry`: the radii.
+
+An ellipse filled with the pen. It works on any target: if it lacks the system's fill buffers (a MUI area), Dash
+lends it its own while it lasts.
+
+See also: [`gfx_ellipse`](#gfx_ellipse), [`gfx_circle_fill`](#gfx_circle_fill), [`gfx_poly_begin`](#gfx_poly_begin).
+
+<a id="gfx_circle_fill"></a>
+
+### `gfx_circle_fill(cx, cy, r)`
+
+- `cx`, `cy`: the centre.
+- `r`: the radius.
+
+A circle filled with the pen. It is `gfx_ellipse_fill(cx, cy, r, r)`.
+
+See also: [`gfx_circle`](#gfx_circle), [`gfx_ellipse_fill`](#gfx_ellipse_fill).
+
+<a id="gfx_flood"></a>
+
+### `gfx_flood(x, y, mode)`
+
+- `x`, `y`: the point where the fill starts.
+- `mode`: 1 = fills the neighbouring pixels that have the same colour as the one at `x`, `y`; 0 = fills until it
+  meets the outline colour (`gfx_pen_outline`).
+
+Fills with the pen, like the paint bucket of a paint program. If the shape has a gap in its border, the fill leaks
+out through it.
+
+See also: [`gfx_pen_outline`](#gfx_pen_outline), [`gfx_poly_begin`](#gfx_poly_begin).
+
+<a id="gfx_text"></a>
+
+### `gfx_text(str)`
+
+- `str`: the text.
+
+Writes the text at the cursor with the current font and the pen. The cursor marks the baseline of the letters, not
+their top: with the 8 point topaz font the text takes from `y - 6` to `y + 1`. Afterwards the cursor sits at the
+end of the text. It does not wrap: a long text is cut at the edge.
+
+See also: [`gfx_text_at`](#gfx_text_at), [`gfx_text_len`](#gfx_text_len), [`font_use`](#font_use), [`font_baseline`](#font_baseline).
+
+<a id="gfx_text_at"></a>
+
+### `gfx_text_at(x, y, str)`
+
+- `x`, `y`: where the text starts; `y` is the baseline.
+- `str`: the text.
+
+It is `gfx_move(x, y)` and `gfx_text(str)`. To write with the top at `y`, add the font's baseline:
+`gfx_text_at(x, y + font_baseline(), "Hello")`.
+
+See also: [`gfx_text`](#gfx_text), [`gfx_text_len`](#gfx_text_len), [`font_baseline`](#font_baseline).
+
+<a id="gfx_text_len"></a>
+
+### `gfx_text_len(str)` → `Int`
+
+- `str`: the text.
+
+Returns how many pixels wide the text is with the current font, without drawing it. Useful to centre:
+`gfx_text_at((width - gfx_text_len(t)) / 2, y, t)`.
+
+See also: [`gfx_text`](#gfx_text), [`font_height`](#font_height).
+
+<a id="gfx_clear"></a>
+
+### `gfx_clear()`
+
+Paints the whole target with colour 0. In a window, its inside.
+
+See also: [`gfx_clear_color`](#gfx_clear_color).
+
+<a id="gfx_clear_color"></a>
+
+### `gfx_clear_color(color)`
+
+- `color`: a palette colour number.
+
+Paints the whole target with that colour.
+
+See also: [`gfx_clear`](#gfx_clear), [`gfx_rect`](#gfx_rect).
+
+<a id="gfx_scroll"></a>
+
+### `gfx_scroll(dx, dy, x1, y1, x2, y2)`
+
+- `dx`, `dy`: how many pixels it moves. Positive moves the contents left (`dx`) or up (`dy`); negative, the other
+  way.
+- `x1`, `y1`, `x2`, `y2`: the rectangle that scrolls, corners included.
+
+Moves what is inside the rectangle and paints the strip left free with the background colour (`gfx_pen_bg`). For
+text that scrolls up or a background that moves along.
+
+See also: [`gfx_copy`](#gfx_copy), [`gfx_pen_bg`](#gfx_pen_bg).
+
+<a id="gfx_poly_begin"></a>
+
+### `gfx_poly_begin(x, y)`
+
+- `x`, `y`: the first vertex.
+
+Starts a filled polygon. Then come the vertices with `gfx_poly_add`, and `gfx_poly_end` closes it, which is when
+it is painted. Up to 100 vertices.
+
+See also: [`gfx_poly_add`](#gfx_poly_add), [`gfx_poly_end`](#gfx_poly_end).
+
+<a id="gfx_poly_add"></a>
+
+### `gfx_poly_add(x, y)`
+
+- `x`, `y`: the next vertex.
+
+Adds a vertex to the polygon started by `gfx_poly_begin`. Without a `gfx_poly_begin` before, it does nothing.
+
+See also: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_end`](#gfx_poly_end).
+
+<a id="gfx_poly_end"></a>
+
+### `gfx_poly_end()`
+
+Closes the polygon joining the last vertex to the first and fills it with the pen.
+
+See also: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_add`](#gfx_poly_add).
+
+<a id="gfx_pens_draw"></a>
+
+### `gfx_pens_draw(buffer, width, height, x, y, zoom)`
+
+- `buffer`: a buffer (`buffer_alloc`) with one byte per pixel, the colour number, row after row.
+- `width`, `height`: the picture's size in pixels. The buffer must hold at least `width * height` bytes.
+- `x`, `y`: where the top left corner goes.
+- `zoom`: how many times each pixel is enlarged; 1 = real size, 2 = each pixel takes 2 x 2.
+
+Draws the whole picture in one call, much faster than one `gfx_pixel` per pixel. Good for pictures the program
+computes (a fractal, a map) or reads from a file.
+
+See also: [`gfx_pixel`](#gfx_pixel), [`buffer_alloc`](#buffer_alloc), [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="gfx_copy"></a>
+
+### `gfx_copy(sx, sy, w, h, dx, dy)`
+
+- `sx`, `sy`: the top left corner of the area to copy.
+- `w`, `h`: its width and height.
+- `dx`, `dy`: where the copy goes.
+
+Copies a rectangle of the target to another place in the same target. The source area is not cleared. To copy from
+an off-screen bitmap there are the `bitmap_*` functions.
+
+See also: [`gfx_scroll`](#gfx_scroll), [`bitmap_draw_to`](#bitmap_draw_to).
+
+<a id="graphics_advanced"></a>
 
 ## Advanced graphics
 
+What games use: sprites, BOBs, tile maps, the copper and off-screen bitmaps. Everything is handled by number (`id`),
+chosen by the program.
+
+**Hardware sprites** (`sprite_*`): the video chip draws them on top of everything, without touching the screen, so
+moving them costs nothing. They need a screen of your own (`screen_open_custom`), and they do not work on graphics
+cards. There are 8 numbers, 0 to 7, but the chip has 8 sprites and the mouse pointer uses one: 7 fit at once, or
+fewer if attached. Each is 16 pixels wide and has 3 colours plus transparent. Two consecutive sprites (0 and 1, 2
+and 3...) share their colours: those of 0 and 1 are colours 17 to 19 of the screen. `sprite_load_attached` joins
+two to get 15 colours.
+
+**Software sprites** (`soft_sprite_*`): pictures that Dash draws on the window or the screen and removes by
+restoring what was behind. They work on any screen, graphics cards too. Up to 16.
+
+**BOBs** (`bob_*`): pictures of any size and colours, with colour 0 transparent, pasted on the `gfx_*` target with
+the blitter. A BOB can have several frames, side by side in the picture. `bob_draw` saves what it covers and
+`bob_erase` puts it back; `bob_paste` only paints, for games that repaint everything every frame with
+`screen_double_buffer`. BOBs and bitmaps share numbers, 0 to 31: a BOB is a bitmap with its mask, and you can draw
+on it with `bitmap_draw_to`.
+
+**Tile maps** (`tilemap_*`): a level made of cells, with layers and objects, like the one saved by the map editor
+in Forja or the extension. It is painted with the frames of a BOB.
+
+**The copper** (`copper_*`): a list of instructions that change video chip registers at a given line of the
+screen, for background gradients and other effects.
+
+**Bitmaps** (`bitmap_*`): off-screen pictures, to load an IFF picture, prepare something unseen and copy it in one
+go.
+
+Pictures come from IFF ILBM files, the ones Deluxe Paint, PPaint and Forja's sprite editor save.
+
+**Example** (`tests/test_doc_sprites.dash`, which is also a test: it runs with the others):
+
+```dash
+# Gráficos avanzados: un BOB de dos fotogramas dibujado desde el programa, que se mueve sobre un fondo y choca con
+# otro, y un sprite de hardware hecho fila a fila.
+
+Main
+    screen_open_custom(320, 200, 3, "Sprites")
+    gfx_clear_color(3)                             # el fondo
+
+    bob_create(0, 32, 16, 3)                       # 32 x 16: dos fotogramas cuadrados
+    bitmap_draw_to(0)                              # los gfx_ dibujan en el BOB
+    gfx_pen(1)
+    gfx_circle_fill(7, 7, 6)                       # el fotograma 0
+    gfx_pen(2)
+    gfx_rect(18, 2, 29, 13)                        # el fotograma 1
+    bitmap_draw_screen()                           # y otra vez en la pantalla
+    Print "nave: #{bob_frames(0)} fotogramas de #{bob_width(0)} x #{bob_height(0)}"
+
+    bob_create(1, 16, 16, 3)
+    bitmap_draw_to(1)
+    gfx_pen(4)
+    gfx_circle_fill(7, 7, 6)
+    bitmap_draw_screen()
+
+    bob_pos(1, 100, 100)
+    bob_draw(1)
+    bob_pos(0, 126, 100)                           # 10 píxeles a la derecha del otro
+    bob_draw(0)
+    Print "choque a 10 pixeles: #{bob_collision(0, 1)}"
+    bob_pos(0, 104, 100)
+    bob_draw(0)                                    # quita el de antes y lo pinta en el sitio nuevo
+    Print "choque encima: #{bob_collision(0, 1)}"
+    bob_erase(0)                                   # en orden inverso al que se pintaron
+    bob_erase(1)
+    Print "fondo devuelto: #{gfx_pixel_read(107, 107)}"
+
+    ok = sprite_create(0, 16, 8)
+    fila = 0
+    while fila < 8
+        sprite_set_row(0, fila, 0x3C3C, 0x0FF0)    # colores 1, 2 y 3 del sprite
+        fila = fila + 1
+    end
+    sprite_color(0, 0, 15, 15, 0)
+    sprite_pos(0, 160, 50)
+    sprite_show(0)
+    Print "sprite: #{ok}"
+    time_delay(50)
+
+    sprite_free(0)
+    bob_free(0)
+    bob_free(1)
+    screen_close()
+    Print "fin"
+end
+```
+
+**Example** (`tests/test_doc_tiles.dash`, which is also a test: it runs with the others):
+
+```dash
+# Mapas de tiles: un nivel hecho desde el programa, con un tileset de dos tiles, pintado en la pantalla, guardado y
+# vuelto a cargar, y su objeto "jugador".
+
+const SUELO = 1
+const LADRILLO = 2
+
+Main
+    screen_open_custom(320, 200, 3, "Nivel")
+
+    bob_create(0, 32, 16, 3)                   # el tileset: dos fotogramas de 16 x 16
+    bitmap_draw_to(0)
+    gfx_pen(2)
+    gfx_rect(0, 0, 15, 15)                     # tile 1, el suelo
+    gfx_pen(4)
+    gfx_rect(16, 0, 31, 15)                    # tile 2, un ladrillo
+    gfx_pen(1)
+    gfx_box(16, 0, 31, 15)
+    bitmap_draw_screen()
+
+    tilemap_create(0, 20, 12, 16, 2)           # 20 x 12 celdas de 16 píxeles, 2 capas
+    x = 0
+    while x < 20
+        tilemap_set(0, 0, x, 9, SUELO)         # una fila de suelo
+        x = x + 1
+    end
+    tilemap_set(0, 0, 6, 7, LADRILLO)
+    tilemap_set(0, 0, 7, 7, LADRILLO + 16384)  # el mismo, en espejo
+    tilemap_object_add(0, 32, 128, "jugador")
+    Print "suelo en la celda 2, 9: tile #{tilemap_get(0, 0, 2, 9)}"
+
+    tilemap_draw(0, 0, 0, 0, 0, 20, 12, 0, 0)  # todo el mapa en la esquina de la pantalla
+    Print "pintado: #{gfx_pixel_read(40, 9 * 16 + 8)}"
+
+    tilemap_save(0, "RAM:nivel.fmap")
+    tilemap_free(0)
+    tilemap_load(1, "RAM:nivel.fmap")
+    Print "cargado: #{tilemap_width(1)} x #{tilemap_height(1)} celdas de #{tilemap_tile_size(1)}, #{tilemap_layers(1)} capas"
+    j = tilemap_object_find(1, "jugador", 0)
+    Print "jugador en #{tilemap_object_x(1, j)}, #{tilemap_object_y(1, j)}"
+
+    time_delay(50)
+    tilemap_free(1)
+    bob_free(0)
+    screen_close()
+    file_delete("RAM:nivel.fmap")
+    Print "fin"
+end
+```
+
+**Example** (`tests/test_doc_bitmaps.dash`, which is also a test: it runs with the others):
+
+```dash
+# Bitmaps y copper: un fondo preparado fuera de pantalla y copiado de golpe, guardado en un IFF y vuelto a cargar,
+# y un degradado de fondo con el copper.
+
+Main
+    screen_open_custom(320, 200, 3, "Bitmaps")
+
+    bitmap_create(0, 64, 32, 3)
+    bitmap_draw_to(0)                          # se prepara sin que se vea
+    gfx_clear_color(5)
+    gfx_pen(1)
+    gfx_box(0, 0, 63, 31)
+    bitmap_draw_screen()
+    bitmap_blit(0, 0, 0, 64, 32, 100, 80)      # y se copia de una vez
+    Print "copiado: #{gfx_pixel_read(130, 95)}"
+
+    bitmap_save(0, "RAM:fondo.iff")
+    bitmap_load(1, "RAM:fondo.iff")
+    bitmap_blit(1, 0, 0, 64, 32, 200, 80)
+    Print "guardado y cargado: #{gfx_pixel_read(230, 95)}"
+
+    copper_create(40)                          # un degradado de azul en el color 0
+    y = 0
+    while y < 16
+        copper_wait(y * 12, 0)
+        copper_color(0, y)                     # 0x000 a 0x00F
+        y = y + 1
+    end
+    copper_end()
+    copper_install()
+    time_delay(50)
+
+    copper_free()
+    bitmap_free(0)
+    bitmap_free(1)
+    screen_close()
+    file_delete("RAM:fondo.iff")
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `sprite_load(id, filename)` | `BOOL` | Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot |  |
-| `sprite_load_attached(id, filename)` | `BOOL` | Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot |  |
-| `sprite_create(id, width, height)` | `BOOL` | Create empty sprite |  |
-| `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
-| `sprite_show(id)` | `void` | Make sprite visible |  |
-| `sprite_hide(id)` | `void` | Hide sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (0-14 for an attached pair; components 0-15) |  |
-| `sprite_load_colors(id, filename)` | `BOOL` | Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none |  |
-| `bob_load_colors(filename, first)` | `LONG` | The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many |  |
-| `sprite_rgb8(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (0-14 for an attached pair), with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
-| `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load or sprite_load_attached |  |
-| `sprite_free(id)` | `void` | Free sprite memory |  |
-| `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
-| `sprite_set_row(id, row, plane0, plane1)` | `void` | Set sprite data row (2 bitplanes) |  |
-| `soft_sprite_create(id, width, height, depth)` | `BOOL` | Create software sprite (RTG compatible) |  |
-| `soft_sprite_free(id)` | `void` | Free software sprite |  |
-| `soft_sprite_pixel(id, x, y, color)` | `void` | Set pixel in software sprite |  |
-| `soft_sprite_clear(id, color)` | `void` | Clear software sprite with color |  |
-| `soft_sprite_row(id, row, plane0, plane1)` | `void` | Set sprite row (hardware sprite format compatible) |  |
-| `soft_sprite_show(id)` | `void` | Show software sprite |  |
-| `soft_sprite_hide(id)` | `void` | Hide software sprite |  |
-| `soft_sprite_pos(id, x, y)` | `void` | Set software sprite position |  |
-| `soft_sprite_x(id)` | `LONG` | Get software sprite X position |  |
-| `soft_sprite_y(id)` | `LONG` | Get software sprite Y position |  |
-| `bob_load(id, filename)` | `BOOL` | Load BOB from file |  |
-| `bob_create(id, width, height, depth)` | `BOOL` | Create empty BOB |  |
-| `bob_pos(id, x, y)` | `void` | Set BOB position |  |
-| `bob_draw(id)` | `void` | Draw BOB |  |
-| `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
-| `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
-| `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
-| `bob_width(id)` | `LONG` | The width of a frame of a BOB (0 if there is no such BOB) |  |
-| `bob_height(id)` | `LONG` | The height of a BOB |  |
-| `bob_frames(id)` | `LONG` | How many frames a BOB has |  |
-| `bob_paste(id, frame, x, y)` | `void` | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
-| `bob_free(id)` | `void` | Free BOB memory |  |
-| `tilemap_create(id, width, height, tile, layers)` | `BOOL` | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
-| `tilemap_load(id, filename)` | `BOOL` | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
-| `tilemap_save(id, filename)` | `BOOL` | Save a tile map as IFF FORM FMAP; false if it cannot |  |
-| `tilemap_free(id)` | `void` | Free a tile map |  |
-| `tilemap_width(id)` | `LONG` | Width of a tile map in cells (0 if there is none) |  |
-| `tilemap_height(id)` | `LONG` | Height of a tile map in cells |  |
-| `tilemap_tile_size(id)` | `LONG` | The side of a tile map's tiles in pixels (8, 16 or 32) |  |
-| `tilemap_layers(id)` | `LONG` | How many layers a tile map has |  |
-| `tilemap_get(id, layer, x, y)` | `LONG` | A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map |  |
-| `tilemap_set(id, layer, x, y, value)` | `void` | Set a cell of a layer (like tilemap_get gives it); nothing outside the map |  |
-| `tilemap_tileset(id)` | `STRPTR` | The file name of the map's tileset, as saved in it ("" if none) |  |
-| `tilemap_set_tileset(id, filename)` | `void` | The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile) |  |
-| `tilemap_layer_name(id, layer)` | `STRPTR` | The name of a layer |  |
-| `tilemap_layer_type(id, layer)` | `LONG` | The type of a layer (0 tiles; the editor uses others for collisions and objects) |  |
-| `tilemap_layer_visible(id, layer)` | `BOOL` | Whether a layer is shown (for the editor) |  |
-| `tilemap_layer_set(id, layer, name, type, visible)` | `void` | Name (up to 31 characters), type and visibility of a layer |  |
-| `tilemap_layer_add(id)` | `LONG` | A new empty layer at the end: its number, or -1 (there are 8 at most) |  |
-| `tilemap_layer_remove(id, layer)` | `BOOL` | Remove a layer (the ones after it move down one); false if it is the only one |  |
-| `tilemap_layer_move(id, from, to)` | `BOOL` | Move a layer to another place (the ones in between move one) |  |
-| `tilemap_resize(id, width, height)` | `BOOL` | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
-| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
-| `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
-| `tilemap_objects(id)` | `LONG` | How many objects the map has |  |
-| `tilemap_object_add(id, x, y, kind)` | `LONG` | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
-| `tilemap_object_remove(id, object)` | `BOOL` | Remove an object (the ones after it move down one) |  |
-| `tilemap_object_x(id, object)` | `LONG` | Where an object is: x in pixels of the map |  |
-| `tilemap_object_y(id, object)` | `LONG` | Where an object is: y in pixels of the map |  |
-| `tilemap_object_move(id, object, x, y)` | `void` | Move an object to x, y |  |
-| `tilemap_object_kind(id, object)` | `STRPTR` | The kind of an object |  |
-| `tilemap_object_name(id, object)` | `STRPTR` | The name of an object |  |
-| `tilemap_object_sprite(id, object)` | `STRPTR` | The sprite file of an object ("" if none) |  |
-| `tilemap_object_set(id, object, kind, name, sprite)` | `void` | Kind, name (up to 31 characters each) and sprite file of an object |  |
-| `tilemap_object_find(id, kind, from)` | `LONG` | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
-| `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
-| `copper_create(size)` | `BOOL` | Create copper list |  |
-| `copper_wait(y, x)` | `void` | Add copper WAIT instruction |  |
-| `copper_move(reg, value)` | `void` | Add copper MOVE instruction |  |
-| `copper_color(index, rgb)` | `void` | Add copper color change |  |
-| `copper_end()` | `void` | End copper list |  |
-| `copper_install()` | `void` | Install copper list |  |
-| `copper_free()` | `void` | Free copper list |  |
-| `bitmap_create(id, width, height, depth)` | `BOOL` | Create bitmap |  |
-| `bitmap_load(id, filename)` | `BOOL` | Load IFF bitmap |  |
-| `bitmap_save(id, filename)` | `BOOL` | Save IFF bitmap |  |
-| `bitmap_free(id)` | `void` | Free bitmap |  |
-| `bitmap_blit(src_id, sx, sy, w, h, dx, dy)` | `void` | Blit from bitmap to screen |  |
-| `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | `void` | Masked blit from bitmap |  |
-| `bitmap_draw_to(id)` | `void` | Set bitmap as drawing target |  |
-| `bitmap_draw_screen()` | `void` | Set screen as drawing target |  |
+| [`sprite_load(id, filename)`](#sprite_load) | Bool | Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot |  |
+| [`sprite_load_attached(id, filename)`](#sprite_load_attached) | Bool | Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot |  |
+| [`sprite_create(id, width, height)`](#sprite_create) | Bool | Create empty sprite |  |
+| [`sprite_pos(id, x, y)`](#sprite_pos) | — | Set sprite position |  |
+| [`sprite_show(id)`](#sprite_show) | — | Make sprite visible |  |
+| [`sprite_hide(id)`](#sprite_hide) | — | Hide sprite |  |
+| [`sprite_color(id, index, r, g, b)`](#sprite_color) | — | Set a sprite colour, index 0-2 (0-14 for an attached pair; components 0-15) |  |
+| [`sprite_load_colors(id, filename)`](#sprite_load_colors) | Bool | Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none |  |
+| [`bob_load_colors(filename, first)`](#bob_load_colors) | Int | The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many |  |
+| [`sprite_rgb8(id, index, r, g, b)`](#sprite_rgb8) | — | Set a sprite colour, index 0-2 (0-14 for an attached pair), with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
+| [`sprite_frame(id, frame)`](#sprite_frame) | — | Show frame number frame (0 the first) of a sprite from sprite_load or sprite_load_attached |  |
+| [`sprite_free(id)`](#sprite_free) | — | Free sprite memory |  |
+| [`sprite_collision(id1, id2)`](#sprite_collision) | Bool | Check sprite collision |  |
+| [`sprite_set_row(id, row, plane0, plane1)`](#sprite_set_row) | — | Set sprite data row (2 bitplanes) |  |
+| [`soft_sprite_create(id, width, height, depth)`](#soft_sprite_create) | Bool | Create software sprite (RTG compatible) |  |
+| [`soft_sprite_free(id)`](#soft_sprite_free) | — | Free software sprite |  |
+| [`soft_sprite_pixel(id, x, y, color)`](#soft_sprite_pixel) | — | Set pixel in software sprite |  |
+| [`soft_sprite_clear(id, color)`](#soft_sprite_clear) | — | Clear software sprite with color |  |
+| [`soft_sprite_row(id, row, plane0, plane1)`](#soft_sprite_row) | — | Set sprite row (hardware sprite format compatible) |  |
+| [`soft_sprite_show(id)`](#soft_sprite_show) | — | Show software sprite |  |
+| [`soft_sprite_hide(id)`](#soft_sprite_hide) | — | Hide software sprite |  |
+| [`soft_sprite_pos(id, x, y)`](#soft_sprite_pos) | — | Set software sprite position |  |
+| [`soft_sprite_x(id)`](#soft_sprite_x) | Int | Get software sprite X position |  |
+| [`soft_sprite_y(id)`](#soft_sprite_y) | Int | Get software sprite Y position |  |
+| [`bob_load(id, filename)`](#bob_load) | Bool | Load BOB from file |  |
+| [`bob_create(id, width, height, depth)`](#bob_create) | Bool | Create empty BOB |  |
+| [`bob_pos(id, x, y)`](#bob_pos) | — | Set BOB position |  |
+| [`bob_draw(id)`](#bob_draw) | — | Draw BOB |  |
+| [`bob_erase(id)`](#bob_erase) | — | Erase BOB (restore background) |  |
+| [`bob_frame(id, frame)`](#bob_frame) | — | Set BOB animation frame |  |
+| [`bob_frame_width(id, width)`](#bob_frame_width) | — | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
+| [`bob_width(id)`](#bob_width) | Int | The width of a frame of a BOB (0 if there is no such BOB) |  |
+| [`bob_height(id)`](#bob_height) | Int | The height of a BOB |  |
+| [`bob_frames(id)`](#bob_frames) | Int | How many frames a BOB has |  |
+| [`bob_paste(id, frame, x, y)`](#bob_paste) | — | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
+| [`bob_free(id)`](#bob_free) | — | Free BOB memory |  |
+| [`tilemap_create(id, width, height, tile, layers)`](#tilemap_create) | Bool | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
+| [`tilemap_load(id, filename)`](#tilemap_load) | Bool | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
+| [`tilemap_save(id, filename)`](#tilemap_save) | Bool | Save a tile map as IFF FORM FMAP; false if it cannot |  |
+| [`tilemap_free(id)`](#tilemap_free) | — | Free a tile map |  |
+| [`tilemap_width(id)`](#tilemap_width) | Int | Width of a tile map in cells (0 if there is none) |  |
+| [`tilemap_height(id)`](#tilemap_height) | Int | Height of a tile map in cells |  |
+| [`tilemap_tile_size(id)`](#tilemap_tile_size) | Int | The side of a tile map's tiles in pixels (8, 16 or 32) |  |
+| [`tilemap_layers(id)`](#tilemap_layers) | Int | How many layers a tile map has |  |
+| [`tilemap_get(id, layer, x, y)`](#tilemap_get) | Int | A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map |  |
+| [`tilemap_set(id, layer, x, y, value)`](#tilemap_set) | — | Set a cell of a layer (like tilemap_get gives it); nothing outside the map |  |
+| [`tilemap_tileset(id)`](#tilemap_tileset) | String | The file name of the map's tileset, as saved in it ("" if none) |  |
+| [`tilemap_set_tileset(id, filename)`](#tilemap_set_tileset) | — | The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile) |  |
+| [`tilemap_layer_name(id, layer)`](#tilemap_layer_name) | String | The name of a layer |  |
+| [`tilemap_layer_type(id, layer)`](#tilemap_layer_type) | Int | The type of a layer (0 tiles; the editor uses others for collisions and objects) |  |
+| [`tilemap_layer_visible(id, layer)`](#tilemap_layer_visible) | Bool | Whether a layer is shown (for the editor) |  |
+| [`tilemap_layer_set(id, layer, name, type, visible)`](#tilemap_layer_set) | — | Name (up to 31 characters), type and visibility of a layer |  |
+| [`tilemap_layer_add(id)`](#tilemap_layer_add) | Int | A new empty layer at the end: its number, or -1 (there are 8 at most) |  |
+| [`tilemap_layer_remove(id, layer)`](#tilemap_layer_remove) | Bool | Remove a layer (the ones after it move down one); false if it is the only one |  |
+| [`tilemap_layer_move(id, from, to)`](#tilemap_layer_move) | Bool | Move a layer to another place (the ones in between move one) |  |
+| [`tilemap_resize(id, width, height)`](#tilemap_resize) | Bool | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
+| [`tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`](#tilemap_draw) | — | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
+| [`tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`](#tilemap_draw_masked) | — | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
+| [`tilemap_objects(id)`](#tilemap_objects) | Int | How many objects the map has |  |
+| [`tilemap_object_add(id, x, y, kind)`](#tilemap_object_add) | Int | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
+| [`tilemap_object_remove(id, object)`](#tilemap_object_remove) | Bool | Remove an object (the ones after it move down one) |  |
+| [`tilemap_object_x(id, object)`](#tilemap_object_x) | Int | Where an object is: x in pixels of the map |  |
+| [`tilemap_object_y(id, object)`](#tilemap_object_y) | Int | Where an object is: y in pixels of the map |  |
+| [`tilemap_object_move(id, object, x, y)`](#tilemap_object_move) | — | Move an object to x, y |  |
+| [`tilemap_object_kind(id, object)`](#tilemap_object_kind) | String | The kind of an object |  |
+| [`tilemap_object_name(id, object)`](#tilemap_object_name) | String | The name of an object |  |
+| [`tilemap_object_sprite(id, object)`](#tilemap_object_sprite) | String | The sprite file of an object ("" if none) |  |
+| [`tilemap_object_set(id, object, kind, name, sprite)`](#tilemap_object_set) | — | Kind, name (up to 31 characters each) and sprite file of an object |  |
+| [`tilemap_object_find(id, kind, from)`](#tilemap_object_find) | Int | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
+| [`bob_collision(id1, id2)`](#bob_collision) | Bool | Check BOB collision |  |
+| [`copper_create(size)`](#copper_create) | Bool | Create copper list |  |
+| [`copper_wait(y, x)`](#copper_wait) | — | Add copper WAIT instruction |  |
+| [`copper_move(reg, value)`](#copper_move) | — | Add copper MOVE instruction |  |
+| [`copper_color(index, rgb)`](#copper_color) | — | Add copper color change |  |
+| [`copper_end()`](#copper_end) | — | End copper list |  |
+| [`copper_install()`](#copper_install) | — | Install copper list |  |
+| [`copper_free()`](#copper_free) | — | Free copper list |  |
+| [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Create bitmap |  |
+| [`bitmap_load(id, filename)`](#bitmap_load) | Bool | Load IFF bitmap |  |
+| [`bitmap_save(id, filename)`](#bitmap_save) | Bool | Save IFF bitmap |  |
+| [`bitmap_free(id)`](#bitmap_free) | — | Free bitmap |  |
+| [`bitmap_blit(src_id, sx, sy, w, h, dx, dy)`](#bitmap_blit) | — | Blit from bitmap to screen |  |
+| [`bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`](#bitmap_blit_mask) | — | Masked blit from bitmap |  |
+| [`bitmap_draw_to(id)`](#bitmap_draw_to) | — | Set bitmap as drawing target |  |
+| [`bitmap_draw_screen()`](#bitmap_draw_screen) | — | Set screen as drawing target |  |
+
+<a id="sprite_load"></a>
+
+### `sprite_load(id, filename)` → `Bool`
+
+- `id`: the sprite's number, 0 to 7.
+- `filename`: an IFF ILBM picture with the 16-pixel-wide frames side by side; the picture's height is the
+  sprite's.
+
+Creates the sprite from the picture and shows the first frame (`sprite_frame` changes frame). Its colours are 1 to 3
+of the picture; 0 is transparent. It does not set the colours: `sprite_load_colors` takes them from the picture.
+Returns `false` if the file cannot be read, there is no screen of your own or no sprite is free.
+
+See also: [`sprite_load_colors`](#sprite_load_colors), [`sprite_frame`](#sprite_frame), [`sprite_pos`](#sprite_pos), [`sprite_load_attached`](#sprite_load_attached).
+
+<a id="sprite_load_attached"></a>
+
+### `sprite_load_attached(id, filename)` → `Bool`
+
+- `id`: the sprite's number, 0 to 7.
+- `filename`: an IFF ILBM picture of up to 16 colours, with 16-pixel-wide frames.
+
+Like `sprite_load`, but joins two hardware sprites to get 15 colours plus transparent: colours 1 to 15 of the
+picture show with colours 17 to 31 of the screen. It takes two sprites. Returns `false` if no pair is free.
+
+See also: [`sprite_load`](#sprite_load), [`sprite_load_colors`](#sprite_load_colors).
+
+<a id="sprite_create"></a>
+
+### `sprite_create(id, width, height)` → `Bool`
+
+- `id`: the sprite's number, 0 to 7.
+- `width`: it does not count: hardware sprites are always 16 pixels wide.
+- `height`: the height in pixels.
+
+Creates an empty, transparent sprite. Its picture is set row by row with `sprite_set_row`. Returns `false` without
+a screen of your own or if no sprite is free.
+
+See also: [`sprite_set_row`](#sprite_set_row), [`sprite_load`](#sprite_load).
+
+<a id="sprite_pos"></a>
+
+### `sprite_pos(id, x, y)`
+
+- `id`: the sprite's number, 0 to 7.
+- `x`, `y`: the position of its top left corner on the screen.
+
+Moves the sprite. Nothing needs clearing or repainting.
+
+See also: [`sprite_show`](#sprite_show), [`sprite_collision`](#sprite_collision).
+
+<a id="sprite_show"></a>
+
+### `sprite_show(id)`
+
+- `id`: the sprite's number, 0 to 7.
+
+Shows it at its position, after a `sprite_hide`.
+
+See also: [`sprite_hide`](#sprite_hide).
+
+<a id="sprite_hide"></a>
+
+### `sprite_hide(id)`
+
+- `id`: the sprite's number, 0 to 7.
+
+Hides it: it moves it off the screen. It is still yours.
+
+See also: [`sprite_show`](#sprite_show), [`sprite_free`](#sprite_free).
+
+<a id="sprite_color"></a>
+
+### `sprite_color(id, index, r, g, b)`
+
+- `id`: the sprite's number, 0 to 7.
+- `index`: the sprite's colour, 0 to 2 (its colours 1 to 3); 0 to 14 in an attached pair.
+- `r`, `g`, `b`: red, green and blue, 0 to 15.
+
+Changes a colour of the sprite. It is shared with the sprite of its pair (0 with 1, 2 with 3...).
+
+See also: [`sprite_rgb8`](#sprite_rgb8), [`sprite_load_colors`](#sprite_load_colors).
+
+<a id="sprite_load_colors"></a>
+
+### `sprite_load_colors(id, filename)` → `Bool`
+
+- `id`: the sprite's number, 0 to 7.
+- `filename`: an IFF picture with a palette: usually the sprite's own.
+
+Sets colours 1 to 3 of the picture's palette as the sprite's colours (1 to 15 in an attached pair). Returns `false`
+if the file has no palette or the sprite does not exist.
+
+See also: [`sprite_load`](#sprite_load), [`bob_load_colors`](#bob_load_colors).
+
+<a id="bob_load_colors"></a>
+
+### `bob_load_colors(filename, first)` → `Int`
+
+- `filename`: an IFF picture with a palette.
+- `first`: the screen colour to start from.
+
+Copies the picture's palette into the screen's (your own or the window's), from colour `first` on. Returns how many
+colours it set, 0 if the file has no palette.
+
+See also: [`bob_load`](#bob_load), [`gfx_rgb8`](#gfx_rgb8).
+
+<a id="sprite_rgb8"></a>
+
+### `sprite_rgb8(id, index, r, g, b)`
+
+- `id`: the sprite's number, 0 to 7.
+- `index`: as in `sprite_color`.
+- `r`, `g`, `b`: red, green and blue, 0 to 255; on OCS and ECS only the top 4 bits count.
+
+Like `sprite_color`, with 8 bits per component.
+
+See also: [`sprite_color`](#sprite_color).
+
+<a id="sprite_frame"></a>
+
+### `sprite_frame(id, frame)`
+
+- `id`: the sprite's number, 0 to 7.
+- `frame`: the frame, from 0.
+
+Shows that frame of a sprite from `sprite_load` or `sprite_load_attached`. To animate it, change it every few
+screen frames. A frame that does not exist does nothing.
+
+See also: [`sprite_load`](#sprite_load).
+
+<a id="sprite_free"></a>
+
+### `sprite_free(id)`
+
+- `id`: the sprite's number, 0 to 7.
+
+Removes it and frees its hardware sprite. They are freed on their own when the program ends.
+
+See also: [`sprite_hide`](#sprite_hide).
+
+<a id="sprite_collision"></a>
+
+### `sprite_collision(id1, id2)` → `Bool`
+
+- `id1`, `id2`: two sprites.
+
+Returns `true` if their rectangles (16 pixels by their height) overlap. It does not look at transparent pixels: for
+that, BOBs and `bob_collision`.
+
+See also: [`bob_collision`](#bob_collision).
+
+<a id="sprite_set_row"></a>
+
+### `sprite_set_row(id, row, plane0, plane1)`
+
+- `id`: the sprite's number, 0 to 7.
+- `row`: the row, from 0.
+- `plane0`, `plane1`: 16 bits each; the leftmost bit is pixel 0. Each pixel's colour is its `plane0` bit plus twice
+  its `plane1` bit: 0 transparent, 1 to 3 the sprite's colours.
+
+Changes one row of the sprite's picture: `sprite_set_row(0, 0, 0xFFFF, 0)` paints the first row in colour 1.
+
+See also: [`sprite_create`](#sprite_create).
+
+<a id="soft_sprite_create"></a>
+
+### `soft_sprite_create(id, width, height, depth)` → `Bool`
+
+- `id`: the software sprite's number, 0 to 15.
+- `width`, `height`: the size in pixels.
+- `depth`: the depth of its picture (the colours, as on a screen).
+
+Creates an empty, transparent software sprite, for the current `gfx_*` target. You draw it with
+`soft_sprite_pixel` or `soft_sprite_row`. Returns `false` without a target or without memory.
+
+See also: [`soft_sprite_pixel`](#soft_sprite_pixel), [`soft_sprite_show`](#soft_sprite_show), [`soft_sprite_pos`](#soft_sprite_pos).
+
+<a id="soft_sprite_free"></a>
+
+### `soft_sprite_free(id)`
+
+- `id`: the software sprite's number, 0 to 15.
+
+Removes it (putting back what it covered) and frees its memory.
+
+See also: [`soft_sprite_hide`](#soft_sprite_hide).
+
+<a id="soft_sprite_pixel"></a>
+
+### `soft_sprite_pixel(id, x, y, color)`
+
+- `id`: the software sprite's number, 0 to 15.
+- `x`, `y`: the pixel inside the sprite.
+- `color`: the colour; 0 = transparent.
+
+See also: [`soft_sprite_clear`](#soft_sprite_clear).
+
+<a id="soft_sprite_clear"></a>
+
+### `soft_sprite_clear(id, color)`
+
+- `id`: the software sprite's number, 0 to 15.
+- `color`: the colour; 0 makes it all transparent.
+
+Paints the whole sprite one colour.
+
+See also: [`soft_sprite_pixel`](#soft_sprite_pixel).
+
+<a id="soft_sprite_row"></a>
+
+### `soft_sprite_row(id, row, plane0, plane1)`
+
+- `id`: the software sprite's number, 0 to 15.
+- `row`: the row.
+- `plane0`, `plane1`: as in `sprite_set_row`.
+
+Sets the first 16 pixels of a row in the hardware sprite format, to reuse the same picture.
+
+See also: [`sprite_set_row`](#sprite_set_row).
+
+<a id="soft_sprite_show"></a>
+
+### `soft_sprite_show(id)`
+
+- `id`: the software sprite's number, 0 to 15.
+
+Draws it at its position, saving what it covers.
+
+See also: [`soft_sprite_hide`](#soft_sprite_hide).
+
+<a id="soft_sprite_hide"></a>
+
+### `soft_sprite_hide(id)`
+
+- `id`: the software sprite's number, 0 to 15.
+
+Removes it, putting back what it covered.
+
+See also: [`soft_sprite_show`](#soft_sprite_show).
+
+<a id="soft_sprite_pos"></a>
+
+### `soft_sprite_pos(id, x, y)`
+
+- `id`: the software sprite's number, 0 to 15.
+- `x`, `y`: the new position.
+
+Moves it: if it shows, it restores the background where it was and draws it at the new place. If something is drawn
+under it while it shows, take it off first with `soft_sprite_hide`: otherwise moving it brings the old background
+back.
+
+See also: [`soft_sprite_x`](#soft_sprite_x), [`soft_sprite_show`](#soft_sprite_show).
+
+<a id="soft_sprite_x"></a>
+
+### `soft_sprite_x(id)` → `Int`
+
+- `id`: the software sprite's number, 0 to 15.
+
+Returns its X position.
+
+See also: [`soft_sprite_y`](#soft_sprite_y).
+
+<a id="soft_sprite_y"></a>
+
+### `soft_sprite_y(id)` → `Int`
+
+- `id`: the software sprite's number, 0 to 15.
+
+Returns its Y position.
+
+See also: [`soft_sprite_x`](#soft_sprite_x).
+
+<a id="bob_load"></a>
+
+### `bob_load(id, filename)` → `Bool`
+
+- `id`: the BOB's number, 0 to 31.
+- `filename`: an IFF ILBM picture. If it is wider than tall and its width is a multiple of its height, it holds
+  square frames side by side; those from Forja's sprite editor state their frame width.
+
+Loads the BOB. Its colour 0 is transparent. On a screen of your own, the palette becomes the picture's; to put it
+elsewhere in the palette, `bob_load_colors`. Returns `false` if it cannot be read.
+
+See also: [`bob_load_colors`](#bob_load_colors), [`bob_draw`](#bob_draw), [`bob_frame_width`](#bob_frame_width).
+
+<a id="bob_create"></a>
+
+### `bob_create(id, width, height, depth)` → `Bool`
+
+- `id`: the BOB's number, 0 to 31.
+- `width`, `height`: the picture's size; if the width is a multiple of the height, you get square frames.
+- `depth`: the depth, 1 to 8; usually the screen's.
+
+Creates an empty BOB (all colour 0, transparent). Draw on it with `bitmap_draw_to(id)` and the `gfx_*` functions,
+and `bitmap_draw_screen()` goes back to the screen.
+
+See also: [`bitmap_draw_to`](#bitmap_draw_to), [`bob_draw`](#bob_draw).
+
+<a id="bob_pos"></a>
+
+### `bob_pos(id, x, y)`
+
+- `id`: the BOB's number, 0 to 31.
+- `x`, `y`: the position of its corner on the target.
+
+Changes where it will go; it shows on the next `bob_draw`.
+
+See also: [`bob_draw`](#bob_draw).
+
+<a id="bob_draw"></a>
+
+### `bob_draw(id)`
+
+- `id`: the BOB's number, 0 to 31.
+Paints it at its position and frame, saving first what it covers. If it was already painted, it removes it from
+the old place first: to move it, `bob_pos` and `bob_draw` are enough. With several overlapping BOBs, remove them in
+the reverse order they were painted.
+
+See also: [`bob_erase`](#bob_erase), [`bob_paste`](#bob_paste), [`bob_pos`](#bob_pos).
+
+<a id="bob_erase"></a>
+
+### `bob_erase(id)`
+
+- `id`: the BOB's number, 0 to 31.
+
+Removes it, putting back what it covered.
+
+See also: [`bob_draw`](#bob_draw).
+
+<a id="bob_frame"></a>
+
+### `bob_frame(id, frame)`
+
+- `id`: the BOB's number, 0 to 31.
+- `frame`: the frame, from 0; it wraps around (with 4 frames, 5 is 1).
+
+Chooses the frame for the next `bob_draw`.
+
+See also: [`bob_frames`](#bob_frames), [`bob_frame_width`](#bob_frame_width).
+
+<a id="bob_frame_width"></a>
+
+### `bob_frame_width(id, width)`
+
+- `id`: the BOB's number, 0 to 31.
+- `width`: each frame's width in pixels.
+
+Says the picture is a strip of frames that wide, when they are not square.
+
+See also: [`bob_frame`](#bob_frame), [`bob_frames`](#bob_frames).
+
+<a id="bob_width"></a>
+
+### `bob_width(id)` → `Int`
+
+- `id`: the BOB's number, 0 to 31.
+
+Returns a frame's width; 0 if there is no such BOB.
+
+See also: [`bob_height`](#bob_height).
+
+<a id="bob_height"></a>
+
+### `bob_height(id)` → `Int`
+
+- `id`: the BOB's number, 0 to 31.
+
+Returns the height; 0 if there is no such BOB.
+
+See also: [`bob_width`](#bob_width).
+
+<a id="bob_frames"></a>
+
+### `bob_frames(id)` → `Int`
+
+- `id`: the BOB's number, 0 to 31.
+
+Returns how many frames it has; 0 if there is no such BOB.
+
+See also: [`bob_frame`](#bob_frame).
+
+<a id="bob_paste"></a>
+
+### `bob_paste(id, frame, x, y)`
+
+- `id`: the BOB's number, 0 to 31.
+- `frame`: the frame.
+- `x`, `y`: where.
+
+Paints that frame at `x`, `y` with its colour 0 transparent, without saving what it covers or moving it from where
+it is. For games that repaint the whole screen every frame, and to draw the same BOB in many places.
+
+See also: [`bob_draw`](#bob_draw), [`screen_double_buffer`](#screen_double_buffer).
+
+<a id="bob_free"></a>
+
+### `bob_free(id)`
+
+- `id`: the BOB's number, 0 to 31.
+
+Removes it from the screen if it was painted and frees its memory.
+
+See also: [`bob_erase`](#bob_erase).
+
+<a id="tilemap_create"></a>
+
+### `tilemap_create(id, width, height, tile, layers)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `width`, `height`: how many cells wide and high, 1 to 1024.
+- `tile`: each tile's side in pixels: 8, 16 or 32.
+- `layers`: how many layers, 1 to 8.
+
+Creates an empty map at that number; any map already there is freed. Returns `false` with sizes out of range or
+without memory.
+
+See also: [`tilemap_set`](#tilemap_set), [`tilemap_draw`](#tilemap_draw), [`tilemap_load`](#tilemap_load).
+
+<a id="tilemap_load"></a>
+
+### `tilemap_load(id, filename)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: an IFF FORM FMAP file, the one the map editor in Forja or the VS Code extension saves.
+
+Loads it with its layers, its objects and its tileset's name. Returns `false` if it is not a map.
+
+See also: [`tilemap_save`](#tilemap_save), [`tilemap_tileset`](#tilemap_tileset).
+
+<a id="tilemap_save"></a>
+
+### `tilemap_save(id, filename)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: the file.
+
+Saves the map as IFF FORM FMAP. Returns `false` if it cannot be written.
+
+See also: [`tilemap_load`](#tilemap_load).
+
+<a id="tilemap_free"></a>
+
+### `tilemap_free(id)`
+
+- `id`: the map's number, 0 to 7.
+
+Frees the map. They are freed on their own when the program ends.
+
+<a id="tilemap_width"></a>
+
+### `tilemap_width(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its width in cells; 0 if there is no map.
+
+See also: [`tilemap_height`](#tilemap_height).
+
+<a id="tilemap_height"></a>
+
+### `tilemap_height(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its height in cells; 0 if there is no map.
+
+See also: [`tilemap_width`](#tilemap_width).
+
+<a id="tilemap_tile_size"></a>
+
+### `tilemap_tile_size(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its tiles' side in pixels: 8, 16 or 32.
+
+<a id="tilemap_layers"></a>
+
+### `tilemap_layers(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns how many layers it has.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_get"></a>
+
+### `tilemap_get(id, layer, x, y)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `x`, `y`: the cell, from 0.
+
+Returns what is in the cell: 0 empty; otherwise the tile's number (1 is the tileset's first frame), plus 16384 if it
+is mirrored left to right and 32768 if top to bottom. The tile alone is `v & 16383`. Outside the map, 0. In
+collision layers, anything other than 0 is solid.
+
+See also: [`tilemap_set`](#tilemap_set), [`tilemap_tile_size`](#tilemap_tile_size).
+
+<a id="tilemap_set"></a>
+
+### `tilemap_set(id, layer, x, y, value)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `x`, `y`: the cell.
+- `value`: what to put, as `tilemap_get` gives it; 0 empties it.
+
+Outside the map it does nothing.
+
+See also: [`tilemap_get`](#tilemap_get).
+
+<a id="tilemap_tileset"></a>
+
+### `tilemap_tileset(id)` → `String`
+
+- `id`: the map's number, 0 to 7.
+
+Returns the tileset file's name as stored in the map; `""` if it has none.
+
+See also: [`tilemap_set_tileset`](#tilemap_set_tileset), [`bob_load`](#bob_load).
+
+<a id="tilemap_set_tileset"></a>
+
+### `tilemap_set_tileset(id, filename)`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: the tileset file: an IFF picture with one frame per tile, like the one from Forja's sprite editor.
+
+Stores the tileset's name in the map. It does not load it: load it with `bob_load` and pass it to `tilemap_draw`.
+
+See also: [`tilemap_tileset`](#tilemap_tileset).
+
+<a id="tilemap_layer_name"></a>
+
+### `tilemap_layer_name(id, layer)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Returns the layer's name.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_type"></a>
+
+### `tilemap_layer_type(id, layer)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+Returns its type: 0 tiles. The editor uses other numbers for collision and object layers.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_visible"></a>
+
+### `tilemap_layer_visible(id, layer)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Returns whether the layer shows in the editor. `tilemap_draw` does not look at it.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_set"></a>
+
+### `tilemap_layer_set(id, layer, name, type, visible)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `name`: its name, up to 31 letters.
+- `type`: its type (0 tiles).
+- `visible`: whether it shows in the editor.
+
+See also: [`tilemap_layer_name`](#tilemap_layer_name).
+
+<a id="tilemap_layer_add"></a>
+
+### `tilemap_layer_add(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Adds an empty layer at the end. Returns its number, or -1 if there are already 8.
+
+See also: [`tilemap_layer_remove`](#tilemap_layer_remove).
+
+<a id="tilemap_layer_remove"></a>
+
+### `tilemap_layer_remove(id, layer)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Removes the layer; the ones behind move down one place. Returns `false` if it is the only one.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_layer_move"></a>
+
+### `tilemap_layer_move(id, from, to)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `from`: the layer to move.
+- `to`: its new place; the ones in between shift by one.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_resize"></a>
+
+### `tilemap_resize(id, width, height)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `width`, `height`: the new size in cells.
+
+What fits stays, counting from the top left corner; the new cells are empty. Returns `false` without memory or with
+sizes out of range.
+
+See also: [`tilemap_create`](#tilemap_create).
+
+<a id="tilemap_draw"></a>
+
+### `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `bob`: the tileset BOB; tile n is its frame n - 1, and each cell is as big as a frame.
+- `tx`, `ty`: the first cell painted.
+- `tw`, `th`: how many cells wide and high.
+- `x`, `y`: where it goes on the `gfx_*` target.
+
+Paints that piece of the layer in one go. Empty cells let what was underneath show. To scroll the level, change
+`tx`, `ty` (cell by cell) or `x`, `y`.
+
+See also: [`tilemap_draw_masked`](#tilemap_draw_masked), [`bob_load`](#bob_load).
+
+<a id="tilemap_draw_masked"></a>
+
+### `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- The rest, as in `tilemap_draw`.
+
+Like `tilemap_draw`, but each tile's colour 0 is also transparent: for front layers, which let the background show
+between their drawings.
+
+See also: [`tilemap_draw`](#tilemap_draw).
+
+<a id="tilemap_objects"></a>
+
+### `tilemap_objects(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns how many objects the map has.
+
+See also: [`tilemap_object_find`](#tilemap_object_find).
+
+<a id="tilemap_object_add"></a>
+
+### `tilemap_object_add(id, x, y, kind)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `x`, `y`: where, in map pixels.
+- `kind`: its kind, a text: `"player"`, `"coin"`.
+
+Adds an object. Returns its number, or -1 if there are already 256.
+
+See also: [`tilemap_object_find`](#tilemap_object_find), [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_remove"></a>
+
+### `tilemap_object_remove(id, object)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Removes the object; the ones behind move down one place.
+
+See also: [`tilemap_object_add`](#tilemap_object_add).
+
+<a id="tilemap_object_x"></a>
+
+### `tilemap_object_x(id, object)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its X in map pixels.
+
+See also: [`tilemap_object_y`](#tilemap_object_y).
+
+<a id="tilemap_object_y"></a>
+
+### `tilemap_object_y(id, object)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its Y in map pixels.
+
+See also: [`tilemap_object_x`](#tilemap_object_x).
+
+<a id="tilemap_object_move"></a>
+
+### `tilemap_object_move(id, object, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+- `x`, `y`: the new place, in map pixels.
+
+See also: [`tilemap_object_x`](#tilemap_object_x).
+
+<a id="tilemap_object_kind"></a>
+
+### `tilemap_object_kind(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its kind.
+
+See also: [`tilemap_object_find`](#tilemap_object_find).
+
+<a id="tilemap_object_name"></a>
+
+### `tilemap_object_name(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its name.
+
+See also: [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_sprite"></a>
+
+### `tilemap_object_sprite(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its sprite's file; `""` if it has none.
+
+See also: [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_set"></a>
+
+### `tilemap_object_set(id, object, kind, name, sprite)`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+- `kind`, `name`: its kind and its name, up to 31 letters each.
+- `sprite`: its sprite's file; `""` none.
+
+See also: [`tilemap_object_add`](#tilemap_object_add).
+
+<a id="tilemap_object_find"></a>
+
+### `tilemap_object_find(id, kind, from)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `kind`: the kind to look for.
+- `from`: the object number to start at.
+
+Returns the first object of that kind from `from` on, or -1 if there is none. To find the player:
+`tilemap_object_find(0, "player", 0)`. To go through every enemy, search again from the one found plus one.
+
+See also: [`tilemap_object_add`](#tilemap_object_add), [`tilemap_objects`](#tilemap_objects).
+
+<a id="bob_collision"></a>
+
+### `bob_collision(id1, id2)` → `Bool`
+
+- `id1`, `id2`: two different BOBs.
+
+Returns `true` if their non-transparent pixels touch, with their current positions and frames. It checks the
+rectangles first and then the pixels where they overlap.
+
+See also: [`sprite_collision`](#sprite_collision).
+
+<a id="copper_create"></a>
+
+### `copper_create(size)` → `Bool`
+
+- `size`: how many instructions fit; 0 = 64. Each `copper_wait`, `copper_move` or `copper_color` is one.
+
+Starts an empty copper list; any previous one is removed. Then come the instructions, `copper_end` and
+`copper_install`. There is a single list. Returns `false` without memory.
+
+See also: [`copper_wait`](#copper_wait), [`copper_color`](#copper_color), [`copper_install`](#copper_install).
+
+<a id="copper_wait"></a>
+
+### `copper_wait(y, x)`
+
+- `y`: the screen line, counting from the top of the program's screen.
+- `x`: the position along the line; 0 = the start.
+
+The copper waits for the beam to get there before going on with the list. Lines go in order: a wait for a line
+already passed is not met until the next frame.
+
+See also: [`copper_color`](#copper_color), [`copper_move`](#copper_move).
+
+<a id="copper_move"></a>
+
+### `copper_move(reg, value)`
+
+- `reg`: the video chip register, as an offset from 0xDFF000: 0x180 is COLOR00.
+- `value`: the 16-bit value.
+
+Writes that value to the register when the copper reaches this instruction. For effects other than colour; a wrong
+register can spoil the picture until the list is removed.
+
+See also: [`copper_color`](#copper_color).
+
+<a id="copper_color"></a>
+
+### `copper_color(index, rgb)`
+
+- `index`: the colour, 0 to 31.
+- `rgb`: the colour in 12 bits, `0xRGB`: `0xF00` red, `0x00F` blue.
+
+Changes that colour from the line of the previous wait on. Several waits with a colour each make a background
+gradient.
+
+See also: [`copper_wait`](#copper_wait), [`copper_move`](#copper_move).
+
+<a id="copper_end"></a>
+
+### `copper_end()`
+
+Closes the list. It goes after the last instruction and before `copper_install`.
+
+See also: [`copper_install`](#copper_install).
+
+<a id="copper_install"></a>
+
+### `copper_install()`
+
+Starts the list on the program's screen (or on the window's, which may be the Workbench: better a screen of your
+own). It goes through the system, without taking it over. An installed list does not change: for another one,
+`copper_free` and start again.
+
+See also: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
+
+<a id="copper_free"></a>
+
+### `copper_free()`
+
+Removes the list from the screen and frees its memory. It is removed on its own when the program ends.
+
+See also: [`copper_install`](#copper_install).
+
+<a id="bitmap_create"></a>
+
+### `bitmap_create(id, width, height, depth)` → `Bool`
+
+- `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
+- `width`, `height`: the size in pixels.
+- `depth`: the depth, 1 to 8.
+
+Creates an empty bitmap (all colour 0) off screen; any bitmap at that number is freed. Returns `false` with sizes
+out of range or without memory.
+
+See also: [`bitmap_draw_to`](#bitmap_draw_to), [`bitmap_blit`](#bitmap_blit).
+
+<a id="bitmap_load"></a>
+
+### `bitmap_load(id, filename)` → `Bool`
+
+- `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
+- `filename`: an IFF ILBM picture, compressed or not.
+
+Loads it into the bitmap. On a screen of your own, the palette becomes the picture's; the Workbench keeps its own.
+Returns `false` if it cannot be read or is not an ILBM.
+
+See also: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_colors), [`image_load`](#image_load).
+
+<a id="bitmap_save"></a>
+
+### `bitmap_save(id, filename)` → `Bool`
+
+- `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
+- `filename`: the file.
+
+Saves it as an uncompressed IFF ILBM, with the palette of the program's screen or the window's. Returns `false` if
+it cannot be written.
+
+See also: [`bitmap_load`](#bitmap_load).
+
+<a id="bitmap_free"></a>
+
+### `bitmap_free(id)`
+
+- `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
+
+Frees the bitmap. If drawing was going to it, drawing goes back to the screen.
+
+See also: [`bitmap_create`](#bitmap_create).
+
+<a id="bitmap_blit"></a>
+
+### `bitmap_blit(src_id, sx, sy, w, h, dx, dy)`
+
+- `src_id`: the source bitmap.
+- `sx`, `sy`: the corner of the part to copy, inside the bitmap.
+- `w`, `h`: its size.
+- `dx`, `dy`: where it goes on the `gfx_*` target.
+
+Copies that part of the bitmap as it is, colour 0 included. It is the fast way to put up a background or a prepared
+screen.
+
+See also: [`bitmap_blit_mask`](#bitmap_blit_mask), [`bob_paste`](#bob_paste).
+
+<a id="bitmap_blit_mask"></a>
+
+### `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`
+
+- `src_id`: the source bitmap.
+- `mask_id`: a bitmap of the same width that says where to copy: pixels with the first plane set (odd colour).
+- `sx`, `sy`, `w`, `h`, `dx`, `dy`: as in `bitmap_blit`.
+
+Copies only where the mask says; elsewhere what was there shows. If the widths do not match, it does nothing. A BOB
+makes its own mask: for pictures with colour 0 transparent, `bob_paste` is easier.
+
+See also: [`bitmap_blit`](#bitmap_blit), [`bob_paste`](#bob_paste).
+
+<a id="bitmap_draw_to"></a>
+
+### `bitmap_draw_to(id)`
+
+- `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
+From now on the `gfx_*` functions draw on that bitmap (or BOB) instead of the screen, until `bitmap_draw_screen`.
+Coordinates count from its corner.
+
+See also: [`bitmap_draw_screen`](#bitmap_draw_screen), [`bob_create`](#bob_create).
+
+<a id="bitmap_draw_screen"></a>
+
+### `bitmap_draw_screen()`
+
+The `gfx_*` functions go back to drawing where they drew before `bitmap_draw_to`: the window or the screen.
+
+See also: [`bitmap_draw_to`](#bitmap_draw_to).
+
+<a id="input_functions"></a>
 
 ## Input (keyboard, mouse, joystick)
 
+The keyboard, the mouse and the joystick, and the program's own screens.
+
+**Two ways to read input.**
+
+- **By events**, in a program with windows: the `EventLoop` gets `On Key`, `On Click`, `On Gadget`... and the
+  program uses no CPU while it waits (manual, sections 12 and 14). `key_wait` and `wait_key` wait for a key the
+  same way, without a loop.
+- **By asking**, in a game: every turn of the main loop looks at how the keys (`key_down`), the joystick (`joy_*`)
+  and the mouse buttons (`mouse_button`) are right now. These read the hardware or the system's keyboard: they need
+  no window, but they do not look at which one is active either.
+
+**Key codes.** The keyboard functions use the key's raw code, the same on every keymap: 0x45 Esc, 0x40 space,
+0x44 Return, 0x41 backspace, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x50 to 0x59 F1 to F10. `key_text` says
+which letter a key gives with the keymap in use.
+
+**The joystick** goes in port 1, the usual one. Port 0 is the mouse's: it is only useful with a second joystick
+plugged in there.
+
+**Screens.** A screen of your own has its palette, resolution and depth, without bothering the Workbench. Open one
+(`screen_open`, `screen_open_custom`, `screen_open_mode`), open the windows on it or draw on it directly, and when
+done close the windows and then the screen. There is one at a time. To animate without flicker,
+`screen_double_buffer` and `screen_flip`.
+
+**Example** (`tests/test_doc_entrada.dash`, which is also a test: it runs with the others):
+
+```dash
+# Entrada: el bucle de un juego que mueve un cuadrado con el joystick o las flechas, en una pantalla propia.
+
+const ESC = 0x45
+const ARRIBA = 0x4C
+const ABAJO = 0x4D
+const DERECHA = 0x4E
+const IZQUIERDA = 0x4F
+
+# v, sin salirse de a..b
+func entre(v: Int, a: Int, b: Int) -> Int
+    if v < a
+        return a
+    elif v > b
+        return b
+    end
+    return v
+end
+
+Main
+    if not screen_open_custom(320, 200, 3, "Entrada")
+        Print "no se pudo abrir la pantalla"
+        return
+    end
+    Print "la A escribe #{key_text(0x20)}"
+    x = 150
+    y = 90
+    fin = time_ms() + 2000                 # para la prueba: acaba sola a los dos segundos
+    while time_ms() < fin and not key_down(ESC) and not joy_fire(1)
+        dx = joy_x(1)                      # -1, 0 o 1
+        dy = joy_y(1)
+        if key_down(IZQUIERDA)
+            dx = -1
+        elif key_down(DERECHA)
+            dx = 1
+        end
+        if key_down(ARRIBA)
+            dy = -1
+        elif key_down(ABAJO)
+            dy = 1
+        end
+        gfx_pen(0)
+        gfx_rect(x, y, x + 19, y + 19)     # borra el cuadrado donde estaba
+        x = entre(x + 2 * dx, 0, 300)
+        y = entre(y + 2 * dy, 12, 180)
+        gfx_pen(1)
+        gfx_rect(x, y, x + 19, y + 19)
+        time_delay(1)                      # una vuelta por fotograma, más o menos
+    end
+    Print "x = #{x}, y = #{y}"
+    screen_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `key_pressed()` | `BOOL` | Check if key is available |  |
-| `key_get()` | `LONG` | Get key code |  |
-| `key_wait()` | `LONG` | Wait for and return key |  |
-| `key_raw()` | `LONG` | Get raw key code (no translation) |  |
-| `key_down(code)` | `BOOL` | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
-| `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
-| `mouse_x()` | `LONG` | Mouse X position relative to window inner area (0 without a window) |  |
-| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area (0 without a window) |  |
-| `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |
-| `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
-| `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
-| `close_window()` | `void` | Close the current window |  |
-| `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
-| `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
-| `screen_visitors()` | `LONG` | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
-| `screen_make_default()` | `BOOL` | The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen |  |
-| `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
-| `screen_double_buffer()` | `BOOL` | Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0 |  |
-| `screen_flip()` | `BOOL` | Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now |  |
-| `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
-| `screen_close()` | `void` | Close the screen |  |
-| `screen_width()` | `LONG` | Get the screen width in pixels |  |
-| `screen_height()` | `LONG` | Get the screen height in pixels |  |
-| `check_lmb()` | `BOOL` | Check if left mouse button is pressed (hardware) |  |
-| `check_rmb()` | `BOOL` | Check if right mouse button is pressed (hardware) |  |
-| `check_mouse()` | `BOOL` | Check if any mouse button is pressed (hardware) |  |
-| `check_esc()` | `BOOL` | Check if ESC key is pressed (hardware) |  |
-| `wait_click()` | `LONG` | Wait for mouse click (press and release) |  |
-| `wait_key()` | `LONG` | Wait for any key and return its code |  |
-| `joy_x(port)` | `LONG` | Joystick X direction (-1, 0, 1) |  |
-| `joy_y(port)` | `LONG` | Joystick Y direction (-1, 0, 1) |  |
-| `joy_button(port)` | `BOOL` | Joystick button state |  |
-| `joy_up(port)` | `BOOL` | Joystick up |  |
-| `joy_down(port)` | `BOOL` | Joystick down |  |
-| `joy_left(port)` | `BOOL` | Joystick left |  |
-| `joy_right(port)` | `BOOL` | Joystick right |  |
-| `joy_fire(port)` | `BOOL` | Joystick fire button |  |
+| [`key_pressed()`](#key_pressed) | Bool | Check if key is available |  |
+| [`key_get()`](#key_get) | Int | Get key code |  |
+| [`key_wait()`](#key_wait) | Int | Wait for and return key |  |
+| [`key_raw()`](#key_raw) | Int | Get raw key code (no translation) |  |
+| [`key_down(code)`](#key_down) | Bool | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
+| [`key_text(keycode)`](#key_text) | String | Convert keycode to text |  |
+| [`mouse_x()`](#mouse_x) | Int | Mouse X position relative to window inner area (0 without a window) |  |
+| [`mouse_y()`](#mouse_y) | Int | Mouse Y position relative to window inner area (0 without a window) |  |
+| [`mouse_button(btn)`](#mouse_button) | Bool | Check mouse button (0=left, 1=right) |  |
+| [`event_window()`](#event_window) | Int | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
+| [`window_check_close()`](#window_check_close) | Bool | Check if close button was clicked (non-blocking) |  |
+| [`close_window()`](#close_window) | — | Close the current window |  |
+| [`screen_open_mode(mode, width, height, depth, title)`](#screen_open_mode) | Bool | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
+| [`screen_clone_wb(name)`](#screen_clone_wb) | Bool | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
+| [`screen_visitors()`](#screen_visitors) | Int | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
+| [`screen_make_default()`](#screen_make_default) | Bool | The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen |  |
+| [`screen_open(depth, title)`](#screen_open) | Bool | Open a screen cloning Workbench display mode with custom depth |  |
+| [`screen_double_buffer()`](#screen_double_buffer) | Bool | Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0 |  |
+| [`screen_flip()`](#screen_flip) | Bool | Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now |  |
+| [`screen_open_custom(width, height, depth, title)`](#screen_open_custom) | Bool | Open a custom screen with specific dimensions and depth |  |
+| [`screen_close()`](#screen_close) | — | Close the screen |  |
+| [`screen_width()`](#screen_width) | Int | Get the screen width in pixels |  |
+| [`screen_height()`](#screen_height) | Int | Get the screen height in pixels |  |
+| [`check_lmb()`](#check_lmb) | Bool | Check if left mouse button is pressed (hardware) |  |
+| [`check_rmb()`](#check_rmb) | Bool | Check if right mouse button is pressed (hardware) |  |
+| [`check_mouse()`](#check_mouse) | Bool | Check if any mouse button is pressed (hardware) |  |
+| [`check_esc()`](#check_esc) | Bool | Check if ESC key is pressed (hardware) |  |
+| [`wait_click()`](#wait_click) | Int | Wait for mouse click (press and release) |  |
+| [`wait_key()`](#wait_key) | Int | Wait for any key and return its code |  |
+| [`joy_x(port)`](#joy_x) | Int | Joystick X direction (-1, 0, 1) |  |
+| [`joy_y(port)`](#joy_y) | Int | Joystick Y direction (-1, 0, 1) |  |
+| [`joy_button(port)`](#joy_button) | Bool | Joystick button state |  |
+| [`joy_up(port)`](#joy_up) | Bool | Joystick up |  |
+| [`joy_down(port)`](#joy_down) | Bool | Joystick down |  |
+| [`joy_left(port)`](#joy_left) | Bool | Joystick left |  |
+| [`joy_right(port)`](#joy_right) | Bool | Joystick right |  |
+| [`joy_fire(port)`](#joy_fire) | Bool | Joystick fire button |  |
+
+<a id="key_pressed"></a>
+
+### `key_pressed()` → `Bool`
+
+Returns `true` if a key is waiting in the current window, without taking it: `key_get` or `key_wait` pick it up
+afterwards. Released keys count too. Without a window, `false`. Inside an `EventLoop` keys go to `On Key`.
+
+See also: [`key_get`](#key_get), [`key_wait`](#key_wait), [`key_down`](#key_down).
+
+<a id="key_get"></a>
+
+### `key_get()` → `Int`
+
+Takes the next key from the current window's queue and returns its raw code, or 0 if there is none. Releasing a
+key sends it again with 128 added (0x80): `if k < 128` keeps only the presses. The queue holds 16; when it is full
+the oldest ones are lost.
+
+See also: [`key_pressed`](#key_pressed), [`key_wait`](#key_wait), [`key_text`](#key_text).
+
+<a id="key_wait"></a>
+
+### `key_wait()` → `Int`
+
+Waits for a key press in the current window and returns its raw code. It uses no CPU while it waits. Released keys
+do not count. Without a window it returns 0 at once.
+
+See also: [`key_get`](#key_get), [`wait_key`](#wait_key), [`key_text`](#key_text).
+
+<a id="key_raw"></a>
+
+### `key_raw()` → `Int`
+
+Returns the raw code of the last key read, with `key_get`, `key_wait` or an `On Key`. It does not look at the
+keyboard: to know whether a key is held now, `key_down`.
+
+See also: [`key_get`](#key_get), [`key_down`](#key_down).
+
+<a id="key_down"></a>
+
+### `key_down(code)` → `Bool`
+
+- `code`: the key's raw code, from 0 to 127.
+
+Returns `true` if that key is held right now. It reads the system's keyboard state: it needs no window and takes
+nothing from the queue. It is what goes in a game loop, once per frame. Note: it sees keys even when the program
+is not the active one.
+
+See also: [`joy_x`](#joy_x), [`key_get`](#key_get), [`check_esc`](#check_esc).
+
+<a id="key_text"></a>
+
+### `key_text(keycode)` → `String`
+
+- `keycode`: a raw key code.
+
+Returns the text that key gives with the keymap in use, without Shift: `key_text(0x20)` is `"a"`. `""` for keys
+without a letter, like the arrows or the function keys.
+
+See also: [`key_get`](#key_get), [`key_raw`](#key_raw).
+
+<a id="mouse_x"></a>
+
+### `mouse_x()` → `Int`
+
+Returns the pointer's X counting from the corner inside the current window's borders, like the `gfx_*` functions.
+It can be negative or beyond the width when the pointer is outside. Without a window, 0.
+
+See also: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), [`click_x`](#click_x).
+
+<a id="mouse_y"></a>
+
+### `mouse_y()` → `Int`
+
+Returns the pointer's Y inside the current window, like `mouse_x`. Without a window, 0.
+
+See also: [`mouse_x`](#mouse_x).
+
+<a id="mouse_button"></a>
+
+### `mouse_button(btn)` → `Bool`
+
+- `btn`: 0 the left one, 1 the right one.
+
+Returns `true` if that button is held now. It reads the mouse port's hardware: it needs no window and sees clicks
+anywhere on the screen. In a program with a window, `On Click` is better.
+
+See also: [`mouse_x`](#mouse_x), [`check_lmb`](#check_lmb), [`wait_click`](#wait_click).
+
+<a id="event_window"></a>
+
+### `event_window()` → `Int`
+
+Inside an `EventLoop`, returns which window the event came from: the `window_create` number, or 0 if it was the
+loop's own window. Useful to close only that window in its `On Close`.
+
+See also: [`window_create`](#window_create), [`gadget_id`](#gadget_id).
+
+<a id="window_check_close"></a>
+
+### `window_check_close()` → `Bool`
+
+Returns `true` if the current window's close button was pressed since the last look, without waiting. For a loop
+of your own, without an `EventLoop`: `while not window_check_close()`.
+
+See also: [`close_window`](#close_window), [`key_get`](#key_get).
+
+<a id="close_window"></a>
+
+### `close_window()`
+
+Closes the current window, declared or from `window_create`. Afterwards there is no current window.
+
+See also: [`window_close`](#window_close), [`window_check_close`](#window_check_close).
+
+<a id="screen_open_mode"></a>
+
+### `screen_open_mode(mode, width, height, depth, title)` → `Bool`
+
+- `mode`: the exact mode: the one from `dialog_screen_mode` (`screen_mode_id`), or a known one: 0x21000 PAL low
+  resolution, 0x29000 PAL high.
+- `width`, `height`, `depth`: size and depth.
+- `title`: the title.
+
+Opens the screen in that mode. Returns `false` if the mode does not exist on this machine, does not allow that depth
+or a screen is already open.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_custom`](#screen_open_custom).
+
+<a id="screen_clone_wb"></a>
+
+### `screen_clone_wb(name)` → `Bool`
+
+- `name`: the screen's public name.
+
+Opens a public screen like the Workbench's (mode, size, depth, pens and font) with that name. Other programs can
+open windows on it when told to. Returns `false` if the name already exists or a screen is already open.
+`screen_close` waits for the others to close their windows, a minute at most; if they are still open, it leaves it.
+
+See also: [`screen_visitors`](#screen_visitors), [`screen_make_default`](#screen_make_default), [`screen_close`](#screen_close).
+
+<a id="screen_visitors"></a>
+
+### `screen_visitors()` → `Int`
+
+Returns how many windows and locks of other programs there are on the program's public screen
+(`screen_clone_wb`); a MUI window can count as two. 0 if there are none or there is no public screen.
+
+See also: [`screen_clone_wb`](#screen_clone_wb).
+
+<a id="screen_make_default"></a>
+
+### `screen_make_default()` → `Bool`
+
+Makes the program's public screen (`screen_clone_wb`) the default public one: windows that do not name a screen,
+like those of programs it launches or a console, open there. `screen_close` puts the old one back. Returns `false`
+if there is no public screen.
+
+See also: [`screen_clone_wb`](#screen_clone_wb).
+
+<a id="screen_open"></a>
+
+### `screen_open(depth, title)` → `Bool`
+
+- `depth`: the depth: 1 = 2 colours, 2 = 4, 3 = 8, 4 = 16, 5 = 32, 8 = 256 (AGA or a graphics card).
+- `title`: the title on the screen's bar.
+
+Opens a screen with the Workbench's mode and size and the given depth. Windows opened afterwards go on it and,
+without a window, the `gfx_*` functions draw on the screen. Returns `false` if it could not be opened. One screen at
+a time: close the old one before opening another.
+
+See also: [`screen_open_custom`](#screen_open_custom), [`screen_open_mode`](#screen_open_mode), [`screen_close`](#screen_close).
+
+<a id="screen_double_buffer"></a>
+
+### `screen_double_buffer()` → `Bool`
+
+Sets up two pictures for the program's own screen: from now on the `gfx_*` functions draw on the hidden one and
+`screen_flip` shows it. Each frame is seen whole, without flicker. Drawing goes on the screen, not in windows: it is
+for full-screen games and demos. Returns `false` without a screen of its own, with a public one (`screen_clone_wb`)
+or before AmigaOS 3.0. Calling it again does nothing.
+
+See also: [`screen_flip`](#screen_flip), [`screen_open_custom`](#screen_open_custom).
+
+<a id="screen_flip"></a>
+
+### `screen_flip()` → `Bool`
+
+Shows what was drawn on the hidden picture and moves on to drawing on the other one. It waits for the display, one
+frame at most, so it sets the pace of the loop: 50 turns a second on PAL. The new picture holds what was there two
+frames ago: what moves has to be cleared or repainted. Returns `false` if it could not swap now.
+
+See also: [`screen_double_buffer`](#screen_double_buffer).
+
+<a id="screen_open_custom"></a>
+
+### `screen_open_custom(width, height, depth, title)` → `Bool`
+
+- `width`, `height`: the size in pixels: 320 x 256 is PAL low resolution, 640 x 256 high.
+- `depth`: the depth, as in `screen_open`.
+- `title`: the title.
+
+Opens a screen of that size; the system picks the mode that fits best (no HAM or half-brite). Returns `false` if it
+could not be opened.
+
+See also: [`screen_open`](#screen_open), [`screen_close`](#screen_close), [`gfx_rgb`](#gfx_rgb).
+
+<a id="screen_close"></a>
+
+### `screen_close()`
+
+Closes the program's own screen. Close the windows on it first. Without a screen of its own it does nothing.
+
+See also: [`screen_open`](#screen_open), [`window_close`](#window_close).
+
+<a id="screen_width"></a>
+
+### `screen_width()` → `Int`
+
+Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, 640.
+
+See also: [`screen_height`](#screen_height).
+
+<a id="screen_height"></a>
+
+### `screen_height()` → `Int`
+
+Returns the height in pixels of the program's screen or of the current window's. With neither, 256.
+
+See also: [`screen_width`](#screen_width).
+
+<a id="check_lmb"></a>
+
+### `check_lmb()` → `Bool`
+
+Returns `true` if the left mouse button is held now. It is `mouse_button(0)`.
+
+See also: [`mouse_button`](#mouse_button), [`check_rmb`](#check_rmb).
+
+<a id="check_rmb"></a>
+
+### `check_rmb()` → `Bool`
+
+Returns `true` if the right mouse button is held now. It is `mouse_button(1)`.
+
+See also: [`mouse_button`](#mouse_button), [`check_lmb`](#check_lmb).
+
+<a id="check_mouse"></a>
+
+### `check_mouse()` → `Bool`
+
+Returns `true` if either mouse button is held.
+
+See also: [`mouse_button`](#mouse_button).
+
+<a id="check_esc"></a>
+
+### `check_esc()` → `Bool`
+
+Returns `true` if the last thing the keyboard sent was Esc pressed. If another key is pressed meanwhile it stops
+seeing it: `key_down(0x45)` is more reliable.
+
+See also: [`key_down`](#key_down).
+
+<a id="wait_click"></a>
+
+### `wait_click()` → `Int`
+
+Waits for a mouse button to be pressed and released, anywhere on the screen. It looks at the mouse 50 times a
+second. Returns 1. In a program with a window, `On Click` also says where it was.
+
+See also: [`mouse_button`](#mouse_button), [`wait_key`](#wait_key).
+
+<a id="wait_key"></a>
+
+### `wait_key()` → `Int`
+
+Waits for a key press in the current window and returns its raw code. The window's other messages (the close
+button, for instance) are lost while it waits. Without a window, it waits one second and returns 0.
+
+See also: [`key_wait`](#key_wait), [`wait_click`](#wait_click).
+
+<a id="joy_x"></a>
+
+### `joy_x(port)` → `Int`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns -1 if the joystick is pushed left, 1 right and 0 in the middle. Check it every frame.
+
+See also: [`joy_y`](#joy_y), [`joy_fire`](#joy_fire), [`key_down`](#key_down).
+
+<a id="joy_y"></a>
+
+### `joy_y(port)` → `Int`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns -1 up, 1 down and 0 in the middle.
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_button"></a>
+
+### `joy_button(port)` → `Bool`
+
+- `port`: 1 the joystick port; 0 the mouse's.
+
+Returns `true` if the fire button is held. On port 0 it is also the left mouse button.
+
+See also: [`joy_fire`](#joy_fire).
+
+<a id="joy_up"></a>
+
+### `joy_up(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed up (diagonals too).
+
+See also: [`joy_y`](#joy_y).
+
+<a id="joy_down"></a>
+
+### `joy_down(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed down (diagonals too).
+
+See also: [`joy_y`](#joy_y).
+
+<a id="joy_left"></a>
+
+### `joy_left(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed left (diagonals too).
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_right"></a>
+
+### `joy_right(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the joystick is pushed right (diagonals too).
+
+See also: [`joy_x`](#joy_x).
+
+<a id="joy_fire"></a>
+
+### `joy_fire(port)` → `Bool`
+
+- `port`: the port, normally 1.
+
+Returns `true` if the fire button is held. It is `joy_button`.
+
+See also: [`joy_button`](#joy_button).
+
+<a id="gadtools_functions"></a>
 
 ## GadTools
 
+GadTools gadgets for a single window, with their own event loop. It is Dash's oldest way; for new programs, the
+numbered gadgets of the Intuition group (`button_create`...), which allow several windows and the `EventLoop`, or
+MUI.
+
+**The flow:**
+
+1. Open the window (`Window X ... end` and `X.open`, or `window_create`).
+2. `gt_init()`: sets GadTools up for the current window. The `gt_*` functions and the menus belong to that window.
+3. Create the gadgets: `gt_button`, `gt_string`, `gt_slider`... Each returns its number, from 0 and in order, or -1
+   if it could not. Up to 64. `x`, `y` count from the corner inside the borders.
+4. `gt_attach()`: puts them on the window. Those created afterwards do not show.
+5. The loop: `gt_wait_event()` waits and returns the number of the gadget used, or -2 if the close button was
+   pressed.
+
+`gt_init` again starts from scratch: it frees the previous gadgets and menus. Everything is freed when the program
+ends.
+
+**Example** (`tests/test_doc_gadtools.dash`, which is also a test: it runs with the others):
+
+```dash
+# GadTools y menús: una ventana con gadgets, un menú con una opción de marca, y su bucle.
+
+const MENU_SONIDO = 1
+const MENU_SALIR = 2
+
+Window Ajustes
+    title "Ajustes"
+    width 300
+    height 110
+end
+
+Main
+    Ajustes.open
+    gt_init()
+    menu_title("Proyecto")
+    menu_check_item("Sonido", "S", MENU_SONIDO)
+    menu_separator()
+    menu_item("Salir", "Q", MENU_SALIR)
+    menu_attach()
+
+    aceptar = gt_button(40, 70, 80, 16, "_Aceptar")
+    nombre = gt_string(90, 10, 180, 14, "Nombre", "Amiga", 40)
+    volumen = gt_slider(90, 35, 180, 12, "Volumen", 0, 64, 32)
+    gt_attach()
+    Print "botón #{aceptar}, campo #{nombre}, deslizador #{volumen}"
+
+    gt_set_value(volumen, 40)
+    input_click(44 + window_border_left(), 74 + window_border_top(), 0)   # para la prueba: pulsa Aceptar
+    ev = gt_wait_event()
+    while ev != -2 and ev != aceptar
+        ev = gt_wait_event()
+    end
+    Print "pulsado: #{ev}"
+    Print "#{gt_get_string(nombre)}, volumen #{gt_get_value(volumen)}, sonido #{menu_checked(MENU_SONIDO)}"
+    gt_cleanup()
+    Ajustes.close
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `gt_init()` | `BOOL` | Initialize GadTools context (call after window open) |  |
-| `gt_cleanup()` | `void` | Cleanup GadTools resources |  |
-| `gt_attach()` | `void` | Attach gadgets to window (call after creating all gadgets) |  |
-| `gt_button(x, y, w, h, label)` | `LONG` | Create a button gadget, returns gadget ID |  |
-| `gt_checkbox(x, y, w, h, label, checked)` | `LONG` | Create a checkbox gadget |  |
-| `gt_string(x, y, w, h, label, initial, maxchars)` | `LONG` | Create a string input gadget |  |
-| `gt_integer(x, y, w, h, label, initial)` | `LONG` | Create an integer input gadget |  |
-| `gt_slider(x, y, w, h, label, min, max, level)` | `LONG` | Create a slider gadget |  |
-| `gt_palette(x, y, w, h, label, depth, color)` | `LONG` | Create a palette selector gadget |  |
-| `gt_text(x, y, w, h, label, text)` | `LONG` | Create a static text gadget |  |
-| `gt_get_value(gad_id)` | `LONG` | Get numeric value from gadget (slider, palette, etc.) |  |
-| `gt_set_value(gad_id, value)` | `void` | Set numeric value of gadget |  |
-| `gt_get_string(gad_id)` | `STRPTR` | Get string value from string gadget |  |
-| `gt_event()` | `LONG` | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
-| `gt_wait_event()` | `LONG` | Wait for gadget event, returns gadget ID or -2 (close) |  |
-| `gt_cycle(x, y, w, h, label, options)` | `LONG` | Create a cycle gadget; options separated by \| (gt_get_value: option) |  |
-| `gt_enable(gad_id)` | `void` | Enable a gadget |  |
-| `gt_disable(gad_id)` | `void` | Disable (ghost) a gadget |  |
-| `gt_set_text(gad_id, text)` | `void` | Change the text of a gt_text or gt_string gadget |  |
+| [`gt_init()`](#gt_init) | Bool | Initialize GadTools context (call after window open) |  |
+| [`gt_cleanup()`](#gt_cleanup) | — | Cleanup GadTools resources |  |
+| [`gt_attach()`](#gt_attach) | — | Attach gadgets to window (call after creating all gadgets) |  |
+| [`gt_button(x, y, w, h, label)`](#gt_button) | Int | Create a button gadget, returns gadget ID |  |
+| [`gt_checkbox(x, y, w, h, label, checked)`](#gt_checkbox) | Int | Create a checkbox gadget |  |
+| [`gt_string(x, y, w, h, label, initial, maxchars)`](#gt_string) | Int | Create a string input gadget |  |
+| [`gt_integer(x, y, w, h, label, initial)`](#gt_integer) | Int | Create an integer input gadget |  |
+| [`gt_slider(x, y, w, h, label, min, max, level)`](#gt_slider) | Int | Create a slider gadget |  |
+| [`gt_palette(x, y, w, h, label, depth, color)`](#gt_palette) | Int | Create a palette selector gadget |  |
+| [`gt_text(x, y, w, h, label, text)`](#gt_text) | Int | Create a static text gadget |  |
+| [`gt_get_value(gad_id)`](#gt_get_value) | Int | Get numeric value from gadget (slider, palette, etc.) |  |
+| [`gt_set_value(gad_id, value)`](#gt_set_value) | — | Set numeric value of gadget |  |
+| [`gt_get_string(gad_id)`](#gt_get_string) | String | Get string value from string gadget |  |
+| [`gt_event()`](#gt_event) | Int | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
+| [`gt_wait_event()`](#gt_wait_event) | Int | Wait for gadget event, returns gadget ID or -2 (close) |  |
+| [`gt_cycle(x, y, w, h, label, options)`](#gt_cycle) | Int | Create a cycle gadget; options separated by \| (gt_get_value: option) |  |
+| [`gt_enable(gad_id)`](#gt_enable) | — | Enable a gadget |  |
+| [`gt_disable(gad_id)`](#gt_disable) | — | Disable (ghost) a gadget |  |
+| [`gt_set_text(gad_id, text)`](#gt_set_text) | — | Change the text of a gt_text or gt_string gadget |  |
+
+<a id="gt_init"></a>
+
+### `gt_init()` → `Bool`
+
+Sets GadTools up for the current window, which must be open. Frees the gadgets and menus of an earlier `gt_init`.
+Returns `false` without a window or without memory.
+
+See also: [`gt_attach`](#gt_attach), [`gt_cleanup`](#gt_cleanup).
+
+<a id="gt_cleanup"></a>
+
+### `gt_cleanup()`
+
+Removes the gadgets and menus from the window and frees them. It happens on its own when the program ends.
+
+See also: [`gt_init`](#gt_init).
+
+<a id="gt_attach"></a>
+
+### `gt_attach()`
+
+Puts the gadgets created since `gt_init` on the window and draws them. It goes after the last `gt_*`.
+
+See also: [`gt_init`](#gt_init), [`gt_wait_event`](#gt_wait_event).
+
+<a id="gt_button"></a>
+
+### `gt_button(x, y, w, h, label)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+
+Creates a button. Returns its number, or -1. `gt_wait_event` returns it when pressed.
+
+See also: [`gt_wait_event`](#gt_wait_event).
+
+<a id="gt_checkbox"></a>
+
+### `gt_checkbox(x, y, w, h, label, checked)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `checked`: whether it starts ticked.
+
+Creates a checkbox, with the text on its left. `gt_get_value` gives 1 or 0.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_string"></a>
+
+### `gt_string(x, y, w, h, label, initial, maxchars)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `initial`: the starting text.
+- `maxchars`: how many letters fit.
+
+Creates a text field, with the label on its left. Its event arrives on Return or Tab; `gt_get_string` reads it.
+
+See also: [`gt_get_string`](#gt_get_string), [`gt_set_text`](#gt_set_text).
+
+<a id="gt_integer"></a>
+
+### `gt_integer(x, y, w, h, label, initial)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `initial`: the starting number.
+
+Creates a whole-number field. `gt_get_value` reads it.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_slider"></a>
+
+### `gt_slider(x, y, w, h, label, min, max, level)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `min`, `max`: the ends.
+- `level`: the starting value.
+
+Creates a horizontal slider. It sends its event while it moves; `gt_get_value` gives the value.
+
+See also: [`gt_get_value`](#gt_get_value), [`gt_set_value`](#gt_set_value).
+
+<a id="gt_palette"></a>
+
+### `gt_palette(x, y, w, h, label, depth, color)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `depth`: how many colours it shows: 2 to the power of `depth`.
+- `color`: the one chosen at the start.
+
+Creates a picker with the screen's colours. `gt_get_value` gives the chosen one.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_text"></a>
+
+### `gt_text(x, y, w, h, label, text)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `text`: what it shows.
+
+Creates a bordered text that is not edited; `gt_set_text` changes it.
+
+See also: [`gt_set_text`](#gt_set_text).
+
+<a id="gt_get_value"></a>
+
+### `gt_get_value(gad_id)` → `Int`
+
+- `gad_id`: the number its `gt_*` gave.
+Returns its value: 1 or 0 for a checkbox; a slider's level; a palette's colour; a number field's number; a cycle's
+option. 0 for the others.
+
+See also: [`gt_set_value`](#gt_set_value), [`gt_get_string`](#gt_get_string).
+
+<a id="gt_set_value"></a>
+
+### `gt_set_value(gad_id, value)`
+
+- `gad_id`: the number its `gt_*` gave.
+- `value`: the new value, as in `gt_get_value`.
+
+It sends no event.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_get_string"></a>
+
+### `gt_get_string(gad_id)` → `String`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Returns the text of a `gt_string`.
+
+See also: [`gt_set_text`](#gt_set_text).
+
+<a id="gt_event"></a>
+
+### `gt_event()` → `Int`
+
+Looks, without waiting, whether a gadget was used. Returns its number, -1 if there is nothing or -2 if the close
+button was pressed. It leaves menu events for `menu_event`.
+
+See also: [`gt_wait_event`](#gt_wait_event), [`menu_event`](#menu_event).
+
+<a id="gt_wait_event"></a>
+
+### `gt_wait_event()` → `Int`
+
+Waits, using no CPU, for a gadget to be used and returns its number, or -2 if the close button was pressed.
+
+See also: [`gt_event`](#gt_event).
+
+<a id="gt_cycle"></a>
+
+### `gt_cycle(x, y, w, h, label, options)` → `Int`
+
+- `x`, `y`: the corner, inside the borders.
+- `w`, `h`: the size.
+- `label`: the text; with a `_` before a letter, it shows underlined.
+- `options`: the options separated by `|`.
+
+Creates a gadget that moves to the next option with each click. `gt_get_value` gives the chosen one, from 0.
+
+See also: [`gt_get_value`](#gt_get_value).
+
+<a id="gt_enable"></a>
+
+### `gt_enable(gad_id)`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Lets a disabled gadget be used again.
+
+See also: [`gt_disable`](#gt_disable).
+
+<a id="gt_disable"></a>
+
+### `gt_disable(gad_id)`
+
+- `gad_id`: the number its `gt_*` gave.
+
+Disables it: it shows grey and does not respond.
+
+See also: [`gt_enable`](#gt_enable).
+
+<a id="gt_set_text"></a>
+
+### `gt_set_text(gad_id, text)`
+
+- `gad_id`: the number its `gt_*` gave.
+- `text`: the new text.
+
+Changes what a `gt_text` or a `gt_string` shows.
+
+See also: [`gt_get_string`](#gt_get_string).
+
+<a id="menu_functions"></a>
 
 ## Menus
 
+The screen bar's menus for the `gt_init` window. They are described in order (`menu_title`, its `menu_item`s, the
+next `menu_title`...) and `menu_attach()` puts them up. Each item has a number of the program's. Read them with
+`menu_event()` in a loop of your own, or in an `EventLoop`'s `On Menu` with `menu_id()`. MUI's menus are separate
+(`mui_menu_*`).
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `menu_title(label)` | `void` | Add a menu title |  |
-| `menu_item(label, shortcut, id)` | `void` | Add a menu item with keyboard shortcut and ID |  |
-| `menu_sub(label, shortcut, id)` | `void` | Add a submenu item |  |
-| `menu_separator()` | `void` | Add a menu separator bar |  |
-| `menu_attach()` | `BOOL` | Attach menus to window (call after defining all menus) |  |
-| `menu_event()` | `LONG` | Check for menu event, returns menu item ID or -1/-2 |  |
-| `menu_id()` | `LONG` | In an EventLoop's On Menu: id of the menu item chosen |  |
-| `menu_check_item(label, shortcut, id)` | `void` | Add a menu item with a check mark that each choice toggles |  |
-| `menu_checked(id)` | `LONG` | 1 if the check mark of that menu item is on |  |
-| `menu_enable(id, enabled)` | `void` | Enable or disable (ghost) a menu item after menu_attach |  |
+| [`menu_title(label)`](#menu_title) | — | Add a menu title |  |
+| [`menu_item(label, shortcut, id)`](#menu_item) | — | Add a menu item with keyboard shortcut and ID |  |
+| [`menu_sub(label, shortcut, id)`](#menu_sub) | — | Add a submenu item |  |
+| [`menu_separator()`](#menu_separator) | — | Add a menu separator bar |  |
+| [`menu_attach()`](#menu_attach) | Bool | Attach menus to window (call after defining all menus) |  |
+| [`menu_event()`](#menu_event) | Int | Check for menu event, returns menu item ID or -1/-2 |  |
+| [`menu_id()`](#menu_id) | Int | In an EventLoop's On Menu: id of the menu item chosen |  |
+| [`menu_check_item(label, shortcut, id)`](#menu_check_item) | — | Add a menu item with a check mark that each choice toggles |  |
+| [`menu_checked(id)`](#menu_checked) | Int | 1 if the check mark of that menu item is on |  |
+| [`menu_enable(id, enabled)`](#menu_enable) | — | Enable or disable (ghost) a menu item after menu_attach |  |
+
+<a id="menu_title"></a>
+
+### `menu_title(label)`
+
+- `label`: the title on the bar.
+
+Starts a new menu; the items that follow go in it.
+
+See also: [`menu_item`](#menu_item), [`menu_attach`](#menu_attach).
+
+<a id="menu_item"></a>
+
+### `menu_item(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item to the last menu.
+
+See also: [`menu_sub`](#menu_sub), [`menu_check_item`](#menu_check_item), [`menu_separator`](#menu_separator).
+
+<a id="menu_sub"></a>
+
+### `menu_sub(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item to a submenu of the last item: that item now opens the submenu.
+
+See also: [`menu_item`](#menu_item).
+
+<a id="menu_separator"></a>
+
+### `menu_separator()`
+
+Adds a line between items.
+
+See also: [`menu_item`](#menu_item).
+
+<a id="menu_attach"></a>
+
+### `menu_attach()` → `Bool`
+
+Puts the described menus on the window. It goes after `gt_init` and the last `menu_*`. Another `menu_attach`
+replaces the menus. Returns `false` if it could not.
+
+See also: [`menu_title`](#menu_title), [`menu_event`](#menu_event).
+
+<a id="menu_event"></a>
+
+### `menu_event()` → `Int`
+
+Looks, without waiting, whether an item was chosen. Returns its number, -1 if there is nothing or -2 if the close
+button was pressed. If several were chosen at once, they come one by one.
+
+See also: [`menu_id`](#menu_id), [`gt_event`](#gt_event).
+
+<a id="menu_id"></a>
+
+### `menu_id()` → `Int`
+
+Inside an `EventLoop`'s `On Menu`, returns the number of the chosen item.
+
+See also: [`menu_event`](#menu_event).
+
+<a id="menu_check_item"></a>
+
+### `menu_check_item(label, shortcut, id)`
+
+- `label`: the text.
+- `shortcut`: the shortcut letter with Amiga (`"N"` = Amiga+N); `""` none.
+- `id`: the number it gives when chosen.
+
+Adds an item with a check mark: each time it is chosen the mark toggles. `menu_checked` reads it.
+
+See also: [`menu_checked`](#menu_checked).
+
+<a id="menu_checked"></a>
+
+### `menu_checked(id)` → `Int`
+
+- `id`: the item's number.
+
+Returns 1 if its mark is set, otherwise 0.
+
+See also: [`menu_check_item`](#menu_check_item).
+
+<a id="menu_enable"></a>
+
+### `menu_enable(id, enabled)`
+
+- `id`: the item's number.
+- `enabled`: `false` disables it (grey), `true` enables it.
+
+It goes after `menu_attach`.
+
+See also: [`menu_attach`](#menu_attach).
+
+<a id="asl_functions"></a>
 
 ## ASL requesters
 
+The system's file requester in two steps: `file_open_dialog` or `file_save_dialog` show it, and then
+`file_get_path`, `file_get_name` and `file_fullpath` say what was chosen. In one step, `dialog_file` (Intuition
+group) returns the full path at once. The requester remembers the last drawer.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `file_open_dialog(title, pattern)` | `BOOL` | Show file open dialog, returns true if file selected |  |
-| `file_save_dialog(title, pattern)` | `BOOL` | Show file save dialog, returns true if file selected |  |
-| `file_get_path()` | `STRPTR` | Get selected directory path from last dialog |  |
-| `file_get_name()` | `STRPTR` | Get selected filename from last dialog |  |
-| `file_fullpath()` | `STRPTR` | Get full path (dir + filename) from last dialog |  |
+| [`file_open_dialog(title, pattern)`](#file_open_dialog) | Bool | Show file open dialog, returns true if file selected |  |
+| [`file_save_dialog(title, pattern)`](#file_save_dialog) | Bool | Show file save dialog, returns true if file selected |  |
+| [`file_get_path()`](#file_get_path) | String | Get selected directory path from last dialog |  |
+| [`file_get_name()`](#file_get_name) | String | Get selected filename from last dialog |  |
+| [`file_fullpath()`](#file_fullpath) | String | Get full path (dir + filename) from last dialog |  |
+
+<a id="file_open_dialog"></a>
+
+### `file_open_dialog(title, pattern)` → `Bool`
+
+- `title`: the requester's title.
+- `pattern`: which files show, with AmigaDOS wildcards (`"#?.iff"`).
+
+Shows the open requester and waits. Returns `true` if a file was chosen: `file_fullpath()` gives its path.
+
+See also: [`file_fullpath`](#file_fullpath), [`file_save_dialog`](#file_save_dialog), [`dialog_file`](#dialog_file).
+
+<a id="file_save_dialog"></a>
+
+### `file_save_dialog(title, pattern)` → `Bool`
+
+- `title`, `pattern`: as in `file_open_dialog`.
+
+Shows the save requester, where a new name can be typed, and waits. Returns `true` if one was chosen.
+
+See also: [`file_open_dialog`](#file_open_dialog), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_path"></a>
+
+### `file_get_path()` → `String`
+
+Returns the drawer chosen in the last accepted requester: `"Work:Pictures"`.
+
+See also: [`file_get_name`](#file_get_name), [`file_fullpath`](#file_fullpath).
+
+<a id="file_get_name"></a>
+
+### `file_get_name()` → `String`
+
+Returns the name of the file chosen in the last accepted requester, without the drawer.
+
+See also: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpath).
+
+<a id="file_fullpath"></a>
+
+### `file_fullpath()` → `String`
+
+Returns the full path of the last accepted requester: the drawer and the name, with a `/` when needed.
+
+See also: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
+
+<a id="reaction_functions"></a>
 
 ## ReAction
 
+Windows with AmigaOS 3.2's ReAction classes (`window.class`, `layout.gadget` and the gadgets): they lay themselves
+out, like MUI's, and come with the system. AmigaOS 3.1 lacks them: for a program that runs everywhere, MUI or the
+numbered gadgets.
+
+**The flow:**
+
+1. `ra_window_create(title, width, height)`: a window, up to 4; it becomes the current one (`ra_window_use` picks
+   another).
+2. The gadgets, in order, inside groups (`ra_layout_hgroup_begin`, `ra_layout_vgroup_begin` and
+   `ra_layout_group_end`). Each `ra_add_*` takes first a gadget number chosen by the program (0 to 63).
+3. The menus, if needed (`ra_menu_*`), before opening.
+4. `ra_window_open()` and the loop: `ra_wait_event()` returns the number of the gadget used, `RA_EVENT_CLOSE()` (-1)
+   if the window was closed or `RA_EVENT_MENU()` if a menu was chosen (`ra_menu_id` says which).
+5. `ra_window_close()`.
+
+Values are read and changed by the gadget's number: `ra_get_value`, `ra_set_value`, `ra_get_string`...
+
+**Example** (`tests/test_doc_reaction.dash`, which is also a test: it runs with the others):
+
+```dash
+# ReAction (AmigaOS 3.2): una ventana que se coloca sola, con un formulario y botones, y su bucle.
+
+const NOMBRE = 0
+const SONIDO = 1
+const ACEPTAR = 2
+const CANCELAR = 3
+
+Main
+    v = ra_window_create("Ajustes", 260, 120)
+    if v == 0
+        Print "hace falta AmigaOS 3.2"
+        return
+    end
+    Print "ventana #{v}"
+    ra_add_string(NOMBRE, "Amiga", 40)
+    ra_add_checkbox(SONIDO, "Sonido", true)
+    ra_layout_hgroup_begin()
+        ra_add_button(ACEPTAR, "_Aceptar")
+        ra_add_space()
+        ra_add_button(CANCELAR, "_Cancelar")
+    ra_layout_group_end()
+    ra_window_open()
+
+    ev = ra_handle_events()                        # para la prueba: sin esperar a nadie
+    while ev != RA_EVENT_NONE() and ev != RA_EVENT_CLOSE() and ev != ACEPTAR and ev != CANCELAR
+        ev = ra_handle_events()
+    end
+    Print "nombre: " + ra_get_string(NOMBRE) + ", sonido: #{ra_get_value(SONIDO)}"
+    ra_window_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `ra_window_create(title, width, height)` | `LONG` | Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure |  |
-| `ra_window_use(window)` | `void` | Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows) |  |
-| `ra_event_window()` | `LONG` | Window of the last event (its number from ra_window_create) |  |
-| `ra_window_open()` | `LONG` | Open the ReAction window |  |
-| `ra_window_close()` | `void` | Close the current ReAction window and free its gadgets (another open one becomes current) |  |
-| `ra_window_sigmask()` | `ULONG` | Get window signal mask for Wait() |  |
-| `ra_handle_events()` | `LONG` | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
-| `ra_wait_event()` | `LONG` | Wait for and handle window events, returns gadget ID or -1 for close |  |
-| `ra_add_button(id, label)` | `LONG` | Add button gadget to layout |  |
-| `ra_add_string(id, initial, maxchars)` | `LONG` | Add string input gadget |  |
-| `ra_add_checkbox(id, label, checked)` | `LONG` | Add checkbox gadget |  |
-| `ra_add_slider(id, min, max, initial)` | `LONG` | Add horizontal slider gadget |  |
-| `ra_add_integer(id, initial, min, max)` | `LONG` | Add integer input gadget |  |
-| `ra_add_label(text)` | `LONG` | Add text label |  |
-| `ra_get_value(id)` | `LONG` | Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller) |  |
-| `ra_get_string(id)` | `STRPTR` | Get string gadget text |  |
-| `ra_set_value(id, value)` | `void` | Set gadget value (same gadgets as ra_get_value) |  |
-| `ra_refresh_layout()` | `void` | Refresh window layout after adding gadgets |  |
-| `RA_EVENT_CLOSE()` | `LONG` | Close window event code (-1) |  |
-| `RA_EVENT_NONE()` | `LONG` | No event code (-3) |  |
-| `ra_get_rastport()` | `APTR` | Get RastPort for custom drawing (also sets _dash_rp) |  |
-| `ra_get_inner_left()` | `LONG` | Get inner left border of window |  |
-| `ra_get_inner_top()` | `LONG` | Get inner top border of window |  |
-| `ra_get_inner_width()` | `LONG` | Get inner width of window |  |
-| `ra_get_inner_height()` | `LONG` | Get inner height of window |  |
-| `ra_add_palette(id, depth, initial_color)` | `LONG` | Add color palette gadget |  |
-| `ra_get_palette_color(id)` | `LONG` | Get selected color from palette |  |
-| `ra_set_palette_color(id, color)` | `void` | Set selected color in palette |  |
-| `ra_add_chooser(id)` | `LONG` | Add dropdown/chooser gadget |  |
-| `ra_chooser_add_item(id, label)` | `LONG` | Add item to chooser |  |
-| `ra_get_chooser_selected(id)` | `LONG` | Get selected index from chooser |  |
-| `ra_set_chooser_selected(id, index)` | `void` | Set selected index in chooser |  |
-| `ra_add_scroller(id, min, max, visible, initial)` | `LONG` | Add horizontal scroller gadget |  |
-| `ra_add_scroller_vert(id, min, max, visible, initial)` | `LONG` | Add vertical scroller gadget |  |
-| `ra_get_scroller(id)` | `LONG` | Get scroller position |  |
-| `ra_set_scroller(id, pos)` | `void` | Set scroller position |  |
-| `ra_enable_gadget(id)` | `void` | Enable a gadget |  |
-| `ra_disable_gadget(id)` | `void` | Disable a gadget |  |
-| `ra_set_string(id, text)` | `void` | Set string gadget text |  |
-| `ra_set_text(id, text)` | `void` | Set button/label text |  |
-| `ra_layout_hgroup_begin()` | `LONG` | Begin horizontal layout group |  |
-| `ra_layout_vgroup_begin()` | `LONG` | Begin vertical layout group |  |
-| `ra_layout_group_end()` | `LONG` | End layout group |  |
-| `ra_add_space()` | `void` | Add horizontal separator |  |
-| `ra_add_vspace()` | `void` | Add vertical separator |  |
-| `ra_layout_hgroup_weighted(weight)` | `LONG` | Begin horizontal layout group with weight hint |  |
-| `ra_layout_vgroup_weighted(weight)` | `LONG` | Begin vertical layout group with weight hint |  |
-| `ra_layout_group_end_weighted()` | `LONG` | End weighted layout group |  |
-| `ra_add_drawing_area(id, min_width, min_height)` | `LONG` | Add Space gadget for custom drawing area |  |
-| `ra_get_drawing_bounds(id)` | `LONG` | Query Space gadget bounds (call after window open) |  |
-| `ra_drawing_left()` | `LONG` | Get drawing area left position |  |
-| `ra_drawing_top()` | `LONG` | Get drawing area top position |  |
-| `ra_drawing_width()` | `LONG` | Get drawing area width |  |
-| `ra_drawing_height()` | `LONG` | Get drawing area height |  |
-| `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` | `LONG` | Calculate drawing area from window dimensions (fallback) |  |
-| `ra_refresh_canvas(id)` | `void` | Trigger canvas Space gadget refresh (calls render hook) |  |
-| `ra_canvas_left()` | `LONG` | Get canvas left position from render hook |  |
-| `ra_canvas_top()` | `LONG` | Get canvas top position from render hook |  |
-| `ra_canvas_width()` | `LONG` | Get canvas width from render hook |  |
-| `ra_canvas_height()` | `LONG` | Get canvas height from render hook |  |
-| `ra_init_canvas_render()` | `void` | Register render_canvas() as the canvas render callback |  |
-| `ra_canvas_enable()` | `void` | Enable canvas rendering (call after all init is done) |  |
-| `ra_gadget_exists(id)` | `LONG` | Check if gadget exists |  |
-| `ra_window_width()` | `LONG` | Get window width |  |
-| `ra_window_height()` | `LONG` | Get window height |  |
-| `ra_window_is_open()` | `LONG` | Check if window is open |  |
-| `ra_add_listbrowser(id)` | `LONG` | Add a list of text lines (value: selected line, -1 none) |  |
-| `ra_listbrowser_add(id, text)` | `LONG` | Add a line at the end of a listbrowser |  |
-| `ra_listbrowser_clear(id)` | `void` | Remove all lines of a listbrowser |  |
-| `ra_listbrowser_count(id)` | `LONG` | Number of lines of a listbrowser |  |
-| `ra_add_radio(id, options)` | `LONG` | Add radio buttons, options separated by \| (value: option) |  |
-| `ra_add_clicktab(id, titles)` | `LONG` | Add tabs, titles separated by \| (value: tab, from 0) |  |
-| `ra_add_fuelgauge(id, max)` | `LONG` | Add a progress bar from 0 to max (value: level) |  |
-| `ra_menu_title(label)` | `void` | Add a menu to the ReAction window (before ra_window_open) |  |
-| `ra_menu_item(label, key, id)` | `void` | Add a menu item: key = letter for Amiga+key ("" none); events: RA_EVENT_MENU() and ra_menu_id() |  |
-| `ra_menu_separator()` | `void` | Add a separator line to the menu |  |
-| `ra_menu_id()` | `LONG` | Id of the menu item of the last RA_EVENT_MENU() |  |
-| `RA_EVENT_MENU()` | `LONG` | Event: a menu item was chosen (ra_menu_id) |  |
-| `ra_add_getfile(id, title)` | `LONG` | Add a button that opens a file requester; ra_get_string(id) gives the file chosen |  |
+| [`ra_window_create(title, width, height)`](#ra_window_create) | Int | Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure |  |
+| [`ra_window_use(window)`](#ra_window_use) | — | Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows) |  |
+| [`ra_event_window()`](#ra_event_window) | Int | Window of the last event (its number from ra_window_create) |  |
+| [`ra_window_open()`](#ra_window_open) | Int | Open the ReAction window |  |
+| [`ra_window_close()`](#ra_window_close) | — | Close the current ReAction window and free its gadgets (another open one becomes current) |  |
+| [`ra_window_sigmask()`](#ra_window_sigmask) | Int | Get window signal mask for Wait() |  |
+| [`ra_handle_events()`](#ra_handle_events) | Int | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
+| [`ra_wait_event()`](#ra_wait_event) | Int | Wait for and handle window events, returns gadget ID or -1 for close |  |
+| [`ra_add_button(id, label)`](#ra_add_button) | Int | Add button gadget to layout |  |
+| [`ra_add_string(id, initial, maxchars)`](#ra_add_string) | Int | Add string input gadget |  |
+| [`ra_add_checkbox(id, label, checked)`](#ra_add_checkbox) | Int | Add checkbox gadget |  |
+| [`ra_add_slider(id, min, max, initial)`](#ra_add_slider) | Int | Add horizontal slider gadget |  |
+| [`ra_add_integer(id, initial, min, max)`](#ra_add_integer) | Int | Add integer input gadget |  |
+| [`ra_add_label(text)`](#ra_add_label) | Int | Add text label |  |
+| [`ra_get_value(id)`](#ra_get_value) | Int | Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller) |  |
+| [`ra_get_string(id)`](#ra_get_string) | String | Get string gadget text |  |
+| [`ra_set_value(id, value)`](#ra_set_value) | — | Set gadget value (same gadgets as ra_get_value) |  |
+| [`ra_refresh_layout()`](#ra_refresh_layout) | — | Refresh window layout after adding gadgets |  |
+| [`RA_EVENT_CLOSE()`](#RA_EVENT_CLOSE) | Int | Close window event code (-1) |  |
+| [`RA_EVENT_NONE()`](#RA_EVENT_NONE) | Int | No event code (-3) |  |
+| [`ra_get_rastport()`](#ra_get_rastport) | Int (address) | Get RastPort for custom drawing (also sets _dash_rp) |  |
+| [`ra_get_inner_left()`](#ra_get_inner_left) | Int | Get inner left border of window |  |
+| [`ra_get_inner_top()`](#ra_get_inner_top) | Int | Get inner top border of window |  |
+| [`ra_get_inner_width()`](#ra_get_inner_width) | Int | Get inner width of window |  |
+| [`ra_get_inner_height()`](#ra_get_inner_height) | Int | Get inner height of window |  |
+| [`ra_add_palette(id, depth, initial_color)`](#ra_add_palette) | Int | Add color palette gadget |  |
+| [`ra_get_palette_color(id)`](#ra_get_palette_color) | Int | Get selected color from palette |  |
+| [`ra_set_palette_color(id, color)`](#ra_set_palette_color) | — | Set selected color in palette |  |
+| [`ra_add_chooser(id)`](#ra_add_chooser) | Int | Add dropdown/chooser gadget |  |
+| [`ra_chooser_add_item(id, label)`](#ra_chooser_add_item) | Int | Add item to chooser |  |
+| [`ra_get_chooser_selected(id)`](#ra_get_chooser_selected) | Int | Get selected index from chooser |  |
+| [`ra_set_chooser_selected(id, index)`](#ra_set_chooser_selected) | — | Set selected index in chooser |  |
+| [`ra_add_scroller(id, min, max, visible, initial)`](#ra_add_scroller) | Int | Add horizontal scroller gadget |  |
+| [`ra_add_scroller_vert(id, min, max, visible, initial)`](#ra_add_scroller_vert) | Int | Add vertical scroller gadget |  |
+| [`ra_get_scroller(id)`](#ra_get_scroller) | Int | Get scroller position |  |
+| [`ra_set_scroller(id, pos)`](#ra_set_scroller) | — | Set scroller position |  |
+| [`ra_enable_gadget(id)`](#ra_enable_gadget) | — | Enable a gadget |  |
+| [`ra_disable_gadget(id)`](#ra_disable_gadget) | — | Disable a gadget |  |
+| [`ra_set_string(id, text)`](#ra_set_string) | — | Set string gadget text |  |
+| [`ra_set_text(id, text)`](#ra_set_text) | — | Set button/label text |  |
+| [`ra_layout_hgroup_begin()`](#ra_layout_hgroup_begin) | Int | Begin horizontal layout group |  |
+| [`ra_layout_vgroup_begin()`](#ra_layout_vgroup_begin) | Int | Begin vertical layout group |  |
+| [`ra_layout_group_end()`](#ra_layout_group_end) | Int | End layout group |  |
+| [`ra_add_space()`](#ra_add_space) | — | Add horizontal separator |  |
+| [`ra_add_vspace()`](#ra_add_vspace) | — | Add vertical separator |  |
+| [`ra_layout_hgroup_weighted(weight)`](#ra_layout_hgroup_weighted) | Int | Begin horizontal layout group with weight hint |  |
+| [`ra_layout_vgroup_weighted(weight)`](#ra_layout_vgroup_weighted) | Int | Begin vertical layout group with weight hint |  |
+| [`ra_layout_group_end_weighted()`](#ra_layout_group_end_weighted) | Int | End weighted layout group |  |
+| [`ra_add_drawing_area(id, min_width, min_height)`](#ra_add_drawing_area) | Int | Add Space gadget for custom drawing area |  |
+| [`ra_get_drawing_bounds(id)`](#ra_get_drawing_bounds) | Int | Query Space gadget bounds (call after window open) |  |
+| [`ra_drawing_left()`](#ra_drawing_left) | Int | Get drawing area left position |  |
+| [`ra_drawing_top()`](#ra_drawing_top) | Int | Get drawing area top position |  |
+| [`ra_drawing_width()`](#ra_drawing_width) | Int | Get drawing area width |  |
+| [`ra_drawing_height()`](#ra_drawing_height) | Int | Get drawing area height |  |
+| [`ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)`](#ra_calc_drawing_area) | Int | Calculate drawing area from window dimensions (fallback) |  |
+| [`ra_refresh_canvas(id)`](#ra_refresh_canvas) | — | Trigger canvas Space gadget refresh (calls render hook) |  |
+| [`ra_canvas_left()`](#ra_canvas_left) | Int | Get canvas left position from render hook |  |
+| [`ra_canvas_top()`](#ra_canvas_top) | Int | Get canvas top position from render hook |  |
+| [`ra_canvas_width()`](#ra_canvas_width) | Int | Get canvas width from render hook |  |
+| [`ra_canvas_height()`](#ra_canvas_height) | Int | Get canvas height from render hook |  |
+| [`ra_init_canvas_render()`](#ra_init_canvas_render) | — | Register render_canvas() as the canvas render callback |  |
+| [`ra_canvas_enable()`](#ra_canvas_enable) | — | Enable canvas rendering (call after all init is done) |  |
+| [`ra_gadget_exists(id)`](#ra_gadget_exists) | Int | Check if gadget exists |  |
+| [`ra_window_width()`](#ra_window_width) | Int | Get window width |  |
+| [`ra_window_height()`](#ra_window_height) | Int | Get window height |  |
+| [`ra_window_is_open()`](#ra_window_is_open) | Int | Check if window is open |  |
+| [`ra_add_listbrowser(id)`](#ra_add_listbrowser) | Int | Add a list of text lines (value: selected line, -1 none) |  |
+| [`ra_listbrowser_add(id, text)`](#ra_listbrowser_add) | Int | Add a line at the end of a listbrowser |  |
+| [`ra_listbrowser_clear(id)`](#ra_listbrowser_clear) | — | Remove all lines of a listbrowser |  |
+| [`ra_listbrowser_count(id)`](#ra_listbrowser_count) | Int | Number of lines of a listbrowser |  |
+| [`ra_add_radio(id, options)`](#ra_add_radio) | Int | Add radio buttons, options separated by \| (value: option) |  |
+| [`ra_add_clicktab(id, titles)`](#ra_add_clicktab) | Int | Add tabs, titles separated by \| (value: tab, from 0) |  |
+| [`ra_add_fuelgauge(id, max)`](#ra_add_fuelgauge) | Int | Add a progress bar from 0 to max (value: level) |  |
+| [`ra_menu_title(label)`](#ra_menu_title) | — | Add a menu to the ReAction window (before ra_window_open) |  |
+| [`ra_menu_item(label, key, id)`](#ra_menu_item) | — | Add a menu item: key = letter for Amiga+key ("" none); events: RA_EVENT_MENU() and ra_menu_id() |  |
+| [`ra_menu_separator()`](#ra_menu_separator) | — | Add a separator line to the menu |  |
+| [`ra_menu_id()`](#ra_menu_id) | Int | Id of the menu item of the last RA_EVENT_MENU() |  |
+| [`RA_EVENT_MENU()`](#RA_EVENT_MENU) | Int | Event: a menu item was chosen (ra_menu_id) |  |
+| [`ra_add_getfile(id, title)`](#ra_add_getfile) | Int | Add a button that opens a file requester; ra_get_string(id) gives the file chosen |  |
+
+<a id="ra_window_create"></a>
+
+### `ra_window_create(title, width, height)` → `Int`
+
+- `title`: the title.
+- `width`, `height`: the initial size.
+
+Creates a ReAction window with its (vertical) layout and makes it the current one. Returns its number (1 to 4), or 0
+if it could not (`window.class` is missing: not AmigaOS 3.2).
+
+See also: [`ra_window_open`](#ra_window_open), [`ra_window_use`](#ra_window_use).
+
+<a id="ra_window_use"></a>
+
+### `ra_window_use(window)`
+
+- `window`: the number from `ra_window_create`.
+
+The following `ra_*` calls work on that window.
+
+See also: [`ra_event_window`](#ra_event_window).
+
+<a id="ra_event_window"></a>
+
+### `ra_event_window()` → `Int`
+
+Returns which window the last event came from: its `ra_window_create` number.
+
+See also: [`ra_window_use`](#ra_window_use).
+
+<a id="ra_window_open"></a>
+
+### `ra_window_open()` → `Int`
+
+Opens the current window, with the gadgets and menus added. Returns 0 if it could not.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="ra_window_close"></a>
+
+### `ra_window_close()`
+
+Closes the current window and frees its gadgets; if another one is open, it becomes current.
+
+See also: [`ra_window_open`](#ra_window_open).
+
+<a id="ra_window_sigmask"></a>
+
+### `ra_window_sigmask()` → `Int`
+
+Returns the window's signal, to wait for other things at the same time with code of your own.
+
+See also: [`ra_handle_events`](#ra_handle_events).
+
+<a id="ra_handle_events"></a>
+
+### `ra_handle_events()` → `Int`
+
+Handles pending events without waiting. Returns the number of the gadget used, `RA_EVENT_CLOSE()` if it was closed or `RA_EVENT_NONE()` if there is nothing.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="ra_wait_event"></a>
+
+### `ra_wait_event()` → `Int`
+
+Waits, using no CPU, and returns the number of the gadget used, `RA_EVENT_CLOSE()` if the window was closed or `RA_EVENT_MENU()` if a menu was chosen.
+
+See also: [`ra_handle_events`](#ra_handle_events), [`ra_menu_id`](#ra_menu_id).
+
+<a id="ra_add_button"></a>
+
+### `ra_add_button(id, label)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the text.
+
+A button.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_wait_event`](#ra_wait_event), [`ra_set_text`](#ra_set_text).
+
+<a id="ra_add_string"></a>
+
+### `ra_add_string(id, initial, maxchars)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `initial`: the starting text.
+- `maxchars`: how many letters fit.
+
+A text field.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_string`](#ra_get_string), [`ra_set_string`](#ra_set_string).
+
+<a id="ra_add_checkbox"></a>
+
+### `ra_add_checkbox(id, label, checked)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the text.
+- `checked`: whether it starts ticked.
+
+A checkbox; `ra_get_value` gives 1 or 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_slider"></a>
+
+### `ra_add_slider(id, min, max, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`: the ends.
+- `initial`: the starting value.
+
+A horizontal slider.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_integer"></a>
+
+### `ra_add_integer(id, initial, min, max)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `initial`: the starting number.
+- `min`, `max`: the limits.
+
+A number field with arrows.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_label"></a>
+
+### `ra_add_label(text)` → `Int`
+
+- `text`: the text.
+
+A fixed label: it has no number and cannot be changed. Returns 1, or 0 if it could not.
+
+<a id="ra_get_value"></a>
+
+### `ra_get_value(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns its value: checkbox 1 or 0, slider, number, palette, chooser, bar, list, radio, tab or progress.
+
+See also: [`ra_set_value`](#ra_set_value).
+
+<a id="ra_get_string"></a>
+
+### `ra_get_string(id)` → `String`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns a text field's text, or a `ra_add_getfile` file.
+
+See also: [`ra_set_string`](#ra_set_string).
+
+<a id="ra_set_value"></a>
+
+### `ra_set_value(id, value)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `value`: the new value, as in `ra_get_value`.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_refresh_layout"></a>
+
+### `ra_refresh_layout()`
+
+Lays the window out again after adding or changing gadgets while it is open.
+
+<a id="RA_EVENT_CLOSE"></a>
+
+### `RA_EVENT_CLOSE()` → `Int`
+
+Returns the close-window event code: -1.
+
+See also: [`ra_wait_event`](#ra_wait_event).
+
+<a id="RA_EVENT_NONE"></a>
+
+### `RA_EVENT_NONE()` → `Int`
+
+Returns the no-event code: -3 (a gadget may have number 0).
+
+See also: [`ra_handle_events`](#ra_handle_events).
+
+<a id="ra_get_rastport"></a>
+
+### `ra_get_rastport()` → `Int (address)`
+
+Returns the current window's RastPort and makes it the `gfx_*` target.
+
+See also: [`ra_get_inner_left`](#ra_get_inner_left).
+
+<a id="ra_get_inner_left"></a>
+
+### `ra_get_inner_left()` → `Int`
+
+Returns where the window's inside starts on the left.
+
+See also: [`ra_get_inner_top`](#ra_get_inner_top).
+
+<a id="ra_get_inner_top"></a>
+
+### `ra_get_inner_top()` → `Int`
+
+Returns where the window's inside starts at the top.
+
+See also: [`ra_get_inner_left`](#ra_get_inner_left).
+
+<a id="ra_get_inner_width"></a>
+
+### `ra_get_inner_width()` → `Int`
+
+Returns the width of the window's inside.
+
+See also: [`ra_get_inner_height`](#ra_get_inner_height).
+
+<a id="ra_get_inner_height"></a>
+
+### `ra_get_inner_height()` → `Int`
+
+Returns the height of the window's inside.
+
+See also: [`ra_get_inner_width`](#ra_get_inner_width).
+
+<a id="ra_add_palette"></a>
+
+### `ra_add_palette(id, depth, initial_color)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `depth`: how many colours: 2 to the power of `depth`.
+- `initial_color`: the one chosen at the start.
+
+A palette gadget.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_palette_color`](#ra_get_palette_color).
+
+<a id="ra_get_palette_color"></a>
+
+### `ra_get_palette_color(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns the chosen colour.
+
+See also: [`ra_set_palette_color`](#ra_set_palette_color).
+
+<a id="ra_set_palette_color"></a>
+
+### `ra_set_palette_color(id, color)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `color`: the colour.
+
+See also: [`ra_get_palette_color`](#ra_get_palette_color).
+
+<a id="ra_add_chooser"></a>
+
+### `ra_add_chooser(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+An empty drop-down list; the options, with `ra_chooser_add_item`.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_chooser_add_item`](#ra_chooser_add_item).
+
+<a id="ra_chooser_add_item"></a>
+
+### `ra_chooser_add_item(id, label)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `label`: the option.
+
+Adds it to the end of the drop-down list.
+
+See also: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
+
+<a id="ra_get_chooser_selected"></a>
+
+### `ra_get_chooser_selected(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns the chosen option, from 0.
+
+See also: [`ra_set_chooser_selected`](#ra_set_chooser_selected).
+
+<a id="ra_set_chooser_selected"></a>
+
+### `ra_set_chooser_selected(id, index)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `index`: the option, from 0.
+
+See also: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
+
+<a id="ra_add_scroller"></a>
+
+### `ra_add_scroller(id, min, max, visible, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`: the document.
+- `visible`: how much shows.
+- `initial`: the position.
+
+A horizontal scroll bar.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_scroller`](#ra_get_scroller), [`ra_add_scroller_vert`](#ra_add_scroller_vert).
+
+<a id="ra_add_scroller_vert"></a>
+
+### `ra_add_scroller_vert(id, min, max, visible, initial)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min`, `max`, `visible`, `initial`: as in `ra_add_scroller`.
+
+A vertical scroll bar.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_add_scroller`](#ra_add_scroller).
+
+<a id="ra_get_scroller"></a>
+
+### `ra_get_scroller(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns its position.
+
+See also: [`ra_set_scroller`](#ra_set_scroller).
+
+<a id="ra_set_scroller"></a>
+
+### `ra_set_scroller(id, pos)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `pos`: the new position.
+
+See also: [`ra_get_scroller`](#ra_get_scroller).
+
+<a id="ra_enable_gadget"></a>
+
+### `ra_enable_gadget(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Lets it be used again.
+
+See also: [`ra_disable_gadget`](#ra_disable_gadget).
+
+<a id="ra_disable_gadget"></a>
+
+### `ra_disable_gadget(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Disables it: grey, not responding.
+
+See also: [`ra_enable_gadget`](#ra_enable_gadget).
+
+<a id="ra_set_string"></a>
+
+### `ra_set_string(id, text)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the field's new text.
+
+See also: [`ra_get_string`](#ra_get_string).
+
+<a id="ra_set_text"></a>
+
+### `ra_set_text(id, text)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the new text of a button.
+
+See also: [`ra_add_button`](#ra_add_button).
+
+<a id="ra_layout_hgroup_begin"></a>
+
+### `ra_layout_hgroup_begin()` → `Int`
+
+Starts a group placing its gadgets side by side, inside the open group. It ends with `ra_layout_group_end`.
+
+See also: [`ra_layout_vgroup_begin`](#ra_layout_vgroup_begin), [`ra_layout_group_end`](#ra_layout_group_end).
+
+<a id="ra_layout_vgroup_begin"></a>
+
+### `ra_layout_vgroup_begin()` → `Int`
+
+Starts a group placing its gadgets one under the other. It ends with `ra_layout_group_end`.
+
+See also: [`ra_layout_group_end`](#ra_layout_group_end).
+
+<a id="ra_layout_group_end"></a>
+
+### `ra_layout_group_end()` → `Int`
+
+Ends the last open group.
+
+See also: [`ra_layout_hgroup_begin`](#ra_layout_hgroup_begin).
+
+<a id="ra_add_space"></a>
+
+### `ra_add_space()`
+
+A space that stretches between gadgets of a horizontal group.
+
+See also: [`ra_add_vspace`](#ra_add_vspace).
+
+<a id="ra_add_vspace"></a>
+
+### `ra_add_vspace()`
+
+A space that stretches between gadgets of a vertical group.
+
+See also: [`ra_add_space`](#ra_add_space).
+
+<a id="ra_layout_hgroup_weighted"></a>
+
+### `ra_layout_hgroup_weighted(weight)` → `Int`
+
+- `weight`: how much space it takes compared with its neighbours.
+
+Like `ra_layout_hgroup_begin`, weighted; it ends with `ra_layout_group_end_weighted`.
+
+See also: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
+
+<a id="ra_layout_vgroup_weighted"></a>
+
+### `ra_layout_vgroup_weighted(weight)` → `Int`
+
+- `weight`: its weight.
+
+Like `ra_layout_vgroup_begin`, weighted.
+
+See also: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
+
+<a id="ra_layout_group_end_weighted"></a>
+
+### `ra_layout_group_end_weighted()` → `Int`
+
+Ends a weighted group.
+
+See also: [`ra_layout_hgroup_weighted`](#ra_layout_hgroup_weighted).
+
+<a id="ra_add_drawing_area"></a>
+
+### `ra_add_drawing_area(id, min_width, min_height)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `min_width`, `min_height`: the minimum size.
+
+An area (Space gadget) to draw by hand; it grows with the window.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render), [`ra_get_drawing_bounds`](#ra_get_drawing_bounds).
+
+<a id="ra_get_drawing_bounds"></a>
+
+### `ra_get_drawing_bounds(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Looks up where the drawing area ended up, after opening the window; `ra_drawing_*` give it.
+
+See also: [`ra_drawing_left`](#ra_drawing_left).
+
+<a id="ra_drawing_left"></a>
+
+### `ra_drawing_left()` → `Int`
+
+After `ra_get_drawing_bounds`, returns the drawing area's left.
+
+See also: [`ra_drawing_top`](#ra_drawing_top).
+
+<a id="ra_drawing_top"></a>
+
+### `ra_drawing_top()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its top.
+
+See also: [`ra_drawing_left`](#ra_drawing_left).
+
+<a id="ra_drawing_width"></a>
+
+### `ra_drawing_width()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its width.
+
+See also: [`ra_drawing_height`](#ra_drawing_height).
+
+<a id="ra_drawing_height"></a>
+
+### `ra_drawing_height()` → `Int`
+
+After `ra_get_drawing_bounds`, returns its height.
+
+See also: [`ra_drawing_width`](#ra_drawing_width).
+
+<a id="ra_calc_drawing_area"></a>
+
+### `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` → `Int`
+
+- `toolbar_h`, `timeline_h`: what is taken at the top and the bottom.
+- `left_w`, `right_w`: what is taken at the sides.
+
+Works out the drawing area by taking that away from the window's inside, when the gadget cannot be asked.
+
+See also: [`ra_get_drawing_bounds`](#ra_get_drawing_bounds).
+
+<a id="ra_refresh_canvas"></a>
+
+### `ra_refresh_canvas(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Asks for the canvas to be drawn again (it calls `render_canvas()`).
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render).
+
+<a id="ra_canvas_left"></a>
+
+### `ra_canvas_left()` → `Int`
+
+Inside the canvas drawing function, returns the canvas's left.
+
+See also: [`ra_canvas_top`](#ra_canvas_top).
+
+<a id="ra_canvas_top"></a>
+
+### `ra_canvas_top()` → `Int`
+
+Inside the canvas drawing function, returns its top.
+
+See also: [`ra_canvas_left`](#ra_canvas_left).
+
+<a id="ra_canvas_width"></a>
+
+### `ra_canvas_width()` → `Int`
+
+Inside the canvas drawing function, returns its width.
+
+See also: [`ra_canvas_height`](#ra_canvas_height).
+
+<a id="ra_canvas_height"></a>
+
+### `ra_canvas_height()` → `Int`
+
+Inside the canvas drawing function, returns its height.
+
+See also: [`ra_canvas_width`](#ra_canvas_width).
+
+<a id="ra_init_canvas_render"></a>
+
+### `ra_init_canvas_render()`
+
+Makes the drawing area paint itself with a program function named `render_canvas()`, which draws with the `gfx_*`
+functions: ReAction calls it when needed. Inside, `ra_canvas_*` say where the canvas is.
+
+See also: [`ra_canvas_enable`](#ra_canvas_enable), [`ra_refresh_canvas`](#ra_refresh_canvas).
+
+<a id="ra_canvas_enable"></a>
+
+### `ra_canvas_enable()`
+
+Turns canvas drawing on, once everything `render_canvas()` uses is ready.
+
+See also: [`ra_init_canvas_render`](#ra_init_canvas_render).
+
+<a id="ra_gadget_exists"></a>
+
+### `ra_gadget_exists(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns 1 if there is a gadget with that number in the current window.
+
+<a id="ra_window_width"></a>
+
+### `ra_window_width()` → `Int`
+
+Returns the current window's width.
+
+See also: [`ra_window_height`](#ra_window_height).
+
+<a id="ra_window_height"></a>
+
+### `ra_window_height()` → `Int`
+
+Returns the current window's height.
+
+See also: [`ra_window_width`](#ra_window_width).
+
+<a id="ra_window_is_open"></a>
+
+### `ra_window_is_open()` → `Int`
+
+Returns 1 if the current window is open.
+
+See also: [`ra_window_open`](#ra_window_open).
+
+<a id="ra_add_listbrowser"></a>
+
+### `ra_add_listbrowser(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+A list of lines; its value is the chosen line, -1 none.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_listbrowser_add"></a>
+
+### `ra_listbrowser_add(id, text)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `text`: the line.
+
+Adds it at the end.
+
+See also: [`ra_listbrowser_clear`](#ra_listbrowser_clear).
+
+<a id="ra_listbrowser_clear"></a>
+
+### `ra_listbrowser_clear(id)`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Removes every line.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_listbrowser_count"></a>
+
+### `ra_listbrowser_count(id)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+
+Returns how many lines it has.
+
+See also: [`ra_listbrowser_add`](#ra_listbrowser_add).
+
+<a id="ra_add_radio"></a>
+
+### `ra_add_radio(id, options)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `options`: separated by `|`.
+
+Radio buttons; its value is the option, from 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_clicktab"></a>
+
+### `ra_add_clicktab(id, titles)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `titles`: separated by `|`.
+
+Tabs; its value is the tab, from 0.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_value`](#ra_get_value).
+
+<a id="ra_add_fuelgauge"></a>
+
+### `ra_add_fuelgauge(id, max)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `max`: the value of the full bar.
+
+A progress bar; `ra_set_value` fills it.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_set_value`](#ra_set_value).
+
+<a id="ra_menu_title"></a>
+
+### `ra_menu_title(label)`
+
+- `label`: the title.
+
+Starts a menu of the current window, before `ra_window_open`.
+
+See also: [`ra_menu_item`](#ra_menu_item).
+
+<a id="ra_menu_item"></a>
+
+### `ra_menu_item(label, key, id)`
+
+- `label`: the text.
+- `key`: the letter with Amiga; `""` none.
+- `id`: its number.
+
+Adds an item to the last menu.
+
+See also: [`ra_menu_id`](#ra_menu_id), [`RA_EVENT_MENU`](#RA_EVENT_MENU).
+
+<a id="ra_menu_separator"></a>
+
+### `ra_menu_separator()`
+
+Adds a line between items.
+
+See also: [`ra_menu_item`](#ra_menu_item).
+
+<a id="ra_menu_id"></a>
+
+### `ra_menu_id()` → `Int`
+
+After a `RA_EVENT_MENU()`, returns the chosen item's number.
+
+See also: [`RA_EVENT_MENU`](#RA_EVENT_MENU).
+
+<a id="RA_EVENT_MENU"></a>
+
+### `RA_EVENT_MENU()` → `Int`
+
+Returns the menu event code; `ra_menu_id` says which item.
+
+See also: [`ra_menu_id`](#ra_menu_id).
+
+<a id="ra_add_getfile"></a>
+
+### `ra_add_getfile(id, title)` → `Int`
+
+- `id`: the gadget's number, chosen by the program (0 to 63).
+- `title`: the requester's title.
+
+A button that opens the file requester; `ra_get_string(id)` gives the chosen one.
+Adds it to the current window's open group. Returns 1, or 0 if it could not.
+
+See also: [`ra_get_string`](#ra_get_string).
+
+<a id="system_functions"></a>
 
 ## System and memory
 
+The Amiga's memory, waiting, random numbers and what is closest to the machine: reading and writing memory
+addresses.
+
+**Memory.** The Amiga has chip memory, the only one the video and sound chips see (pictures, sprites, sounds), and
+fast memory, for the processor only. `mem_*` say how much there is. Dash's texts, lists and structs come from a pool
+freed on its own at the end; buffers, arenas and `amiga_alloc` are not: they must be freed.
+
+**Waiting.** `time_delay` counts in ticks of 1/50 of a second and uses no CPU while it waits. `wait_vblank` waits
+for the screen's next frame, to animate at its pace.
+
+**The dangerous part.** `peek_*` and `poke_*` read and write any address: writing where you should not hangs the
+Amiga. `retain` and `release` touch the reference count Dash keeps on its own: getting it wrong frees an object
+still in use.
+
+**Example** (`tests/test_doc_sistema.dash`, which is also a test: it runs with the others):
+
+```dash
+# Sistema y memoria: cuánta memoria hay, números al azar repetibles, una arena y esperar.
+
+Main
+    Print "chip libre de la total: #{mem_chip_free() <= mem_chip_total()}"
+
+    random_seed(1234)
+    a = random_range(1, 6)
+    b = random_range(1, 6)
+    random_seed(1234)                          # la misma semilla, la misma serie
+    iguales = random_range(1, 6) == a and random_range(1, 6) == b
+    Print "dados iguales con la misma semilla: #{iguales}"
+    bien = true
+    i = 0
+    while i < 200
+        d = random_range(-3, 3)
+        if d < -3 or d > 3
+            bien = false
+        end
+        i = i + 1
+    end
+    Print "dentro del rango: #{bien}, y con max <= min: #{random_range(7, 2)}"
+
+    ar = arena_new(100)
+    p1 = arena_alloc(ar, 5)                    # se alinea a 4: ocupa 8
+    p2 = arena_alloc(ar, 4)
+    poke_long(p2, 0x12345678)
+    Print "arena: #{arena_used(ar)} usados, #{arena_available(ar)} libres"
+    arena_free(ar)                             # las arenas no se liberan solas
+
+    time_delay(10)                             # una quinta parte de un segundo
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `debug_break()` | `void` | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
-| `mem_chip_free()` | `LONG` | Available chip RAM |  |
-| `mem_fast_free()` | `LONG` | Available fast RAM |  |
-| `mem_total()` | `LONG` | Free memory, chip and fast (what is available: not the size of the RAM) |  |
-| `mem_chip_total()` | `LONG` | Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
-| `mem_fast_total()` | `LONG` | Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
-| `peek_byte(addr)` | `LONG` | Read byte from memory address |  |
-| `peek_word(addr)` | `LONG` | Read word from memory address |  |
-| `peek_long(addr)` | `LONG` | Read long from memory address |  |
-| `poke_byte(addr, value)` | `void` | Write byte to memory address |  |
-| `poke_word(addr, value)` | `void` | Write word to memory address |  |
-| `amiga_alloc(size)` | `LONG` | size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory |  |
-| `amiga_free(addr, size)` | `void` | Gives back what amiga_alloc gave (with the same size) |  |
-| `poke_long(addr, value)` | `void` | Write long to memory address |  |
-| `time_delay(ticks)` | `void` | Delay in ticks (50 per second) |  |
-| `time_delay_ms(ms)` | `void` | Delay in milliseconds |  |
-| `random()` | `LONG` | Random number |  |
-| `random_range(min, max)` | `LONG` | Random in range [min, max] |  |
-| `random_seed(seed)` | `void` | Set random seed |  |
-| `wait_vblank()` | `void` | Wait for vertical blank |  |
-| `wait_blit()` | `void` | Wait for blitter |  |
-| `arena_new(size)` | `LONG` | Create arena allocator with given size in bytes |  |
-| `arena_alloc(arena, size)` | `LONG` | Allocate from arena (fast bump allocator) |  |
-| `arena_reset(arena)` | `void` | Reset arena (reuse memory without freeing) |  |
-| `arena_free(arena)` | `void` | Free arena and all its memory |  |
-| `arena_used(arena)` | `LONG` | Get bytes used in arena |  |
-| `arena_available(arena)` | `LONG` | Get bytes available in arena |  |
-| `refcount(obj)` | `LONG` | Get reference count of object |  |
-| `retain(obj)` | `void` | Manually increment reference count |  |
-| `release(obj)` | `void` | Manually decrement reference count (frees if 0) |  |
-| `mem_trim()` | `LONG` | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
-| `mem_puddle(bytes)` | `BOOL` | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
+| [`debug_break()`](#debug_break) | — | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
+| [`mem_chip_free()`](#mem_chip_free) | Int | Available chip RAM |  |
+| [`mem_fast_free()`](#mem_fast_free) | Int | Available fast RAM |  |
+| [`mem_total()`](#mem_total) | Int | Free memory, chip and fast (what is available: not the size of the RAM) |  |
+| [`mem_chip_total()`](#mem_chip_total) | Int | Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
+| [`mem_fast_total()`](#mem_fast_total) | Int | Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
+| [`peek_byte(addr)`](#peek_byte) | Int | Read byte from memory address |  |
+| [`peek_word(addr)`](#peek_word) | Int | Read word from memory address |  |
+| [`peek_long(addr)`](#peek_long) | Int | Read long from memory address |  |
+| [`poke_byte(addr, value)`](#poke_byte) | — | Write byte to memory address |  |
+| [`poke_word(addr, value)`](#poke_word) | — | Write word to memory address |  |
+| [`amiga_alloc(size)`](#amiga_alloc) | Int | size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory |  |
+| [`amiga_free(addr, size)`](#amiga_free) | — | Gives back what amiga_alloc gave (with the same size) |  |
+| [`poke_long(addr, value)`](#poke_long) | — | Write long to memory address |  |
+| [`time_delay(ticks)`](#time_delay) | — | Delay in ticks (50 per second) |  |
+| [`time_delay_ms(ms)`](#time_delay_ms) | — | Delay in milliseconds |  |
+| [`random()`](#random) | Int | Random number |  |
+| [`random_range(min, max)`](#random_range) | Int | Random in range [min, max] |  |
+| [`random_seed(seed)`](#random_seed) | — | Set random seed |  |
+| [`wait_vblank()`](#wait_vblank) | — | Wait for vertical blank |  |
+| [`wait_blit()`](#wait_blit) | — | Wait for blitter |  |
+| [`arena_new(size)`](#arena_new) | Int | Create arena allocator with given size in bytes |  |
+| [`arena_alloc(arena, size)`](#arena_alloc) | Int | Allocate from arena (fast bump allocator) |  |
+| [`arena_reset(arena)`](#arena_reset) | — | Reset arena (reuse memory without freeing) |  |
+| [`arena_free(arena)`](#arena_free) | — | Free arena and all its memory |  |
+| [`arena_used(arena)`](#arena_used) | Int | Get bytes used in arena |  |
+| [`arena_available(arena)`](#arena_available) | Int | Get bytes available in arena |  |
+| [`refcount(obj)`](#refcount) | Int | Get reference count of object |  |
+| [`retain(obj)`](#retain) | — | Manually increment reference count |  |
+| [`release(obj)`](#release) | — | Manually decrement reference count (frees if 0) |  |
+| [`mem_trim()`](#mem_trim) | Int | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
+| [`mem_puddle(bytes)`](#mem_puddle) | Bool | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
+
+<a id="debug_break"></a>
+
+### `debug_break()`
+
+Stops the program in the emulator's debugger (`tools/emu_run.py --debug`). On a real Amiga, or an emulator without
+that debugger, it does nothing.
+
+<a id="mem_chip_free"></a>
+
+### `mem_chip_free()` → `Int`
+
+Returns the bytes of chip memory free now.
+
+See also: [`mem_chip_total`](#mem_chip_total), [`mem_fast_free`](#mem_fast_free).
+
+<a id="mem_fast_free"></a>
+
+### `mem_fast_free()` → `Int`
+
+Returns the bytes of fast memory free now; 0 on an Amiga without fast.
+
+See also: [`mem_fast_total`](#mem_fast_total), [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_total"></a>
+
+### `mem_total()` → `Int`
+
+Returns the free bytes adding chip and fast. It is what is left, not the size of the memory.
+
+See also: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_chip_total"></a>
+
+### `mem_chip_total()` → `Int`
+
+Returns the size of chip memory in bytes, free and in use: a little under 2 MB on an A1200.
+
+See also: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_fast_total"></a>
+
+### `mem_fast_total()` → `Int`
+
+Returns the size of fast memory in bytes, free and in use.
+
+See also: [`mem_fast_free`](#mem_fast_free).
+
+<a id="peek_byte"></a>
+
+### `peek_byte(addr)` → `Int`
+
+- `addr`: the address.
+
+Returns the byte there, 0 to 255.
+
+See also: [`poke_byte`](#poke_byte), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="peek_word"></a>
+
+### `peek_word(addr)` → `Int`
+
+- `addr`: the address, even.
+
+Returns the 16 bits there. On a 68000, an odd address is a CPU error.
+
+See also: [`poke_word`](#poke_word).
+
+<a id="peek_long"></a>
+
+### `peek_long(addr)` → `Int`
+
+- `addr`: the address, even.
+
+Returns the 32 bits there.
+
+See also: [`poke_long`](#poke_long).
+
+<a id="poke_byte"></a>
+
+### `poke_byte(addr, value)`
+
+- `addr`: the address.
+- `value`: the byte.
+
+Writes it there. A wrong address hangs the Amiga.
+
+See also: [`peek_byte`](#peek_byte).
+
+<a id="poke_word"></a>
+
+### `poke_word(addr, value)`
+
+- `addr`: the address, even.
+- `value`: the 16 bits.
+
+See also: [`peek_word`](#peek_word).
+
+<a id="amiga_alloc"></a>
+
+### `amiga_alloc(size)` → `Int`
+
+- `size`: how many bytes.
+
+Zeroed memory for AmigaOS structures (`@amiga struct`) handed to the system. Returns the address, or 0 without
+memory. Give it back with `amiga_free` and the same size; it is not freed on its own.
+
+See also: [`amiga_free`](#amiga_free), [`buffer_alloc`](#buffer_alloc).
+
+<a id="amiga_free"></a>
+
+### `amiga_free(addr, size)`
+
+- `addr`: what `amiga_alloc` gave.
+- `size`: the same size that was asked for.
+
+See also: [`amiga_alloc`](#amiga_alloc).
+
+<a id="poke_long"></a>
+
+### `poke_long(addr, value)`
+
+- `addr`: the address, even.
+- `value`: the 32 bits.
+
+See also: [`peek_long`](#peek_long).
+
+<a id="time_delay"></a>
+
+### `time_delay(ticks)`
+
+- `ticks`: how many ticks; there are 50 a second (`time_delay(50)` is one second).
+
+Waits without using CPU: other programs carry on.
+
+See also: [`time_delay_ms`](#time_delay_ms), [`wait_vblank`](#wait_vblank).
+
+<a id="time_delay_ms"></a>
+
+### `time_delay_ms(ms)`
+
+- `ms`: how many milliseconds.
+
+Like `time_delay`, in milliseconds, in steps of 20: under 20 does not wait at all.
+
+See also: [`time_delay`](#time_delay).
+
+<a id="random"></a>
+
+### `random()` → `Int`
+
+Returns a random number from 0 to 32767. The series is always the same unless the seed changes:
+`random_seed(time_ms())` at the start gives a different one each time.
+
+See also: [`random_range`](#random_range), [`random_seed`](#random_seed).
+
+<a id="random_range"></a>
+
+### `random_range(min, max)` → `Int`
+
+- `min`, `max`: the ends, both included.
+
+Returns a random number between them: `random_range(1, 6)` is a die. With `max` less than or equal to `min` it
+returns `min`. For ranges of more than 32768 numbers, not all of them come up.
+
+See also: [`random`](#random), [`random_seed`](#random_seed).
+
+<a id="random_seed"></a>
+
+### `random_seed(seed)`
+
+- `seed`: the seed.
+
+The same seed gives the same series of numbers.
+
+See also: [`random`](#random).
+
+<a id="wait_vblank"></a>
+
+### `wait_vblank()`
+
+Waits for the next vertical blank: 50 times a second on PAL, 60 on NTSC. In a game loop, one wait per turn keeps it
+at the screen's pace. With `screen_flip` it is not needed.
+
+See also: [`screen_flip`](#screen_flip), [`time_delay`](#time_delay).
+
+<a id="wait_blit"></a>
+
+### `wait_blit()`
+
+Waits for the blitter to finish what it is doing. Dash's builtins already wait when needed; it is for code of your
+own reading memory the blitter is writing.
+
+<a id="arena_new"></a>
+
+### `arena_new(size)` → `Int`
+
+- `size`: how many bytes.
+
+Creates an arena: a block of memory handed out in order, very fast, and emptied in one go. For lots of small data
+living the same time (a frame, a level). Returns the arena, or 0 without memory. It must be freed with
+`arena_free`.
+
+See also: [`arena_alloc`](#arena_alloc), [`arena_reset`](#arena_reset), [`arena_free`](#arena_free).
+
+<a id="arena_alloc"></a>
+
+### `arena_alloc(arena, size)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+- `size`: how many bytes.
+
+Returns the address of a new piece, or 0 if it no longer fits. Pieces are aligned to 4 bytes. After an
+`arena_reset` they hold whatever was there before: they are not zeroed. They are not freed one by one: the whole
+arena is emptied.
+
+See also: [`arena_reset`](#arena_reset), [`arena_available`](#arena_available).
+
+<a id="arena_reset"></a>
+
+### `arena_reset(arena)`
+
+- `arena`: the arena from `arena_new`.
+
+Empties it: what was handed out is no longer valid and handing out starts over.
+
+See also: [`arena_alloc`](#arena_alloc).
+
+<a id="arena_free"></a>
+
+### `arena_free(arena)`
+
+- `arena`: the arena from `arena_new`.
+
+Gives its memory back to the system.
+
+See also: [`arena_new`](#arena_new).
+
+<a id="arena_used"></a>
+
+### `arena_used(arena)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+
+Returns how many bytes have been handed out.
+
+See also: [`arena_available`](#arena_available).
+
+<a id="arena_available"></a>
+
+### `arena_available(arena)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+
+Returns how many bytes are left.
+
+See also: [`arena_used`](#arena_used).
+
+<a id="refcount"></a>
+
+### `refcount(obj)` → `Int`
+
+- `obj`: a list or a struct.
+
+Returns how many references it has: how many variables, fields or lists hold it. For hunting memory leaks;
+`./dash --memcheck` does it better.
+
+See also: [`retain`](#retain), [`release`](#release).
+
+<a id="retain"></a>
+
+### `retain(obj)`
+
+- `obj`: the object.
+
+Adds a reference to it, so it is not freed even if Dash thinks nobody uses it: for instance, if only C code keeps
+it. Each `retain` needs its `release`.
+
+See also: [`release`](#release), [`refcount`](#refcount).
+
+<a id="release"></a>
+
+### `release(obj)`
+
+- `obj`: the object.
+
+Takes a reference away; if it reaches 0, it frees it. Only to undo a `retain`.
+
+See also: [`retain`](#retain).
+
+<a id="mem_trim"></a>
+
+### `mem_trim()` → `Int`
+
+Gives back to the system Dash's small-memory blocks (up to 128 bytes) left completely free. Returns how many bytes
+it gave back. Handy after dropping lots of data in a program that keeps running.
+
+See also: [`mem_puddle`](#mem_puddle).
+
+<a id="mem_puddle"></a>
+
+### `mem_puddle(bytes)` → `Bool`
+
+- `bytes`: the size of each piece Dash asks the system for its memory, 1 KB to 1 MB; 4 KB if not set.
+
+It only works before the program asks for memory: the first line of `Main`. Large pieces suit lots of data; small
+ones, an Amiga short of memory. Returns `false` if it is too late or the size is not valid.
+
+See also: [`mem_trim`](#mem_trim).
+
+<a id="dos_functions"></a>
 
 ## Files (DOS)
 
+Files and drawers with `dos.library`: open, read, write, copy, delete, list a drawer.
+
+**The simplest first.** For a whole text file there is no need to open it: `file_read_text(path)` returns it as a
+text (or `nil` if it cannot be read) and `file_write_text(path, text)` writes it (Text group). `str_split(text,
+"\n")` gives the lines. For whole binary data, `file_load` and `file_save` with a buffer.
+
+**Open and close.** To read or write in pieces:
+
+1. `f = file_open(path, mode)`: 1005 to read a file that exists, 1006 to create a new one (if it existed, it is
+   emptied), 1004 to read and write one that exists. Returns 0 if it cannot.
+2. Read or write: by bytes (`file_read_byte`), by lines (`file_read_line`, `file_write_line`) or by blocks with a
+   buffer (`file_read`, `file_write`).
+3. `file_close(f)`. What was written is not safe on disk until it is closed.
+
+**Paths.** As in AmigaOS: `"RAM:notes.txt"`, `"DH0:Projects/game/level1.map"`, `"PROGDIR:data"` (the program's
+drawer). A path without a volume counts from the current drawer. Case does not matter.
+
+**Buffered and not.** The byte and line functions (`file_read_byte`, `file_read_line`, `file_write_byte`,
+`file_write_line`, `file_print`) use a `dos.library` buffer, fast for small things. `file_read` and `file_write` go
+direct. Do not mix them on the same file without a `file_seek` in between.
+
+**Example** (`tests/test_doc_ficheros.dash`, which is also a test: it runs with the others):
+
+```dash
+# Ficheros: escribir unas líneas, leerlas una a una, mirar un cajón, renombrar y borrar.
+
+Main
+    cajon = "RAM:Prueba"
+    dir_create(cajon)
+    ruta = cajon + "/notas.txt"
+
+    f = file_open(ruta, 1006)                  # nuevo
+    if f == 0
+        Print "no se pudo crear " + ruta
+        return
+    end
+    file_write_line(f, "uno")
+    file_write_line(f, "dos")
+    file_write_line(f, "tres")
+    file_close(f)
+
+    f = file_open(ruta, 1005)                  # leer
+    linea = buffer_alloc(80)
+    n = 0
+    segunda = ""
+    l = file_read_line(f, linea, 80)
+    while l != nil
+        n = n + 1
+        if n == 2
+            segunda = str_trim(l)              # la línea trae su salto al final
+        end
+        l = file_read_line(f, linea, 80)
+    end
+    file_seek(f, 0, -1)                        # al principio
+    primera = file_read_byte(f)
+    file_close(f)
+    buffer_free(linea)
+    Print "#{n} lineas, la segunda: #{segunda}"
+    Print "notas.txt pesa #{file_size(ruta)} bytes"
+
+    copia = cajon + "/copia.txt"
+    file_copy(ruta, copia)
+    total = dir_read(cajon)
+    Print "Prueba: #{total} entradas"
+    i = 0
+    while i < total
+        Print "- #{dir_entry_name(i)} #{dir_entry_size(i)}"
+        i = i + 1
+    end
+    Print "en el principio otra vez: #{str_char(primera)}"
+
+    Print "borrados: #{file_delete(ruta)} #{file_delete(copia)} #{file_delete(cajon)}"
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `file_open(filename, mode)` | `LONG` | Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails) |  |
-| `file_close(handle)` | `void` | Close file |  |
-| `file_read_byte(handle)` | `LONG` | Read single byte |  |
-| `file_read_line(handle, buffer, maxlen)` | `STRPTR` | Read line into buffer |  |
-| `file_read(handle, buffer, length)` | `LONG` | Read bytes into buffer |  |
-| `file_eof(handle)` | `BOOL` | True at the end of the file (looks at the next byte without consuming it) |  |
-| `file_write_byte(handle, byte)` | `LONG` | Write single byte |  |
-| `file_write_line(handle, str)` | `LONG` | Write string followed by a newline (0 = ok, -1 = error) |  |
-| `file_write(handle, buffer, length)` | `LONG` | Write bytes from buffer |  |
-| `file_print(handle, str)` | `void` | Print string to file |  |
-| `file_seek(handle, position, mode)` | `LONG` | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
-| `file_pos(handle)` | `LONG` | Get current position |  |
-| `file_size(filename)` | `LONG` | Get file size |  |
-| `file_exists(filename)` | `BOOL` | Check if file exists |  |
-| `file_delete(filename)` | `BOOL` | Delete file |  |
-| `file_rename(oldname, newname)` | `BOOL` | Rename file |  |
-| `file_copy(src, dest)` | `BOOL` | Copy file |  |
-| `dir_create(path)` | `BOOL` | Create directory |  |
-| `dir_change(path)` | `BOOL` | Change current directory |  |
-| `dir_current()` | `STRPTR` | Full name of the current directory ("Ram Disk:" ...) |  |
-| `dir_read(path)` | `LONG` | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
-| `dir_entry_name(i)` | `STRPTR` | Name of entry i (from 0) of the last dir_read; "" past the end |  |
-| `dir_entry_size(i)` | `LONG` | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
-| `dir_entry_is_dir(i)` | `BOOL` | True if entry i of the last dir_read is a directory |  |
-| `dir_entry_date(i)` | `LONG` | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
-| `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
-| `console_write(str)` | `void` | Write to console |  |
-| `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
-| `file_save(filename, buffer, size)` | `LONG` | Save buffer to file, returns bytes written |  |
+| [`file_open(filename, mode)`](#file_open) | Int | Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails) |  |
+| [`file_close(handle)`](#file_close) | — | Close file |  |
+| [`file_read_byte(handle)`](#file_read_byte) | Int | Read single byte |  |
+| [`file_read_line(handle, buffer, maxlen)`](#file_read_line) | String | Read line into buffer |  |
+| [`file_read(handle, buffer, length)`](#file_read) | Int | Read bytes into buffer |  |
+| [`file_eof(handle)`](#file_eof) | Bool | True at the end of the file (looks at the next byte without consuming it) |  |
+| [`file_write_byte(handle, byte)`](#file_write_byte) | Int | Write single byte |  |
+| [`file_write_line(handle, str)`](#file_write_line) | Int | Write string followed by a newline (0 = ok, -1 = error) |  |
+| [`file_write(handle, buffer, length)`](#file_write) | Int | Write bytes from buffer |  |
+| [`file_print(handle, str)`](#file_print) | — | Print string to file |  |
+| [`file_seek(handle, position, mode)`](#file_seek) | Int | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
+| [`file_pos(handle)`](#file_pos) | Int | Get current position |  |
+| [`file_size(filename)`](#file_size) | Int | Get file size |  |
+| [`file_exists(filename)`](#file_exists) | Bool | Check if file exists |  |
+| [`file_delete(filename)`](#file_delete) | Bool | Delete file |  |
+| [`file_rename(oldname, newname)`](#file_rename) | Bool | Rename file |  |
+| [`file_copy(src, dest)`](#file_copy) | Bool | Copy file |  |
+| [`dir_create(path)`](#dir_create) | Bool | Create directory |  |
+| [`dir_change(path)`](#dir_change) | Bool | Change current directory |  |
+| [`dir_current()`](#dir_current) | String | Full name of the current directory ("Ram Disk:" ...) |  |
+| [`dir_read(path)`](#dir_read) | Int | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
+| [`dir_entry_name(i)`](#dir_entry_name) | String | Name of entry i (from 0) of the last dir_read; "" past the end |  |
+| [`dir_entry_size(i)`](#dir_entry_size) | Int | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
+| [`dir_entry_is_dir(i)`](#dir_entry_is_dir) | Bool | True if entry i of the last dir_read is a directory |  |
+| [`dir_entry_date(i)`](#dir_entry_date) | Int | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
+| [`console_read(buffer, maxlen)`](#console_read) | Int | Read from console |  |
+| [`console_write(str)`](#console_write) | — | Write to console |  |
+| [`file_load(filename, buffer, maxsize)`](#file_load) | Int | Load entire file into buffer, returns bytes read or -1 |  |
+| [`file_save(filename, buffer, size)`](#file_save) | Int | Save buffer to file, returns bytes written |  |
+
+<a id="file_open"></a>
+
+### `file_open(filename, mode)` → `Int`
+
+- `filename`: the path.
+- `mode`: 1005 = read one that exists; 1006 = create a new one, emptying it if it existed; 1004 = read and write
+  one that exists, starting at the beginning.
+
+Returns the open file, a number passed to the other functions, or 0 if it could not: it does not exist, the drawer
+does not exist, the disk is protected. With 1006 and 1004 no other program can open it at the same time.
+
+See also: [`file_close`](#file_close), [`file_read_line`](#file_read_line), [`file_read_text`](#file_read_text).
+
+<a id="file_close"></a>
+
+### `file_close(handle)`
+
+- `handle`: the file from `file_open`.
+
+Closes the file and writes to disk what was left in the buffer. Always close it: an open file stays locked for
+other programs.
+
+See also: [`file_open`](#file_open).
+
+<a id="file_read_byte"></a>
+
+### `file_read_byte(handle)` → `Int`
+
+- `handle`: the file.
+
+Returns the next byte, from 0 to 255, or -1 at the end of the file.
+
+See also: [`file_eof`](#file_eof), [`file_read`](#file_read).
+
+<a id="file_read_line"></a>
+
+### `file_read_line(handle, buffer, maxlen)` → `String`
+
+- `handle`: the file.
+- `buffer`: a `buffer_alloc` buffer the line is read into.
+- `maxlen`: its size in bytes; a longer line comes in pieces.
+
+Returns the next line, with its `"\n"` at the end (`str_trim` removes it), or `nil` at the end of the file. What it
+returns lives in the buffer until the next read; storing it in a variable makes a copy.
+
+See also: [`file_write_line`](#file_write_line), [`file_read_text`](#file_read_text), [`buffer_alloc`](#buffer_alloc).
+
+<a id="file_read"></a>
+
+### `file_read(handle, buffer, length)` → `Int`
+
+- `handle`: the file.
+- `buffer`: where the bytes are read into.
+- `length`: how many at most; the buffer must have room.
+
+Returns how many bytes it read: fewer than `length` near the end, 0 at the end and -1 on an error.
+
+See also: [`file_write`](#file_write), [`file_load`](#file_load), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="file_eof"></a>
+
+### `file_eof(handle)` → `Bool`
+
+- `handle`: the file.
+
+Returns `true` if no bytes are left. It looks at the next one without using it up, so it can be asked before each
+read: `while not file_eof(f)`.
+
+See also: [`file_read_byte`](#file_read_byte).
+
+<a id="file_write_byte"></a>
+
+### `file_write_byte(handle, byte)` → `Int`
+
+- `handle`: the file.
+- `byte`: the byte, from 0 to 255.
+
+Returns the byte written, or -1 on an error.
+
+See also: [`file_read_byte`](#file_read_byte), [`file_write`](#file_write).
+
+<a id="file_write_line"></a>
+
+### `file_write_line(handle, str)` → `Int`
+
+- `handle`: the file.
+- `str`: the text.
+
+Writes the text and a line break. Returns 0 if it went well and -1 on an error (a full disk).
+
+See also: [`file_print`](#file_print), [`file_read_line`](#file_read_line), [`file_write_text`](#file_write_text).
+
+<a id="file_write"></a>
+
+### `file_write(handle, buffer, length)` → `Int`
+
+- `handle`: the file.
+- `buffer`: the bytes.
+- `length`: how many.
+
+Returns how many bytes it wrote; fewer than `length`, or -1, is an error.
+
+See also: [`file_read`](#file_read), [`file_save`](#file_save).
+
+<a id="file_print"></a>
+
+### `file_print(handle, str)`
+
+- `handle`: the file.
+- `str`: the text.
+
+Writes the text as it is, without a line break.
+
+See also: [`file_write_line`](#file_write_line).
+
+<a id="file_seek"></a>
+
+### `file_seek(handle, position, mode)` → `Int`
+
+- `handle`: the file.
+- `position`: how many bytes.
+- `mode`: from where: -1 = the beginning, 0 = the current place, 1 = the end. Dash has no `OFFSET_*` constants: use
+  the number.
+
+Moves the read and write place to that position: `file_seek(f, 0, -1)` goes back to the start. Returns the place
+before, or -1 if it could not.
+
+See also: [`file_pos`](#file_pos).
+
+<a id="file_pos"></a>
+
+### `file_pos(handle)` → `Int`
+
+- `handle`: the file.
+
+Returns the current place, in bytes from the start.
+
+See also: [`file_seek`](#file_seek).
+
+<a id="file_size"></a>
+
+### `file_size(filename)` → `Int`
+
+- `filename`: the path.
+
+Returns the size in bytes, without opening it, or -1 if it does not exist.
+
+See also: [`file_exists`](#file_exists), [`dir_entry_size`](#dir_entry_size).
+
+<a id="file_exists"></a>
+
+### `file_exists(filename)` → `Bool`
+
+- `filename`: the path.
+
+Returns `true` if it exists, file or drawer.
+
+See also: [`file_size`](#file_size).
+
+<a id="file_delete"></a>
+
+### `file_delete(filename)` → `Bool`
+
+- `filename`: the path.
+
+Deletes the file, or the drawer if it is empty. Returns `false` if it could not: it does not exist, it is open, it
+is protected.
+
+See also: [`file_rename`](#file_rename).
+
+<a id="file_rename"></a>
+
+### `file_rename(oldname, newname)` → `Bool`
+
+- `oldname`, `newname`: the old path and the new one.
+
+Renames it or moves it to another drawer on the same disk. Returns `false` if it could not; across different disks
+it cannot: `file_copy` and then `file_delete`.
+
+See also: [`file_copy`](#file_copy), [`file_delete`](#file_delete).
+
+<a id="file_copy"></a>
+
+### `file_copy(src, dest)` → `Bool`
+
+- `src`: the file to copy.
+- `dest`: the copy; if it existed, it is replaced.
+
+Returns `true` if it copied everything.
+
+See also: [`file_rename`](#file_rename).
+
+<a id="dir_create"></a>
+
+### `dir_create(path)` → `Bool`
+
+- `path`: the new drawer's path.
+
+Creates it. Returns `false` if it could not or it already existed. It does not create the ones above.
+
+See also: [`dir_read`](#dir_read), [`dir_change`](#dir_change).
+
+<a id="dir_change"></a>
+
+### `dir_change(path)` → `Bool`
+
+- `path`: the drawer.
+
+Makes it the current drawer: paths without a volume count from it. Returns `false` if it does not exist. When the
+program ends, the old drawer is put back.
+
+See also: [`dir_current`](#dir_current).
+
+<a id="dir_current"></a>
+
+### `dir_current()` → `String`
+
+Returns the full path of the current drawer, with the volume's name: `"Ram Disk:"`, `"Work:Projects"`.
+
+See also: [`dir_change`](#dir_change).
+
+<a id="dir_read"></a>
+
+### `dir_read(path)` → `Int`
+
+- `path`: the drawer.
+
+Reads what is in it, sorted by name ignoring case, and returns how many entries it has; -1 if it is not a drawer
+that can be read. Then `dir_entry_name(i)` and the others give each entry, from 0 to the count minus one, until the
+next `dir_read`.
+
+See also: [`dir_entry_name`](#dir_entry_name), [`dir_entry_is_dir`](#dir_entry_is_dir), [`dir_entry_size`](#dir_entry_size), [`dir_entry_date`](#dir_entry_date).
+
+<a id="dir_entry_name"></a>
+
+### `dir_entry_name(i)` → `String`
+
+- `i`: the entry, from 0.
+
+Returns its name, without the path; `""` if there is no entry `i`.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_size"></a>
+
+### `dir_entry_size(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns its size in bytes; 0 if it is a drawer.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_is_dir"></a>
+
+### `dir_entry_is_dir(i)` → `Bool`
+
+- `i`: the entry, from 0.
+
+Returns `true` if it is a drawer.
+
+See also: [`dir_read`](#dir_read).
+
+<a id="dir_entry_date"></a>
+
+### `dir_entry_date(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns the date of its last change in seconds since 1 January 1970, like `time_unix`. 0 if there is no entry `i`.
+
+See also: [`dir_read`](#dir_read), [`time_unix`](#time_unix).
+
+<a id="console_read"></a>
+
+### `console_read(buffer, maxlen)` → `Int`
+
+- `buffer`: where to read into.
+- `maxlen`: how many bytes at most.
+
+Reads from the program's input: the Shell, or what comes in with `<`. In the Shell it waits for Return and returns
+how many bytes it read, line break included; 0 at the end of the input.
+
+See also: [`console_write`](#console_write).
+
+<a id="console_write"></a>
+
+### `console_write(str)`
+
+- `str`: the text.
+
+Writes it to the program's output, without a line break and without a buffer: it shows at once. For a line,
+`Print`.
+
+See also: [`console_read`](#console_read).
+
+<a id="file_load"></a>
+
+### `file_load(filename, buffer, maxsize)` → `Int`
+
+- `filename`: the path.
+- `buffer`: a `buffer_alloc` buffer.
+- `maxsize`: its size.
+
+Loads the whole file into the buffer. Returns the bytes read, or -1 if it does not exist or does not fit
+(`file_size` says how much is needed).
+
+See also: [`file_save`](#file_save), [`file_size`](#file_size), [`file_read_text`](#file_read_text).
+
+<a id="file_save"></a>
+
+### `file_save(filename, buffer, size)` → `Int`
+
+- `filename`: the path; if it existed, it is replaced.
+- `buffer`: the bytes.
+- `size`: how many.
+
+Saves the buffer as the whole file. Returns the bytes written: if it is not `size`, it failed (0 if it could not
+create it).
+
+See also: [`file_load`](#file_load), [`file_write_text`](#file_write_text).
+
+<a id="buffer_functions"></a>
 
 ## Buffers
 
+Raw memory for binary data: files that are not text, pictures, what goes over the network. A buffer is the address
+of a block of memory; positions (`offset`) are bytes from its start.
+
+Dash does not check bounds: reading or writing outside the buffer touches other memory and can hang the Amiga. And
+it is not freed on its own: every `buffer_alloc` needs its `buffer_free`, or that memory is lost until a reboot.
+
+16 and 32-bit numbers go as on the 68000, high byte first (big-endian), which is how Amiga files (IFF) store them.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `buffer_alloc(size)` | `APTR` | Allocate memory buffer |  |
-| `buffer_free(buffer)` | `void` | Free memory buffer |  |
-| `buffer_get_byte(buffer, offset)` | `LONG` | Get byte at offset |  |
-| `buffer_set_byte(buffer, offset, value)` | `void` | Set byte at offset |  |
-| `buffer_get_word(buffer, offset)` | `LONG` | Get 16-bit word at offset (big-endian) |  |
-| `buffer_set_word(buffer, offset, value)` | `void` | Set 16-bit word at offset (big-endian) |  |
-| `buffer_get_long(buffer, offset)` | `LONG` | Get 32-bit long at offset (big-endian) |  |
-| `buffer_set_long(buffer, offset, value)` | `void` | Set 32-bit long at offset (big-endian) |  |
-| `buffer_copy(dest, dest_offset, src, src_offset, length)` | `void` | Copy bytes between buffers |  |
-| `buffer_fill(buffer, offset, length, value)` | `void` | Fill buffer region with byte value |  |
+| [`buffer_alloc(size)`](#buffer_alloc) | Int (address) | Allocate memory buffer |  |
+| [`buffer_free(buffer)`](#buffer_free) | — | Free memory buffer |  |
+| [`buffer_get_byte(buffer, offset)`](#buffer_get_byte) | Int | Get byte at offset |  |
+| [`buffer_set_byte(buffer, offset, value)`](#buffer_set_byte) | — | Set byte at offset |  |
+| [`buffer_get_word(buffer, offset)`](#buffer_get_word) | Int | Get 16-bit word at offset (big-endian) |  |
+| [`buffer_set_word(buffer, offset, value)`](#buffer_set_word) | — | Set 16-bit word at offset (big-endian) |  |
+| [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | Get 32-bit long at offset (big-endian) |  |
+| [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Set 32-bit long at offset (big-endian) |  |
+| [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copy bytes between buffers |  |
+| [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Fill buffer region with byte value |  |
+
+<a id="buffer_alloc"></a>
+
+### `buffer_alloc(size)` → `Int (address)`
+
+- `size`: how many bytes.
+
+Asks for a block of memory, filled with zeros. Returns its address, or 0 if there is no memory. It must be freed
+with `buffer_free`.
+
+See also: [`buffer_free`](#buffer_free), [`file_load`](#file_load).
+
+<a id="buffer_free"></a>
+
+### `buffer_free(buffer)`
+
+- `buffer`: the buffer; 0 does nothing.
+
+Gives the memory back. Afterwards the buffer cannot be used.
+
+See also: [`buffer_alloc`](#buffer_alloc).
+
+<a id="buffer_get_byte"></a>
+
+### `buffer_get_byte(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the byte, 0 to 255.
+
+See also: [`buffer_set_byte`](#buffer_set_byte).
+
+<a id="buffer_set_byte"></a>
+
+### `buffer_set_byte(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the byte; its low 8 bits count.
+
+See also: [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="buffer_get_word"></a>
+
+### `buffer_get_word(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the 16-bit number at that position, 0 to 65535, high byte first.
+
+See also: [`buffer_set_word`](#buffer_set_word).
+
+<a id="buffer_set_word"></a>
+
+### `buffer_set_word(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the number; its low 16 bits count.
+
+See also: [`buffer_get_word`](#buffer_get_word).
+
+<a id="buffer_get_long"></a>
+
+### `buffer_get_long(buffer, offset)` → `Int`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns the signed 32-bit number at that position, high byte first.
+
+See also: [`buffer_set_long`](#buffer_set_long).
+
+<a id="buffer_set_long"></a>
+
+### `buffer_set_long(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the number.
+
+See also: [`buffer_get_long`](#buffer_get_long).
+
+<a id="buffer_copy"></a>
+
+### `buffer_copy(dest, dest_offset, src, src_offset, length)`
+
+- `dest`, `dest_offset`: where to.
+- `src`, `src_offset`: where from.
+- `length`: how many bytes.
+
+Copies bytes from one buffer to another, or within the same one if the areas do not overlap.
+
+See also: [`buffer_fill`](#buffer_fill).
+
+<a id="buffer_fill"></a>
+
+### `buffer_fill(buffer, offset, length, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `length`: how many bytes.
+- `value`: the byte to fill them with.
+
+See also: [`buffer_copy`](#buffer_copy).
+
+<a id="text_functions"></a>
 
 ## Text
 
+Find, cut, change and convert texts, and read or write a whole text file.
+
+The functions return a new text: the original does not change. Positions start at 0. Besides these, the language
+has `s.length`, `s[i]` (one character), `s[a:b]` (a slice), `+` to join, `Int(s)` and interpolation `"#{x}"`
+(manual, section 5).
+
+Texts are Latin-1, one byte per character: ñ and accented vowels take one. A text ends at the first 0 byte, so when
+data from a file or a buffer becomes a text, 0 bytes turn into spaces. For binary data, buffers. For UTF-8 text
+(from the network), the UTF-8 group.
+
+**Example** (`tests/test_doc_texto.dash`, which is also a test: it runs with the others):
+
+```dash
+# Texto y búferes: leer un fichero de ajustes "clave = valor", y la cabecera de un fichero binario en un búfer.
+
+Main
+    file_write_text("RAM:ajustes.txt", "# mis ajustes\nNombre = Lorraine\n\ncolores = 32\n")
+    texto = file_read_text("RAM:ajustes.txt")
+    if texto == nil
+        Print "no se pudo leer"
+        return
+    end
+    for linea in str_split(texto, "\n")
+        linea = str_trim(linea)
+        if linea == "" or str_starts(linea, "#")
+            continue
+        end
+        p = str_find(linea, "=")
+        clave = str_lower(str_trim(linea[:p]))
+        valor = str_trim(linea[p + 1:])
+        if clave == "colores"
+            n = Int(valor)
+            Print "#{clave} -> #{n} (0x#{str_from_int(n, 16)})"
+        else
+            Print "#{clave} -> #{valor}"
+        end
+    end
+
+    b = buffer_alloc(12)                       # una cabecera IFF: "FORM", el largo y el tipo
+    str_to_buffer("FORM", b, 0)
+    buffer_set_long(b, 4, 4)
+    str_to_buffer("ILBM", b, 8)
+    file_save("RAM:cabecera.iff", b, 12)
+    buffer_fill(b, 0, 12, 0)
+    n = file_load("RAM:cabecera.iff", b, 12)
+    es_iff = buffer_equals(b, 0, 4, "FORM")
+    Print "es un IFF de #{n} bytes: #{es_iff}"
+    buffer_free(b)                             # los búferes no se liberan solos
+
+    file_delete("RAM:ajustes.txt")
+    file_delete("RAM:cabecera.iff")
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_code(s, i)` | `LONG` | Code (0-255) of the character at position i, 0 outside the text |  |
-| `str_char(code)` | `STRPTR` | One-character String with that code |  |
-| `str_find(s, sub)` | `LONG` | Position of the first sub in s, -1 if it is not there |  |
-| `str_find_from(s, sub, start)` | `LONG` | Position of the first sub in s from position start, -1 if none |  |
-| `str_starts(s, prefix)` | `BOOL` | Does s start with prefix? |  |
-| `str_ends(s, suffix)` | `BOOL` | Does s end with suffix? |  |
-| `str_lower(s)` | `STRPTR` | Lowercase copy (Latin-1: also accented letters) |  |
-| `str_upper(s)` | `STRPTR` | Uppercase copy (Latin-1: also accented letters) |  |
-| `str_trim(s)` | `STRPTR` | Copy without spaces, tabs and line ends at both ends |  |
-| `str_to_int(s, base)` | `LONG` | Number written in s in that base (2-36); Int(s) is base 10 |  |
-| `str_from_int(n, base)` | `STRPTR` | n written in that base (2-36, lowercase letters) |  |
-| `str_replace(s, from, to)` | `STRPTR` | Copy with every from replaced by to |  |
-| `str_contains(s, sub)` | `BOOL` | Whether sub is in s ("" is in every text) |  |
-| `str_split(s, sep)` | `DashArrayLong *` | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
-| `file_read_text(filename)` | `STRPTR` | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
-| `file_write_text(filename, text)` | `BOOL` | Write the text as the whole file; true if it was all written |  |
-| `str_from_buffer(buffer, offset, length)` | `STRPTR` | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
-| `str_to_buffer(s, buffer, offset)` | `LONG` | Copy the bytes of s to buffer + offset; returns how many |  |
+| [`str_code(s, i)`](#str_code) | Int | Code (0-255) of the character at position i, 0 outside the text |  |
+| [`str_char(code)`](#str_char) | String | One-character String with that code |  |
+| [`str_find(s, sub)`](#str_find) | Int | Position of the first sub in s, -1 if it is not there |  |
+| [`str_find_from(s, sub, start)`](#str_find_from) | Int | Position of the first sub in s from position start, -1 if none |  |
+| [`str_starts(s, prefix)`](#str_starts) | Bool | Does s start with prefix? |  |
+| [`str_ends(s, suffix)`](#str_ends) | Bool | Does s end with suffix? |  |
+| [`str_lower(s)`](#str_lower) | String | Lowercase copy (Latin-1: also accented letters) |  |
+| [`str_upper(s)`](#str_upper) | String | Uppercase copy (Latin-1: also accented letters) |  |
+| [`str_trim(s)`](#str_trim) | String | Copy without spaces, tabs and line ends at both ends |  |
+| [`str_to_int(s, base)`](#str_to_int) | Int | Number written in s in that base (2-36); Int(s) is base 10 |  |
+| [`str_from_int(n, base)`](#str_from_int) | String | n written in that base (2-36, lowercase letters) |  |
+| [`str_replace(s, from, to)`](#str_replace) | String | Copy with every from replaced by to |  |
+| [`str_contains(s, sub)`](#str_contains) | Bool | Whether sub is in s ("" is in every text) |  |
+| [`str_split(s, sep)`](#str_split) | [Int] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
+| [`file_read_text(filename)`](#file_read_text) | String | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
+| [`file_write_text(filename, text)`](#file_write_text) | Bool | Write the text as the whole file; true if it was all written |  |
+| [`str_from_buffer(buffer, offset, length)`](#str_from_buffer) | String | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
+| [`str_to_buffer(s, buffer, offset)`](#str_to_buffer) | Int | Copy the bytes of s to buffer + offset; returns how many |  |
+
+<a id="str_code"></a>
+
+### `str_code(s, i)` → `Int`
+
+- `s`: the text.
+- `i`: the position, from 0.
+
+Returns the character's Latin-1 code (0 to 255); 0 outside the text. It is `Int(s[i])`.
+
+See also: [`str_char`](#str_char).
+
+<a id="str_char"></a>
+
+### `str_char(code)` → `String`
+
+- `code`: a Latin-1 code, 1 to 255.
+
+Returns a one-character text: `str_char(65)` is `"A"`.
+
+See also: [`str_code`](#str_code).
+
+<a id="str_find"></a>
+
+### `str_find(s, sub)` → `Int`
+
+- `s`: the text.
+- `sub`: what to look for.
+
+Returns the position of its first appearance, or -1 if it is not there. It is case sensitive.
+
+See also: [`str_find_from`](#str_find_from), [`str_contains`](#str_contains).
+
+<a id="str_find_from"></a>
+
+### `str_find_from(s, sub, start)` → `Int`
+
+- `s`: the text.
+- `sub`: what to look for.
+- `start`: the position to start at.
+
+Like `str_find`, starting at `start`. To find them all, search again from the previous one plus one.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_starts"></a>
+
+### `str_starts(s, prefix)` → `Bool`
+
+- `s`: the text.
+- `prefix`: the beginning.
+
+Returns `true` if `s` starts with `prefix`.
+
+See also: [`str_ends`](#str_ends).
+
+<a id="str_ends"></a>
+
+### `str_ends(s, suffix)` → `Bool`
+
+- `s`: the text.
+- `suffix`: the end.
+
+Returns `true` if `s` ends with `suffix`: `str_ends(name, ".iff")`.
+
+See also: [`str_starts`](#str_starts).
+
+<a id="str_lower"></a>
+
+### `str_lower(s)` → `String`
+
+- `s`: the text.
+
+Returns a lower-case copy, accented letters and Ñ included.
+
+See also: [`str_upper`](#str_upper).
+
+<a id="str_upper"></a>
+
+### `str_upper(s)` → `String`
+
+- `s`: the text.
+
+Returns an upper-case copy, accented letters and ñ included.
+
+See also: [`str_lower`](#str_lower).
+
+<a id="str_trim"></a>
+
+### `str_trim(s)` → `String`
+
+- `s`: the text.
+
+Returns a copy without the spaces, tabs and line breaks at the start and the end.
+
+See also: [`str_split`](#str_split).
+
+<a id="str_to_int"></a>
+
+### `str_to_int(s, base)` → `Int`
+
+- `s`: the text.
+- `base`: the base, 2 to 36; any other counts as 10.
+
+Returns the number written at the start of the text: it skips spaces, takes a sign and reads digits of that base
+(letters in either case) up to the first one that is not. 0 if there are none. `str_to_int("ff", 16)` is 255.
+
+See also: [`str_from_int`](#str_from_int).
+
+<a id="str_from_int"></a>
+
+### `str_from_int(n, base)` → `String`
+
+- `n`: the number.
+- `base`: the base, 2 to 36.
+
+Returns the number written in that base, with lower-case letters: `str_from_int(255, 16)` is `"ff"`. In base 10,
+interpolation is enough: `"#{n}"`.
+
+See also: [`str_to_int`](#str_to_int).
+
+<a id="str_replace"></a>
+
+### `str_replace(s, from, to)` → `String`
+
+- `s`: the text.
+- `from`: what to change.
+- `to`: what to put instead; `""` removes it.
+
+Returns a copy with every appearance of `from` changed to `to`.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_contains"></a>
+
+### `str_contains(s, sub)` → `Bool`
+
+- `s`: the text.
+- `sub`: what to look for.
+
+Returns `true` if `sub` is in `s`. `""` is in every text.
+
+See also: [`str_find`](#str_find).
+
+<a id="str_split"></a>
+
+### `str_split(s, sep)` → `[Int]`
+
+- `s`: the text.
+- `sep`: the separator.
+
+Returns a `[String]` list with the pieces of `s` between each `sep`. Two separators in a row give a `""` piece.
+With an empty `sep`, or if it does not appear, the list holds just `s`. `str_split(text, "\n")` gives the lines.
+
+See also: [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
+
+<a id="file_read_text"></a>
+
+### `file_read_text(filename)` → `String`
+
+- `filename`: the path.
+
+Returns the whole file as a text, or `nil` if it cannot be read. 0 bytes turn into spaces. Large files need memory
+for the whole text.
+
+See also: [`file_write_text`](#file_write_text), [`str_split`](#str_split).
+
+<a id="file_write_text"></a>
+
+### `file_write_text(filename, text)` → `Bool`
+
+- `filename`: the path; if it existed, it is replaced.
+- `text`: the text.
+
+Writes the text as the whole file. Returns `true` if everything was written.
+
+See also: [`file_read_text`](#file_read_text), [`file_write_line`](#file_write_line).
+
+<a id="str_from_buffer"></a>
+
+### `str_from_buffer(buffer, offset, length)` → `String`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `length`: how many bytes.
+
+Returns a text with those bytes of the buffer; 0 bytes turn into spaces.
+
+See also: [`str_to_buffer`](#str_to_buffer).
+
+<a id="str_to_buffer"></a>
+
+### `str_to_buffer(s, buffer, offset)` → `Int`
+
+- `s`: the text.
+- `buffer`: the buffer, with room for the text.
+- `offset`: where to copy it.
+
+Copies the text's bytes, without the final 0, and returns how many it copied.
+
+See also: [`str_from_buffer`](#str_from_buffer).
+
+<a id="net_functions"></a>
 
 ## Network (TCP)
 
+TCP and UDP with the `bsdsocket.library` of whatever TCP/IP stack the Amiga has (Roadshow, AmiTCP, Miami, or the
+emulator's). If no stack is running, calls fail and `net_error` says so; `net_stack_running` checks without loading
+anything.
+
+**A client:** `s = net_connect(host, port, wait_ms)` gives a socket (-1 on failure), `net_send` sends, `net_recv`
+receives and `net_close` closes. Waits are in milliseconds; -1 means wait as long as needed. `net_recv` returns
+`""` if nothing arrived in time and `nil` when the other side closes.
+
+**Without blocking the window:** `net_connect_start` and `net_connect_poll` connect bit by bit; `net_signal` with
+`mui_wait_event_signals` wakes the program when data arrives. For several downloads at once while the program does
+something else, the "Network in a task of its own" group.
+
+**A server:** `net_listen(port)` and `net_accept`. **UDP:** `net_udp_open`, `net_udp_send`, `net_udp_recv`.
+
+**HTTPS** and other encrypted protocols: the connected socket switches to TLS with `tls_connect` (TLS group).
+
+**Example** (`tests/test_doc_red.dash`, which is also a test: it runs with the others):
+
+```dash
+# Red: un cliente TCP que manda una línea a un servidor y lee la respuesta (el de las pruebas contesta "eco: ...").
+
+Main
+    if not net_stack_running()
+        Print "no hay pila TCP/IP en marcha"
+        return
+    end
+    s = net_connect("127.0.0.1", 40831, 5000)  # como mucho 5 segundos
+    if s < 0
+        Print "no se pudo conectar: " + net_error()
+        return
+    end
+    Print "conectado"
+    net_send(s, "hola desde el Amiga\r\n")
+    respuesta = ""
+    trozo = net_recv(s, 256, 5000)
+    while trozo != nil and trozo != ""             # nil: el otro lado cerró; "": nada a tiempo
+        respuesta = respuesta + trozo
+        trozo = net_recv(s, 256, 2000)
+    end
+    net_close(s)
+    Print "respuesta: " + str_trim(respuesta)
+
+    if net_connect("127.0.0.1", 40832, 2000) < 0   # nadie escucha ahí
+        Print "otro puerto: " + net_error()
+    end
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `net_connect(host, port, timeout_ms)` | `LONG` | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
-| `net_connect_start(host, port, timeout_ms)` | `LONG` | Start a TCP connection without waiting (the name is looked up in another process); the socket, or -1 (see net_error) |  |
-| `net_connect_poll(sock)` | `LONG` | Go on with net_connect_start without waiting: 1 connected, 0 not yet, -1 failed (the socket is closed; see net_error) |  |
-| `net_connect_stage(sock)` | `LONG` | What net_connect_start is doing: 0 looking the name up, 1 connecting, 2 done |  |
-| `net_send(sock, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
-| `net_send_buffer(sock, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
-| `net_recv(sock, max, timeout_ms)` | `STRPTR` | Up to max bytes as text: "" if nothing came within timeout_ms (-1: wait), nil once closed |  |
-| `net_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | Up to max bytes into a buffer: the count, 0 on time out, -1 once closed |  |
-| `net_wait(sock, timeout_ms)` | `LONG` | Wait until there is something to read: 1 yes, 0 time out, -1 error |  |
-| `net_close(sock)` | `void` | Close the connection |  |
-| `net_resolve(host)` | `STRPTR` | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
-| `net_error()` | `STRPTR` | What went wrong in the last net_ call |  |
-| `net_listen(port)` | `LONG` | A TCP server on port (0: any free one, net_port says which): the listening socket, or -1 (see net_error) |  |
-| `net_accept(sock, timeout_ms)` | `LONG` | The next connection to a net_listen server, waiting timeout_ms at most (-1: wait, 0: only look): its socket (net_send, net_recv...), or -1 if none came |  |
-| `net_peer(sock)` | `STRPTR` | The address ("a.b.c.d") of the other end of a TCP connection, nil if none |  |
-| `net_port(sock)` | `LONG` | The local port of a socket (the one net_listen(0) or net_udp_open(0) got), -1 if none |  |
-| `net_udp_open(port)` | `LONG` | A UDP socket on port (0: any free one), broadcasts allowed: the socket, or -1 (net_close closes it) |  |
-| `net_udp_send(sock, host, port, text)` | `LONG` | Send text as one datagram to host:port ("255.255.255.255": the whole local network); bytes sent or -1 |  |
-| `net_udp_send_buffer(sock, host, port, buffer, length)` | `LONG` | Send length bytes of a buffer as one datagram to host:port; bytes sent or -1 |  |
-| `net_udp_recv(sock, max, timeout_ms)` | `STRPTR` | The next datagram as text (up to max bytes): "" if none came within timeout_ms, nil on error; who sent it: net_udp_from, net_udp_from_port |  |
-| `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | The next datagram into a buffer: its length, 0 if none came in time, -1 on error |  |
-| `net_udp_from()` | `STRPTR` | The address ("a.b.c.d") of who sent the last datagram received |  |
-| `net_udp_from_port()` | `LONG` | The port of who sent the last datagram received (to answer it) |  |
-| `net_stack_running()` | `BOOL` | True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is loaded to know it. Roadshow's stays in memory after NetShutdown: that one is opened and closed |  |
-| `net_release()` | `void` | Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and name lookups still open; the next net_ call opens it again (the program's end does it too) |  |
-| `net_signal()` | `LONG` | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
+| [`net_connect(host, port, timeout_ms)`](#net_connect) | Int | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
+| [`net_connect_start(host, port, timeout_ms)`](#net_connect_start) | Int | Start a TCP connection without waiting (the name is looked up in another process); the socket, or -1 (see net_error) |  |
+| [`net_connect_poll(sock)`](#net_connect_poll) | Int | Go on with net_connect_start without waiting: 1 connected, 0 not yet, -1 failed (the socket is closed; see net_error) |  |
+| [`net_connect_stage(sock)`](#net_connect_stage) | Int | What net_connect_start is doing: 0 looking the name up, 1 connecting, 2 done |  |
+| [`net_send(sock, text)`](#net_send) | Int | Send the whole text; bytes sent or -1 |  |
+| [`net_send_buffer(sock, buffer, length)`](#net_send_buffer) | Int | Send length bytes of a buffer; bytes sent or -1 |  |
+| [`net_recv(sock, max, timeout_ms)`](#net_recv) | String | Up to max bytes as text: "" if nothing came within timeout_ms (-1: wait), nil once closed |  |
+| [`net_recv_buffer(sock, buffer, max, timeout_ms)`](#net_recv_buffer) | Int | Up to max bytes into a buffer: the count, 0 on time out, -1 once closed |  |
+| [`net_wait(sock, timeout_ms)`](#net_wait) | Int | Wait until there is something to read: 1 yes, 0 time out, -1 error |  |
+| [`net_close(sock)`](#net_close) | — | Close the connection |  |
+| [`net_resolve(host)`](#net_resolve) | String | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
+| [`net_error()`](#net_error) | String | What went wrong in the last net_ call |  |
+| [`net_listen(port)`](#net_listen) | Int | A TCP server on port (0: any free one, net_port says which): the listening socket, or -1 (see net_error) |  |
+| [`net_accept(sock, timeout_ms)`](#net_accept) | Int | The next connection to a net_listen server, waiting timeout_ms at most (-1: wait, 0: only look): its socket (net_send, net_recv...), or -1 if none came |  |
+| [`net_peer(sock)`](#net_peer) | String | The address ("a.b.c.d") of the other end of a TCP connection, nil if none |  |
+| [`net_port(sock)`](#net_port) | Int | The local port of a socket (the one net_listen(0) or net_udp_open(0) got), -1 if none |  |
+| [`net_udp_open(port)`](#net_udp_open) | Int | A UDP socket on port (0: any free one), broadcasts allowed: the socket, or -1 (net_close closes it) |  |
+| [`net_udp_send(sock, host, port, text)`](#net_udp_send) | Int | Send text as one datagram to host:port ("255.255.255.255": the whole local network); bytes sent or -1 |  |
+| [`net_udp_send_buffer(sock, host, port, buffer, length)`](#net_udp_send_buffer) | Int | Send length bytes of a buffer as one datagram to host:port; bytes sent or -1 |  |
+| [`net_udp_recv(sock, max, timeout_ms)`](#net_udp_recv) | String | The next datagram as text (up to max bytes): "" if none came within timeout_ms, nil on error; who sent it: net_udp_from, net_udp_from_port |  |
+| [`net_udp_recv_buffer(sock, buffer, max, timeout_ms)`](#net_udp_recv_buffer) | Int | The next datagram into a buffer: its length, 0 if none came in time, -1 on error |  |
+| [`net_udp_from()`](#net_udp_from) | String | The address ("a.b.c.d") of who sent the last datagram received |  |
+| [`net_udp_from_port()`](#net_udp_from_port) | Int | The port of who sent the last datagram received (to answer it) |  |
+| [`net_stack_running()`](#net_stack_running) | Bool | True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is loaded to know it. Roadshow's stays in memory after NetShutdown: that one is opened and closed |  |
+| [`net_release()`](#net_release) | — | Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and name lookups still open; the next net_ call opens it again (the program's end does it too) |  |
+| [`net_signal()`](#net_signal) | Int | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
+
+<a id="net_connect"></a>
+
+### `net_connect(host, port, timeout_ms)` → `Int`
+
+- `host`: the name (`"aminet.net"`) or the address (`"192.168.1.10"`).
+- `port`: the port: 80 web, 443 HTTPS, 21 FTP...
+- `timeout_ms`: the longest to wait.
+
+Connects over TCP and waits until done. Returns the socket, or -1 on failure: `net_error` says why.
+
+See also: [`net_send`](#net_send), [`net_recv`](#net_recv), [`net_close`](#net_close), [`net_connect_start`](#net_connect_start).
+
+<a id="net_connect_start"></a>
+
+### `net_connect_start(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: as in `net_connect`.
+
+Starts connecting without waiting; the name is looked up in another process. Returns the socket, or -1. Then
+`net_connect_poll` until it gives 1.
+
+See also: [`net_connect_poll`](#net_connect_poll), [`net_connect_stage`](#net_connect_stage).
+
+<a id="net_connect_poll"></a>
+
+### `net_connect_poll(sock)` → `Int`
+
+- `sock`: the socket.
+Carries on with the connection without waiting. Returns 1 when done, 0 if not yet and -1 on failure (the socket
+closes itself; `net_error` says why).
+
+See also: [`net_connect_start`](#net_connect_start).
+
+<a id="net_connect_stage"></a>
+
+### `net_connect_stage(sock)` → `Int`
+
+- `sock`: the socket.
+
+Returns what `net_connect_start` is doing: 0 looking up the name, 1 connecting, 2 done. To show it in the window.
+
+See also: [`net_connect_poll`](#net_connect_poll).
+
+<a id="net_send"></a>
+
+### `net_send(sock, text)` → `Int`
+
+- `sock`: the socket.
+- `text`: what to send, as it is (text protocols usually want `"\r\n"` at the end).
+
+Sends the whole text. Returns the bytes sent, or -1.
+
+See also: [`net_recv`](#net_recv), [`net_send_buffer`](#net_send_buffer).
+
+<a id="net_send_buffer"></a>
+
+### `net_send_buffer(sock, buffer, length)` → `Int`
+
+- `sock`: the socket.
+- `buffer`: the bytes.
+- `length`: how many.
+
+For binary data. Returns the bytes sent, or -1.
+
+See also: [`net_send`](#net_send).
+
+<a id="net_recv"></a>
+
+### `net_recv(sock, max, timeout_ms)` → `String`
+
+- `sock`: the socket.
+- `max`: how many bytes at most.
+- `timeout_ms`: how long to wait; -1 as long as needed.
+
+Returns what has arrived, up to `max` bytes, as a text: it may be only part of what the other side sent. `""` if
+nothing arrived in time, `nil` if the connection closed.
+
+See also: [`net_recv_buffer`](#net_recv_buffer), [`net_wait`](#net_wait).
+
+<a id="net_recv_buffer"></a>
+
+### `net_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+
+- `sock`: the socket.
+- `buffer`: where.
+- `max`: how many bytes at most.
+- `timeout_ms`: how long to wait.
+
+Like `net_recv`, for binary data. Returns how many bytes arrived, 0 on timeout, -1 if it closed.
+
+See also: [`net_recv`](#net_recv).
+
+<a id="net_wait"></a>
+
+### `net_wait(sock, timeout_ms)` → `Int`
+
+- `sock`: the socket.
+- `timeout_ms`: how long to wait.
+
+Waits until there is something to read. Returns 1 if there is, 0 on timeout, -1 on an error.
+
+See also: [`net_recv`](#net_recv).
+
+<a id="net_close"></a>
+
+### `net_close(sock)`
+
+- `sock`: the socket.
+
+Closes the connection or the server. Any left open close at the end.
+
+See also: [`net_connect`](#net_connect).
+
+<a id="net_resolve"></a>
+
+### `net_resolve(host)` → `String`
+
+- `host`: the name.
+
+Returns its IPv4 address (`"a.b.c.d"`), or `nil` if not found.
+
+See also: [`net_connect`](#net_connect).
+
+<a id="net_error"></a>
+
+### `net_error()` → `String`
+
+Returns what went wrong in the last `net_*` or `tls_*` call, in words: `"conexión rechazada"`.
+
+See also: [`net_connect`](#net_connect).
+
+<a id="net_listen"></a>
+
+### `net_listen(port)` → `Int`
+
+- `port`: the port; 0 = any free one (`net_port` says which).
+
+Opens a TCP server. Returns the listening socket, or -1. Connections are picked up with `net_accept`.
+
+See also: [`net_accept`](#net_accept), [`net_port`](#net_port).
+
+<a id="net_accept"></a>
+
+### `net_accept(sock, timeout_ms)` → `Int`
+
+- `sock`: the `net_listen` socket.
+- `timeout_ms`: how long to wait; -1 as long as needed, 0 just look.
+
+Returns the socket of the next connection, for `net_send` and `net_recv`, or -1 if none arrived.
+
+See also: [`net_listen`](#net_listen), [`net_peer`](#net_peer).
+
+<a id="net_peer"></a>
+
+### `net_peer(sock)` → `String`
+
+- `sock`: the socket.
+
+Returns the address of the other end of the connection, or `nil`.
+
+See also: [`net_accept`](#net_accept).
+
+<a id="net_port"></a>
+
+### `net_port(sock)` → `Int`
+
+- `sock`: the socket.
+
+Returns its local port; the one picked by `net_listen(0)` or `net_udp_open(0)`. -1 if none.
+
+See also: [`net_listen`](#net_listen).
+
+<a id="net_udp_open"></a>
+
+### `net_udp_open(port)` → `Int`
+
+- `port`: the port it receives on; 0 = a free one.
+
+Opens a UDP socket, which may broadcast to the local network. Returns the socket, or -1. It closes with
+`net_close`.
+
+See also: [`net_udp_send`](#net_udp_send), [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_send"></a>
+
+### `net_udp_send(sock, host, port, text)` → `Int`
+
+- `sock`: the socket.
+- `host`, `port`: the destination; `"255.255.255.255"` is the whole local network.
+- `text`: the datagram.
+
+Sends it. Returns the bytes sent, or -1. UDP does not tell if it gets lost.
+
+See also: [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_send_buffer"></a>
+
+### `net_udp_send_buffer(sock, host, port, buffer, length)` → `Int`
+
+- `sock`: the socket.
+- `host`, `port`: the destination.
+- `buffer`, `length`: the bytes.
+
+Like `net_udp_send`, with binary data.
+
+See also: [`net_udp_send`](#net_udp_send).
+
+<a id="net_udp_recv"></a>
+
+### `net_udp_recv(sock, max, timeout_ms)` → `String`
+
+- `sock`: the socket.
+- `max`: how many bytes at most.
+- `timeout_ms`: how long to wait.
+
+Returns the next datagram as a text, `""` if none arrived in time or `nil` on an error. `net_udp_from` and
+`net_udp_from_port` say who sent it.
+
+See also: [`net_udp_from`](#net_udp_from).
+
+<a id="net_udp_recv_buffer"></a>
+
+### `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+
+- `sock`: the socket.
+- `buffer`, `max`, `timeout_ms`: where, how much and how long to wait.
+
+Returns the datagram's length, 0 if none arrived in time, -1 on an error.
+
+See also: [`net_udp_recv`](#net_udp_recv).
+
+<a id="net_udp_from"></a>
+
+### `net_udp_from()` → `String`
+
+Returns the address of whoever sent the last datagram received.
+
+See also: [`net_udp_from_port`](#net_udp_from_port).
+
+<a id="net_udp_from_port"></a>
+
+### `net_udp_from_port()` → `Int`
+
+Returns the port of whoever sent the last datagram, to reply to them.
+
+See also: [`net_udp_from`](#net_udp_from).
+
+<a id="net_stack_running"></a>
+
+### `net_stack_running()` → `Bool`
+
+Returns `true` if a TCP/IP stack is running, without loading anything to find out. To warn the user before trying
+to connect.
+
+See also: [`net_connect`](#net_connect).
+
+<a id="net_release"></a>
+
+### `net_release()`
+
+Lets go of the network now: closes the sockets, the TLS connections and `bsdsocket.library`. The next `net_*` call
+opens it again. So the user can stop the stack without quitting the program.
+
+<a id="net_signal"></a>
+
+### `net_signal()` → `Int`
+
+Returns the signal sockets give on every change (connected, data, closed), for
+`mui_wait_event_signals(net_signal())`. 0 if the stack cannot. Call it before each wait.
+
+See also: [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="tls_functions"></a>
 
 ## TLS (AmiSSL)
 
+Encrypted connections (TLS, what HTTPS uses) with AmiSSL, which must be installed. Connect the socket with
+`net_connect` and then `tls_connect(socket, host)` negotiates TLS checking the server's certificate. From then on,
+send and receive with `tls_send` and `tls_recv`, and at the end `tls_close` and `net_close`.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `tls_connect(sock, host)` | `LONG` | TLS over a connected socket, verifying the certificate for host; -1 if not (net_error) |  |
-| `tls_connect_start(sock, host, timeout_ms)` | `LONG` | TLS over a connected socket without waiting for the handshake; the connection or -1 (see net_error) |  |
-| `tls_connect_poll(tls)` | `LONG` | Go on with tls_connect_start: 1 done (certificate verified), 0 not yet, -1 failed (the TLS connection is freed; see net_error) |  |
-| `tls_send(tls, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
-| `tls_send_buffer(tls, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
-| `tls_recv(tls, max, timeout_ms)` | `STRPTR` | Like net_recv: "" if nothing came in time, nil once closed |  |
-| `tls_recv_buffer(tls, buffer, max, timeout_ms)` | `LONG` | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
-| `tls_close(tls)` | `void` | End TLS on the connection (net_close the socket after) |  |
-| `tls_resumed(tls)` | `BOOL` | True if the connection resumed an earlier session with the same server (no key exchange) |  |
+| [`tls_connect(sock, host)`](#tls_connect) | Int | TLS over a connected socket, verifying the certificate for host; -1 if not (net_error) |  |
+| [`tls_connect_start(sock, host, timeout_ms)`](#tls_connect_start) | Int | TLS over a connected socket without waiting for the handshake; the connection or -1 (see net_error) |  |
+| [`tls_connect_poll(tls)`](#tls_connect_poll) | Int | Go on with tls_connect_start: 1 done (certificate verified), 0 not yet, -1 failed (the TLS connection is freed; see net_error) |  |
+| [`tls_send(tls, text)`](#tls_send) | Int | Send the whole text; bytes sent or -1 |  |
+| [`tls_send_buffer(tls, buffer, length)`](#tls_send_buffer) | Int | Send length bytes of a buffer; bytes sent or -1 |  |
+| [`tls_recv(tls, max, timeout_ms)`](#tls_recv) | String | Like net_recv: "" if nothing came in time, nil once closed |  |
+| [`tls_recv_buffer(tls, buffer, max, timeout_ms)`](#tls_recv_buffer) | Int | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
+| [`tls_close(tls)`](#tls_close) | — | End TLS on the connection (net_close the socket after) |  |
+| [`tls_resumed(tls)`](#tls_resumed) | Bool | True if the connection resumed an earlier session with the same server (no key exchange) |  |
+
+<a id="tls_connect"></a>
+
+### `tls_connect(sock, host)` → `Int`
+
+- `sock`: a socket already connected with `net_connect`.
+- `host`: the server's name, to check its certificate.
+
+Negotiates TLS and waits. Returns the TLS connection, or -1 on failure (no AmiSSL, a certificate that is not
+valid...): `net_error` says why.
+
+See also: [`tls_send`](#tls_send), [`tls_recv`](#tls_recv), [`tls_close`](#tls_close), [`tls_connect_start`](#tls_connect_start).
+
+<a id="tls_connect_start"></a>
+
+### `tls_connect_start(sock, host, timeout_ms)` → `Int`
+
+- `sock`, `host`: as in `tls_connect`.
+- `timeout_ms`: how long the handshake may take.
+
+Starts TLS without waiting. Returns the connection, or -1. Then `tls_connect_poll` until it gives 1.
+
+See also: [`tls_connect_poll`](#tls_connect_poll).
+
+<a id="tls_connect_poll"></a>
+
+### `tls_connect_poll(tls)` → `Int`
+
+- `tls`: the TLS connection.
+
+Carries on with the handshake. Returns 1 when done (certificate checked), 0 if not yet, -1 on failure.
+
+See also: [`tls_connect_start`](#tls_connect_start).
+
+<a id="tls_send"></a>
+
+### `tls_send(tls, text)` → `Int`
+
+- `tls`: the TLS connection.
+- `text`: what to send.
+
+Returns the bytes sent, or -1.
+
+See also: [`tls_recv`](#tls_recv).
+
+<a id="tls_send_buffer"></a>
+
+### `tls_send_buffer(tls, buffer, length)` → `Int`
+
+- `tls`: the TLS connection.
+- `buffer`, `length`: the bytes.
+
+Returns the bytes sent, or -1.
+
+See also: [`tls_send`](#tls_send).
+
+<a id="tls_recv"></a>
+
+### `tls_recv(tls, max, timeout_ms)` → `String`
+
+- `tls`: the TLS connection.
+- `max`, `timeout_ms`: as in `net_recv`.
+
+Returns what arrived as a text, `""` if nothing in time, `nil` once closed.
+
+See also: [`net_recv`](#net_recv).
+
+<a id="tls_recv_buffer"></a>
+
+### `tls_recv_buffer(tls, buffer, max, timeout_ms)` → `Int`
+
+- `tls`: the TLS connection.
+- `buffer`, `max`, `timeout_ms`: as in `net_recv_buffer`.
+
+See also: [`net_recv_buffer`](#net_recv_buffer).
+
+<a id="tls_close"></a>
+
+### `tls_close(tls)`
+
+- `tls`: the TLS connection.
+
+Ends TLS. The socket stays open: afterwards, `net_close`.
+
+See also: [`net_close`](#net_close).
+
+<a id="tls_resumed"></a>
+
+### `tls_resumed(tls)` → `Bool`
+
+- `tls`: the TLS connection.
+
+Returns `true` if it resumed an earlier session with the same server, without exchanging keys again (faster).
+
+<a id="font_functions"></a>
 
 ## Fonts and colors
 
+Writing with other fonts and choosing colours by their RGB value.
+
+**Fonts.** `font_open` opens a system font (from `FONTS:`) at a size; `font_use` makes `gfx_text` and `gfx_text_at`
+write with it on the current target. `font_height`, `font_baseline` and `font_text_width` measure with the font in
+use. For TrueType fonts, `font_from_ttf`.
+
+**RGB colours.** A palette screen has only a few colours. `color_pen(r, g, b)` finds the closest one on the screen
+(or takes a free one) and returns its number, for `gfx_pen`. When it is no longer needed, `color_pen_free`.
+
+**Example** (`tests/test_doc_fuentes.dash`, which is also a test: it runs with the others):
+
+```dash
+# Fuentes y colores: escribir con una fuente del sistema, colores por su valor RGB, una sombra translúcida y una
+# imagen RGB hecha en un búfer.
+
+Main
+    screen_open_custom(320, 200, 4, "Fuentes")
+    gfx_rgb8(5, 255, 0, 0)
+
+    f = font_open("topaz.font", 8)
+    if f == 0
+        Print "no hay topaz"
+        return
+    end
+    font_use(f)
+    t = "Hola"
+    Print "topaz de #{font_size(f)}: #{t} mide #{font_text_width(t)}"
+    gfx_pen(1)
+    gfx_text_at(20, 30 + font_baseline(), t)       # con la parte de arriba en y = 30
+    font_style(2)                                  # negrita
+    gfx_text_at(20, 45 + font_baseline(), t)
+    font_style(0)
+
+    rojo = color_pen(255, 0, 0)                    # el color de la pantalla más parecido
+    gfx_pen(rojo)
+    gfx_rect(100, 20, 140, 60)
+    rgb = gfx_pixel_rgb(120, 40)
+    Print "rojo puro: 0x#{str_from_int(rgb, 16)}"
+    color_pen_free(rojo)
+    gfx_blend_rect(110, 30, 160, 70, 0x000000, 128)   # una sombra a medias
+
+    b = buffer_alloc(16 * 16 * 3)                  # 16 x 16 píxeles RGB, todos verdes
+    i = 0
+    while i < 16 * 16
+        buffer_set_byte(b, i * 3 + 1, 255)
+        i = i + 1
+    end
+    gfx_rgb_draw(b, 16, 16, 200, 30)
+    buffer_free(b)
+    verde = gfx_pixel_rgb(208, 38)
+    Print "el centro de la imagen es verde: #{(verde >> 8) & 255 > 128}"
+
+    time_delay(50)
+    font_close(f)
+    screen_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels, at least 2): the font, or 0 if there is none |  |
-| `font_use(font)` | `void` | Draw text with this font |  |
-| `font_close(font)` | `void` | Close a font (the open ones close at exit) |  |
-| `font_style(style)` | `void` | Text style: 0 plain, +1 underlined, +2 bold, +4 italic |  |
-| `font_height()` | `LONG` | Height of the current font |  |
-| `font_baseline()` | `LONG` | Pixels from the top of the text to its baseline |  |
-| `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
-| `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
-| `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
-| `color_pen_free(pen)` | `void` | One color_pen of this pen is no longer needed; when none is left it goes back to the screen |  |
+| [`font_open(name, size)`](#font_open) | Int | Open a font ("helvetica.font", size in pixels, at least 2): the font, or 0 if there is none |  |
+| [`font_use(font)`](#font_use) | — | Draw text with this font |  |
+| [`font_close(font)`](#font_close) | — | Close a font (the open ones close at exit) |  |
+| [`font_style(style)`](#font_style) | — | Text style: 0 plain, +1 underlined, +2 bold, +4 italic |  |
+| [`font_height()`](#font_height) | Int | Height of the current font |  |
+| [`font_baseline()`](#font_baseline) | Int | Pixels from the top of the text to its baseline |  |
+| [`font_text_width(text)`](#font_text_width) | Int | Width of a text in pixels with the current font and style |  |
+| [`font_size(font)`](#font_size) | Int | Size the system gave for this font (the nearest it has) |  |
+| [`color_pen(r, g, b)`](#color_pen) | Int | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+| [`color_pen_free(pen)`](#color_pen_free) | — | One color_pen of this pen is no longer needed; when none is left it goes back to the screen |  |
+
+<a id="font_open"></a>
+
+### `font_open(name, size)` → `Int`
+
+- `name`: the font's name with `.font`: `"helvetica.font"`, `"topaz.font"`.
+- `size`: the height in pixels, at least 2.
+
+Opens the font; if it lacks that size, the system gives the closest (`font_size` says which). Returns the font, or 0
+if it does not exist.
+
+See also: [`font_use`](#font_use), [`font_close`](#font_close), [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_use"></a>
+
+### `font_use(font)`
+
+- `font`: a font from `font_open` or `font_from_ttf`.
+
+From now on `gfx_text` writes with it on the current target.
+
+See also: [`font_open`](#font_open), [`font_style`](#font_style), [`gfx_text`](#gfx_text).
+
+<a id="font_close"></a>
+
+### `font_close(font)`
+
+- `font`: the font.
+
+Closes it. Open fonts close on their own at the end.
+
+See also: [`font_open`](#font_open).
+
+<a id="font_style"></a>
+
+### `font_style(style)`
+
+- `style`: added up: 0 normal, 1 underlined, 2 bold, 4 italic (`2 + 4` bold italic).
+
+The style of the text that follows. If the font has no drawn version of that style, the system imitates it.
+
+See also: [`font_use`](#font_use).
+
+<a id="font_height"></a>
+
+### `font_height()` → `Int`
+
+Returns the height in pixels of the font in use: the distance from one line of text to the next.
+
+See also: [`font_baseline`](#font_baseline), [`font_text_width`](#font_text_width).
+
+<a id="font_baseline"></a>
+
+### `font_baseline()` → `Int`
+
+Returns how many pixels there are from the top of the letters to their baseline. `gfx_text_at` writes with the
+baseline at `y`: to put the top at `y`, add this.
+
+See also: [`gfx_text_at`](#gfx_text_at), [`font_height`](#font_height).
+
+<a id="font_text_width"></a>
+
+### `font_text_width(text)` → `Int`
+
+- `text`: the text.
+
+Returns its width in pixels with the font and style in use.
+
+See also: [`gfx_text_len`](#gfx_text_len).
+
+<a id="font_size"></a>
+
+### `font_size(font)` → `Int`
+
+- `font`: the font.
+
+Returns the size the system gave, which may differ from the one asked for.
+
+See also: [`font_open`](#font_open).
+
+<a id="color_pen"></a>
+
+### `color_pen(r, g, b)` → `Int`
+
+- `r`, `g`, `b`: the colour, 0 to 255.
+
+Returns the number of the closest colour on the drawing screen, for `gfx_pen`. On the Workbench or another shared
+screen it reserves the colour for the program (an exact one, if there is room) and each `color_pen` needs its
+`color_pen_free`. On a screen of your own the whole palette is the program's: it gives the closest one it has.
+
+See also: [`color_pen_free`](#color_pen_free), [`gfx_pen`](#gfx_pen).
+
+<a id="color_pen_free"></a>
+
+### `color_pen_free(pen)`
+
+- `pen`: what `color_pen` gave.
+
+Says that colour is no longer needed. When no use is left, the system may give it to another program.
+
+See also: [`color_pen`](#color_pen).
+
+<a id="blend_functions"></a>
 
 ## Transparency and gradients
 
+Semi-transparent colour over what is already drawn. On true-colour screens (RTG of 15 bits or more) it really
+blends; on palette screens it is imitated with a dot pattern of the closest colour.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)` | `void` | Mix the color 0xRRGGBB with what is drawn, alpha 0-255 (palette screens: a 4x4 dither of the closest pen) |  |
-| `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)` | `void` | Gradient from (rgb1, alpha1) to (rgb2, alpha2), top to bottom if vertical, else left to right, mixed with what is drawn |  |
-| `gfx_pixel_rgb(x, y)` | `LONG` | Color of a pixel as 0xRRGGBB (on a palette screen, its pen's color) |  |
+| [`gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`](#gfx_blend_rect) | — | Mix the color 0xRRGGBB with what is drawn, alpha 0-255 (palette screens: a 4x4 dither of the closest pen) |  |
+| [`gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`](#gfx_gradient_rect) | — | Gradient from (rgb1, alpha1) to (rgb2, alpha2), top to bottom if vertical, else left to right, mixed with what is drawn |  |
+| [`gfx_pixel_rgb(x, y)`](#gfx_pixel_rgb) | Int | Color of a pixel as 0xRRGGBB (on a palette screen, its pen's color) |  |
+
+<a id="gfx_blend_rect"></a>
+
+### `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`
+
+- `x1`, `y1`, `x2`, `y2`: the rectangle, corners included.
+- `rgb`: the colour, `0xRRGGBB`.
+- `alpha`: how much it covers, 0 (nothing) to 255 (fully).
+
+Blends the colour with what is already inside the rectangle: to darken a background behind a text or a translucent
+panel.
+
+See also: [`gfx_gradient_rect`](#gfx_gradient_rect).
+
+<a id="gfx_gradient_rect"></a>
+
+### `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`
+
+- `x1`, `y1`, `x2`, `y2`: the rectangle.
+- `rgb1`, `alpha1`: the colour and transparency at the start.
+- `rgb2`, `alpha2`: those at the end.
+- `vertical`: `true` top to bottom, `false` left to right.
+
+A gradient between the two, blended with what is drawn.
+
+See also: [`gfx_blend_rect`](#gfx_blend_rect).
+
+<a id="gfx_pixel_rgb"></a>
+
+### `gfx_pixel_rgb(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns that pixel's colour as `0xRRGGBB`; on a palette screen, the one of its colour number.
+
+See also: [`gfx_pixel_read`](#gfx_pixel_read).
+
+<a id="rgb_functions"></a>
 
 ## RGB images from a buffer (video)
 
+Drawing a picture the program holds in a buffer, 3 bytes per pixel (red, green, blue), like a video frame. On RTG
+it goes straight; on a palette screen each pixel takes the closest colour.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `gfx_rgb_draw(buffer, width, height, x, y)` | `void` | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
-| `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)` | `void` | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
+| [`gfx_rgb_draw(buffer, width, height, x, y)`](#gfx_rgb_draw) | — | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
+| [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#gfx_rgb_draw_scaled) | — | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
+
+<a id="gfx_rgb_draw"></a>
+
+### `gfx_rgb_draw(buffer, width, height, x, y)`
+
+- `buffer`: the pixels, 3 bytes each (red, green, blue), row after row.
+- `width`, `height`: the picture's size.
+- `x`, `y`: where it goes.
+
+Draws it in one go. On a palette screen, each pixel takes the closest colour.
+
+See also: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_rgb_draw_scaled"></a>
+
+### `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`
+
+- `buffer`, `width`, `height`: as in `gfx_rgb_draw`.
+- `x`, `y`: where it goes.
+- `dest_width`, `dest_height`: the size it is drawn at.
+
+Draws it enlarged or reduced, taking the nearest pixel for each point.
+
+See also: [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="task_functions"></a>
 
 ## Tasks, clock, translations and desktop
 
+What programs living on the desktop need, like Trasfondo: work in another process, commodities for Exchange, the
+user's clock and language, watched files, the desktop background, and system data (disks, network, temperature, CPU
+per task, USB mice).
+
+**Tasks.** `task_start(f, arg)` runs a function in another process while the program carries on. The function may
+only use numbers, booleans and builtins that give no texts or lists (the compiler checks): Dash texts cannot be
+shared between processes. `task_done` says whether it finished, `task_result` gives what it returned and
+`task_free` forgets it.
+
+**Commodities.** `cx_broker` puts the program in Exchange, `cx_hotkey` gives it a hot key and `cx_wait` waits for its
+commands without using CPU.
+
+**Translations.** `tr(n, "text")` gives text number `n` of the program's catalog in the user's language, or the one
+inside the program if there is no catalog (`@catalog` and `tools/catalogo.py`).
+
+**Example** (`tests/test_doc_tareas.dash`, which is also a test: it runs with the others):
+
+```dash
+# Tareas y escritorio: un cálculo en otro proceso mientras el programa sigue, una sola copia del programa, el reloj,
+# un texto traducible y los discos montados.
+
+# Corre en otro proceso: solo números y builtins que no den textos ni listas
+func sumar(hasta: Int) -> Int
+    total = 0
+    i = 1
+    while i <= hasta
+        total = total + i
+        i = i + 1
+    end
+    return total
+end
+
+Main
+    t = task_start(sumar, 1000)
+    while not task_done(t)
+        time_delay(1)                              # aquí el programa haría otras cosas
+    end
+    Print "la tarea sumó #{task_result(t)}"
+    task_free(t)
+
+    Print "única copia: #{single_instance("DOCTAREAS")}"
+
+    clock_read()
+    Print "año válido: #{clock_year() >= 1978 and clock_month() >= 1 and clock_month() <= 12}"
+    Print "sin catálogo: " + tr(1, "Hola")
+
+    hay_ram = false
+    n = disks_read(2000)
+    i = 0
+    while i < n
+        if str_upper(disk_name(i)) == "RAM DISK"     # "Ram Disk" en OS 3.1, "RAM Disk" en 3.2
+            hay_ram = true
+        end
+        i = i + 1
+    end
+    Print "RAM montado: #{hay_ram}"
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `task_start(func, arg)` | `LONG` | Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, @native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: the task, or 0 |  |
-| `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
-| `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
-| `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |
-| `desktop_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
-| `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
-| `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was; where the desktop was repainted since, it draws too) |  |
-| `desktop_canvas_veil(canvas, rgb, alpha)` | `void` | The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in each drawing, without its cost. Takes away the veils of desktop_canvas_veil_rect. Seen from the next desktop_canvas_update |  |
-| `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` | `BOOL` | One more veil, only in that rectangle, mixed once over desktop_canvas_veil's (which takes them away: call it first): a box that is always there. Up to 16; false when full |  |
-| `desktop_canvas_drawing(x, y, width, height)` | `BOOL` | In the drawing function: true if that rectangle reaches the part being drawn (all the area, or the one of desktop_canvas_update_area with what the desktop repainted), to skip what would not show. Outside it, always true |  |
-| `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
-| `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
-| `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
-| `tooltype(name, default)` | `STRPTR` | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
-| `cx_broker(name, title, description, priority)` | `BOOL` | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
-| `cx_hotkey(description)` | `BOOL` | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
-| `cx_key_add(description, n)` | `BOOL` | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
-| `cx_command()` | `LONG` | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
-| `cx_wait(ms)` | `LONG` | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
-| `disks_read(ms)` | `LONG` | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
-| `disk_name(i)` | `STRPTR` | The name of volume i (0 to disks_read() - 1) of the last disks_read, without the colon |  |
-| `disk_kb(i)` | `LONG` | The size of volume i in KB (as Info shows it); -1 if it did not answer in time |  |
-| `disk_free_kb(i)` | `LONG` | The free space of volume i in KB; -1 if it did not answer in time |  |
-| `net_ifs_read()` | `LONG` | Reads the network interfaces of Roadshow (lo0 included), their state and bytes: how many; -1 without a TCP/IP stack or with one that does not tell (AmiTCP, Miami) |  |
-| `net_if_name(i)` | `STRPTR` | The name of interface i (0 to net_ifs_read() - 1) of the last net_ifs_read |  |
-| `net_if_up(i)` | `BOOL` | True if interface i is up (connected) |  |
-| `net_if_bytes_in(i)` | `LONG` | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
-| `net_if_bytes_out(i)` | `LONG` | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
-| `pistorm_temperature()` | `LONG` | Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: 52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68 |  |
-| `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for itself, -1 no Roadshow |  |
-| `wifi_read_device(driver, unit, ms)` | `LONG` | Like wifi_read, asking a SANA-II driver that is in use ("wifipi.device", unit 0) directly, with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver in use, 4 offline, 5 the stack has it only for itself |  |
-| `net_drivers_read()` | `LONG` | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
-| `net_driver_name(i)` | `STRPTR` | The name of driver i (0 to net_drivers_read() - 1) of the last net_drivers_read ("wifipi.device") |  |
-| `net_driver_read(driver, unit, ms)` | `LONG` | Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out) |  |
-| `net_driver_has_bytes()` | `BOOL` | True if the driver of the last net_driver_read counts bytes (its IPv4, IPv6 and ARP packets): net_driver_bytes_in and net_driver_bytes_out |  |
-| `net_driver_bytes_in()` | `LONG` | The bytes received by the driver of the last net_driver_read (the low 32 bits), if net_driver_has_bytes |  |
-| `net_driver_bytes_out()` | `LONG` | The bytes sent by the driver of the last net_driver_read, if net_driver_has_bytes |  |
-| `net_driver_packets_in()` | `LONG` | The packets received by the driver of the last net_driver_read that gave 0 |  |
-| `net_driver_packets_out()` | `LONG` | The packets sent by the driver of the last net_driver_read that gave 0 |  |
-| `wifi_signal()` | `LONG` | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
-| `wifi_noise()` | `LONG` | The noise level of the last wifi_read that gave 0, in dBm |  |
-| `usb_hid_read()` | `LONG` | Reads the USB devices (each interface) that Poseidon's hid.class handles: how many; -1 without poseidon.library 4 |  |
-| `usb_hid_name(i)` | `STRPTR` | The product name of USB device i (0 to usb_hid_read() - 1) of the last usb_hid_read |  |
-| `usb_hid_maker(i)` | `STRPTR` | The manufacturer of USB device i |  |
-| `usb_hid_vendor(i)` | `LONG` | The VendorID of USB device i |  |
-| `usb_hid_product(i)` | `LONG` | The ProductID of USB device i |  |
-| `usb_hid_kind(i)` | `LONG` | What USB device i is: 1 mouse, 2 keyboard, 0 other (many trackpads) |  |
-| `usb_hid_emitter(i)` | `LONG` | The emitter of USB device i: the number of the hid.class task that sends its moves, for mouse_curve |  |
-| `mouse_curve(emitter, factors)` | `BOOL` | The acceleration curve of a mouse: emitter 0 is the Amiga mouse (and every move not from a USB mouse), else a usb_hid_emitter. factors: a list of hundredths (100 = as it comes), entry i for a move of i units, the last one from there on (up to 32); [] takes it away. The fractions left are kept. False if input.device does not open or there are 16 emitters already |  |
-| `mouse_curve_events(emitter)` | `LONG` | How many moves an emitter's curve has scaled |  |
-| `mouse_curves_off()` | `void` | Takes the curves out of input.device now (the program's end does it too); a mouse_curve puts them back. Under another program's patch, a stub that passes everything through stays |  |
-| `mouse_patch_left()` | `LONG` | How many stubs were left under another program's patch of input.device (they pass everything through, for good) |  |
-| `mouse_prefs_ticks()` | `LONG` | The system's mouse speed (Input preferences): 1 fastest, 2, 4 slowest |  |
-| `mouse_prefs_accel()` | `BOOL` | True if the system's mouse acceleration (Input preferences) is on |  |
-| `mouse_prefs_set(ticks, accel)` | `void` | Sets the system's mouse speed and acceleration; they go back as they were at the program's end |  |
-| `tr(id, text)` | `STRPTR` | The text number id of the program's catalog (@catalog) in the user's language; text (the program's own) without a catalog, without that number or without locale.library |  |
-| `catalog_open(name, version)` | `BOOL` | Opens another catalog ("X.catalog", version 0: any) in the user's languages instead of the one in use; false if there is none (tr gives the program's own texts) |  |
-| `catalog_language()` | `STRPTR` | The language of the catalog in use ("english"), "" without one |  |
-| `clock_read()` | `void` | Takes the date and time of the system's clock: clock_year, clock_month... give its parts |  |
-| `clock_year()` | `LONG` | The year of the last clock_read (1978...) |  |
-| `clock_month()` | `LONG` | The month of the last clock_read (1 to 12) |  |
-| `clock_day()` | `LONG` | The day of the month of the last clock_read (1 to 31) |  |
-| `clock_weekday()` | `LONG` | The day of the week of the last clock_read: 0 Sunday, 1 Monday ... 6 Saturday |  |
-| `clock_hour()` | `LONG` | The hour of the last clock_read (0 to 23) |  |
-| `clock_minute()` | `LONG` | The minute of the last clock_read |  |
-| `clock_second()` | `LONG` | The second of the last clock_read |  |
-| `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
-| `locale_gmt_offset()` | `LONG` | How many minutes the Amiga's clock is ahead of GMT (60 in Spain in winter), from Locale; 0 without locale.library. git keeps its times so ("+0100") |  |
-| `locale_decimal_point()` | `STRPTR` | What goes before the decimals in the user's country: "," in Spain, "." in English (also without locale.library) |  |
-| `locale_group_separator()` | `STRPTR` | What separates the thousands in the user's country: "." in Spain (1.234,5), "," in English (1,234.5); maybe "" |  |
-| `locale_date_order()` | `STRPTR` | The order of day, month and year in the user's short date: "DMY", "MDY" or "YMD" |  |
-| `program_version()` | `STRPTR` | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
-| `file_notify(path)` | `LONG` | Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. cx_wait gives 7 when it changes; file_changed(n) says whether it did |  |
-| `file_changed(n)` | `BOOL` | True if the file watched with that number changed since the last file_changed |  |
-| `file_notify_end(n)` | `void` | Stop watching that file (the program's end stops them all) |  |
-| `file_notify_signal()` | `LONG` | The signal of the watched files, for mui_wait_event_signals (0 before any file_notify) |  |
-| `run_program(command)` | `BOOL` | Start a command line ("SYS:Prefs/Font", "\"Work:My Prog\" arg") in another process without waiting, its input and output NIL:; false if it could not start |  |
-| `program_relaunch()` | `void` | When the program ends, start it again (after everything of its end, single_instance's port too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its arguments. For updating itself |  |
-| `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
-| `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
-| `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
-| `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
-| `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |
-| `cpu_task_load(i)` | `LONG` | CPU of task i of the last sample, per thousand |  |
-| `cpu_total()` | `LONG` | CPU of all the counted tasks in the last sample, per thousand (the rest is idle) |  |
-| `cpu_stop()` | `void` | Take the hooks out of the tasks (the program's end does it too) |  |
-| `task_signal()` | `LONG` | Signal mask each task sends to the program when its function returns (for mui_wait_event_signals), 0 if none is free |  |
-| `task_result(task)` | `LONG` | What the function returned (waits for it if it has not finished) |  |
-| `task_free(task)` | `void` | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
+| [`task_start(func, arg)`](#task_start) | Int | Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, @native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: the task, or 0 |  |
+| [`task_start_with(func, arg, stack, priority)`](#task_start_with) | Int | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
+| [`task_done(task)`](#task_done) | Bool | True once the function has returned (does not wait) |  |
+| [`desktop_canvas(x, y, width, height)`](#desktop_canvas) | Int (address) | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |
+| [`desktop_canvas_on_draw(canvas, func)`](#desktop_canvas_on_draw) | — | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
+| [`desktop_canvas_update(canvas)`](#desktop_canvas_update) | — | Draw the area again now and show what changed, without touching the icons |  |
+| [`desktop_canvas_update_area(canvas, x, y, width, height)`](#desktop_canvas_update_area) | — | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was; where the desktop was repainted since, it draws too) |  |
+| [`desktop_canvas_veil(canvas, rgb, alpha)`](#desktop_canvas_veil) | — | The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in each drawing, without its cost. Takes away the veils of desktop_canvas_veil_rect. Seen from the next desktop_canvas_update |  |
+| [`desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)`](#desktop_canvas_veil_rect) | Bool | One more veil, only in that rectangle, mixed once over desktop_canvas_veil's (which takes them away: call it first): a box that is always there. Up to 16; false when full |  |
+| [`desktop_canvas_drawing(x, y, width, height)`](#desktop_canvas_drawing) | Bool | In the drawing function: true if that rectangle reaches the part being drawn (all the area, or the one of desktop_canvas_update_area with what the desktop repainted), to skip what would not show. Outside it, always true |  |
+| [`desktop_canvas_free(canvas)`](#desktop_canvas_free) | — | The wallpaper back in the area (the program's end does it too) |  |
+| [`break_check()`](#break_check) | Bool | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
+| [`single_instance(name)`](#single_instance) | Bool | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
+| [`tooltype(name, default)`](#tooltype) | String | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
+| [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
+| [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
+| [`cx_command()`](#cx_command) | Int | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
+| [`cx_wait(ms)`](#cx_wait) | Int | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
+| [`disks_read(ms)`](#disks_read) | Int | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
+| [`disk_name(i)`](#disk_name) | String | The name of volume i (0 to disks_read() - 1) of the last disks_read, without the colon |  |
+| [`disk_kb(i)`](#disk_kb) | Int | The size of volume i in KB (as Info shows it); -1 if it did not answer in time |  |
+| [`disk_free_kb(i)`](#disk_free_kb) | Int | The free space of volume i in KB; -1 if it did not answer in time |  |
+| [`net_ifs_read()`](#net_ifs_read) | Int | Reads the network interfaces of Roadshow (lo0 included), their state and bytes: how many; -1 without a TCP/IP stack or with one that does not tell (AmiTCP, Miami) |  |
+| [`net_if_name(i)`](#net_if_name) | String | The name of interface i (0 to net_ifs_read() - 1) of the last net_ifs_read |  |
+| [`net_if_up(i)`](#net_if_up) | Bool | True if interface i is up (connected) |  |
+| [`net_if_bytes_in(i)`](#net_if_bytes_in) | Int | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
+| [`net_if_bytes_out(i)`](#net_if_bytes_out) | Int | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
+| [`pistorm_temperature()`](#pistorm_temperature) | Int | Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: 52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68 |  |
+| [`wifi_read(interface, ms)`](#wifi_read) | Int | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for itself, -1 no Roadshow |  |
+| [`wifi_read_device(driver, unit, ms)`](#wifi_read_device) | Int | Like wifi_read, asking a SANA-II driver that is in use ("wifipi.device", unit 0) directly, with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver in use, 4 offline, 5 the stack has it only for itself |  |
+| [`net_drivers_read()`](#net_drivers_read) | Int | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
+| [`net_driver_name(i)`](#net_driver_name) | String | The name of driver i (0 to net_drivers_read() - 1) of the last net_drivers_read ("wifipi.device") |  |
+| [`net_driver_read(driver, unit, ms)`](#net_driver_read) | Int | Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out) |  |
+| [`net_driver_has_bytes()`](#net_driver_has_bytes) | Bool | True if the driver of the last net_driver_read counts bytes (its IPv4, IPv6 and ARP packets): net_driver_bytes_in and net_driver_bytes_out |  |
+| [`net_driver_bytes_in()`](#net_driver_bytes_in) | Int | The bytes received by the driver of the last net_driver_read (the low 32 bits), if net_driver_has_bytes |  |
+| [`net_driver_bytes_out()`](#net_driver_bytes_out) | Int | The bytes sent by the driver of the last net_driver_read, if net_driver_has_bytes |  |
+| [`net_driver_packets_in()`](#net_driver_packets_in) | Int | The packets received by the driver of the last net_driver_read that gave 0 |  |
+| [`net_driver_packets_out()`](#net_driver_packets_out) | Int | The packets sent by the driver of the last net_driver_read that gave 0 |  |
+| [`wifi_signal()`](#wifi_signal) | Int | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
+| [`wifi_noise()`](#wifi_noise) | Int | The noise level of the last wifi_read that gave 0, in dBm |  |
+| [`usb_hid_read()`](#usb_hid_read) | Int | Reads the USB devices (each interface) that Poseidon's hid.class handles: how many; -1 without poseidon.library 4 |  |
+| [`usb_hid_name(i)`](#usb_hid_name) | String | The product name of USB device i (0 to usb_hid_read() - 1) of the last usb_hid_read |  |
+| [`usb_hid_maker(i)`](#usb_hid_maker) | String | The manufacturer of USB device i |  |
+| [`usb_hid_vendor(i)`](#usb_hid_vendor) | Int | The VendorID of USB device i |  |
+| [`usb_hid_product(i)`](#usb_hid_product) | Int | The ProductID of USB device i |  |
+| [`usb_hid_kind(i)`](#usb_hid_kind) | Int | What USB device i is: 1 mouse, 2 keyboard, 0 other (many trackpads) |  |
+| [`usb_hid_emitter(i)`](#usb_hid_emitter) | Int | The emitter of USB device i: the number of the hid.class task that sends its moves, for mouse_curve |  |
+| [`mouse_curve(emitter, factors)`](#mouse_curve) | Bool | The acceleration curve of a mouse: emitter 0 is the Amiga mouse (and every move not from a USB mouse), else a usb_hid_emitter. factors: a list of hundredths (100 = as it comes), entry i for a move of i units, the last one from there on (up to 32); [] takes it away. The fractions left are kept. False if input.device does not open or there are 16 emitters already |  |
+| [`mouse_curve_events(emitter)`](#mouse_curve_events) | Int | How many moves an emitter's curve has scaled |  |
+| [`mouse_curves_off()`](#mouse_curves_off) | — | Takes the curves out of input.device now (the program's end does it too); a mouse_curve puts them back. Under another program's patch, a stub that passes everything through stays |  |
+| [`mouse_patch_left()`](#mouse_patch_left) | Int | How many stubs were left under another program's patch of input.device (they pass everything through, for good) |  |
+| [`mouse_prefs_ticks()`](#mouse_prefs_ticks) | Int | The system's mouse speed (Input preferences): 1 fastest, 2, 4 slowest |  |
+| [`mouse_prefs_accel()`](#mouse_prefs_accel) | Bool | True if the system's mouse acceleration (Input preferences) is on |  |
+| [`mouse_prefs_set(ticks, accel)`](#mouse_prefs_set) | — | Sets the system's mouse speed and acceleration; they go back as they were at the program's end |  |
+| [`tr(id, text)`](#tr) | String | The text number id of the program's catalog (@catalog) in the user's language; text (the program's own) without a catalog, without that number or without locale.library |  |
+| [`catalog_open(name, version)`](#catalog_open) | Bool | Opens another catalog ("X.catalog", version 0: any) in the user's languages instead of the one in use; false if there is none (tr gives the program's own texts) |  |
+| [`catalog_language()`](#catalog_language) | String | The language of the catalog in use ("english"), "" without one |  |
+| [`clock_read()`](#clock_read) | — | Takes the date and time of the system's clock: clock_year, clock_month... give its parts |  |
+| [`clock_year()`](#clock_year) | Int | The year of the last clock_read (1978...) |  |
+| [`clock_month()`](#clock_month) | Int | The month of the last clock_read (1 to 12) |  |
+| [`clock_day()`](#clock_day) | Int | The day of the month of the last clock_read (1 to 31) |  |
+| [`clock_weekday()`](#clock_weekday) | Int | The day of the week of the last clock_read: 0 Sunday, 1 Monday ... 6 Saturday |  |
+| [`clock_hour()`](#clock_hour) | Int | The hour of the last clock_read (0 to 23) |  |
+| [`clock_minute()`](#clock_minute) | Int | The minute of the last clock_read |  |
+| [`clock_second()`](#clock_second) | Int | The second of the last clock_read |  |
+| [`date_text(format)`](#date_text) | String | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
+| [`locale_gmt_offset()`](#locale_gmt_offset) | Int | How many minutes the Amiga's clock is ahead of GMT (60 in Spain in winter), from Locale; 0 without locale.library. git keeps its times so ("+0100") |  |
+| [`locale_decimal_point()`](#locale_decimal_point) | String | What goes before the decimals in the user's country: "," in Spain, "." in English (also without locale.library) |  |
+| [`locale_group_separator()`](#locale_group_separator) | String | What separates the thousands in the user's country: "." in Spain (1.234,5), "," in English (1,234.5); maybe "" |  |
+| [`locale_date_order()`](#locale_date_order) | String | The order of day, month and year in the user's short date: "DMY", "MDY" or "YMD" |  |
+| [`program_version()`](#program_version) | String | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
+| [`file_notify(path)`](#file_notify) | Int | Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. cx_wait gives 7 when it changes; file_changed(n) says whether it did |  |
+| [`file_changed(n)`](#file_changed) | Bool | True if the file watched with that number changed since the last file_changed |  |
+| [`file_notify_end(n)`](#file_notify_end) | — | Stop watching that file (the program's end stops them all) |  |
+| [`file_notify_signal()`](#file_notify_signal) | Int | The signal of the watched files, for mui_wait_event_signals (0 before any file_notify) |  |
+| [`run_program(command)`](#run_program) | Bool | Start a command line ("SYS:Prefs/Font", "\"Work:My Prog\" arg") in another process without waiting, its input and output NIL:; false if it could not start |  |
+| [`program_relaunch()`](#program_relaunch) | — | When the program ends, start it again (after everything of its end, single_instance's port too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its arguments. For updating itself |  |
+| [`dos_requesters(on)`](#dos_requesters) | — | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
+| [`base64_to_file(text, file)`](#base64_to_file) | Int | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
+| [`cpu_start()`](#cpu_start) | Bool | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
+| [`cpu_sample()`](#cpu_sample) | Int | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
+| [`cpu_task_name(i)`](#cpu_task_name) | String | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |
+| [`cpu_task_load(i)`](#cpu_task_load) | Int | CPU of task i of the last sample, per thousand |  |
+| [`cpu_total()`](#cpu_total) | Int | CPU of all the counted tasks in the last sample, per thousand (the rest is idle) |  |
+| [`cpu_stop()`](#cpu_stop) | — | Take the hooks out of the tasks (the program's end does it too) |  |
+| [`task_signal()`](#task_signal) | Int | Signal mask each task sends to the program when its function returns (for mui_wait_event_signals), 0 if none is free |  |
+| [`task_result(task)`](#task_result) | Int | What the function returned (waits for it if it has not finished) |  |
+| [`task_free(task)`](#task_free) | — | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
+
+<a id="task_start"></a>
+
+### `task_start(func, arg)` → `Int`
+
+- `func`: a Dash function `f(arg: Int) -> Int` that only uses `Int`, `Bool`, `Float` and builtins giving no texts or
+  lists; or a C one (`@native`, `@extern`).
+- `arg`: the number it receives.
+
+Runs it in another process, with 128 KB of stack and the program's priority, and returns at once. Returns the task,
+or 0 if it could not. The program waits for any still running when it ends.
+
+See also: [`task_done`](#task_done), [`task_result`](#task_result), [`task_free`](#task_free), [`task_start_with`](#task_start_with).
+
+<a id="task_start_with"></a>
+
+### `task_start_with(func, arg, stack, priority)` → `Int`
+
+- `func`, `arg`: as in `task_start`.
+- `stack`: the stack in bytes; 0 = 128 KB.
+- `priority`: relative to the program's; -1 = it only runs while the program waits.
+
+See also: [`task_start`](#task_start).
+
+<a id="task_done"></a>
+
+### `task_done(task)` → `Bool`
+
+- `task`: the number from `task_start`.
+
+Returns `true` once the function has finished, without waiting.
+
+See also: [`task_result`](#task_result), [`task_signal`](#task_signal).
+
+<a id="desktop_canvas"></a>
+
+### `desktop_canvas(x, y, width, height)` → `Int (address)`
+
+- `x`, `y`: the corner on the Workbench desktop, below the screen's bar. Negative values count from the right or the
+  bottom edge.
+- `width`, `height`: the size.
+
+An area of the desktop background, behind the icons and without clicks, where the program draws (a clock, a
+monitor). Returns the area, or 0. Drawing happens from `desktop_canvas_on_draw`.
+
+See also: [`desktop_canvas_on_draw`](#desktop_canvas_on_draw), [`desktop_canvas_update`](#desktop_canvas_update), [`desktop_canvas_free`](#desktop_canvas_free).
+
+<a id="desktop_canvas_on_draw"></a>
+
+### `desktop_canvas_on_draw(canvas, func)`
+
+- `canvas`: the area from `desktop_canvas`.
+- `func`: a function `f(x, y, width, height)` that draws with the `gfx_*` functions from 0, 0.
+
+It draws over the desktop background underneath, so what is not painted lets it show.
+
+See also: [`desktop_canvas_update`](#desktop_canvas_update).
+
+<a id="desktop_canvas_update"></a>
+
+### `desktop_canvas_update(canvas)`
+
+- `canvas`: the area from `desktop_canvas`.
+
+Draws it again now and shows what changed, without touching the icons.
+
+See also: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
+
+<a id="desktop_canvas_update_area"></a>
+
+### `desktop_canvas_update_area(canvas, x, y, width, height)`
+
+- `canvas`: the area from `desktop_canvas`.
+- `x`, `y`, `width`, `height`: the part.
+
+Like `desktop_canvas_update`, only in that part (and wherever the desktop was repainted meanwhile).
+
+See also: [`desktop_canvas_drawing`](#desktop_canvas_drawing).
+
+<a id="desktop_canvas_veil"></a>
+
+### `desktop_canvas_veil(canvas, rgb, alpha)`
+
+- `canvas`: the area from `desktop_canvas`.
+- `rgb`: the colour, `0xRRGGBB`.
+- `alpha`: how much it covers, 0 (nothing) to 255.
+
+A veil of that colour over the background, under the drawing, so text reads over any background picture.
+
+See also: [`desktop_canvas_veil_rect`](#desktop_canvas_veil_rect).
+
+<a id="desktop_canvas_veil_rect"></a>
+
+### `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` → `Bool`
+
+- `canvas`: the area from `desktop_canvas`.
+- `x`, `y`, `width`, `height`: the rectangle.
+- `rgb`, `alpha`: as in `desktop_canvas_veil`.
+
+One more veil, only there, on top of the `desktop_canvas_veil` one (which removes them: it goes first). Up to 16;
+`false` if no more fit.
+
+See also: [`desktop_canvas_veil`](#desktop_canvas_veil).
+
+<a id="desktop_canvas_drawing"></a>
+
+### `desktop_canvas_drawing(x, y, width, height)` → `Bool`
+
+- `x`, `y`, `width`, `height`: a rectangle.
+
+Inside the drawing function, returns `true` if it reaches the part being drawn: to skip what is not seen.
+
+See also: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
+
+<a id="desktop_canvas_free"></a>
+
+### `desktop_canvas_free(canvas)`
+
+- `canvas`: the area from `desktop_canvas`.
+
+Puts the desktop background back in the area. It happens on its own when the program ends.
+
+See also: [`desktop_canvas`](#desktop_canvas).
+
+<a id="break_check"></a>
+
+### `break_check()` → `Bool`
+
+Returns `true` if a Ctrl-C arrived (`Break` in the Shell, or another copy of the program with `single_instance`), and clears it. For a long loop that can be stopped.
+
+See also: [`single_instance`](#single_instance).
+
+<a id="single_instance"></a>
+
+### `single_instance(name)` → `Bool`
+
+- `name`: a unique name for the program.
+
+So only one copy runs: if there is another, it sends it a Ctrl-C and returns `false` (the new one should end; the
+old one sees it with `break_check`). Otherwise it returns `true`.
+
+See also: [`break_check`](#break_check).
+
+<a id="tooltype"></a>
+
+### `tooltype(name, default)` → `String`
+
+- `name`: the name: `"DELAY"`.
+- `default`: what it returns if it is not there.
+
+From the Shell, the argument `NAME=value`; from the Workbench, the program icon's tooltype.
+
+See also: [`arg`](#arg).
+
+<a id="cx_broker"></a>
+
+### `cx_broker(name, title, description, priority)` → `Bool`
+
+- `name`: the name in Exchange, up to 23 letters.
+- `title`, `description`: what Exchange shows, up to 39 letters each.
+- `priority`: the commodity's; usually 0.
+
+Puts the program in Exchange as a commodity, with Show and Hide, and enabled. Returns `false` without
+`commodities.library` or if one with that name exists.
+
+See also: [`cx_hotkey`](#cx_hotkey), [`cx_wait`](#cx_wait), [`cx_command`](#cx_command).
+
+<a id="cx_hotkey"></a>
+
+### `cx_hotkey(description)` → `Bool`
+
+- `description`: the key, as Exchange writes it: `"ctrl alt t"`; `""` removes it.
+
+The commodity's hot key: pressing it makes `cx_command` give 6. Returns `false` if the description is not valid.
+
+See also: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
+
+<a id="cx_key_add"></a>
+
+### `cx_key_add(description, n)` → `Bool`
+
+- `description`: the key, or a mouse button (`"rawmouse lalt mouse_leftpress"`); `""` removes it.
+- `n`: its number, 1 to 32.
+
+One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
+
+See also: [`cx_hotkey`](#cx_hotkey).
+
+<a id="cx_command"></a>
+
+### `cx_command()` → `Int`
+
+Returns the next command from Exchange or a hot key: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 quit, 6 the hot key, 100 + n those of `cx_key_add`.
+
+See also: [`cx_wait`](#cx_wait).
+
+<a id="cx_wait"></a>
+
+### `cx_wait(ms)` → `Int`
+
+- `ms`: the longest to wait.
+
+Waits without using CPU until a command arrives (it returns it, like `cx_command`), a Ctrl-C (-1) or the time runs
+out (0). A watched file that changes gives 7.
+
+See also: [`cx_command`](#cx_command), [`file_notify`](#file_notify).
+
+<a id="disks_read"></a>
+
+### `disks_read(ms)` → `Int`
+
+- `ms`: the longest to wait for the answers.
+
+Reads the mounted volumes with a disk inside, their size and free space, asking them all at once. Returns how many
+there are. It never asks for a disk.
+
+See also: [`disk_name`](#disk_name), [`disk_free_kb`](#disk_free_kb).
+
+<a id="disk_name"></a>
+
+### `disk_name(i)` → `String`
+
+- `i`: the volume, from 0, of the last `disks_read`.
+
+Returns its name, without the colon.
+
+See also: [`disks_read`](#disks_read).
+
+<a id="disk_kb"></a>
+
+### `disk_kb(i)` → `Int`
+
+- `i`: the volume, from 0, of the last `disks_read`.
+
+Returns its size in KB, like `Info`; -1 if it did not answer in time.
+
+See also: [`disk_free_kb`](#disk_free_kb).
+
+<a id="disk_free_kb"></a>
+
+### `disk_free_kb(i)` → `Int`
+
+- `i`: the volume, from 0, of the last `disks_read`.
+
+Returns its free space in KB; -1 if it did not answer in time.
+
+See also: [`disk_kb`](#disk_kb).
+
+<a id="net_ifs_read"></a>
+
+### `net_ifs_read()` → `Int`
+
+Reads Roadshow's network interfaces (`lo0` too), their state and bytes, and returns how many there are; -1 without a TCP/IP stack or with one that does not say (AmiTCP, Miami).
+
+See also: [`net_if_name`](#net_if_name), [`net_drivers_read`](#net_drivers_read).
+
+<a id="net_if_name"></a>
+
+### `net_if_name(i)` → `String`
+
+- `i`: the interface, from 0, of the last `net_ifs_read`.
+
+Returns its name.
+
+See also: [`net_ifs_read`](#net_ifs_read).
+
+<a id="net_if_up"></a>
+
+### `net_if_up(i)` → `Bool`
+
+- `i`: the interface, from 0, of the last `net_ifs_read`.
+
+Returns `true` if it is up.
+
+See also: [`net_ifs_read`](#net_ifs_read).
+
+<a id="net_if_bytes_in"></a>
+
+### `net_if_bytes_in(i)` → `Int`
+
+- `i`: the interface, from 0, of the last `net_ifs_read`.
+
+Returns the bytes received (the low 32 bits: subtracting two readings gives what came in between).
+
+See also: [`net_if_bytes_out`](#net_if_bytes_out).
+
+<a id="net_if_bytes_out"></a>
+
+### `net_if_bytes_out(i)` → `Int`
+
+- `i`: the interface, from 0, of the last `net_ifs_read`.
+
+Returns the bytes sent, like `net_if_bytes_in`.
+
+See also: [`net_if_bytes_in`](#net_if_bytes_in).
+
+<a id="pistorm_temperature"></a>
+
+### `pistorm_temperature()` → `Int`
+
+Returns the temperature of a PiStorm's Raspberry Pi running Emu68, in tenths of a degree (523 is 52.3); -1 without Emu68.
+
+<a id="wifi_read"></a>
+
+### `wifi_read(interface, ms)` → `Int`
+
+- `interface`: the Roadshow interface.
+- `ms`: the longest to wait.
+
+Asks the driver for its WiFi signal. Returns 0 if it read it (`wifi_signal`, `wifi_noise`), 1 if it did not answer in time, 2 if the driver does not say
+and 3 if there is no such interface or driver.
+
+See also: [`wifi_signal`](#wifi_signal), [`wifi_read_device`](#wifi_read_device).
+
+<a id="wifi_read_device"></a>
+
+### `wifi_read_device(driver, unit, ms)` → `Int`
+
+- `driver`: the SANA-II driver: `"wifipi.device"`.
+- `unit`: its unit.
+- `ms`: how long to wait.
+
+Like `wifi_read`, asking the driver directly, with any TCP/IP stack. Returns 0 if it read it (`wifi_signal`, `wifi_noise`), 1 if it did not answer in time, 2 if the driver does not say
+and 3 if there is no such interface or driver.
+
+See also: [`wifi_read`](#wifi_read).
+
+<a id="net_drivers_read"></a>
+
+### `net_drivers_read()` → `Int`
+
+Reads the SANA-II network drivers in use (those in `DEVS:Networks` something has open), with any stack, and returns how many.
+
+See also: [`net_driver_name`](#net_driver_name), [`net_driver_read`](#net_driver_read).
+
+<a id="net_driver_name"></a>
+
+### `net_driver_name(i)` → `String`
+
+- `i`: the driver, from 0.
+
+Returns its name: `"wifipi.device"`.
+
+See also: [`net_drivers_read`](#net_drivers_read).
+
+<a id="net_driver_read"></a>
+
+### `net_driver_read(driver, unit, ms)` → `Int`
+
+- `driver`, `unit`, `ms`: as in `wifi_read_device`.
+
+Asks for its packet counters. Returns the same codes as `wifi_read_device` (0 read).
+
+See also: [`net_driver_packets_in`](#net_driver_packets_in), [`net_driver_has_bytes`](#net_driver_has_bytes).
+
+<a id="net_driver_has_bytes"></a>
+
+### `net_driver_has_bytes()` → `Bool`
+
+Returns `true` if the driver of the last `net_driver_read` also counts bytes.
+
+See also: [`net_driver_bytes_in`](#net_driver_bytes_in).
+
+<a id="net_driver_bytes_in"></a>
+
+### `net_driver_bytes_in()` → `Int`
+
+Returns the bytes received by the driver of the last `net_driver_read` (low 32 bits).
+
+See also: [`net_driver_bytes_out`](#net_driver_bytes_out).
+
+<a id="net_driver_bytes_out"></a>
+
+### `net_driver_bytes_out()` → `Int`
+
+Returns the bytes sent by the driver of the last `net_driver_read`.
+
+See also: [`net_driver_bytes_in`](#net_driver_bytes_in).
+
+<a id="net_driver_packets_in"></a>
+
+### `net_driver_packets_in()` → `Int`
+
+Returns the packets received by the driver of the last `net_driver_read`.
+
+See also: [`net_driver_packets_out`](#net_driver_packets_out).
+
+<a id="net_driver_packets_out"></a>
+
+### `net_driver_packets_out()` → `Int`
+
+Returns the packets sent by the driver of the last `net_driver_read`.
+
+See also: [`net_driver_packets_in`](#net_driver_packets_in).
+
+<a id="wifi_signal"></a>
+
+### `wifi_signal()` → `Int`
+
+Returns the signal of the last `wifi_read` that gave 0, in dBm: -30 very good, -90 very poor.
+
+See also: [`wifi_noise`](#wifi_noise).
+
+<a id="wifi_noise"></a>
+
+### `wifi_noise()` → `Int`
+
+Returns the noise of the last `wifi_read` that gave 0, in dBm.
+
+See also: [`wifi_signal`](#wifi_signal).
+
+<a id="usb_hid_read"></a>
+
+### `usb_hid_read()` → `Int`
+
+Reads the USB devices handled by Poseidon's `hid.class` and returns how many; -1 without `poseidon.library` 4.
+
+See also: [`usb_hid_name`](#usb_hid_name), [`usb_hid_kind`](#usb_hid_kind).
+
+<a id="usb_hid_name"></a>
+
+### `usb_hid_name(i)` → `String`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns the product's name.
+
+See also: [`usb_hid_maker`](#usb_hid_maker).
+
+<a id="usb_hid_maker"></a>
+
+### `usb_hid_maker(i)` → `String`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns the maker.
+
+See also: [`usb_hid_name`](#usb_hid_name).
+
+<a id="usb_hid_vendor"></a>
+
+### `usb_hid_vendor(i)` → `Int`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns its VendorID.
+
+See also: [`usb_hid_product`](#usb_hid_product).
+
+<a id="usb_hid_product"></a>
+
+### `usb_hid_product(i)` → `Int`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns its ProductID.
+
+See also: [`usb_hid_vendor`](#usb_hid_vendor).
+
+<a id="usb_hid_kind"></a>
+
+### `usb_hid_kind(i)` → `Int`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns what it is: 1 mouse, 2 keyboard, 0 something else (many trackpads show up so).
+
+See also: [`usb_hid_emitter`](#usb_hid_emitter).
+
+<a id="usb_hid_emitter"></a>
+
+### `usb_hid_emitter(i)` → `Int`
+
+- `i`: the device, from 0, of the last `usb_hid_read`.
+
+Returns its emitter, for `mouse_curve`.
+
+See also: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_curve"></a>
+
+### `mouse_curve(emitter, factors)` → `Bool`
+
+- `emitter`: 0 the Amiga mouse (and every movement not from a USB mouse); otherwise one from `usb_hid_emitter`.
+- `factors`: a list of hundredths per speed (100 = as is, 200 = double).
+
+Puts an acceleration curve on that mouse. Returns `false` if it could not. It is removed when the program ends.
+
+See also: [`mouse_curves_off`](#mouse_curves_off), [`usb_hid_emitter`](#usb_hid_emitter).
+
+<a id="mouse_curve_events"></a>
+
+### `mouse_curve_events(emitter)` → `Int`
+
+- `emitter`: the emitter.
+
+Returns how many movements its curve has scaled.
+
+See also: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_curves_off"></a>
+
+### `mouse_curves_off()`
+
+Removes the curves now (also when the program ends); another `mouse_curve` puts them back.
+
+See also: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_patch_left"></a>
+
+### `mouse_patch_left()` → `Int`
+
+Returns how many bridges were left in `input.device` under another program's patch: they let everything through, for good.
+
+See also: [`mouse_curves_off`](#mouse_curves_off).
+
+<a id="mouse_prefs_ticks"></a>
+
+### `mouse_prefs_ticks()` → `Int`
+
+Returns the mouse speed from the Input preferences: 1 the fastest, 2, 4 the slowest.
+
+See also: [`mouse_prefs_set`](#mouse_prefs_set).
+
+<a id="mouse_prefs_accel"></a>
+
+### `mouse_prefs_accel()` → `Bool`
+
+Returns `true` if the Input preferences' mouse acceleration is on.
+
+See also: [`mouse_prefs_set`](#mouse_prefs_set).
+
+<a id="mouse_prefs_set"></a>
+
+### `mouse_prefs_set(ticks, accel)`
+
+- `ticks`: 1, 2 or 4, like `mouse_prefs_ticks`.
+- `accel`: the acceleration.
+
+Sets them; they go back to how they were when the program ends.
+
+See also: [`mouse_prefs_ticks`](#mouse_prefs_ticks).
+
+<a id="tr"></a>
+
+### `tr(id, text)` → `String`
+
+- `id`: the text's number in the catalog.
+- `text`: the text in the program's language.
+
+Returns the translation from the program's catalog into the user's language, or `text` if there is no catalog, it
+lacks that number or `locale.library` is missing.
+
+See also: [`catalog_open`](#catalog_open), [`catalog_language`](#catalog_language).
+
+<a id="catalog_open"></a>
+
+### `catalog_open(name, version)` → `Bool`
+
+- `name`: the catalog: `"X.catalog"`.
+- `version`: the version; 0 any.
+
+Uses that catalog instead of the program's. Returns `false` if there is none.
+
+See also: [`tr`](#tr).
+
+<a id="catalog_language"></a>
+
+### `catalog_language()` → `String`
+
+Returns the language of the catalog in use (`"english"`), or `""` if none.
+
+See also: [`tr`](#tr).
+
+<a id="clock_read"></a>
+
+### `clock_read()`
+
+Takes the date and time from the system clock; `clock_year`, `clock_month` and the rest give its parts.
+
+See also: [`clock_year`](#clock_year), [`date_text`](#date_text).
+
+<a id="clock_year"></a>
+
+### `clock_year()` → `Int`
+
+Returns the year of the last `clock_read`.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_month"></a>
+
+### `clock_month()` → `Int`
+
+Returns the month of the last `clock_read`, 1 to 12.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_day"></a>
+
+### `clock_day()` → `Int`
+
+Returns the day of the month of the last `clock_read`, 1 to 31.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_weekday"></a>
+
+### `clock_weekday()` → `Int`
+
+Returns the weekday of the last `clock_read`: 0 Sunday, 1 Monday... 6 Saturday.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_hour"></a>
+
+### `clock_hour()` → `Int`
+
+Returns the hour of the last `clock_read`, 0 to 23.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_minute"></a>
+
+### `clock_minute()` → `Int`
+
+Returns the minute of the last `clock_read`.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="clock_second"></a>
+
+### `clock_second()` → `Int`
+
+Returns the second of the last `clock_read`.
+
+See also: [`clock_read`](#clock_read).
+
+<a id="date_text"></a>
+
+### `date_text(format)` → `String`
+
+- `format`: the `FormatDate` format: `%A` the weekday, `%d-%m-%Y`, `%b` the short month, `%H:%M:%S`...
+
+Returns the current date and time that way, in the user's language and country (in English without
+`locale.library`).
+
+See also: [`clock_read`](#clock_read).
+
+<a id="locale_gmt_offset"></a>
+
+### `locale_gmt_offset()` → `Int`
+
+Returns how many minutes the Amiga's clock runs ahead of GMT, by Locale (60 in Spain in winter); 0 without `locale.library`.
+
+See also: [`time_unix`](#time_unix).
+
+<a id="locale_decimal_point"></a>
+
+### `locale_decimal_point()` → `String`
+
+Returns what goes before the decimals in the user's country: `","` in Spain, `"."` in English.
+
+See also: [`locale_group_separator`](#locale_group_separator).
+
+<a id="locale_group_separator"></a>
+
+### `locale_group_separator()` → `String`
+
+Returns the thousands separator in the user's country: `"."` in Spain, `","` in English; it can be `""`.
+
+See also: [`locale_decimal_point`](#locale_decimal_point).
+
+<a id="locale_date_order"></a>
+
+### `locale_date_order()` → `String`
+
+Returns the order of the user's short date: `"DMY"`, `"MDY"` or `"YMD"`.
+
+See also: [`date_text`](#date_text).
+
+<a id="program_version"></a>
+
+### `program_version()` → `String`
+
+Returns the name and version from `@version` (`"Trasfondo 0.7"`), or `""` if the program has none.
+
+<a id="file_notify"></a>
+
+### `file_notify(path)` → `Int`
+
+- `path`: the file; it may not exist yet.
+
+Watches it: each time it changes, `cx_wait` gives 7 and `file_changed` says so. Returns its number (1 to 8), or 0 if
+it cannot be watched.
+
+See also: [`file_changed`](#file_changed), [`file_notify_end`](#file_notify_end), [`file_notify_signal`](#file_notify_signal).
+
+<a id="file_changed"></a>
+
+### `file_changed(n)` → `Bool`
+
+- `n`: the number from `file_notify`.
+
+Returns `true` if it changed since the last `file_changed`.
+
+See also: [`file_notify`](#file_notify).
+
+<a id="file_notify_end"></a>
+
+### `file_notify_end(n)`
+
+- `n`: the number from `file_notify`.
+
+Stops watching it. All are dropped when the program ends.
+
+See also: [`file_notify`](#file_notify).
+
+<a id="file_notify_signal"></a>
+
+### `file_notify_signal()` → `Int`
+
+Returns the watched files' signal, for `mui_wait_event_signals`; 0 before a `file_notify`.
+
+See also: [`file_notify`](#file_notify).
+
+<a id="run_program"></a>
+
+### `run_program(command)` → `Bool`
+
+- `command`: the command: `"SYS:Prefs/Font"`, `"\"Work:My Prog\" arg"`.
+
+Starts it in another process without waiting, with its input and output in `NIL:`. Returns `false` if it could not
+start. To launch programs from a menu or a dock.
+
+See also: [`run_command`](#run_command), [`wb_open`](#wb_open).
+
+<a id="program_relaunch"></a>
+
+### `program_relaunch()`
+
+When it ends, the program starts again the way it started, from the Workbench or the Shell with its arguments, after
+all its cleanup. To apply an update.
+
+See also: [`program_exit`](#program_exit).
+
+<a id="dos_requesters"></a>
+
+### `dos_requesters(on)`
+
+- `on`: `false` removes the "Please insert volume" and disk error requesters for this program (the call fails
+  instead); `true` puts them back.
+
+They return to how they were when the program ends.
+
+See also: [`file_exists`](#file_exists).
+
+<a id="base64_to_file"></a>
+
+### `base64_to_file(text, file)` → `Int`
+
+- `text`: the base64 text; spaces and line breaks do not count.
+- `file`: the file to write.
+
+Returns the bytes written, or -1 if the text is not base64 (and then no file is created) or it cannot be written.
+
+<a id="cpu_start"></a>
+
+### `cpu_start()` → `Bool`
+
+Starts measuring the CPU each task uses. Returns `false` before AmigaOS 2.04 or without the system's fine clock.
+
+See also: [`cpu_sample`](#cpu_sample), [`cpu_stop`](#cpu_stop).
+
+<a id="cpu_sample"></a>
+
+### `cpu_sample()` → `Int`
+
+Takes a sample and returns how many tasks there are, sorted from the one that used most since the previous sample to the least.
+
+See also: [`cpu_task_name`](#cpu_task_name), [`cpu_task_load`](#cpu_task_load).
+
+<a id="cpu_task_name"></a>
+
+### `cpu_task_name(i)` → `String`
+
+- `i`: the task, from 0, of the last sample.
+
+Returns its name (for a Shell process, its command).
+
+See also: [`cpu_sample`](#cpu_sample).
+
+<a id="cpu_task_load"></a>
+
+### `cpu_task_load(i)` → `Int`
+
+- `i`: the task, from 0, of the last sample.
+
+Returns the CPU it used, in parts per thousand.
+
+See also: [`cpu_total`](#cpu_total).
+
+<a id="cpu_total"></a>
+
+### `cpu_total()` → `Int`
+
+Returns the CPU of all tasks in the last sample, in parts per thousand; the rest is idle.
+
+See also: [`cpu_sample`](#cpu_sample).
+
+<a id="cpu_stop"></a>
+
+### `cpu_stop()`
+
+Stops measuring. It happens on its own when the program ends.
+
+See also: [`cpu_start`](#cpu_start).
+
+<a id="task_signal"></a>
+
+### `task_signal()` → `Int`
+
+Returns the signal each task sends the program when it ends, for `mui_wait_event_signals`: the window keeps
+responding and the program learns as soon as it ends. 0 if no signal is free.
+
+See also: [`task_done`](#task_done), [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="task_result"></a>
+
+### `task_result(task)` → `Int`
+
+- `task`: the number from `task_start`.
+
+Returns what the function returned; if it has not finished, it waits.
+
+See also: [`task_done`](#task_done).
+
+<a id="task_free"></a>
+
+### `task_free(task)`
+
+- `task`: the number from `task_start`.
+
+Forgets it and frees its number; if it is still running, it waits for it to end.
+
+See also: [`task_start`](#task_start).
+
+<a id="image_functions"></a>
 
 ## Images (datatypes)
 
+Pictures from files with the system's datatypes: always ILBM; PNG, GIF or JPEG if their datatypes are installed.
+The picture adapts to the colours of the screen it is drawn on. Each picture is a number drawn as many times as
+needed and freed with `image_free` (at the end, those left). To decode without datatypes, `image_decode`.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `image_load(file)` | `LONG` | Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), with the colors of the screen drawn on: the image, or 0 |  |
-| `image_width(image)` | `LONG` | Width of an image |  |
-| `image_height(image)` | `LONG` | Height of an image |  |
-| `image_draw(image, x, y)` | `void` | Draw an image at x, y (its transparent pixels are not drawn) |  |
-| `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
-| `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
-| `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
-| `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
+| [`image_load(file)`](#image_load) | Int | Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), with the colors of the screen drawn on: the image, or 0 |  |
+| [`image_width(image)`](#image_width) | Int | Width of an image |  |
+| [`image_height(image)`](#image_height) | Int | Height of an image |  |
+| [`image_draw(image, x, y)`](#image_draw) | — | Draw an image at x, y (its transparent pixels are not drawn) |  |
+| [`image_draw_part(image, sx, sy, x, y, w, h)`](#image_draw_part) | — | Draw the part w x h at sx, sy of an image at x, y |  |
+| [`image_scale(image, w, h)`](#image_scale) | Int | A copy of an image at w x h pixels: a new image, or 0 |  |
+| [`image_free(image)`](#image_free) | — | Free an image (the ones left are freed at exit) |  |
+| [`image_from_rgb(buffer, width, height, alpha)`](#image_from_rgb) | Int | An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
+
+<a id="image_load"></a>
+
+### `image_load(file)` → `Int`
+
+- `file`: the picture: ILBM; PNG, GIF or JPEG if their datatypes are installed.
+
+Loads it already adapted to the colours of the screen being drawn on. Returns the picture, or 0 if it cannot.
+
+See also: [`image_draw`](#image_draw), [`image_free`](#image_free), [`image_decode`](#image_decode).
+
+<a id="image_width"></a>
+
+### `image_width(image)` → `Int`
+
+- `image`: the picture.
+
+Returns its width in pixels.
+
+See also: [`image_height`](#image_height).
+
+<a id="image_height"></a>
+
+### `image_height(image)` → `Int`
+
+- `image`: the picture.
+
+Returns its height in pixels.
+
+See also: [`image_width`](#image_width).
+
+<a id="image_draw"></a>
+
+### `image_draw(image, x, y)`
+
+- `image`: the picture.
+- `x`, `y`: where its corner goes.
+
+Draws it on the current target; transparent pixels let what is underneath show.
+
+See also: [`image_draw_part`](#image_draw_part), [`image_scale`](#image_scale).
+
+<a id="image_draw_part"></a>
+
+### `image_draw_part(image, sx, sy, x, y, w, h)`
+
+- `image`: the picture.
+- `sx`, `sy`: the part's corner, inside the picture.
+- `x`, `y`: where it goes.
+- `w`, `h`: the part's size.
+
+Draws only that part: for a picture holding several pieces (icons, letters).
+
+See also: [`image_draw`](#image_draw).
+
+<a id="image_scale"></a>
+
+### `image_scale(image, w, h)` → `Int`
+
+- `image`: the picture.
+- `w`, `h`: the new size.
+
+Returns a copy at that size, another picture to free too, or 0.
+
+See also: [`image_draw`](#image_draw).
+
+<a id="image_free"></a>
+
+### `image_free(image)`
+
+- `image`: the picture.
+
+Frees it. Those left are freed at the end.
+
+See also: [`image_load`](#image_load).
+
+<a id="image_from_rgb"></a>
+
+### `image_from_rgb(buffer, width, height, alpha)` → `Int`
+
+- `buffer`: the pixels, row after row: 3 bytes (RGB) or 4 (RGBA).
+- `width`, `height`: the size.
+- `alpha`: `true` if there are 4 bytes per pixel. Transparency blends on RTG; on a palette screen a pixel is drawn
+  if its alpha is 128 or more.
+
+Returns a picture with those pixels, for `image_draw`, or 0. On palette screens it needs AmigaOS 3.5 or later.
+
+See also: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decoded).
+
+<a id="args_functions"></a>
 
 ## Arguments
 
+What the program gets when it starts: the Shell arguments, or the project icons it was opened with from the
+Workbench. And two more things from that stage of the language: where the last click was and the program's clock.
+
+**Example** (`tests/test_doc_varios.dash`, which is also a test: it runs with the others):
+
+```dash
+# Utilidades: argumentos, comprimir y descomprimir, SHA-1, UTF-8, Double, expresiones regulares, comodines, JSON y el
+# portapapeles.
+
+Main
+    Print "argumentos: #{arg_count()}"
+
+    a = buffer_alloc(3000)
+    buffer_fill(a, 0, 3000, 65)                    # 3000 letras A: se comprime mucho
+    c = buffer_alloc(3100)
+    n = deflate(a, 3000, c, 3100, 9)
+    d = buffer_alloc(3000)
+    m = inflate(c, n, d, 3000)
+    iguales = crc32(a, 3000, 0) == crc32(d, m, 0)
+    Print "3000 bytes -> menos de 100: #{n < 100}, vuelta: #{m}, mismo crc: #{iguales}"
+    buffer_free(a)
+    buffer_free(c)
+    buffer_free(d)
+
+    Print "sha1 de abc: " + sha1_text("abc")
+
+    u = latin1_to_utf8("Ñu")
+    Print "Ñu en UTF-8: #{u.length} bytes, #{utf8_length(u)} caracteres, vuelta: " + utf8_to_latin1(u)
+
+    var r: Double = sqrt(2.0)
+    var med: Double = round(2.5)
+    Print "raíz de 2: " + str_from_double(r, 4) + ", redondeo de 2.5: #{Int(med)}"
+
+    texto = "pedido 4521 listo"
+    p = regex_find("\\d+", texto, 0, false)        # en un literal de Dash, "\\d" es \d
+    Print "número en \"#{texto}\": " + texto[p:p + regex_length()]
+    Print "comodín: #{wildcard_match("*.IFF", "dibujo.iff", true)}"
+
+    nodos = json_scan("{\"nombre\": \"Lorraine\", \"chips\": [1]}")
+    Print "JSON: #{nodos} nodos, #{json_scan_name(1)} = #{json_scan_text(1)}"
+
+    clip_write_text("Amiga")
+    Print "portapapeles: " + clip_read_text()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `arg_count()` | `LONG` | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
-| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
-| `click_x()` | `LONG` | X of the last On Click, in the window (inside its borders) |  |
-| `click_y()` | `LONG` | Y of the last On Click, in the window (inside its borders) |  |
-| `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
+| [`arg_count()`](#arg_count) | Int | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
+| [`arg(i)`](#arg) | String | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
+| [`click_x()`](#click_x) | Int | X of the last On Click, in the window (inside its borders) |  |
+| [`click_y()`](#click_y) | Int | Y of the last On Click, in the window (inside its borders) |  |
+| [`time_ms()`](#time_ms) | Int | Milliseconds since the program started (EClock of timer.device) |  |
+
+<a id="arg_count"></a>
+
+### `arg_count()` → `Int`
+
+Returns how many arguments it got: the words after the name in the Shell, or the project icons it was opened with
+from the Workbench (a double click on a document, or Shift and click on several).
+
+See also: [`arg`](#arg).
+
+<a id="arg"></a>
+
+### `arg(i)` → `String`
+
+- `i`: the argument, from 0.
+
+Returns that argument, or `""` if there is none. From the Workbench, the icon's full path. An argument in quotes in
+the Shell arrives without them, as a single one.
+
+See also: [`arg_count`](#arg_count).
+
+<a id="click_x"></a>
+
+### `click_x()` → `Int`
+
+Inside an `On Click`, returns the click's X inside the window's borders.
+
+See also: [`click_y`](#click_y).
+
+<a id="click_y"></a>
+
+### `click_y()` → `Int`
+
+Inside an `On Click`, returns the click's Y inside the window's borders.
+
+See also: [`click_x`](#click_x).
+
+<a id="time_ms"></a>
+
+### `time_ms()` → `Int`
+
+Returns the milliseconds since the program started, with the system's fine clock. To time something or move a
+game's things at the same pace on any machine.
+
+See also: [`time_delay`](#time_delay).
+
+<a id="zlib_functions"></a>
 
 ## Compression (zlib)
 
+Compressing and decompressing deflate, gzip and zlib (what ZIP, PNG and HTTP use), checksums (CRC-32, Adler-32) and
+SHA-1, all on buffers. It is the usual zlib inside the program: no library needs to be installed.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `inflate(src, n, dest, max)` | `LONG` | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
-| `inflate_auto(src, n, dest, max)` | `LONG` | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
-| `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
-| `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
-| `adler32(buffer, n, a)` | `LONG` | Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to start) |  |
-| `inflate_used()` | `LONG` | The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 too): where the next object starts in a git pack |  |
-| `sha1(buffer, n)` | `STRPTR` | SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so) |  |
-| `sha1_text(s)` | `STRPTR` | SHA-1 of a text, in 40 hex digits |  |
-| `sha1_new()` | `LONG` | A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if all are in use. sha1_hex or sha1_bytes end it |  |
-| `sha1_add(sha, buffer, n)` | `void` | Adds n bytes of a buffer to a SHA-1 of sha1_new |  |
-| `sha1_add_text(sha, s)` | `void` | Adds a text to a SHA-1 of sha1_new |  |
-| `sha1_add_byte(sha, b)` | `void` | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
-| `sha1_hex(sha)` | `STRPTR` | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
-| `sha1_bytes(sha, out)` | `BOOL` | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
+| [`inflate(src, n, dest, max)`](#inflate) | Int | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
+| [`inflate_auto(src, n, dest, max)`](#inflate_auto) | Int | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
+| [`deflate(src, n, dest, max, level)`](#deflate) | Int | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
+| [`crc32(buffer, n, crc)`](#crc32) | Int | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
+| [`adler32(buffer, n, a)`](#adler32) | Int | Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to start) |  |
+| [`inflate_used()`](#inflate_used) | Int | The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 too): where the next object starts in a git pack |  |
+| [`sha1(buffer, n)`](#sha1) | String | SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so) |  |
+| [`sha1_text(s)`](#sha1_text) | String | SHA-1 of a text, in 40 hex digits |  |
+| [`sha1_new()`](#sha1_new) | Int | A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if all are in use. sha1_hex or sha1_bytes end it |  |
+| [`sha1_add(sha, buffer, n)`](#sha1_add) | — | Adds n bytes of a buffer to a SHA-1 of sha1_new |  |
+| [`sha1_add_text(sha, s)`](#sha1_add_text) | — | Adds a text to a SHA-1 of sha1_new |  |
+| [`sha1_add_byte(sha, b)`](#sha1_add_byte) | — | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
+| [`sha1_hex(sha)`](#sha1_hex) | String | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
+| [`sha1_bytes(sha, out)`](#sha1_bytes) | Bool | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
+
+<a id="inflate"></a>
+
+### `inflate(src, n, dest, max)` → `Int`
+
+- `src`, `n`: the compressed buffer and how many bytes it has.
+- `dest`, `max`: where to decompress to and how much fits.
+
+Decompresses headerless deflate (what is inside a ZIP). Returns the bytes written, -1 if it is not deflate or is
+cut short, -2 if it does not fit in `max`, -3 without memory.
+
+See also: [`inflate_auto`](#inflate_auto), [`deflate`](#deflate), [`inflate_used`](#inflate_used).
+
+<a id="inflate_auto"></a>
+
+### `inflate_auto(src, n, dest, max)` → `Int`
+
+- `src`, `n`, `dest`, `max`: as in `inflate`.
+
+Like `inflate`, but it looks at the first bytes and handles gzip, zlib or headerless deflate: what arrives over HTTP
+with `Content-Encoding: gzip`.
+
+See also: [`inflate`](#inflate).
+
+<a id="deflate"></a>
+
+### `deflate(src, n, dest, max, level)` → `Int`
+
+- `src`, `n`: what to compress.
+- `dest`, `max`: where and how much fits.
+- `level`: 0 (uncompressed, fast) to 9 (smallest); -1 = 6.
+
+Compresses as headerless deflate. Returns the bytes written, -2 if they do not fit, -3 without memory. While working
+it uses about 260 KB.
+
+See also: [`inflate`](#inflate).
+
+<a id="crc32"></a>
+
+### `crc32(buffer, n, crc)` → `Int`
+
+- `buffer`, `n`: the bytes.
+- `crc`: the CRC so far, to go on in parts; 0 to start.
+
+Returns the CRC-32, the one ZIP and PNG use.
+
+See also: [`adler32`](#adler32).
+
+<a id="adler32"></a>
+
+### `adler32(buffer, n, a)` → `Int`
+
+- `buffer`, `n`: the bytes.
+- `a`: the value so far; 1 to start.
+
+Returns the Adler-32, the checksum at the end of a zlib stream.
+
+See also: [`crc32`](#crc32).
+
+<a id="inflate_used"></a>
+
+### `inflate_used()` → `Int`
+
+Returns how many input bytes the last `inflate` or `inflate_auto` used: where the next one starts if several
+compressed things come one after another (as in a git pack).
+
+See also: [`inflate`](#inflate).
+
+<a id="sha1"></a>
+
+### `sha1(buffer, n)` → `String`
+
+- `buffer`, `n`: the bytes.
+
+Returns their SHA-1 as 40 hex digits.
+
+See also: [`sha1_text`](#sha1_text), [`sha1_new`](#sha1_new).
+
+<a id="sha1_text"></a>
+
+### `sha1_text(s)` → `String`
+
+- `s`: the text.
+
+Returns its SHA-1 as 40 hex digits.
+
+See also: [`sha1`](#sha1).
+
+<a id="sha1_new"></a>
+
+### `sha1_new()` → `Int`
+
+Starts a SHA-1 in parts, for data not all in one place. Returns its number (1 to 8), or 0 if all are in use. Add to
+it with `sha1_add*` and finish with `sha1_hex` or `sha1_bytes`.
+
+See also: [`sha1_add`](#sha1_add), [`sha1_hex`](#sha1_hex).
+
+<a id="sha1_add"></a>
+
+### `sha1_add(sha, buffer, n)`
+
+- `sha`: the number from `sha1_new`.
+- `buffer`, `n`: the bytes to add.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_text"></a>
+
+### `sha1_add_text(sha, s)`
+
+- `sha`: the number from `sha1_new`.
+- `s`: the text to add.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_add_byte"></a>
+
+### `sha1_add_byte(sha, b)`
+
+- `sha`: the number from `sha1_new`.
+- `b`: the byte, 0 to 255.
+
+See also: [`sha1_new`](#sha1_new).
+
+<a id="sha1_hex"></a>
+
+### `sha1_hex(sha)` → `String`
+
+- `sha`: the number from `sha1_new`.
+
+Finishes it and returns the 40 hex digits; `""` if that number is not in use. The number becomes free.
+
+See also: [`sha1_bytes`](#sha1_bytes).
+
+<a id="sha1_bytes"></a>
+
+### `sha1_bytes(sha, out)` → `Bool`
+
+- `sha`: the number from `sha1_new`.
+- `out`: a 20-byte buffer.
+
+Finishes it and writes its 20 bytes to `out`. Returns `false` if that number is not in use.
+
+See also: [`sha1_hex`](#sha1_hex).
+
+<a id="utf8_functions"></a>
 
 ## UTF-8
 
+Dash's texts are Latin-1, but what comes from the network is usually UTF-8, where a character takes 1 to 4 bytes.
+These functions walk a UTF-8 text character by character (positions are bytes) and convert it to Latin-1 and back.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `utf8_next(s, i)` | `LONG` | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
-| `utf8_prev(s, i)` | `LONG` | Position of the UTF-8 character before byte i (0 at the start) |  |
-| `utf8_code(s, i)` | `LONG` | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
-| `utf8_char(code)` | `STRPTR` | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
-| `utf8_length(s)` | `LONG` | How many UTF-8 characters s has (each invalid byte counts as one) |  |
-| `utf8_to_latin1(s)` | `STRPTR` | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
-| `latin1_to_utf8(s)` | `STRPTR` | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
-| `utf8_check(buffer, from, to)` | `LONG` | Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a sequence cut by to), -1 if all are valid |  |
+| [`utf8_next(s, i)`](#utf8_next) | Int | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
+| [`utf8_prev(s, i)`](#utf8_prev) | Int | Position of the UTF-8 character before byte i (0 at the start) |  |
+| [`utf8_code(s, i)`](#utf8_code) | Int | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
+| [`utf8_char(code)`](#utf8_char) | String | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
+| [`utf8_length(s)`](#utf8_length) | Int | How many UTF-8 characters s has (each invalid byte counts as one) |  |
+| [`utf8_to_latin1(s)`](#utf8_to_latin1) | String | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
+| [`latin1_to_utf8(s)`](#latin1_to_utf8) | String | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
+| [`utf8_check(buffer, from, to)`](#utf8_check) | Int | Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a sequence cut by to), -1 if all are valid |  |
+
+<a id="utf8_next"></a>
+
+### `utf8_next(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: a character's position, in bytes.
+
+Returns where the next character starts; at the end, the text's length.
+
+See also: [`utf8_prev`](#utf8_prev), [`utf8_code`](#utf8_code).
+
+<a id="utf8_prev"></a>
+
+### `utf8_prev(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: a position in bytes.
+
+Returns where the previous character starts; 0 at the beginning.
+
+See also: [`utf8_next`](#utf8_next).
+
+<a id="utf8_code"></a>
+
+### `utf8_code(s, i)` → `Int`
+
+- `s`: the UTF-8 text.
+- `i`: the character's position.
+
+Returns its Unicode number; 65533 for a byte that is not valid UTF-8, 0 outside the text.
+
+See also: [`utf8_char`](#utf8_char).
+
+<a id="utf8_char"></a>
+
+### `utf8_char(code)` → `String`
+
+- `code`: a Unicode number.
+
+Returns that character in UTF-8; `""` for 0.
+
+See also: [`utf8_code`](#utf8_code).
+
+<a id="utf8_length"></a>
+
+### `utf8_length(s)` → `Int`
+
+- `s`: the UTF-8 text.
+
+Returns how many characters it has (not bytes).
+
+See also: [`utf8_next`](#utf8_next).
+
+<a id="utf8_to_latin1"></a>
+
+### `utf8_to_latin1(s)` → `String`
+
+- `s`: the UTF-8 text.
+
+Returns the text in Latin-1, to show it with Amiga fonts. What Latin-1 lacks becomes something close (curly quotes
+to straight ones, € to EUR) or `?`.
+
+See also: [`latin1_to_utf8`](#latin1_to_utf8).
+
+<a id="latin1_to_utf8"></a>
+
+### `latin1_to_utf8(s)` → `String`
+
+- `s`: a Dash text (Latin-1).
+
+Returns the text in UTF-8, to send it over the network or store it for other systems.
+
+See also: [`utf8_to_latin1`](#utf8_to_latin1).
+
+<a id="utf8_check"></a>
+
+### `utf8_check(buffer, from, to)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: from `from` to `to - 1`.
+
+Returns the position of the first byte that is not valid UTF-8 (or starts a character cut by `to`); -1 if it is all valid.
+
+See also: [`utf8_to_latin1`](#utf8_to_latin1).
+
+<a id="bufsearch_functions"></a>
 
 ## Comparing and searching in a buffer
 
+Compare and search inside a buffer without turning it into a text, to read formats or protocols quickly.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `buffer_equals(buffer, offset, n, s)` | `BOOL` | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
-| `buffer_find_byte(buffer, from, to, byte)` | `LONG` | Position of the first byte equal to byte from from to to - 1, or -1 |  |
-| `buffer_find_any(buffer, from, to, bytes)` | `LONG` | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+| [`buffer_equals(buffer, offset, n, s)`](#buffer_equals) | Bool | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
+| [`buffer_find_byte(buffer, from, to, byte)`](#buffer_find_byte) | Int | Position of the first byte equal to byte from from to to - 1, or -1 |  |
+| [`buffer_find_any(buffer, from, to, bytes)`](#buffer_find_any) | Int | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+
+<a id="buffer_equals"></a>
+
+### `buffer_equals(buffer, offset, n, s)` → `Bool`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `n`: how many bytes.
+- `s`: the text.
+
+Returns `true` if those `n` bytes are exactly the text `s` and `s` has `n` bytes. To check a file's header:
+`buffer_equals(b, 0, 4, "FORM")`.
+
+See also: [`buffer_find_byte`](#buffer_find_byte).
+
+<a id="buffer_find_byte"></a>
+
+### `buffer_find_byte(buffer, from, to, byte)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: where to search, from `from` to `to - 1`.
+- `byte`: the byte to look for.
+
+Returns the position of the first one, or -1. To find the end of a line: `buffer_find_byte(b, i, n, 10)`.
+
+See also: [`buffer_find_any`](#buffer_find_any).
+
+<a id="buffer_find_any"></a>
+
+### `buffer_find_any(buffer, from, to, bytes)` → `Int`
+
+- `buffer`: the buffer.
+- `from`, `to`: from `from` to `to - 1`.
+- `bytes`: a text with the bytes that match.
+
+Returns the position of the first byte that is any of those in `bytes`, or -1.
+
+See also: [`buffer_find_byte`](#buffer_find_byte).
+
+<a id="double_functions"></a>
 
 ## Double and text
 
+Turning a `Double` (64 bits) into a text with the decimals you want, and a text into a `Double`, without losing
+digits.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_from_double(d, decimals)` | `STRPTR` | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
-| `str_to_double(s)` | `double` | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+| [`str_from_double(d, decimals)`](#str_from_double) | String | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
+| [`str_to_double(s)`](#str_to_double) | Double | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+
+<a id="str_from_double"></a>
+
+### `str_from_double(d, decimals)` → `String`
+
+- `d`: the number.
+- `decimals`: how many decimals; 0 none; negative, just enough to read back the same.
+
+Returns the number as a text, rounding halves away from zero: `str_from_double(2.675, 2)` is `"2.68"`.
+
+See also: [`str_to_double`](#str_to_double).
+
+<a id="str_to_double"></a>
+
+### `str_to_double(s)` → `Double`
+
+- `s`: the text.
+
+Returns the number at the start of the text, exact to 17 digits; 0.0 if there is no number. It is `Double(s)`.
+
+See also: [`str_from_double`](#str_from_double).
+
+<a id="math_functions"></a>
 
 ## Double math
 
+The usual maths functions with `Double`. Angles are in radians (180 degrees is 3.14159...). An impossible result
+does not stop the program: it gives `nan` (not a number) or `inf`, checked with `is_nan` and `is_inf`.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `sqrt(x)` | `double` | Square root (nan for a negative) |  |
-| `pow(x, y)` | `double` | x to the power y |  |
-| `exp(x)` | `double` | e to the power x |  |
-| `log(x)` | `double` | Natural logarithm (-inf for 0, nan for a negative) |  |
-| `log10(x)` | `double` | Base 10 logarithm |  |
-| `sin(x)` | `double` | Sine of x radians |  |
-| `cos(x)` | `double` | Cosine of x radians |  |
-| `tan(x)` | `double` | Tangent of x radians |  |
-| `asin(x)` | `double` | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
-| `acos(x)` | `double` | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
-| `atan(x)` | `double` | Arc tangent in radians, -pi/2 to pi/2 |  |
-| `atan2(y, x)` | `double` | Angle of the point (x, y) in radians, -pi to pi |  |
-| `floor(x)` | `double` | The largest whole number not above x (a Double) |  |
-| `ceil(x)` | `double` | The smallest whole number not below x (a Double) |  |
-| `round(x)` | `double` | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
-| `trunc(x)` | `double` | The whole part, toward zero (-2.7 is -2.0) |  |
-| `fmod(x, y)` | `double` | Remainder of x / y with the sign of x (nan if y is 0) |  |
-| `abs(x)` | `double` | Absolute value, a Double |  |
-| `is_nan(x)` | `BOOL` | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
-| `is_inf(x)` | `BOOL` | True if x is inf or -inf |  |
+| [`sqrt(x)`](#sqrt) | Double | Square root (nan for a negative) |  |
+| [`pow(x, y)`](#pow) | Double | x to the power y |  |
+| [`exp(x)`](#exp) | Double | e to the power x |  |
+| [`log(x)`](#log) | Double | Natural logarithm (-inf for 0, nan for a negative) |  |
+| [`log10(x)`](#log10) | Double | Base 10 logarithm |  |
+| [`sin(x)`](#sin) | Double | Sine of x radians |  |
+| [`cos(x)`](#cos) | Double | Cosine of x radians |  |
+| [`tan(x)`](#tan) | Double | Tangent of x radians |  |
+| [`asin(x)`](#asin) | Double | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
+| [`acos(x)`](#acos) | Double | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
+| [`atan(x)`](#atan) | Double | Arc tangent in radians, -pi/2 to pi/2 |  |
+| [`atan2(y, x)`](#atan2) | Double | Angle of the point (x, y) in radians, -pi to pi |  |
+| [`floor(x)`](#floor) | Double | The largest whole number not above x (a Double) |  |
+| [`ceil(x)`](#ceil) | Double | The smallest whole number not below x (a Double) |  |
+| [`round(x)`](#round) | Double | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
+| [`trunc(x)`](#trunc) | Double | The whole part, toward zero (-2.7 is -2.0) |  |
+| [`fmod(x, y)`](#fmod) | Double | Remainder of x / y with the sign of x (nan if y is 0) |  |
+| [`abs(x)`](#abs) | Double | Absolute value, a Double |  |
+| [`is_nan(x)`](#is_nan) | Bool | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
+| [`is_inf(x)`](#is_inf) | Bool | True if x is inf or -inf |  |
+
+<a id="sqrt"></a>
+
+### `sqrt(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the square root; `nan` for a negative.
+
+See also: [`pow`](#pow).
+
+<a id="pow"></a>
+
+### `pow(x, y)` → `Double`
+
+- `x`: the base.
+- `y`: the exponent.
+
+Returns `x` to the power of `y`.
+
+See also: [`sqrt`](#sqrt), [`exp`](#exp).
+
+<a id="exp"></a>
+
+### `exp(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns e to the power of `x`.
+
+See also: [`log`](#log).
+
+<a id="log"></a>
+
+### `log(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the natural logarithm; `-inf` for 0, `nan` for a negative.
+
+See also: [`log10`](#log10), [`exp`](#exp).
+
+<a id="log10"></a>
+
+### `log10(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the base-10 logarithm.
+
+See also: [`log`](#log).
+
+<a id="sin"></a>
+
+### `sin(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the sine of `x` radians.
+
+See also: [`cos`](#cos), [`asin`](#asin).
+
+<a id="cos"></a>
+
+### `cos(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the cosine of `x` radians.
+
+See also: [`sin`](#sin).
+
+<a id="tan"></a>
+
+### `tan(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the tangent of `x` radians.
+
+See also: [`atan`](#atan).
+
+<a id="asin"></a>
+
+### `asin(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arcsine in radians, -pi/2 to pi/2; `nan` outside -1..1.
+
+See also: [`sin`](#sin).
+
+<a id="acos"></a>
+
+### `acos(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arccosine in radians, 0 to pi; `nan` outside -1..1.
+
+See also: [`cos`](#cos).
+
+<a id="atan"></a>
+
+### `atan(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the arctangent in radians, -pi/2 to pi/2.
+
+See also: [`atan2`](#atan2).
+
+<a id="atan2"></a>
+
+### `atan2(y, x)` → `Double`
+
+- `y`, `x`: the point (mind the order).
+
+Returns the point's angle in radians, -pi to pi: where it points, to turn a sprite towards a target.
+
+See also: [`atan`](#atan).
+
+<a id="floor"></a>
+
+### `floor(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the largest whole number not above `x`, as a `Double`: `floor(-2.5)` is -3.0.
+
+See also: [`ceil`](#ceil), [`round`](#round), [`trunc`](#trunc).
+
+<a id="ceil"></a>
+
+### `ceil(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the smallest whole number not below `x`, as a `Double`.
+
+See also: [`floor`](#floor).
+
+<a id="round"></a>
+
+### `round(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the nearest whole number, halves away from zero: 2.5 gives 3.0 and -2.5 gives -3.0.
+
+See also: [`floor`](#floor), [`trunc`](#trunc).
+
+<a id="trunc"></a>
+
+### `trunc(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the whole part, towards zero: -2.7 gives -2.0.
+
+See also: [`floor`](#floor).
+
+<a id="fmod"></a>
+
+### `fmod(x, y)` → `Double`
+
+- `x`, `y`: the two numbers.
+
+Returns the remainder of `x / y` with the sign of `x`; `nan` if `y` is 0.
+
+<a id="abs"></a>
+
+### `abs(x)` → `Double`
+
+- `x`: the number, a `Double`.
+
+Returns the absolute value, a `Double`.
+
+<a id="is_nan"></a>
+
+### `is_nan(x)` → `Bool`
+
+- `x`: the number, a `Double`.
+
+Returns `true` if `x` is `nan`: the result of something impossible, like `sqrt(-1.0)` or `0.0 / 0.0`.
+
+See also: [`is_inf`](#is_inf).
+
+<a id="is_inf"></a>
+
+### `is_inf(x)` → `Bool`
+
+- `x`: the number, a `Double`.
+
+Returns `true` if `x` is `inf` or `-inf`, like `1.0 / 0.0`.
+
+See also: [`is_nan`](#is_nan).
+
+<a id="regex_functions"></a>
 
 ## Regular expressions and wildcards
 
+Regular expressions (ICU's common syntax) and spreadsheet wildcards on UTF-8 texts; positions and lengths are in
+bytes. A badly written pattern does not stop the program: it gives `false` or -1 and `regex_error` says why. The
+full syntax is in the manual (section 5).
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `regex_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
-| `regex_find(pattern, text, from, ignore_case)` | `LONG` | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
-| `regex_length()` | `LONG` | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
-| `regex_error()` | `STRPTR` | Why the last pattern is wrong, "" if it is right |  |
-| `wildcard_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
+| [`regex_match(pattern, text, ignore_case)`](#regex_match) | Bool | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
+| [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
+| [`regex_length()`](#regex_length) | Int | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
+| [`regex_error()`](#regex_error) | String | Why the last pattern is wrong, "" if it is right |  |
+| [`wildcard_match(pattern, text, ignore_case)`](#wildcard_match) | Bool | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
+
+<a id="regex_match"></a>
+
+### `regex_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: the regular expression.
+- `text`: the text, in UTF-8.
+- `ignore_case`: `true` to ignore case.
+
+Returns `true` if the whole text matches. Also `false` if the pattern is wrong (`regex_error`).
+
+See also: [`regex_find`](#regex_find), [`wildcard_match`](#wildcard_match).
+
+<a id="regex_find"></a>
+
+### `regex_find(pattern, text, from, ignore_case)` → `Int`
+
+- `pattern`, `text`, `ignore_case`: as in `regex_match`.
+- `from`: the byte to start searching at.
+
+Returns where the first match starts, or -1. `regex_length` gives its length.
+
+See also: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
+
+<a id="regex_length"></a>
+
+### `regex_length()` → `Int`
+
+Returns the length in bytes of the last match; 0 if none.
+
+See also: [`regex_find`](#regex_find).
+
+<a id="regex_error"></a>
+
+### `regex_error()` → `String`
+
+Returns why the last pattern is wrong, or `""` if it is fine.
+
+See also: [`regex_match`](#regex_match).
+
+<a id="wildcard_match"></a>
+
+### `wildcard_match(pattern, text, ignore_case)` → `Bool`
+
+- `pattern`: with spreadsheet wildcards: `*` anything, `?` one character, `~` before one takes it literally
+  (`~*`).
+- `text`, `ignore_case`: as in `regex_match`.
+
+Returns `true` if the whole text matches. For AmigaDOS wildcards (`#?`), `dialog_file`.
+
+See also: [`regex_match`](#regex_match).
+
+<a id="siminput_functions"></a>
 
 ## Simulated keyboard and mouse
 
+Fake keys and clicks, as if the user made them, through the system's `input.device`: they go to the active window,
+the program's or another's. They are for testing a program unattended (Forja's and Dash's tests use them) and for
+automating others. Coordinates count from the active window's outer corner, borders included.
+
+**Example** (`tests/test_doc_otros.dash`, which is also a test: it runs with the others):
+
+```dash
+# Manejar una ventana como un usuario: buscarla por su título, hacer clic en un campo y escribir en él, y verla en
+# la lista de ventanas del Workbench.
+
+Main
+    v = window_create("Prueba de entrada", 40, 40, 260, 60, 8)
+    campo = textfield_create(v, 10, 10, 200, 0, 40)
+    time_delay(25)
+
+    w = window_find("Prueba de")                   # vale el principio del título
+    Print "encontrada: #{w != 0}"
+    window_found_activate(w)                       # los input_* van a la ventana activa
+    bl = window_found_box(w, 4)                    # sus bordes: input_click cuenta desde fuera
+    bt = window_found_box(w, 5)
+    input_click(bl + 20, bt + 15, 0)               # en el campo
+    input_text("hola Amiga")
+    input_key(0x44, 0)                             # Return
+    time_delay(10)
+    Print "escrito: " + textfield_get(campo)
+
+    esta = false
+    n = wm_read()
+    i = 0
+    while i < n
+        if wm_title(i) == "Prueba de entrada"
+            esta = true
+        end
+        i = i + 1
+    end
+    Print "en la lista del Workbench: #{esta}"
+    window_close(v)
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `input_key(code, qualifiers)` | `void` | Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it |  |
-| `input_text(text)` | `void` | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
-| `input_move(x, y)` | `void` | Move the pointer to (x, y) from the corner of the active window |  |
-| `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
-| `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
-| `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
-| `input_qualifiers()` | `LONG` | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
-| `input_menu(menu, item, hold)` | `BOOL` | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
-| `input_move_screen(x, y, buttons)` | `void` | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
-| `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
+| [`input_key(code, qualifiers)`](#input_key) | — | Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it |  |
+| [`input_text(text)`](#input_text) | — | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
+| [`input_move(x, y)`](#input_move) | — | Move the pointer to (x, y) from the corner of the active window |  |
+| [`input_click(x, y, qualifiers)`](#input_click) | — | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
+| [`input_button(button, down)`](#input_button) | — | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
+| [`input_drag(x1, y1, x2, y2)`](#input_drag) | — | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
+| [`input_qualifiers()`](#input_qualifiers) | Int | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
+| [`input_menu(menu, item, hold)`](#input_menu) | Bool | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
+| [`input_move_screen(x, y, buttons)`](#input_move_screen) | — | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
+| [`input_active_title()`](#input_active_title) | String | Title of the active window ("" if none): to wait for the window of the program to test |  |
+
+<a id="input_key"></a>
+
+### `input_key(code, qualifiers)`
+
+- `code`: the key's raw code (0x44 Return, 0x45 Esc, 0x4C up...).
+- `qualifiers`: the keys held around it: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up; 0 none.
+
+Presses and releases the key in the active window.
+
+See also: [`input_text`](#input_text), [`key_text`](#key_text).
+
+<a id="input_text"></a>
+
+### `input_text(text)`
+
+- `text`: the text.
+
+Types it into the active window with the keymap; what the keymap cannot type is left out.
+
+See also: [`input_key`](#input_key).
+
+<a id="input_move"></a>
+
+### `input_move(x, y)`
+
+- `x`, `y`: the point, from the active window's corner.
+
+Moves the pointer there.
+
+See also: [`input_click`](#input_click).
+
+<a id="input_click"></a>
+
+### `input_click(x, y, qualifiers)`
+
+- `x`, `y`: the point, from the active window's outer corner (borders included).
+- `qualifiers`: the keys held during the click: 1 Shift, 2 Ctrl, 4 Alt.
+
+Makes a left-button click. To hit another program's gadget, `gadget_x` and `gadget_y` say where.
+
+See also: [`input_drag`](#input_drag), [`gadget_x`](#gadget_x).
+
+<a id="input_button"></a>
+
+### `input_button(button, down)`
+
+- `button`: 1 left, 2 right (menus), 3 middle.
+- `down`: `true` presses it, `false` releases it.
+
+Wherever the pointer is. To hold a menu open while the pointer moves.
+
+See also: [`input_menu`](#input_menu).
+
+<a id="input_drag"></a>
+
+### `input_drag(x1, y1, x2, y2)`
+
+- `x1`, `y1`: where it presses.
+- `x2`, `y2`: where it releases.
+
+Drags with the left button, from the active window's corner.
+
+See also: [`input_click`](#input_click).
+
+<a id="input_qualifiers"></a>
+
+### `input_qualifiers()` → `Int`
+
+Returns the keys held now, added up: 1 and 2 Shift, 8 Ctrl, 16 and 32 Alt, 64 and 128 Amiga (left and right); 0 if it cannot.
+
+See also: [`input_key`](#input_key).
+
+<a id="input_menu"></a>
+
+### `input_menu(menu, item, hold)` → `Bool`
+
+- `menu`: the menu, from 0.
+- `item`: the item, from 0, counting separators.
+- `hold`: how many ticks (1/50 s) it stays pressed before releasing.
+
+Chooses that item from the active window's menu with the mouse, like a user. Returns `false` if there is no such
+item.
+
+See also: [`input_button`](#input_button).
+
+<a id="input_move_screen"></a>
+
+### `input_move_screen(x, y, buttons)`
+
+- `x`, `y`: the point on the screen.
+- `buttons`: the buttons held along the way: 1 left, 2 right, 0 none.
+
+Moves the pointer pixel by pixel, so MUI's menus follow it.
+
+See also: [`input_move`](#input_move).
+
+<a id="input_active_title"></a>
+
+### `input_active_title()` → `String`
+
+Returns the active window's title, or `""`. To wait for the window of the program under test to open.
+
+See also: [`window_find`](#window_find).
+
+<a id="clip_functions"></a>
 
 ## Clipboard
 
+The system clipboard: copying and pasting text with other programs, and blocks of your own that only the program
+understands (some cells, a drawing) tied to that text.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `clip_write_text(s)` | `BOOL` | Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 (€ to EUR); false if the clipboard cannot be written |  |
-| `clip_read_text()` | `STRPTR` | The text in the clipboard (unit 0) in UTF-8; "" if it is empty or holds no text |  |
-| `clip_write_block(unit, type, buffer, n)` | `BOOL` | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
-| `clip_block_size(unit, type)` | `LONG` | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
-| `clip_read_block(unit, type, dest, max)` | `LONG` | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+| [`clip_write_text(s)`](#clip_write_text) | Bool | Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 (€ to EUR); false if the clipboard cannot be written |  |
+| [`clip_read_text()`](#clip_read_text) | String | The text in the clipboard (unit 0) in UTF-8; "" if it is empty or holds no text |  |
+| [`clip_write_block(unit, type, buffer, n)`](#clip_write_block) | Bool | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
+| [`clip_block_size(unit, type)`](#clip_block_size) | Int | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
+| [`clip_read_block(unit, type, dest, max)`](#clip_read_block) | Int | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+
+<a id="clip_write_text"></a>
+
+### `clip_write_text(s)` → `Bool`
+
+- `s`: the text, in UTF-8 (a plain Dash text works if it has no accents; if it does, `latin1_to_utf8` first).
+
+Copies it to the clipboard the way other programs read it. Returns `false` if it cannot.
+
+See also: [`clip_read_text`](#clip_read_text).
+
+<a id="clip_read_text"></a>
+
+### `clip_read_text()` → `String`
+
+Returns the clipboard text in UTF-8 (`utf8_to_latin1` to show it); `""` if it is empty or holds no text.
+
+See also: [`clip_write_text`](#clip_write_text).
+
+<a id="clip_write_block"></a>
+
+### `clip_write_block(unit, type, buffer, n)` → `Bool`
+
+- `unit`: a clipboard unit, 1 to 255.
+- `type`: a 4-letter type of your own (`"CELL"`).
+- `buffer`, `n`: the bytes.
+
+After `clip_write_text`, stores a block of your own tied to that text: if something else is copied later, the block
+is no longer valid. That way the same program pastes some cells with their format and others paste the text.
+
+See also: [`clip_read_block`](#clip_read_block), [`clip_block_size`](#clip_block_size).
+
+<a id="clip_block_size"></a>
+
+### `clip_block_size(unit, type)` → `Int`
+
+- `unit`, `type`: as in `clip_write_block`.
+
+Returns the block's size, or -1 if there is none or something else was copied since.
+
+See also: [`clip_read_block`](#clip_read_block).
+
+<a id="clip_read_block"></a>
+
+### `clip_read_block(unit, type, dest, max)` → `Int`
+
+- `unit`, `type`: as in `clip_write_block`.
+- `dest`, `max`: where and how much fits.
+
+Copies the block. Returns its bytes, -1 if there is none, -2 if it does not fit.
+
+See also: [`clip_block_size`](#clip_block_size).
+
+<a id="collate_functions"></a>
 
 ## Sorting texts by language
 
+Sorting texts the way the user's language does, not by each letter's code.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `str_compare_locale(a, b, ignore_case)` | `LONG` | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+| [`str_compare_locale(a, b, ignore_case)`](#str_compare_locale) | Int | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+
+<a id="str_compare_locale"></a>
+
+### `str_compare_locale(a, b, ignore_case)` → `Int`
+
+- `a`, `b`: the two texts, in UTF-8.
+- `ignore_case`: `true` to ignore case.
+
+Returns -1 if `a` goes first, 0 if they are equal and 1 if `b` goes first, in the user's language order: accents and
+case only count after the letters ("árbol" before "barco").
+
+<a id="sysprog_functions"></a>
 
 ## System and program
 
+The program and the system around it: the time, the processor, libraries, running commands, environment variables,
+ARexx and lists of what is running (ports, tasks, assigns).
+
+**Running commands.** `run_command` runs and waits, with the command's output in the program's. `run_capture`
+collects it in a text. `run_start` does the same without waiting, so the window keeps responding; then `run_ready`
+and `run_finish`.
+
+**ARexx.** `rexx_send` sends a command to another program's port and waits for its reply. For other programs to
+send commands to yours: `rexx_port`, `rexx_get` and `rexx_reply` (with MUI, `mui_app_rexx` is easier).
+
+**Lists.** `ports_read`, `tasks_read` and `assigns_read` take a snapshot of what is there now and return how many;
+each one's functions give them by number, from 0, until the next read.
+
+**Example** (`tests/test_doc_sysprog.dash`, which is also a test: it runs with the others):
+
+```dash
+# Sistema y programa: el procesador, una librería, ejecutar una orden y recoger lo que escribe, una variable de
+# entorno y las asignaciones.
+
+Main
+    cpu = cpu_model()                              # 68000 en un A500, 68020 en un A1200...
+    Print "exec.library 40 o más: #{library_version("exec.library") >= 40}"
+
+    salida = run_capture("Echo hola", 5000)
+    Print "la orden dijo: #{str_trim(salida)}, código #{run_rc()}"
+
+    env_set("DashPrueba", "azul", false)           # en ENV:, sin guardar en ENVARC:
+    Print "variable: " + env_get("DashPrueba")
+    file_delete("ENV:DashPrueba")
+
+    hay_c = false
+    n = assigns_read()
+    i = 0
+    while i < n
+        if assign_name(i) == "C"
+            hay_c = true
+        end
+        i = i + 1
+    end
+    Print "hay C:: #{hay_c}"
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
-| `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
-| `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
-| `program_exit(rc)` | `void` | Ends the program now with that return code (5 warning, 10 error, 20 failure), after the usual cleanup: windows, files and memory |  |
-| `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
-| `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
-| `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
-| `locale_language()` | `STRPTR` | The user's first preferred language in Locale prefs ("español"), "" without one |  |
-| `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
-| `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
-| `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
-| `library_revision(name)` | `LONG` | The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there |  |
-| `resident_version(name)` | `LONG` | The version of a resident module of the system (FindResident: "MorphOS" says the program runs on MorphOS); -1 if there is none |  |
-| `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
-| `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
-| `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
-| `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
-| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's stderr goes to the console; dashc writes its errors to its output on the Amiga) |  |
-| `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
-| `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
-| `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
-| `run_finish(run)` | `STRPTR` | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
-| `run_rc()` | `LONG` | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
-| `env_get(name)` | `STRPTR` | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
-| `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
-| `rexx_send(port, command)` | `STRPTR` | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
-| `rexx_rc()` | `LONG` | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
-| `rexx_port(name)` | `BOOL` | Opens the program's own ARexx port with that name ("ADDRESS NAME" from ARexx): false if there is one already, or without rexxsyslib.library. Its commands, with rexx_get |  |
-| `rexx_get()` | `STRPTR` | The next command that came to the rexx_port ("" if none): it waits for rexx_reply (the next rexx_get answers it with RC 0) |  |
-| `rexx_reply(rc, result)` | `void` | Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT ("": none) |  |
-| `notify(title, text)` | `BOOL` | A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx (port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it starts. False if it got to neither |  |
-| `ports_read()` | `LONG` | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
-| `port_name(i)` | `STRPTR` | Name of port i (from 0) of the last ports_read |  |
-| `tasks_read()` | `LONG` | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |
-| `task_entry_name(i)` | `STRPTR` | Name of task i of the last tasks_read ("Shell Process", "input.device"...) |  |
-| `task_entry_command(i)` | `STRPTR` | The command a Shell process of the last tasks_read is running ("" if none) |  |
-| `task_entry_state(i)` | `STRPTR` | State of task i: "running" (the program), "ready" or "waiting" |  |
-| `task_entry_priority(i)` | `LONG` | Priority of task i of the last tasks_read |  |
-| `task_entry_cli(i)` | `LONG` | Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process |  |
-| `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
-| `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
-| `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+| [`time_unix()`](#time_unix) | Int | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
+| [`clock_days()`](#clock_days) | Int | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
+| [`mem_largest()`](#mem_largest) | Int | The largest free block of memory, chip or fast, in bytes |  |
+| [`program_exit(rc)`](#program_exit) | — | Ends the program now with that return code (5 warning, 10 error, 20 failure), after the usual cleanup: windows, files and memory |  |
+| [`run_command(command)`](#run_command) | Int | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
+| [`wb_open(path)`](#wb_open) | Bool | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
+| [`program_path()`](#program_path) | String | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
+| [`locale_language()`](#locale_language) | String | The user's first preferred language in Locale prefs ("español"), "" without one |  |
+| [`cpu_model()`](#cpu_model) | Int | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
+| [`fpu_model()`](#fpu_model) | Int | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
+| [`library_version(name)`](#library_version) | Int | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
+| [`library_revision(name)`](#library_revision) | Int | The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there |  |
+| [`resident_version(name)`](#resident_version) | Int | The version of a resident module of the system (FindResident: "MorphOS" says the program runs on MorphOS); -1 if there is none |  |
+| [`task_priority(n)`](#task_priority) | Int | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
+| [`build_date()`](#build_date) | String | The date the program was compiled, "2026-10-28" |  |
+| [`build_time()`](#build_time) | String | The time the program was compiled, "20:45:10" |  |
+| [`console_flush()`](#console_flush) | — | Write out now what Print left in the output's buffer (a progress line without its end) |  |
+| [`run_capture(command, timeout_ms)`](#run_capture) | String | Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's stderr goes to the console; dashc writes its errors to its output on the Amiga) |  |
+| [`run_start(command, timeout_ms)`](#run_start) | Int | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
+| [`run_ready(run)`](#run_ready) | Bool | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
+| [`run_break(run)`](#run_break) | — | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
+| [`run_finish(run)`](#run_finish) | String | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
+| [`run_rc()`](#run_rc) | Int | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
+| [`env_get(name)`](#env_get) | String | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
+| [`env_set(name, value, save)`](#env_set) | Bool | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
+| [`rexx_send(port, command)`](#rexx_send) | String | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
+| [`rexx_rc()`](#rexx_rc) | Int | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| [`rexx_port(name)`](#rexx_port) | Bool | Opens the program's own ARexx port with that name ("ADDRESS NAME" from ARexx): false if there is one already, or without rexxsyslib.library. Its commands, with rexx_get |  |
+| [`rexx_get()`](#rexx_get) | String | The next command that came to the rexx_port ("" if none): it waits for rexx_reply (the next rexx_get answers it with RC 0) |  |
+| [`rexx_reply(rc, result)`](#rexx_reply) | — | Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT ("": none) |  |
+| [`notify(title, text)`](#notify) | Bool | A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx (port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it starts. False if it got to neither |  |
+| [`ports_read()`](#ports_read) | Int | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
+| [`port_name(i)`](#port_name) | String | Name of port i (from 0) of the last ports_read |  |
+| [`tasks_read()`](#tasks_read) | Int | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |
+| [`task_entry_name(i)`](#task_entry_name) | String | Name of task i of the last tasks_read ("Shell Process", "input.device"...) |  |
+| [`task_entry_command(i)`](#task_entry_command) | String | The command a Shell process of the last tasks_read is running ("" if none) |  |
+| [`task_entry_state(i)`](#task_entry_state) | String | State of task i: "running" (the program), "ready" or "waiting" |  |
+| [`task_entry_priority(i)`](#task_entry_priority) | Int | Priority of task i of the last tasks_read |  |
+| [`task_entry_cli(i)`](#task_entry_cli) | Int | Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process |  |
+| [`assigns_read()`](#assigns_read) | Int | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
+| [`assign_name(i)`](#assign_name) | String | Name of assign i of the last assigns_read, without the colon |  |
+| [`assign_path(i)`](#assign_path) | String | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+
+<a id="time_unix"></a>
+
+### `time_unix()` → `Int`
+
+Returns the system clock's time in seconds since 1 January 1970, like Internet dates.
+
+See also: [`clock_days`](#clock_days), [`dir_entry_date`](#dir_entry_date).
+
+<a id="clock_days"></a>
+
+### `clock_days()` → `Int`
+
+Returns the days since 1 January 1978, the Amiga's day zero, by the system clock.
+
+See also: [`time_unix`](#time_unix).
+
+<a id="mem_largest"></a>
+
+### `mem_largest()` → `Int`
+
+Returns the largest free memory block, chip or fast. The biggest thing that can be asked for in one go.
+
+See also: [`mem_total`](#mem_total).
+
+<a id="program_exit"></a>
+
+### `program_exit(rc)`
+
+- `rc`: the return code: 0 fine, 5 warning, 10 error, 20 failure.
+
+Ends the program now, from anywhere, with the usual cleanup: it closes windows and files and gives memory back. A
+Shell script can check the code with `If WARN` or `If ERROR`.
+
+<a id="run_command"></a>
+
+### `run_command(command)` → `Int`
+
+- `command`: the command, as in the Shell: `"Copy RAM:a TO RAM:b"`.
+
+Runs it and waits for it to finish; what it writes goes to the program's output. Returns its return code, or -1 if
+it could not start.
+
+See also: [`run_capture`](#run_capture), [`run_start`](#run_start).
+
+<a id="wb_open"></a>
+
+### `wb_open(path)` → `Bool`
+
+- `path`: a drawer, a program or a document.
+
+Opens it like a double click on its icon: a document opens with its program. It needs AmigaOS 3.5 or later. Returns
+`false` if it could not.
+
+See also: [`run_command`](#run_command).
+
+<a id="program_path"></a>
+
+### `program_path()` → `String`
+
+Returns the program's full path (`"Work:Games/Ship"`), started from the Shell or the Workbench.
+
+<a id="locale_language"></a>
+
+### `locale_language()` → `String`
+
+Returns the first language in the user's Locale preferences (`"español"`), or `""` if none.
+
+<a id="cpu_model"></a>
+
+### `cpu_model()` → `Int`
+
+Returns the processor: 68000, 68010, 68020, 68030, 68040 or 68060.
+
+See also: [`fpu_model`](#fpu_model).
+
+<a id="fpu_model"></a>
+
+### `fpu_model()` → `Int`
+
+Returns the maths coprocessor: 68881, 68882, 68040 or 68060 (the processor's own); 0 if none.
+
+See also: [`cpu_model`](#cpu_model).
+
+<a id="library_version"></a>
+
+### `library_version(name)` → `Int`
+
+- `name`: the library's name: `"muimaster.library"`.
+
+Returns its version, loading it from disk if it is not in memory, or -1 if it is not installed. To warn before using
+something that needs a given version.
+
+See also: [`library_revision`](#library_revision).
+
+<a id="library_revision"></a>
+
+### `library_revision(name)` → `Int`
+
+- `name`: the library's name.
+
+Returns its revision (the 3 in 47.3), or -1.
+
+See also: [`library_version`](#library_version).
+
+<a id="resident_version"></a>
+
+### `resident_version(name)` → `Int`
+
+- `name`: a resident module's name.
+
+Returns its version, or -1. `resident_version("MorphOS")` above 0 says the program runs on MorphOS.
+
+See also: [`library_version`](#library_version).
+
+<a id="task_priority"></a>
+
+### `task_priority(n)` → `Int`
+
+- `n`: the new priority, -128 to 127; the Shell gives 0.
+
+Changes the program's priority and returns the old one. At -1, a long job lets everything else run smoothly.
+
+<a id="build_date"></a>
+
+### `build_date()` → `String`
+
+Returns the date the program was compiled: `"2026-10-28"`.
+
+See also: [`build_time`](#build_time).
+
+<a id="build_time"></a>
+
+### `build_time()` → `String`
+
+Returns the time it was compiled: `"20:45:10"`.
+
+See also: [`build_date`](#build_date).
+
+<a id="console_flush"></a>
+
+### `console_flush()`
+
+Pushes out now what `Print` left in the output buffer: for a progress line written in pieces.
+
+See also: [`console_write`](#console_write).
+
+<a id="run_capture"></a>
+
+### `run_capture(command, timeout_ms)` → `String`
+
+- `command`: the command.
+- `timeout_ms`: the time limit; past it the command gets Ctrl-C (and another every second until it ends). 0 = no
+  limit.
+
+Runs it, waits and returns everything it wrote. Its return code is in `run_rc()`. Only the normal output: AmigaOS
+gives no separate error channel.
+
+See also: [`run_rc`](#run_rc), [`run_start`](#run_start).
+
+<a id="run_start"></a>
+
+### `run_start(command, timeout_ms)` → `Int`
+
+- `command`, `timeout_ms`: as in `run_capture`.
+
+Starts it without waiting. Returns a number for `run_ready`, `run_break` and `run_finish`, or 0 if it could not
+start. When the program ends it waits for any still running.
+
+See also: [`run_ready`](#run_ready), [`run_finish`](#run_finish).
+
+<a id="run_ready"></a>
+
+### `run_ready(run)` → `Bool`
+
+- `run`: the number from `run_start`.
+
+Returns `true` once it has finished, without waiting.
+
+See also: [`run_finish`](#run_finish).
+
+<a id="run_break"></a>
+
+### `run_break(run)`
+
+- `run`: the number from `run_start`.
+
+Sends it Ctrl-C, and another every second until it ends.
+
+See also: [`run_start`](#run_start).
+
+<a id="run_finish"></a>
+
+### `run_finish(run)` → `String`
+
+- `run`: the number from `run_start`.
+
+Returns what it wrote, like `run_capture`; if it is still running, it waits. Always call it: it frees its number.
+
+See also: [`run_rc`](#run_rc).
+
+<a id="run_rc"></a>
+
+### `run_rc()` → `Int`
+
+Returns the return code of the last `run_capture` or `run_finish`; -1 if it could not start, -2 if it ran out of time.
+
+See also: [`run_capture`](#run_capture).
+
+<a id="env_get"></a>
+
+### `env_get(name)` → `String`
+
+- `name`: the name: `"Language"`, `"Forja/ejecutables"`.
+
+Returns its value, from the program's Shell or from `ENV:`, up to the first line end; `""` if it does not exist.
+
+See also: [`env_set`](#env_set).
+
+<a id="env_set"></a>
+
+### `env_set(name, value, save)` → `Bool`
+
+- `name`: the name; with `/` it goes in a drawer of `ENV:`.
+- `value`: the value.
+- `save`: `true` also stores it in `ENVARC:`, so it survives a reboot.
+
+Returns `false` if it could not.
+
+See also: [`env_get`](#env_get).
+
+<a id="rexx_send"></a>
+
+### `rexx_send(port, command)` → `String`
+
+- `port`: another program's ARexx port (`"MULTIVIEW.1"`); `"REXX"` runs a script.
+- `command`: the command.
+
+Sends it and waits for the reply. Returns its RESULT (`""` if none); the RC goes to `rexx_rc()`. Not to the
+program's own port: it would wait for itself.
+
+See also: [`rexx_rc`](#rexx_rc), [`ports_read`](#ports_read).
+
+<a id="rexx_rc"></a>
+
+### `rexx_rc()` → `Int`
+
+Returns the RC of the last `rexx_send`: 0 fine, 5, 10, 20 the program's; -1 if the port does not exist, -2 without `rexxsyslib.library`.
+
+See also: [`rexx_send`](#rexx_send).
+
+<a id="rexx_port"></a>
+
+### `rexx_port(name)` → `Bool`
+
+- `name`: the port's name, in capitals.
+
+Opens the program's ARexx port: from ARexx, `ADDRESS NAME`. Returns `false` if that name exists already or
+`rexxsyslib.library` is missing. Commands are read with `rexx_get`.
+
+See also: [`rexx_get`](#rexx_get), [`rexx_reply`](#rexx_reply).
+
+<a id="rexx_get"></a>
+
+### `rexx_get()` → `String`
+
+Returns the next command that reached the `rexx_port` port, or `""` if none. It does not wait. Whoever sent it waits
+for the reply: `rexx_reply` (otherwise the next `rexx_get` answers it with RC 0).
+
+See also: [`rexx_reply`](#rexx_reply).
+
+<a id="rexx_reply"></a>
+
+### `rexx_reply(rc, result)`
+
+- `rc`: 0 fine, 5 warning, 10 error, 20 failure.
+- `result`: with `rc` 0, the RESULT the sender gets; `""` none.
+
+See also: [`rexx_get`](#rexx_get).
+
+<a id="notify"></a>
+
+### `notify(title, text)` → `Bool`
+
+- `title`: the notice's title.
+- `text`: the text.
+
+Sends a notice to the desktop, with the program's name: to Trasfondo's bar if it is running; otherwise to its list,
+shown when it starts. Returns `false` if it reached neither.
+
+<a id="ports_read"></a>
+
+### `ports_read()` → `Int`
+
+Reads the names of the open public ports (ARexx ones among them) and returns how many there are.
+
+See also: [`port_name`](#port_name).
+
+<a id="port_name"></a>
+
+### `port_name(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns that port's name from the last `ports_read`.
+
+See also: [`ports_read`](#ports_read).
+
+<a id="tasks_read"></a>
+
+### `tasks_read()` → `Int`
+
+Reads the system's tasks and processes (the first, the program itself) and returns how many there are.
+
+See also: [`task_entry_name`](#task_entry_name).
+
+<a id="task_entry_name"></a>
+
+### `task_entry_name(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns its name: `"Shell Process"`, `"input.device"`.
+
+See also: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_command"></a>
+
+### `task_entry_command(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns the command a Shell process is running; `""` if none.
+
+See also: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_state"></a>
+
+### `task_entry_state(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns its state: `"running"` (the program), `"ready"` or `"waiting"`.
+
+See also: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_priority"></a>
+
+### `task_entry_priority(i)` → `Int`
+
+- `i`: the number, from 0.
+
+Returns its priority.
+
+See also: [`tasks_read`](#tasks_read).
+
+<a id="task_entry_cli"></a>
+
+### `task_entry_cli(i)` → `Int`
+
+- `i`: the number, from 0.
+
+Returns its Shell number (the one `Status` gives, for `Break`); 0 if it is not a Shell process.
+
+See also: [`tasks_read`](#tasks_read).
+
+<a id="assigns_read"></a>
+
+### `assigns_read()` → `Int`
+
+Reads the assigns (`C:`, `LIBS:`, those from `Assign`) and returns how many there are.
+
+See also: [`assign_name`](#assign_name).
+
+<a id="assign_name"></a>
+
+### `assign_name(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns its name, without the colon.
+
+See also: [`assign_path`](#assign_path).
+
+<a id="assign_path"></a>
+
+### `assign_path(i)` → `String`
+
+- `i`: the number, from 0.
+
+Returns where it points: a drawer (`"Workbench:C"`), several separated by `;`, or the name a deferred assign will look for.
+
+See also: [`assign_name`](#assign_name).
+
+<a id="json_functions"></a>
 
 ## JSON read in C (for lib/json.dash)
 
+The C part of the JSON reader. To use JSON in a program, the `lib/json.dash` module is better: it builds an
+easy-to-walk tree from this.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `json_scan(text)` | `LONG` | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
-| `json_scan_error()` | `STRPTR` | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
-| `json_scan_kind(i)` | `LONG` | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
-| `json_scan_count(i)` | `LONG` | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
-| `json_scan_text(i)` | `STRPTR` | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
-| `json_scan_name(i)` | `STRPTR` | The name of node i inside its object ("" in an array or at the top) |  |
+| [`json_scan(text)`](#json_scan) | Int | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
+| [`json_scan_error()`](#json_scan_error) | String | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
+| [`json_scan_kind(i)`](#json_scan_kind) | Int | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
+| [`json_scan_count(i)`](#json_scan_count) | Int | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
+| [`json_scan_text(i)`](#json_scan_text) | String | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
+| [`json_scan_name(i)`](#json_scan_name) | String | The name of node i inside its object ("" in an array or at the top) |  |
+
+<a id="json_scan"></a>
+
+### `json_scan(text)` → `Int`
+
+- `text`: the JSON.
+
+Reads it into a table of nodes in order, each followed by what it contains. Returns how many nodes, or -1 if it is
+not JSON (`json_scan_error`).
+
+See also: [`json_scan_kind`](#json_scan_kind), [`json_scan_error`](#json_scan_error).
+
+<a id="json_scan_error"></a>
+
+### `json_scan_error()` → `String`
+
+Returns why the last `json_scan` gave -1 and at which byte.
+
+See also: [`json_scan`](#json_scan).
+
+<a id="json_scan_kind"></a>
+
+### `json_scan_kind(i)` → `Int`
+
+- `i`: the node, from 0.
+
+Returns its kind: 0 null, 1 true or false, 2 number, 3 text, 4 list, 5 object.
+
+See also: [`json_scan_count`](#json_scan_count).
+
+<a id="json_scan_count"></a>
+
+### `json_scan_count(i)` → `Int`
+
+- `i`: the node, from 0.
+
+For a list or object, how many elements it has (they follow it); for a boolean, 1 if true.
+
+See also: [`json_scan_kind`](#json_scan_kind).
+
+<a id="json_scan_text"></a>
+
+### `json_scan_text(i)` → `String`
+
+- `i`: the node, from 0.
+
+Returns the text of a text node, unescaped and in UTF-8, or a number as written.
+
+See also: [`json_scan_name`](#json_scan_name).
+
+<a id="json_scan_name"></a>
+
+### `json_scan_name(i)` → `String`
+
+- `i`: the node, from 0.
+
+Returns its name inside its object; `""` in a list or at the top.
+
+See also: [`json_scan_text`](#json_scan_text).
+
+<a id="debugger_functions"></a>
 
 ## Debugger (the debugged program, built with dash --debug)
 
+For writing a debugger in Dash, like Forja's: load another program compiled with `dash --debug`, set breakpoints on
+it, go line by line and look at its variables.
+
+**The flow:**
+
+1. `dbg_start(program, arguments)`: loads it in a process of its own, paused before its first line.
+2. `dbg_break(file, line)`: the breakpoints.
+3. `dbg_continue()`, `dbg_step()`, `dbg_next()` or `dbg_out()`: set it going, and `dbg_wait` waits for it to stop
+   or end (with MUI, `dbg_signal` with `mui_wait_event_signals`).
+4. Stopped: `dbg_file`, `dbg_line` and `dbg_function` say where; `dbg_frames` and `dbg_frame_*`, the call stack;
+   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables.
+5. When it ends (`dbg_state()` 4), `dbg_rc` and `dbg_output`.
+
+There is one debugged program at a time. Calls are numbered from the stopping point: 0 where it stopped, 1 its
+caller...
+
+**Example** (`dashc/tests/depurar/basico.dash`, which is also a test: it runs with the others):
+
+```dash
+# El depurador: cargar un programa en pausa, un punto de parada, seguir hasta él, dónde está, registros y memoria,
+# seguir hasta el final con su salida y su código; y un programa sin --debug.
+
+Main
+    if not dbg_start("DH0:depurado", "")
+        Print "error: #{dbg_error()}"
+    end
+    Print "estado: #{dbg_state()}"
+    ok = dbg_break("depurado.dash", 10)
+    no = dbg_break("depurado.dash", 2)
+    Print "punto: #{ok} #{no}"
+    dbg_continue()
+    e = dbg_wait(10000)
+    f = dbg_file()
+    es = str_ends(f, "depurado.dash")
+    Print "parado: #{e} #{dbg_function()} #{dbg_line()} #{es}"
+    pc = dbg_reg(16)
+    Print "pc en la línea: #{dbg_peek(pc, 2) == 0x4E4F}"
+    s = dbg_output()
+    Print "salida hasta aquí: [#{str_trim(s)}]"
+    dbg_unbreak("depurado.dash", 10)
+    dbg_continue()
+    e = dbg_wait(10000)
+    Print "acabado: #{e} #{dbg_rc()}"
+    Print str_trim(dbg_output())
+    ok = dbg_start("DH0:sin_debug", "")
+    Print "sin debug: #{ok} [#{dbg_error()}]"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `dbg_start(program, args)` | `BOOL` | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
-| `dbg_error()` | `STRPTR` | Why the last dbg_start failed |  |
-| `dbg_state()` | `LONG` | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
-| `dbg_signal()` | `LONG` | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
-| `dbg_wait(ms)` | `LONG` | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
-| `dbg_break(file, line)` | `BOOL` | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
-| `dbg_unbreak(file, line)` | `BOOL` | Take the breakpoint out of that line |  |
-| `dbg_continue()` | `BOOL` | Go on (from the start or a stop) until a breakpoint or the end |  |
-| `dbg_step()` | `BOOL` | Go on to the next line, into the functions it calls |  |
-| `dbg_next()` | `BOOL` | Go on to the next line of this function (or of the one that called it) |  |
-| `dbg_out()` | `BOOL` | Go on until the function returns: the next line of the one that called it |  |
-| `dbg_pause()` | `BOOL` | Stop the running program at the next line it runs |  |
-| `dbg_end(ms)` | `BOOL` | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
-| `dbg_rc()` | `LONG` | The return code of the ended program |  |
-| `dbg_file()` | `STRPTR` | The file of the line where the program stopped (its full path) |  |
-| `dbg_line()` | `LONG` | The line where the program stopped (0 if it is not stopped) |  |
-| `dbg_function()` | `STRPTR` | The function where the program stopped ("Main", "Punto.mover"...) |  |
-| `dbg_frames()` | `LONG` | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
-| `dbg_frame_function(i)` | `STRPTR` | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
-| `dbg_frame_line(i)` | `LONG` | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
-| `dbg_frame_file(i)` | `STRPTR` | The file of call i (its full path) |  |
-| `dbg_vars(i)` | `LONG` | How many variables call i sees: its parameters and the variables declared up to its line |  |
-| `dbg_var_name(i, k)` | `STRPTR` | Name of variable k (from 0) of call i |  |
-| `dbg_var_type(i, k)` | `STRPTR` | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
-| `dbg_globals()` | `LONG` | How many global variables the program has |  |
-| `dbg_global_name(g)` | `STRPTR` | Name of global g (from 0) |  |
-| `dbg_value(i, expr)` | `STRPTR` | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
-| `dbg_value_type(i, expr)` | `STRPTR` | The type of expr in call i ("" if it cannot) |  |
-| `dbg_reg(n)` | `LONG` | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
-| `dbg_peek(addr, size)` | `LONG` | 1, 2 or 4 bytes of memory at addr, without sign |  |
-| `dbg_output()` | `STRPTR` | What the program has written so far (output and error output) |  |
+| [`dbg_start(program, args)`](#dbg_start) | Bool | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
+| [`dbg_error()`](#dbg_error) | String | Why the last dbg_start failed |  |
+| [`dbg_state()`](#dbg_state) | Int | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
+| [`dbg_signal()`](#dbg_signal) | Int | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
+| [`dbg_wait(ms)`](#dbg_wait) | Int | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
+| [`dbg_break(file, line)`](#dbg_break) | Bool | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
+| [`dbg_unbreak(file, line)`](#dbg_unbreak) | Bool | Take the breakpoint out of that line |  |
+| [`dbg_continue()`](#dbg_continue) | Bool | Go on (from the start or a stop) until a breakpoint or the end |  |
+| [`dbg_step()`](#dbg_step) | Bool | Go on to the next line, into the functions it calls |  |
+| [`dbg_next()`](#dbg_next) | Bool | Go on to the next line of this function (or of the one that called it) |  |
+| [`dbg_out()`](#dbg_out) | Bool | Go on until the function returns: the next line of the one that called it |  |
+| [`dbg_pause()`](#dbg_pause) | Bool | Stop the running program at the next line it runs |  |
+| [`dbg_end(ms)`](#dbg_end) | Bool | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
+| [`dbg_rc()`](#dbg_rc) | Int | The return code of the ended program |  |
+| [`dbg_file()`](#dbg_file) | String | The file of the line where the program stopped (its full path) |  |
+| [`dbg_line()`](#dbg_line) | Int | The line where the program stopped (0 if it is not stopped) |  |
+| [`dbg_function()`](#dbg_function) | String | The function where the program stopped ("Main", "Punto.mover"...) |  |
+| [`dbg_frames()`](#dbg_frames) | Int | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
+| [`dbg_frame_function(i)`](#dbg_frame_function) | String | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
+| [`dbg_frame_line(i)`](#dbg_frame_line) | Int | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
+| [`dbg_frame_file(i)`](#dbg_frame_file) | String | The file of call i (its full path) |  |
+| [`dbg_vars(i)`](#dbg_vars) | Int | How many variables call i sees: its parameters and the variables declared up to its line |  |
+| [`dbg_var_name(i, k)`](#dbg_var_name) | String | Name of variable k (from 0) of call i |  |
+| [`dbg_var_type(i, k)`](#dbg_var_type) | String | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
+| [`dbg_globals()`](#dbg_globals) | Int | How many global variables the program has |  |
+| [`dbg_global_name(g)`](#dbg_global_name) | String | Name of global g (from 0) |  |
+| [`dbg_value(i, expr)`](#dbg_value) | String | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
+| [`dbg_value_type(i, expr)`](#dbg_value_type) | String | The type of expr in call i ("" if it cannot) |  |
+| [`dbg_reg(n)`](#dbg_reg) | Int | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
+| [`dbg_peek(addr, size)`](#dbg_peek) | Int | 1, 2 or 4 bytes of memory at addr, without sign |  |
+| [`dbg_output()`](#dbg_output) | String | What the program has written so far (output and error output) |  |
+
+<a id="dbg_start"></a>
+
+### `dbg_start(program, args)` → `Bool`
+
+- `program`: the executable, compiled with `dash --debug`.
+- `args`: its arguments, as in the Shell.
+
+Loads it and leaves it paused before its first line, to set the breakpoints. Returns `false` if it could not;
+`dbg_error` says why (a program without `--debug`, for instance).
+
+See also: [`dbg_break`](#dbg_break), [`dbg_continue`](#dbg_continue), [`dbg_error`](#dbg_error).
+
+<a id="dbg_error"></a>
+
+### `dbg_error()` → `String`
+
+Returns why the last `dbg_start` failed.
+
+See also: [`dbg_start`](#dbg_start).
+
+<a id="dbg_state"></a>
+
+### `dbg_state()` → `Int`
+
+Returns the program's state: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 finished.
+
+See also: [`dbg_wait`](#dbg_wait).
+
+<a id="dbg_signal"></a>
+
+### `dbg_signal()` → `Int`
+
+Returns the signal the debugger gets when the program stops or ends, for `mui_wait_event_signals`.
+
+See also: [`dbg_wait`](#dbg_wait), [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="dbg_wait"></a>
+
+### `dbg_wait(ms)` → `Int`
+
+- `ms`: the longest to wait; 0 no limit.
+
+Waits for the program to stop or end and returns its state, like `dbg_state`.
+
+See also: [`dbg_state`](#dbg_state).
+
+<a id="dbg_break"></a>
+
+### `dbg_break(file, line)` → `Bool`
+
+- `file`: the file, by the end of its path: `"game.dash"`.
+- `line`: the line.
+
+Sets a breakpoint. Returns `false` if that line has no code (a comment, an empty line).
+
+See also: [`dbg_unbreak`](#dbg_unbreak), [`dbg_continue`](#dbg_continue).
+
+<a id="dbg_unbreak"></a>
+
+### `dbg_unbreak(file, line)` → `Bool`
+
+- `file`, `line`: as in `dbg_break`.
+
+Removes that breakpoint.
+
+See also: [`dbg_break`](#dbg_break).
+
+<a id="dbg_continue"></a>
+
+### `dbg_continue()` → `Bool`
+
+Carries on, from the start or a stop, until a breakpoint or the end. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step), [`dbg_wait`](#dbg_wait).
+
+<a id="dbg_step"></a>
+
+### `dbg_step()` → `Bool`
+
+Carries on to the next line, stepping into the functions it calls. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_next`](#dbg_next), [`dbg_out`](#dbg_out).
+
+<a id="dbg_next"></a>
+
+### `dbg_next()` → `Bool`
+
+Carries on to the next line of this function, without stepping into those it calls (or to its caller if it ends). Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step).
+
+<a id="dbg_out"></a>
+
+### `dbg_out()` → `Bool`
+
+Carries on until the function returns: the next line of its caller. Returns `false` if there is no paused or stopped program. It does not wait: `dbg_wait`.
+
+See also: [`dbg_step`](#dbg_step).
+
+<a id="dbg_pause"></a>
+
+### `dbg_pause()` → `Bool`
+
+Stops the running program at the next line it executes. Returns `false` if it was not running.
+
+See also: [`dbg_continue`](#dbg_continue).
+
+<a id="dbg_end"></a>
+
+### `dbg_end(ms)` → `Bool`
+
+- `ms`: the longest to wait.
+
+Ends the program: it sends Ctrl-C and, at its next line, it exits with its usual cleanup. Returns `true` if it ended
+in time.
+
+See also: [`dbg_rc`](#dbg_rc).
+
+<a id="dbg_rc"></a>
+
+### `dbg_rc()` → `Int`
+
+Returns the finished program's return code.
+
+See also: [`dbg_output`](#dbg_output).
+
+<a id="dbg_file"></a>
+
+### `dbg_file()` → `String`
+
+Returns the file, with its full path, of the line where it stopped.
+
+See also: [`dbg_line`](#dbg_line).
+
+<a id="dbg_line"></a>
+
+### `dbg_line()` → `Int`
+
+Returns the line where it stopped; 0 if it is not stopped.
+
+See also: [`dbg_file`](#dbg_file), [`dbg_function`](#dbg_function).
+
+<a id="dbg_function"></a>
+
+### `dbg_function()` → `String`
+
+Returns the function where it stopped: `"Main"`, `"Point.move"`.
+
+See also: [`dbg_frames`](#dbg_frames).
+
+<a id="dbg_frames"></a>
+
+### `dbg_frames()` → `Int`
+
+Returns how many calls are open where it stopped: 1 in `Main`, 2 in a function `Main` called...; 0 if not stopped.
+
+See also: [`dbg_frame_function`](#dbg_frame_function).
+
+<a id="dbg_frame_function"></a>
+
+### `dbg_frame_function(i)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns that call's function.
+
+See also: [`dbg_frame_line`](#dbg_frame_line).
+
+<a id="dbg_frame_line"></a>
+
+### `dbg_frame_line(i)` → `Int`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns the line that call is at.
+
+See also: [`dbg_frame_file`](#dbg_frame_file).
+
+<a id="dbg_frame_file"></a>
+
+### `dbg_frame_file(i)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns that call's file, with its full path.
+
+See also: [`dbg_frame_line`](#dbg_frame_line).
+
+<a id="dbg_vars"></a>
+
+### `dbg_vars(i)` → `Int`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+
+Returns how many variables it sees: its parameters and those declared before its line.
+
+See also: [`dbg_var_name`](#dbg_var_name), [`dbg_value`](#dbg_value).
+
+<a id="dbg_var_name"></a>
+
+### `dbg_var_name(i, k)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `k`: the variable, from 0.
+
+Returns its name.
+
+See also: [`dbg_var_type`](#dbg_var_type).
+
+<a id="dbg_var_type"></a>
+
+### `dbg_var_type(i, k)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `k`: the variable.
+
+Returns its type as written in Dash: `"Int"`, `"[String]"`, `"Point"`.
+
+See also: [`dbg_var_name`](#dbg_var_name).
+
+<a id="dbg_globals"></a>
+
+### `dbg_globals()` → `Int`
+
+Returns how many global variables the program has.
+
+See also: [`dbg_global_name`](#dbg_global_name).
+
+<a id="dbg_global_name"></a>
+
+### `dbg_global_name(g)` → `String`
+
+- `g`: the global, from 0.
+
+Returns its name.
+
+See also: [`dbg_globals`](#dbg_globals).
+
+<a id="dbg_value"></a>
+
+### `dbg_value(i, expr)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `expr`: a variable of that call or a global, with `.field` and `[n]` after it: `"p.children[0].x"`.
+
+Returns its value as a text: `3`, `"hello"`, `Point(x: 3, y: 4)`, `[1, 2]`, `nil`. If it cannot, `"? "` and why.
+
+See also: [`dbg_value_type`](#dbg_value_type), [`dbg_vars`](#dbg_vars).
+
+<a id="dbg_value_type"></a>
+
+### `dbg_value_type(i, expr)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `expr`: as in `dbg_value`.
+
+Returns its type; `""` if it cannot.
+
+See also: [`dbg_value`](#dbg_value).
+
+<a id="dbg_reg"></a>
+
+### `dbg_reg(n)` → `Int`
+
+- `n`: 0 to 7 registers d0 to d7, 8 to 15 a0 to a7, 16 the program counter.
+
+Returns that register of the stopped program.
+
+See also: [`dbg_peek`](#dbg_peek).
+
+<a id="dbg_peek"></a>
+
+### `dbg_peek(addr, size)` → `Int`
+
+- `addr`: the address.
+- `size`: 1, 2 or 4 bytes.
+
+Returns what is in memory, unsigned.
+
+See also: [`dbg_reg`](#dbg_reg).
+
+<a id="dbg_output"></a>
+
+### `dbg_output()` → `String`
+
+Returns everything the program has written so far, its output and its errors.
+
+See also: [`dbg_rc`](#dbg_rc).
+
+<a id="imgdec_functions"></a>
 
 ## Pictures decoded by the program (no datatypes)
 
+Decoding JPEG, WebP, PNG, GIF, BMP and SVG with the program's own code, without datatypes: it works on any Amiga.
+The result is RGB or RGBA pixels in memory (`image_decoded_*`); `image_from_decoded` turns them into a picture for
+`image_draw`. Decoding a big picture takes time: `image_decode_start` does it in another process so the window keeps
+responding.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
-| `image_decode_start(file, maxw, maxh)` | `LONG` | image_decode in a process of its own, one below the program's priority, so the window goes on answering: a number for image_decode_ready and image_decode_finish, or 0 if it could not start |  |
-| `image_decode_ready(t)` | `BOOL` | True when an image_decode_start has finished (it does not wait) |  |
-| `image_decode_finish(t)` | `LONG` | What an image_decode_start decoded, as image_decode (0 if it could not); it waits if it is still running, and frees its process |  |
-| `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
-| `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
-| `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
-| `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
-| `image_decoded_free(d)` | `void` | Free a decoded picture |  |
-| `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
-| `image_from_decoded_size(d, w, h)` | `LONG` | As image_from_decoded, made w x h first with smooth edges (each pixel the average of the ones it covers, alpha too); the decoded picture is still to be freed |  |
+| [`image_decode(file, maxw, maxh)`](#image_decode) | Int | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| [`image_decode_start(file, maxw, maxh)`](#image_decode_start) | Int | image_decode in a process of its own, one below the program's priority, so the window goes on answering: a number for image_decode_ready and image_decode_finish, or 0 if it could not start |  |
+| [`image_decode_ready(t)`](#image_decode_ready) | Bool | True when an image_decode_start has finished (it does not wait) |  |
+| [`image_decode_finish(t)`](#image_decode_finish) | Int | What an image_decode_start decoded, as image_decode (0 if it could not); it waits if it is still running, and frees its process |  |
+| [`image_decoded_width(d)`](#image_decoded_width) | Int | Width of a decoded picture |  |
+| [`image_decoded_height(d)`](#image_decoded_height) | Int | Height of a decoded picture |  |
+| [`image_decoded_alpha(d)`](#image_decoded_alpha) | Bool | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
+| [`image_decoded_pixels(d)`](#image_decoded_pixels) | Int (address) | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
+| [`image_decoded_free(d)`](#image_decoded_free) | — | Free a decoded picture |  |
+| [`image_from_decoded(d)`](#image_from_decoded) | Int | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
+| [`image_from_decoded_size(d, w, h)`](#image_from_decoded_size) | Int | As image_from_decoded, made w x h first with smooth edges (each pixel the average of the ones it covers, alpha too); the decoded picture is still to be freed |  |
+
+<a id="image_decode"></a>
+
+### `image_decode(file, maxw, maxh)` → `Int`
+
+- `file`: the picture: JPEG, WebP, PNG, GIF, BMP or SVG.
+- `maxw`, `maxh`: the maximum size; it is reduced until it is not much bigger. 0, 0 = its own size.
+
+Returns the decoded picture, or 0 if it cannot. Read it with `image_decoded_*` and free it with
+`image_decoded_free`.
+
+See also: [`image_decode_start`](#image_decode_start), [`image_from_decoded`](#image_from_decoded), [`image_decoded_free`](#image_decoded_free).
+
+<a id="image_decode_start"></a>
+
+### `image_decode_start(file, maxw, maxh)` → `Int`
+
+- `file`, `maxw`, `maxh`: as in `image_decode`.
+
+Starts decoding in another process and returns at once. Returns a number for `image_decode_ready` and
+`image_decode_finish`, or 0 if it could not start.
+
+See also: [`image_decode_ready`](#image_decode_ready), [`image_decode_finish`](#image_decode_finish).
+
+<a id="image_decode_ready"></a>
+
+### `image_decode_ready(t)` → `Bool`
+
+- `t`: the number from `image_decode_start`.
+
+Returns `true` once it has finished, without waiting.
+
+See also: [`image_decode_finish`](#image_decode_finish).
+
+<a id="image_decode_finish"></a>
+
+### `image_decode_finish(t)` → `Int`
+
+- `t`: the number from `image_decode_start`.
+
+Returns the decoded picture, like `image_decode`, or 0. If it has not finished, it waits. Always call it: it frees
+the process.
+
+See also: [`image_decode_start`](#image_decode_start).
+
+<a id="image_decoded_width"></a>
+
+### `image_decoded_width(d)` → `Int`
+
+- `d`: the decoded picture.
+
+Returns its width in pixels.
+
+See also: [`image_decoded_height`](#image_decoded_height).
+
+<a id="image_decoded_height"></a>
+
+### `image_decoded_height(d)` → `Int`
+
+- `d`: the decoded picture.
+
+Returns its height in pixels.
+
+See also: [`image_decoded_width`](#image_decoded_width).
+
+<a id="image_decoded_alpha"></a>
+
+### `image_decoded_alpha(d)` → `Bool`
+
+- `d`: the decoded picture.
+
+Returns `true` if it has transparency: 4 bytes per pixel (RGBA); otherwise 3 (RGB).
+
+See also: [`image_decoded_pixels`](#image_decoded_pixels).
+
+<a id="image_decoded_pixels"></a>
+
+### `image_decoded_pixels(d)` → `Int (address)`
+
+- `d`: the decoded picture.
+
+Returns the address of its pixels, row after row, for `buffer_get_byte` or `image_from_rgb`. It lives until `image_decoded_free`.
+
+See also: [`image_decoded_alpha`](#image_decoded_alpha).
+
+<a id="image_decoded_free"></a>
+
+### `image_decoded_free(d)`
+
+- `d`: the decoded picture.
+
+Frees it.
+
+See also: [`image_decode`](#image_decode).
+
+<a id="image_from_decoded"></a>
+
+### `image_from_decoded(d)` → `Int`
+
+- `d`: the decoded picture.
+
+Returns a picture for `image_draw` with its pixels, or 0. Both are freed separately.
+
+See also: [`image_from_decoded_size`](#image_from_decoded_size), [`image_from_rgb`](#image_from_rgb).
+
+<a id="image_from_decoded_size"></a>
+
+### `image_from_decoded_size(d, w, h)` → `Int`
+
+- `d`: the decoded picture.
+- `w`, `h`: the new picture's size.
+
+Like `image_from_decoded`, at that size and with smooth edges: each point is the average of those it covers.
+
+See also: [`image_from_decoded`](#image_from_decoded).
+
+<a id="ttf_functions"></a>
 
 ## TrueType, WOFF and WOFF2 fonts
 
+TrueType fonts (TTF, OTF with TrueType outlines, WOFF and WOFF2) turned into an Amiga font of one size, with their
+Latin-1 characters. You write with them via `font_use` like any other. Tachyon uses them for web page fonts.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
-| `font_ttf_icon(file, size, code)` | `LONG` | A font of the file whose "A" is the character code (an icon of a web font, in Unicode's private area) at size pixels, the other letters empty: draw "A" with it; 0 if it cannot |  |
-| `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
-| `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
+| [`font_from_ttf(file, size, width)`](#font_from_ttf) | Int | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
+| [`font_ttf_icon(file, size, code)`](#font_ttf_icon) | Int | A font of the file whose "A" is the character code (an icon of a web font, in Unicode's private area) at size pixels, the other letters empty: draw "A" with it; 0 if it cannot |  |
+| [`font_ttf_free(font)`](#font_ttf_free) | — | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
+| [`font_ttf_forget(file)`](#font_ttf_forget) | — | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
+
+<a id="font_from_ttf"></a>
+
+### `font_from_ttf(file, size, width)` → `Int`
+
+- `file`: the font file.
+- `size`: the size in pixels.
+- `width`: the width as a percentage of the normal one; 0 = 100.
+
+Returns a font with its Latin-1 characters at that size, for `font_use`, or 0 if it cannot. Free it with
+`font_ttf_free`.
+
+See also: [`font_use`](#font_use), [`font_ttf_free`](#font_ttf_free).
+
+<a id="font_ttf_icon"></a>
+
+### `font_ttf_icon(file, size, code)` → `Int`
+
+- `file`: an icon font (the kind web pages use).
+- `size`: the size.
+- `code`: the icon's Unicode code.
+
+Returns a font whose letter "A" is that icon: you draw it by writing "A" with it. 0 if it cannot.
+
+See also: [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_ttf_free"></a>
+
+### `font_ttf_free(font)`
+
+- `font`: a `font_from_ttf` font.
+
+Frees it. Not while a window is still writing with it.
+
+See also: [`font_from_ttf`](#font_from_ttf).
+
+<a id="font_ttf_forget"></a>
+
+### `font_ttf_forget(file)`
+
+- `file`: the file.
+
+`font_from_ttf` keeps the last 8 files in memory to make other sizes without reading them again; this forgets that
+one. For when the file has changed.
+
+See also: [`font_from_ttf`](#font_from_ttf).
+
+<a id="netbg_functions"></a>
 
 ## Network in a task of its own
 
+Connections opened and served by a task of Dash's own, while the program draws or waits for the user: up to 48 at
+once, with or without TLS. The program asks for the connection (`net_bg_open`), leaves what it wants to send
+(`net_bg_send`) and picks up what arrives whenever it likes (`net_bg_recv`), never waiting. `task_signal` wakes the
+program when something arrives. That is how Tachyon loads a page's pictures.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `net_bg_open(host, port, timeout_ms)` | `LONG` | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
-| `net_bg_open_tls(host, port, timeout_ms)` | `LONG` | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
-| `net_bg_state(c)` | `LONG` | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
-| `net_bg_stage(c)` | `LONG` | While connecting, its stage, as net_connect_stage |  |
-| `net_bg_error(c)` | `STRPTR` | Why a connection failed or closed, "" if it did not |  |
-| `net_bg_send(c, text)` | `BOOL` | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
-| `net_bg_send_buffer(c, buffer, n)` | `BOOL` | net_bg_send of n bytes of a buffer |  |
-| `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
-| `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
-| `net_bg_close(c)` | `void` | Close a connection and free its number |  |
-| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000; a connection the program keeps reading, waiting for an answer, counts as traffic); another starts when needed |  |
-| `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
+| [`net_bg_open(host, port, timeout_ms)`](#net_bg_open) | Int | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
+| [`net_bg_open_tls(host, port, timeout_ms)`](#net_bg_open_tls) | Int | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
+| [`net_bg_state(c)`](#net_bg_state) | Int | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
+| [`net_bg_stage(c)`](#net_bg_stage) | Int | While connecting, its stage, as net_connect_stage |  |
+| [`net_bg_error(c)`](#net_bg_error) | String | Why a connection failed or closed, "" if it did not |  |
+| [`net_bg_send(c, text)`](#net_bg_send) | Bool | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
+| [`net_bg_send_buffer(c, buffer, n)`](#net_bg_send_buffer) | Bool | net_bg_send of n bytes of a buffer |  |
+| [`net_bg_recv(c, buffer, max)`](#net_bg_recv) | Int | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
+| [`net_bg_pending(c)`](#net_bg_pending) | Int | How many bytes have come and are not read yet |  |
+| [`net_bg_close(c)`](#net_bg_close) | — | Close a connection and free its number |  |
+| [`net_bg_idle(ms)`](#net_bg_idle) | — | The task ends by itself after this many ms without traffic (2000; a connection the program keeps reading, waiting for an answer, counts as traffic); another starts when needed |  |
+| [`net_bg_stop()`](#net_bg_stop) | — | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
+
+<a id="net_bg_open"></a>
+
+### `net_bg_open(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: as in `net_connect`.
+
+Asks the network task for a connection, which it opens on its own. Returns its number (up to 48 at once), or -1.
+`net_bg_state` says how it is going.
+
+See also: [`net_bg_state`](#net_bg_state), [`net_bg_send`](#net_bg_send), [`net_bg_recv`](#net_bg_recv), [`net_bg_open_tls`](#net_bg_open_tls).
+
+<a id="net_bg_open_tls"></a>
+
+### `net_bg_open_tls(host, port, timeout_ms)` → `Int`
+
+- `host`, `port`, `timeout_ms`: as in `net_connect`.
+
+Like `net_bg_open`, with TLS and its certificate checked.
+
+See also: [`net_bg_open`](#net_bg_open).
+
+<a id="net_bg_state"></a>
+
+### `net_bg_state(c)` → `Int`
+
+- `c`: the connection's number.
+
+Returns how it is going: 1 requested, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (`net_bg_error` says which).
+
+See also: [`net_bg_error`](#net_bg_error), [`net_bg_stage`](#net_bg_stage).
+
+<a id="net_bg_stage"></a>
+
+### `net_bg_stage(c)` → `Int`
+
+- `c`: the connection's number.
+
+While connecting, which stage it is at, like `net_connect_stage`.
+
+See also: [`net_bg_state`](#net_bg_state).
+
+<a id="net_bg_error"></a>
+
+### `net_bg_error(c)` → `String`
+
+- `c`: the connection's number.
+
+Returns why it failed or closed, or `""`.
+
+See also: [`net_bg_state`](#net_bg_state).
+
+<a id="net_bg_send"></a>
+
+### `net_bg_send(c, text)` → `Bool`
+
+- `c`: the connection's number.
+- `text`: what to send.
+
+Queues it: the task sends it as soon as the connection is open. Returns `false` without memory.
+
+See also: [`net_bg_recv`](#net_bg_recv).
+
+<a id="net_bg_send_buffer"></a>
+
+### `net_bg_send_buffer(c, buffer, n)` → `Bool`
+
+- `c`: the connection's number.
+- `buffer`, `n`: the bytes.
+
+Like `net_bg_send`, with binary data.
+
+See also: [`net_bg_send`](#net_bg_send).
+
+<a id="net_bg_recv"></a>
+
+### `net_bg_recv(c, buffer, max)` → `Int`
+
+- `c`: the connection's number.
+- `buffer`: where.
+- `max`: how many bytes at most.
+
+Copies whatever has arrived, without waiting. Returns how many bytes, 0 if nothing yet, -1 if it is closed and
+nothing is left.
+
+See also: [`net_bg_pending`](#net_bg_pending), [`task_signal`](#task_signal).
+
+<a id="net_bg_pending"></a>
+
+### `net_bg_pending(c)` → `Int`
+
+- `c`: the connection's number.
+
+Returns how many bytes have arrived and not been read yet.
+
+See also: [`net_bg_recv`](#net_bg_recv).
+
+<a id="net_bg_close"></a>
+
+### `net_bg_close(c)`
+
+- `c`: the connection's number.
+
+Closes the connection and frees its number.
+
+See also: [`net_bg_open`](#net_bg_open).
+
+<a id="net_bg_idle"></a>
+
+### `net_bg_idle(ms)`
+
+- `ms`: how many milliseconds without traffic; 2000 if not set.
+
+The network task ends by itself after that long with nothing to do, and starts again when needed.
+
+See also: [`net_bg_stop`](#net_bg_stop).
+
+<a id="net_bg_stop"></a>
+
+### `net_bg_stop()`
+
+Ends the network task now, closing whatever is open, and waits for it. It happens on its own when the program ends.
+
+See also: [`net_bg_idle`](#net_bg_idle).
+
+<a id="otherwin_functions"></a>
 
 ## Other programs' windows (tests)
 
+Finding another program's window by its title, bringing it to the front, finding out where its gadgets are and
+reading the screen's colours. With the `input_*` functions, to drive another program as the user would.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `window_find(title)` | `LONG` | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
-| `window_found_activate(win)` | `void` | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
-| `window_found_box(win, what)` | `LONG` | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
-| `gadget_index(win, text)` | `LONG` | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
-| `gadget_x(win, n)` | `LONG` | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
-| `gadget_y(win, n)` | `LONG` | y of the centre of that gadget, as gadget_x |  |
-| `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
-| `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
-| `screen_pixel_rgb(x, y)` | `LONG` | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
-| `screen_pen_rgb(n)` | `LONG` | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
-| `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+| [`window_find(title)`](#window_find) | Int | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
+| [`window_found_activate(win)`](#window_found_activate) | — | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
+| [`window_found_box(win, what)`](#window_found_box) | Int | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
+| [`gadget_index(win, text)`](#gadget_index) | Int | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
+| [`gadget_x(win, n)`](#gadget_x) | Int | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
+| [`gadget_y(win, n)`](#gadget_y) | Int | y of the centre of that gadget, as gadget_x |  |
+| [`gadget_selected(win, n)`](#gadget_selected) | Bool | True if the gadget at place n (a checkbox) is selected |  |
+| [`screen_pixel(x, y)`](#screen_pixel) | Int | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
+| [`screen_pixel_rgb(x, y)`](#screen_pixel_rgb) | Int | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
+| [`screen_pen_rgb(n)`](#screen_pen_rgb) | Int | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
+| [`cx_send(name, command)`](#cx_send) | Int | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+
+<a id="window_find"></a>
+
+### `window_find(title)` → `Int`
+
+- `title`: the start of the title.
+
+Looks, on every screen, for the window whose title starts like that (the program's or another's). Returns a number
+for `window_found_*` and `gadget_*`, or 0. It stops being valid if that window closes.
+
+See also: [`window_found_activate`](#window_found_activate), [`gadget_index`](#gadget_index).
+
+<a id="window_found_activate"></a>
+
+### `window_found_activate(win)`
+
+- `win`: the window from `window_find`.
+
+Brings it to the front, with its screen, and makes it active: the `input_*` functions go to it.
+
+See also: [`window_find`](#window_find).
+
+<a id="window_found_box"></a>
+
+### `window_found_box(win, what)` → `Int`
+
+- `win`: the window from `window_find`.
+- `what`: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border.
+
+See also: [`window_find`](#window_find).
+
+<a id="gadget_index"></a>
+
+### `gadget_index(win, text)` → `Int`
+
+- `win`: the window from `window_find`.
+- `text`: the gadget's text.
+
+Returns its place in the window, from 0, or -1. GadTools buttons do not keep their text: find a neighbour that does
+and count from it.
+
+See also: [`gadget_x`](#gadget_x), [`gadget_selected`](#gadget_selected).
+
+<a id="gadget_x"></a>
+
+### `gadget_x(win, n)` → `Int`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns the x of its centre, from the window's corner, as `input_click` wants it; -1 if none.
+
+See also: [`gadget_y`](#gadget_y), [`input_click`](#input_click).
+
+<a id="gadget_y"></a>
+
+### `gadget_y(win, n)` → `Int`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns the y of its centre, like `gadget_x`.
+
+See also: [`gadget_x`](#gadget_x).
+
+<a id="gadget_selected"></a>
+
+### `gadget_selected(win, n)` → `Bool`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns `true` if it is ticked (a checkbox).
+
+See also: [`gadget_index`](#gadget_index).
+
+<a id="screen_pixel"></a>
+
+### `screen_pixel(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns the colour number of that pixel of the front screen; -1 outside it.
+
+See also: [`screen_pixel_rgb`](#screen_pixel_rgb).
+
+<a id="screen_pixel_rgb"></a>
+
+### `screen_pixel_rgb(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns that pixel's colour on the front screen as `0xRRGGBB`, whoever painted it; -1 outside it.
+
+See also: [`screen_pixel`](#screen_pixel).
+
+<a id="screen_pen_rgb"></a>
+
+### `screen_pen_rgb(n)` → `Int`
+
+- `n`: the Workbench pen: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text,
+  7 background, 8 highlighted text, 9 to 11 the bar's.
+
+Returns its colour as `0xRRGGBB`, or -1 if there is no such pen. So a program can look like the Workbench.
+
+See also: [`color_pen`](#color_pen).
+
+<a id="cx_send"></a>
+
+### `cx_send(name, command)` → `Int`
+
+- `name`: the commodity's name.
+- `command`: as Exchange does: 15 disable, 17 enable, 19 show, 21 hide, 23 quit.
+
+Returns 0 if done, -1 if there is no such commodity, -2 if it has no port, -99 without `commodities.library`.
+
+<a id="wm_functions"></a>
 
 ## Window manager (every program's windows)
 
+What a window manager or a task bar (Trasfondo, for instance) needs: the list of windows on the Workbench screen
+with their program and size, moving them, bringing them to the front, and Workbench icons, to draw them or to get
+those dropped on a window.
+
+`wm_read` takes a snapshot of the windows, front to back; the other `wm_*` functions give each one by number, from
+0. To change them you use their id (`wm_id`), which stays valid even if the order changes.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `wm_read()` | `LONG` | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
-| `wm_id(i)` | `LONG` | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
-| `wm_title(i)` | `STRPTR` | The title of window i of the last wm_read ("" if it has none) |  |
-| `wm_task(i)` | `STRPTR` | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
-| `wm_path(i)` | `STRPTR` | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
-| `wm_box(i, what)` | `LONG` | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
-| `wm_flags(i)` | `LONG` | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
-| `wm_set_box(id, x, y, width, height)` | `BOOL` | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
-| `wm_front(id)` | `BOOL` | A window in front of the others; false if it is not open any more |  |
-| `wm_back(id)` | `BOOL` | A window behind the others; false if it is not open any more |  |
-| `wm_activate(id)` | `BOOL` | Make a window the active one (keys go to it); false if it is not open any more |  |
-| `wm_zip(id)` | `BOOL` | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
-| `wm_active()` | `LONG` | The id of the active window, if it is on the Workbench screen; 0 if not |  |
-| `wm_at(x, y)` | `LONG` | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
-| `wm_pointer_x()` | `LONG` | Where the pointer is on the Workbench screen: x |  |
-| `wm_pointer_y()` | `LONG` | Where the pointer is on the Workbench screen: y |  |
-| `wm_bar_height()` | `LONG` | The height of the Workbench screen's title bar (where windows usually start) |  |
-| `wm_bar_gadgets()` | `LONG` | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
-| `file_real_path(path)` | `STRPTR` | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
-| `app_window(handle)` | `BOOL` | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
-| `app_drop()` | `STRPTR` | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
-| `app_drop_x()` | `LONG` | Where the last icon of app_drop fell: x from the window's corner |  |
-| `app_drop_y()` | `LONG` | Where the last icon of app_drop fell: y from the window's corner |  |
-| `icon_load(path)` | `LONG` | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
-| `icon_draw(icon, x, y)` | `void` | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
-| `icon_draw_size(icon, x, y, width, height)` | `void` | Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on a true colour screen; on others, at its size, centred in that box) |  |
-| `icon_width(icon)` | `LONG` | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
-| `icon_height(icon)` | `LONG` | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
-| `icon_free(icon)` | `void` | Frees an icon of icon_load (the ones left, at exit) |  |
+| [`wm_read()`](#wm_read) | Int | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
+| [`wm_id(i)`](#wm_id) | Int | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
+| [`wm_title(i)`](#wm_title) | String | The title of window i of the last wm_read ("" if it has none) |  |
+| [`wm_task(i)`](#wm_task) | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
+| [`wm_path(i)`](#wm_path) | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
+| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
+| [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
+| [`wm_front(id)`](#wm_front) | Bool | A window in front of the others; false if it is not open any more |  |
+| [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
+| [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
+| [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_active()`](#wm_active) | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
+| [`wm_at(x, y)`](#wm_at) | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
+| [`wm_pointer_x()`](#wm_pointer_x) | Int | Where the pointer is on the Workbench screen: x |  |
+| [`wm_pointer_y()`](#wm_pointer_y) | Int | Where the pointer is on the Workbench screen: y |  |
+| [`wm_bar_height()`](#wm_bar_height) | Int | The height of the Workbench screen's title bar (where windows usually start) |  |
+| [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
+| [`file_real_path(path)`](#file_real_path) | String | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
+| [`app_window(handle)`](#app_window) | Bool | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
+| [`app_drop()`](#app_drop) | String | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
+| [`app_drop_x()`](#app_drop_x) | Int | Where the last icon of app_drop fell: x from the window's corner |  |
+| [`app_drop_y()`](#app_drop_y) | Int | Where the last icon of app_drop fell: y from the window's corner |  |
+| [`icon_load(path)`](#icon_load) | Int | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
+| [`icon_draw(icon, x, y)`](#icon_draw) | — | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
+| [`icon_draw_size(icon, x, y, width, height)`](#icon_draw_size) | — | Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on a true colour screen; on others, at its size, centred in that box) |  |
+| [`icon_width(icon)`](#icon_width) | Int | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| [`icon_height(icon)`](#icon_height) | Int | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| [`icon_free(icon)`](#icon_free) | — | Frees an icon of icon_load (the ones left, at exit) |  |
+
+<a id="wm_read"></a>
+
+### `wm_read()` → `Int`
+
+Reads the Workbench screen's windows, front to back, up to 64, and returns how many.
+
+See also: [`wm_id`](#wm_id), [`wm_title`](#wm_title).
+
+<a id="wm_id"></a>
+
+### `wm_id(i)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its id, for `wm_set_box`, `wm_front` and the rest; 0 outside the list.
+
+See also: [`wm_read`](#wm_read).
+
+<a id="wm_title"></a>
+
+### `wm_title(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its title, or `""`.
+
+See also: [`wm_task`](#wm_task).
+
+<a id="wm_task"></a>
+
+### `wm_task(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its program: a Shell process's command, without the path, or its task's name (`"Workbench"`).
+
+See also: [`wm_path`](#wm_path).
+
+<a id="wm_path"></a>
+
+### `wm_path(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns the path of that window's program; `""` if it is not a process's or it has closed.
+
+See also: [`file_real_path`](#file_real_path).
+
+<a id="wm_box"></a>
+
+### `wm_box(i, what)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit).
+
+Returns that value, or -1 outside the list.
+
+See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_flags"></a>
+
+### `wm_flags(i)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns, added up: 1 resizable, 2 backdrop, 4 borderless, 8 active, 16 with a drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_set_box"></a>
+
+### `wm_set_box(id, x, y, width, height)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+- `x`, `y`, `width`, `height`: the new box.
+
+Moves and resizes the window, within its limits and its screen. Returns `false` if it is gone.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_front"></a>
+
+### `wm_front(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Brings it to the front. Returns `false` if it is gone.
+
+See also: [`wm_back`](#wm_back).
+
+<a id="wm_back"></a>
+
+### `wm_back(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Sends it to the back. Returns `false` if it is gone.
+
+See also: [`wm_front`](#wm_front).
+
+<a id="wm_activate"></a>
+
+### `wm_activate(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Makes it active: keys go to it. Returns `false` if it is gone.
+
+See also: [`wm_active`](#wm_active).
+
+<a id="wm_zip"></a>
+
+### `wm_zip(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Switches it to its other size, like its zoom button. Returns `false` if it is gone.
+
+See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_active"></a>
+
+### `wm_active()` → `Int`
+
+Returns the active window's id if it is on the Workbench screen; 0 otherwise.
+
+See also: [`wm_activate`](#wm_activate).
+
+<a id="wm_at"></a>
+
+### `wm_at(x, y)` → `Int`
+
+- `x`, `y`: a point on the Workbench screen.
+
+Returns the id of the front window at that point; 0 if none.
+
+See also: [`wm_pointer_x`](#wm_pointer_x).
+
+<a id="wm_pointer_x"></a>
+
+### `wm_pointer_x()` → `Int`
+
+Returns the pointer's x on the Workbench screen.
+
+See also: [`wm_pointer_y`](#wm_pointer_y).
+
+<a id="wm_pointer_y"></a>
+
+### `wm_pointer_y()` → `Int`
+
+Returns the pointer's y on the Workbench screen.
+
+See also: [`wm_pointer_x`](#wm_pointer_x).
+
+<a id="wm_bar_height"></a>
+
+### `wm_bar_height()` → `Int`
+
+Returns the height of the Workbench screen's title bar, where windows usually start.
+
+<a id="wm_bar_gadgets"></a>
+
+### `wm_bar_gadgets()` → `Int`
+
+Returns how far from the right edge of the screen's bar its system buttons start; 0 if unknown.
+
+<a id="file_real_path"></a>
+
+### `file_real_path(path)` → `String`
+
+- `path`: a file or drawer.
+
+Returns its real path, with the volume's name (`"SYS:Utilities/Clock"` gives `"System:Utilities/Clock"`), to compare with `wm_path`; `""` if it does not exist.
+
+See also: [`wm_path`](#wm_path).
+
+<a id="app_window"></a>
+
+### `app_window(handle)` → `Bool`
+
+- `handle`: the window: 0 the current one, or a `window_create` number.
+
+Makes it accept icons dropped from the Workbench. Returns `true` if it does. The paths come with `app_drop`.
+
+See also: [`app_drop`](#app_drop), [`mui_on_drop`](#mui_on_drop).
+
+<a id="app_drop"></a>
+
+### `app_drop()` → `String`
+
+Returns the path of the next icon dropped on an `app_window`, or `""` if none; check it from an `On Timer`. Several icons come one by one.
+
+See also: [`app_drop_x`](#app_drop_x), [`app_window`](#app_window).
+
+<a id="app_drop_x"></a>
+
+### `app_drop_x()` → `Int`
+
+Returns the x where the last icon landed, from the window's corner.
+
+See also: [`app_drop_y`](#app_drop_y).
+
+<a id="app_drop_y"></a>
+
+### `app_drop_y()` → `Int`
+
+Returns the y where the last icon landed.
+
+See also: [`app_drop_x`](#app_drop_x).
+
+<a id="icon_load"></a>
+
+### `icon_load(path)` → `Int`
+
+- `path`: the program, drawer or file, without `.info`.
+
+Loads its icon with the colours of the window's screen (with AmigaOS 3.5 or later, colour and PNG icons too, and its
+type's icon if it has none). Returns a number for `icon_draw`, or 0.
+
+See also: [`icon_draw`](#icon_draw), [`icon_free`](#icon_free).
+
+<a id="icon_draw"></a>
+
+### `icon_draw(icon, x, y)`
+
+- `icon`: the icon from `icon_load`.
+- `x`, `y`: its corner.
+
+Draws it like the Workbench, without a name or frame.
+
+See also: [`icon_draw_size`](#icon_draw_size).
+
+<a id="icon_draw_size"></a>
+
+### `icon_draw_size(icon, x, y, width, height)`
+
+- `icon`: the icon from `icon_load`.
+- `x`, `y`, `width`, `height`: the box.
+
+Draws it at that size with smooth edges on a true-colour screen; on others, at its own size and centred.
+
+See also: [`icon_draw`](#icon_draw).
+
+<a id="icon_width"></a>
+
+### `icon_width(icon)` → `Int`
+
+- `icon`: the icon from `icon_load`.
+
+Returns its width as `icon_draw` draws it; 0 if missing.
+
+See also: [`icon_height`](#icon_height).
+
+<a id="icon_height"></a>
+
+### `icon_height(icon)` → `Int`
+
+- `icon`: the icon from `icon_load`.
+
+Returns its height as `icon_draw` draws it; 0 if missing.
+
+See also: [`icon_width`](#icon_width).
+
+<a id="icon_free"></a>
+
+### `icon_free(icon)`
+
+- `icon`: the icon from `icon_load`.
+
+Frees it. Those left, at the end.
+
+See also: [`icon_load`](#icon_load).
+
+<a id="audio_functions"></a>
 
 ## Audio
 
+Sound with the Amiga's four channels (Paula), through the system's `audio.device`: effects (`sound_*`), ProTracker
+music (`music_*`) and tones (`tone_play`).
+
+**Channels.** There are 4, 0 to 3: 0 and 3 sound on the left, 1 and 2 on the right. Each channel plays one sound at
+a time; a new one on the same channel cuts the previous one. They are taken on the first sound and given back when
+the program ends.
+
+**Sounds.** They load from an uncompressed IFF 8SVX file (`sound_load`) or are built sample by sample
+(`sound_create` and `sound_sample`), with a number from 0 to 31. They live in chip memory. Everything is
+asynchronous: `sound_play` returns at once and the sound goes on while the program does other things.
+
+**Music.** `music_load` loads a 4-channel ProTracker module; while it plays, the channels are its own: a `sound_*`
+at the same time would clash with it. The most used effects are there (the list in the manual, section 15).
+
+**Example** (`tests/test_doc_audio.dash`, which is also a test: it runs with the others):
+
+```dash
+# Audio: un sonido hecho muestra a muestra, que suena mientras el programa sigue, y un tono.
+
+Main
+    if not sound_create(0, 800, 8000)          # una décima de segundo a 8000 muestras por segundo
+        Print "no hay memoria chip"
+        return
+    end
+    i = 0
+    while i < 800
+        sound_sample(0, i, (i % 18) * 14 - 120)     # una onda de sierra de unos 440 Hz
+        i = i + 1
+    end
+    sound_volume(0, 48)
+    sound_play(0, 0)                           # vuelve enseguida
+    Print "sonando: #{sound_playing(0)}"
+    time_delay(20)                             # el sonido dura 5 tics
+    Print "acabado: #{sound_playing(0)}"
+
+    tone_play(1, 880, 32, 200)                 # un pitido de 880 Hz, 0,2 segundos
+    time_delay(15)
+    sound_free(0)
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `sound_load(id, filename)` | `BOOL` | Load an IFF 8SVX sound (uncompressed) |  |
-| `sound_sample(id, index, value)` | `void` | Set one sample (-128..127) of a sound made with sound_create |  |
-| `sound_create(id, length, rate)` | `BOOL` | Create a silent sound in chip memory: length in samples, rate in samples per second |  |
-| `sound_free(id)` | `void` | Free sound memory |  |
-| `sound_play(id, channel)` | `void` | Play a sound once on a channel (0-3) |  |
-| `sound_stop(channel)` | `void` | Stop channel |  |
-| `sound_loop(id, channel)` | `void` | Play a sound looped on a channel (until sound_stop) |  |
-| `sound_playing(channel)` | `BOOL` | Check if channel is playing |  |
-| `sound_volume(channel, vol)` | `void` | Set channel volume (0-64) |  |
-| `sound_period(channel, period)` | `void` | Set the channel period (pitch: lower = higher) |  |
-| `music_load(filename)` | `BOOL` | Load MOD file |  |
-| `music_play()` | `void` | Start music playback |  |
-| `music_stop()` | `void` | Stop music |  |
-| `music_pause()` | `void` | Pause music |  |
-| `music_resume()` | `void` | Resume music |  |
-| `music_volume(vol)` | `void` | Set music volume (0-64) |  |
-| `music_position(pos)` | `void` | Set music position |  |
-| `music_pos()` | `LONG` | Song position the music is playing (index in the order list) |  |
-| `music_row()` | `LONG` | Pattern row the music is playing (0-63) |  |
-| `music_free()` | `void` | Free music data |  |
-| `tone_play(channel, freq, vol, duration)` | `void` | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
+| [`sound_load(id, filename)`](#sound_load) | Bool | Load an IFF 8SVX sound (uncompressed) |  |
+| [`sound_sample(id, index, value)`](#sound_sample) | — | Set one sample (-128..127) of a sound made with sound_create |  |
+| [`sound_create(id, length, rate)`](#sound_create) | Bool | Create a silent sound in chip memory: length in samples, rate in samples per second |  |
+| [`sound_free(id)`](#sound_free) | — | Free sound memory |  |
+| [`sound_play(id, channel)`](#sound_play) | — | Play a sound once on a channel (0-3) |  |
+| [`sound_stop(channel)`](#sound_stop) | — | Stop channel |  |
+| [`sound_loop(id, channel)`](#sound_loop) | — | Play a sound looped on a channel (until sound_stop) |  |
+| [`sound_playing(channel)`](#sound_playing) | Bool | Check if channel is playing |  |
+| [`sound_volume(channel, vol)`](#sound_volume) | — | Set channel volume (0-64) |  |
+| [`sound_period(channel, period)`](#sound_period) | — | Set the channel period (pitch: lower = higher) |  |
+| [`music_load(filename)`](#music_load) | Bool | Load MOD file |  |
+| [`music_play()`](#music_play) | — | Start music playback |  |
+| [`music_stop()`](#music_stop) | — | Stop music |  |
+| [`music_pause()`](#music_pause) | — | Pause music |  |
+| [`music_resume()`](#music_resume) | — | Resume music |  |
+| [`music_volume(vol)`](#music_volume) | — | Set music volume (0-64) |  |
+| [`music_position(pos)`](#music_position) | — | Set music position |  |
+| [`music_pos()`](#music_pos) | Int | Song position the music is playing (index in the order list) |  |
+| [`music_row()`](#music_row) | Int | Pattern row the music is playing (0-63) |  |
+| [`music_free()`](#music_free) | — | Free music data |  |
+| [`tone_play(channel, freq, vol, duration)`](#tone_play) | — | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
+
+<a id="sound_load"></a>
+
+### `sound_load(id, filename)` → `Bool`
+
+- `id`: the sound's number, 0 to 31.
+- `filename`: an uncompressed IFF 8SVX file.
+
+Loads it with its sample rate (8363 if it does not say). Returns `false` if it cannot be read, is compressed or
+chip memory is short.
+
+See also: [`sound_play`](#sound_play), [`sound_free`](#sound_free).
+
+<a id="sound_sample"></a>
+
+### `sound_sample(id, index, value)`
+
+- `id`: the sound's number, 0 to 31.
+- `index`: the sample, from 0.
+- `value`: its value, -128 to 127.
+
+Changes one sample of a `sound_create` sound. A wave going up and down 440 times a second sounds like an A.
+
+See also: [`sound_create`](#sound_create).
+
+<a id="sound_create"></a>
+
+### `sound_create(id, length, rate)` → `Bool`
+
+- `id`: the sound's number, 0 to 31.
+- `length`: how many samples, at least 2.
+- `rate`: how many samples a second: 8000 is fine for effects; the Amiga reaches about 28000.
+
+Creates a silent sound in chip memory, to fill with `sound_sample`. Returns `false` without memory.
+
+See also: [`sound_sample`](#sound_sample), [`sound_play`](#sound_play).
+
+<a id="sound_free"></a>
+
+### `sound_free(id)`
+
+- `id`: the sound's number, 0 to 31.
+
+Frees its memory. Not while it plays: `sound_stop` first.
+
+See also: [`sound_stop`](#sound_stop).
+
+<a id="sound_play"></a>
+
+### `sound_play(id, channel)`
+
+- `id`: the sound's number, 0 to 31.
+- `channel`: the channel, 0 to 3.
+Plays it once on that channel, at its rate, with the channel's volume. It returns at once. If the channel was
+playing, it cuts what was there.
+
+See also: [`sound_loop`](#sound_loop), [`sound_playing`](#sound_playing), [`sound_volume`](#sound_volume).
+
+<a id="sound_stop"></a>
+
+### `sound_stop(channel)`
+
+- `channel`: the channel, 0 to 3.
+
+Silences that channel.
+
+See also: [`sound_play`](#sound_play).
+
+<a id="sound_loop"></a>
+
+### `sound_loop(id, channel)`
+
+- `id`: the sound's number, 0 to 31.
+- `channel`: the channel, 0 to 3.
+
+Plays it over and over until `sound_stop`. For an engine, rain or a held note.
+
+See also: [`sound_stop`](#sound_stop), [`sound_play`](#sound_play).
+
+<a id="sound_playing"></a>
+
+### `sound_playing(channel)` → `Bool`
+
+- `channel`: the channel, 0 to 3.
+
+Returns `true` if the channel is still playing.
+
+See also: [`sound_play`](#sound_play).
+
+<a id="sound_volume"></a>
+
+### `sound_volume(channel, vol)`
+
+- `channel`: the channel, 0 to 3.
+- `vol`: 0 (silent) to 64 (full).
+
+That channel's volume, also for what is already playing.
+
+See also: [`sound_period`](#sound_period).
+
+<a id="sound_period"></a>
+
+### `sound_period(channel, period)`
+
+- `channel`: the channel, 0 to 3.
+- `period`: the period, 124 to 65535: the frequency is 3546895 divided by it on PAL. The lower, the higher the
+  pitch.
+
+Changes the pitch of what plays on the channel, without restarting it. For an engine speeding up or a siren.
+
+See also: [`sound_volume`](#sound_volume).
+
+<a id="music_load"></a>
+
+### `music_load(filename)` → `Bool`
+
+- `filename`: a 4-channel, 31-instrument ProTracker module (M.K., M!K!, FLT4, 4CHN).
+
+Loads it whole into chip memory; the previous music is freed. It does not start until `music_play`. Returns `false`
+if it cannot be read, is not that kind or does not fit.
+
+See also: [`music_play`](#music_play), [`music_free`](#music_free).
+
+<a id="music_play"></a>
+
+### `music_play()`
+
+Starts playing the music from the beginning. It silences any sounds: the channels become its own.
+
+See also: [`music_stop`](#music_stop), [`music_pause`](#music_pause).
+
+<a id="music_stop"></a>
+
+### `music_stop()`
+
+Stops the music and gives the channels back to the `sound_*` functions.
+
+See also: [`music_play`](#music_play).
+
+<a id="music_pause"></a>
+
+### `music_pause()`
+
+Silences it where it is; `music_resume` carries on from there.
+
+See also: [`music_resume`](#music_resume).
+
+<a id="music_resume"></a>
+
+### `music_resume()`
+
+Carries on playing after a `music_pause`.
+
+See also: [`music_pause`](#music_pause).
+
+<a id="music_volume"></a>
+
+### `music_volume(vol)`
+
+- `vol`: 0 to 64.
+
+The volume of the whole music, to lower it under the effects or fade it.
+
+See also: [`music_play`](#music_play).
+
+<a id="music_position"></a>
+
+### `music_position(pos)`
+
+- `pos`: the position in the song's order list, from 0; outside it, 0.
+
+While it plays, jumps there, to the start of the pattern: to switch sections in a game (the menu's, the level's).
+`music_play` always starts from the beginning.
+
+See also: [`music_pos`](#music_pos), [`music_row`](#music_row).
+
+<a id="music_pos"></a>
+
+### `music_pos()` → `Int`
+
+Returns the position in the order list playing now.
+
+See also: [`music_row`](#music_row), [`music_position`](#music_position).
+
+<a id="music_row"></a>
+
+### `music_row()` → `Int`
+
+Returns the pattern row playing, 0 to 63. To sync something with the music.
+
+See also: [`music_pos`](#music_pos).
+
+<a id="music_free"></a>
+
+### `music_free()`
+
+Stops the music if it was playing and frees its memory.
+
+See also: [`music_load`](#music_load).
+
+<a id="tone_play"></a>
+
+### `tone_play(channel, freq, vol, duration)`
+
+- `channel`: the channel, 0 to 3.
+- `freq`: the frequency in hertz: 440 is A.
+- `vol`: the volume, 0 to 64.
+- `duration`: how long it lasts, in milliseconds.
+
+Plays a pure tone (a sine wave) and returns at once, without waiting for it to end. For beeps and alerts without any
+file.
+
+See also: [`sound_play`](#sound_play).
+
+<a id="intuition_expanded"></a>
 
 ## Intuition
 
+Windows opened from code, their gadgets, and the system requesters (file, colour, font, screen mode).
+
+**Two ways to have windows.** `Window X ... end` declares a window and `X.open` opens it (see the manual, section
+12). `window_create` opens one from code, without declaring it, and you can open several. The two can be mixed. The `EventLoop` needs a declared, open window; it also serves the `window_create` ones, and
+`event_window()` says which one each event came from.
+
+**Window numbers.** `window_create` returns a number from 1 to 16, or 0 if it could not open the window. The other
+`window_*` functions take that number; 0 is the current window, the one opened last or chosen with `window_use`. A
+number that is not an open window does nothing. Windows still open close on their own when the program ends.
+
+**Gadgets.** Buttons, text fields, checkboxes, sliders, lists... are GadTools gadgets. Each `*_create` takes the
+window first (the number from `window_create`, or 0 for the current one) and returns the gadget's number, from 1 to
+64, or 0 if it could not be created. Also:
+
+- `x`, `y` count from the corner inside the borders, like the `gfx_*` functions.
+- With width or height 0, Dash measures them with the screen's font: the button's text, the longest option, ten
+  letters for a field.
+- A `_` in the text underlines the next letter, which works as a key: `"_Accept"` is also pressed with A.
+- When they are used, the `EventLoop` gets `On Gadget` and `gadget_id()` says which one.
+
+**Measuring for any font.** The screen's font can be 8 points or 13. `screen_font_height` and
+`screen_font_text_width` measure with it; with flag 8 of `window_create` the size is the inside one, so there is no
+need to count the borders.
+
+**Bigger programs.** For many windows, or windows that resize on their own, MUI is easier (see the MUI group). The
+`gt_*` functions (GadTools) are for a single window.
+
+**Example** (`tests/test_doc_ventanas.dash`, which is also a test: it runs with the others):
+
+```dash
+# Ventanas: una ventana declarada, sus gadgets y su bucle de eventos.
+
+Window Prefs
+    title "Preferencias"
+    width 270
+    height 130
+end
+
+Main
+    Prefs.open
+    alto = screen_font_height() + 6                # una fila de gadgets, con la fuente de la pantalla
+    gfx_pen(1)
+    gfx_text_at(8, 4 + alto - 5, "Nombre")         # la etiqueta del campo, en su fila
+    nombre = textfield_create(0, 70, 4, 180, alto, 40)     # 0: la ventana actual
+    sonido = checkbox_create(0, 70, alto + 8, "_Sonido")
+    modo = cycle_create(0, 70, 2 * alto + 12, 0, alto, "NTSC|PAL")
+    aceptar = button_create(0, 70, 3 * alto + 16, 0, alto, "_Aceptar")
+
+    textfield_set(nombre, "Amiga")
+    checkbox_set(sonido, true)
+    cycle_set(modo, 1)
+    modos = ["NTSC", "PAL"]
+
+    EventLoop
+        On Gadget
+            if gadget_id() == aceptar
+                Stop
+            end
+        end
+        On Timer 1500                              # para la prueba: sin nadie que pulse, acaba sola
+            Stop
+        end
+        On Close
+            Stop
+        end
+    end
+    Print "nombre: #{textfield_get(nombre)}, sonido: #{checkbox_get(sonido)}, modo: #{modos[cycle_get(modo)]}"
+    Prefs.close
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `window_create(title, x, y, w, h, flags)` | `LONG` | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
-| `window_border_top()` | `LONG` | The top border of the current window (title bar included); gadgets count from the inside, without it |  |
-| `window_border_bottom()` | `LONG` | The bottom border of the current window |  |
-| `window_border_left()` | `LONG` | The left border of the current window |  |
-| `window_border_right()` | `LONG` | The right border of the current window |  |
-| `screen_font_height()` | `LONG` | The height of the screen's font (the program's screen, or the Workbench's): the one of title bars and of GadTools gadgets |  |
-| `screen_font_text_width(text)` | `LONG` | The width of a text in the screen's font |  |
-| `window_close(handle)` | `void` | Close window (handle 0: current window) |  |
-| `window_title(handle, title)` | `void` | Set window title (handle 0: current window) |  |
-| `window_move(handle, x, y)` | `void` | Move window to x, y (absolute; handle 0: current window) |  |
-| `window_resize(handle, w, h)` | `void` | Resize window to w x h (handle 0: current window) |  |
-| `window_to_front(handle)` | `void` | Bring window to front (handle 0: current window) |  |
-| `window_to_back(handle)` | `void` | Send window to back (handle 0: current window) |  |
-| `window_activate(handle)` | `void` | Activate window (handle 0: current window) |  |
-| `window_use(handle)` | `BOOL` | Makes a window the current one, the one gfx_ draws in: a handle of window_create, or 0 the declared window (Window X ... end) opened last; false if it is not open |  |
-| `screen_to_front()` | `void` | Bring custom screen to front |  |
-| `screen_to_back()` | `void` | Send custom screen to back |  |
-| `gadget_id()` | `LONG` | Handle of the last gadget used (for On Gadget in the EventLoop) |  |
-| `gadget_width(gadget)` | `LONG` | Width of a gadget in pixels (also when it was created with width 0) |  |
-| `gadget_height(gadget)` | `LONG` | Height of a gadget in pixels (also when it was created with height 0) |  |
-| `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget |  |
-| `button_enable(gad)` | `void` | Enable button |  |
-| `button_disable(gad)` | `void` | Disable button |  |
-| `textfield_create(win, x, y, w, h, maxlen)` | `LONG` | Create text input field |  |
-| `textfield_get(gad)` | `STRPTR` | Get text field content |  |
-| `textfield_set(gad, text)` | `void` | Set text field content |  |
-| `checkbox_create(win, x, y, label)` | `LONG` | Create checkbox |  |
-| `checkbox_get(gad)` | `BOOL` | Get checkbox state |  |
-| `checkbox_set(gad, state)` | `void` | Set checkbox state |  |
-| `slider_create(win, x, y, w, h, min, max, value)` | `LONG` | Create slider |  |
-| `slider_get(gad)` | `LONG` | Get slider value |  |
-| `slider_set(gad, value)` | `void` | Set slider value |  |
-| `listview_create(win, x, y, w, h)` | `LONG` | Create listview |  |
-| `listview_add(gad, text)` | `void` | Add item to listview |  |
-| `listview_clear(gad)` | `void` | Clear listview |  |
-| `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) |  |
-| `cycle_create(win, x, y, w, h, options)` | `LONG` | Create cycle gadget; options separated by \| (value = option, from 0) |  |
-| `cycle_get(gad)` | `LONG` | Get selected option of a cycle gadget |  |
-| `cycle_set(gad, index)` | `void` | Select an option of a cycle gadget |  |
-| `radio_create(win, x, y, options)` | `LONG` | Create radio buttons (one per option, separated by \|) |  |
-| `radio_get(gad)` | `LONG` | Get selected radio button |  |
-| `radio_set(gad, index)` | `void` | Select a radio button |  |
-| `integer_create(win, x, y, w, h, value)` | `LONG` | Create integer input field |  |
-| `integer_get(gad)` | `LONG` | Get integer field value |  |
-| `integer_set(gad, value)` | `void` | Set integer field value |  |
-| `palette_create(win, x, y, w, h, depth)` | `LONG` | Create colour palette gadget (2^depth colours) |  |
-| `palette_get(gad)` | `LONG` | Get selected colour |  |
-| `palette_set(gad, color)` | `void` | Select a colour |  |
-| `number_create(win, x, y, w, h, value)` | `LONG` | Create a box that shows a number |  |
-| `number_set(gad, value)` | `void` | Change the number shown |  |
-| `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
-| `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
-| `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
-| `dialog_screen_mode(title)` | `BOOL` | Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it |  |
-| `screen_mode_id()` | `LONG` | The display mode of the last dialog_screen_mode (for screen_open_mode) |  |
-| `screen_mode_width()` | `LONG` | The width chosen in the last dialog_screen_mode |  |
-| `screen_mode_height()` | `LONG` | The height chosen in the last dialog_screen_mode |  |
-| `screen_mode_depth()` | `LONG` | The depth (planes) chosen in the last dialog_screen_mode |  |
-| `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
+| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
+| [`window_border_top()`](#window_border_top) | Int | The top border of the current window (title bar included); gadgets count from the inside, without it |  |
+| [`window_border_bottom()`](#window_border_bottom) | Int | The bottom border of the current window |  |
+| [`window_border_left()`](#window_border_left) | Int | The left border of the current window |  |
+| [`window_border_right()`](#window_border_right) | Int | The right border of the current window |  |
+| [`screen_font_height()`](#screen_font_height) | Int | The height of the screen's font (the program's screen, or the Workbench's): the one of title bars and of GadTools gadgets |  |
+| [`screen_font_text_width(text)`](#screen_font_text_width) | Int | The width of a text in the screen's font |  |
+| [`window_close(handle)`](#window_close) | — | Close window (handle 0: current window) |  |
+| [`window_title(handle, title)`](#window_title) | — | Set window title (handle 0: current window) |  |
+| [`window_move(handle, x, y)`](#window_move) | — | Move window to x, y (absolute; handle 0: current window) |  |
+| [`window_resize(handle, w, h)`](#window_resize) | — | Resize window to w x h (handle 0: current window) |  |
+| [`window_to_front(handle)`](#window_to_front) | — | Bring window to front (handle 0: current window) |  |
+| [`window_to_back(handle)`](#window_to_back) | — | Send window to back (handle 0: current window) |  |
+| [`window_activate(handle)`](#window_activate) | — | Activate window (handle 0: current window) |  |
+| [`window_use(handle)`](#window_use) | Bool | Makes a window the current one, the one gfx_ draws in: a handle of window_create, or 0 the declared window (Window X ... end) opened last; false if it is not open |  |
+| [`screen_to_front()`](#screen_to_front) | — | Bring custom screen to front |  |
+| [`screen_to_back()`](#screen_to_back) | — | Send custom screen to back |  |
+| [`gadget_id()`](#gadget_id) | Int | Handle of the last gadget used (for On Gadget in the EventLoop) |  |
+| [`gadget_width(gadget)`](#gadget_width) | Int | Width of a gadget in pixels (also when it was created with width 0) |  |
+| [`gadget_height(gadget)`](#gadget_height) | Int | Height of a gadget in pixels (also when it was created with height 0) |  |
+| [`button_create(win, x, y, w, h, label)`](#button_create) | Int | Create button gadget |  |
+| [`button_enable(gad)`](#button_enable) | — | Enable button |  |
+| [`button_disable(gad)`](#button_disable) | — | Disable button |  |
+| [`textfield_create(win, x, y, w, h, maxlen)`](#textfield_create) | Int | Create text input field |  |
+| [`textfield_get(gad)`](#textfield_get) | String | Get text field content |  |
+| [`textfield_set(gad, text)`](#textfield_set) | — | Set text field content |  |
+| [`checkbox_create(win, x, y, label)`](#checkbox_create) | Int | Create checkbox |  |
+| [`checkbox_get(gad)`](#checkbox_get) | Bool | Get checkbox state |  |
+| [`checkbox_set(gad, state)`](#checkbox_set) | — | Set checkbox state |  |
+| [`slider_create(win, x, y, w, h, min, max, value)`](#slider_create) | Int | Create slider |  |
+| [`slider_get(gad)`](#slider_get) | Int | Get slider value |  |
+| [`slider_set(gad, value)`](#slider_set) | — | Set slider value |  |
+| [`listview_create(win, x, y, w, h)`](#listview_create) | Int | Create listview |  |
+| [`listview_add(gad, text)`](#listview_add) | — | Add item to listview |  |
+| [`listview_clear(gad)`](#listview_clear) | — | Clear listview |  |
+| [`listview_selected(gad)`](#listview_selected) | Int | Get selected index (-1 if none) |  |
+| [`cycle_create(win, x, y, w, h, options)`](#cycle_create) | Int | Create cycle gadget; options separated by \| (value = option, from 0) |  |
+| [`cycle_get(gad)`](#cycle_get) | Int | Get selected option of a cycle gadget |  |
+| [`cycle_set(gad, index)`](#cycle_set) | — | Select an option of a cycle gadget |  |
+| [`radio_create(win, x, y, options)`](#radio_create) | Int | Create radio buttons (one per option, separated by \|) |  |
+| [`radio_get(gad)`](#radio_get) | Int | Get selected radio button |  |
+| [`radio_set(gad, index)`](#radio_set) | — | Select a radio button |  |
+| [`integer_create(win, x, y, w, h, value)`](#integer_create) | Int | Create integer input field |  |
+| [`integer_get(gad)`](#integer_get) | Int | Get integer field value |  |
+| [`integer_set(gad, value)`](#integer_set) | — | Set integer field value |  |
+| [`palette_create(win, x, y, w, h, depth)`](#palette_create) | Int | Create colour palette gadget (2^depth colours) |  |
+| [`palette_get(gad)`](#palette_get) | Int | Get selected colour |  |
+| [`palette_set(gad, color)`](#palette_set) | — | Select a colour |  |
+| [`number_create(win, x, y, w, h, value)`](#number_create) | Int | Create a box that shows a number |  |
+| [`number_set(gad, value)`](#number_set) | — | Change the number shown |  |
+| [`dialog_file(title, pattern, save_mode)`](#dialog_file) | String | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
+| [`dialog_file_at(title, pattern, save_mode, drawer, file)`](#dialog_file_at) | String | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
+| [`dialog_color(title, initial)`](#dialog_color) | Int | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
+| [`dialog_screen_mode(title)`](#dialog_screen_mode) | Bool | Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it |  |
+| [`screen_mode_id()`](#screen_mode_id) | Int | The display mode of the last dialog_screen_mode (for screen_open_mode) |  |
+| [`screen_mode_width()`](#screen_mode_width) | Int | The width chosen in the last dialog_screen_mode |  |
+| [`screen_mode_height()`](#screen_mode_height) | Int | The height chosen in the last dialog_screen_mode |  |
+| [`screen_mode_depth()`](#screen_mode_depth) | Int | The depth (planes) chosen in the last dialog_screen_mode |  |
+| [`dialog_font(title)`](#dialog_font) | String | Font requester: "name.font/size", "" if cancelled |  |
+
+<a id="window_create"></a>
+
+### `window_create(title, x, y, w, h, flags)` → `Int`
+
+- `title`: the title. With `""`, no flag 1 and flags 2 and 4, the window has no title bar.
+- `x`, `y`: the position on the screen.
+- `w`, `h`: the size, at least 40 x 20.
+- `flags`: they add up. 1 = resizable; 2 = borderless; 4 = no close button; 8 = `w` and `h` are the inside, without
+  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus.
+
+Opens the window on the program's screen, if one was opened, or on the Workbench. Returns its number (1 to 16) and
+makes it the current window: the `gfx_*` functions draw in it. Returns 0 if it could not be opened or if there are
+already 16.
+
+See also: [`window_close`](#window_close), [`window_use`](#window_use), [`screen_font_height`](#screen_font_height), [`event_window`](#event_window).
+
+<a id="window_border_top"></a>
+
+### `window_border_top()` → `Int`
+
+Returns the thickness of the current window's top border, title bar included, in pixels; 0 without a window. It
+depends on the screen's font. You need it to work out a window's outer size; with flag 8 of `window_create` you
+do not.
+
+See also: [`window_border_bottom`](#window_border_bottom), [`window_border_left`](#window_border_left), [`window_border_right`](#window_border_right), [`window_create`](#window_create).
+
+<a id="window_border_bottom"></a>
+
+### `window_border_bottom()` → `Int`
+
+Returns the thickness of the current window's bottom border, in pixels; 0 without a window.
+
+See also: [`window_border_top`](#window_border_top).
+
+<a id="window_border_left"></a>
+
+### `window_border_left()` → `Int`
+
+Returns the thickness of the current window's left border, in pixels; 0 without a window.
+
+See also: [`window_border_top`](#window_border_top).
+
+<a id="window_border_right"></a>
+
+### `window_border_right()` → `Int`
+
+Returns the thickness of the current window's right border, in pixels; 0 without a window.
+
+See also: [`window_border_top`](#window_border_top).
+
+<a id="screen_font_height"></a>
+
+### `screen_font_height()` → `Int`
+
+Returns the height in pixels of the screen's font: the program's screen, the current window's or, with neither,
+the Workbench's. It is the font of title bars and gadgets. A comfortable row of gadgets is
+`screen_font_height() + 6` high.
+
+See also: [`screen_font_text_width`](#screen_font_text_width), [`window_create`](#window_create).
+
+<a id="screen_font_text_width"></a>
+
+### `screen_font_text_width(text)` → `Int`
+
+- `text`: the text.
+
+Returns how many pixels wide the text is in the screen's font. Useful to give a window or a column of labels just
+the right width.
+
+See also: [`screen_font_height`](#screen_font_height), [`gfx_text_len`](#gfx_text_len).
+
+<a id="window_close"></a>
+
+### `window_close(handle)`
+
+- `handle`: the window's number; 0, the current one.
+
+Closes the window. If it was the current one, there is no current window left: call `window_use` before drawing
+again. Its gadgets stop being drawn. Closing one that is already closed does nothing.
+
+See also: [`window_create`](#window_create), [`window_use`](#window_use), [`close_window`](#close_window).
+
+<a id="window_title"></a>
+
+### `window_title(handle, title)`
+
+- `handle`: the window's number; 0, the current one.
+- `title`: the new title.
+
+Changes the text of the title bar. Handy to show a state: the file's name, a `*` when there are changes.
+
+See also: [`window_create`](#window_create).
+
+<a id="window_move"></a>
+
+### `window_move(handle, x, y)`
+
+- `handle`: the window's number; 0, the current one.
+- `x`, `y`: the new position on the screen (not an offset).
+
+Moves the window there. Intuition does it a moment later, not when the call returns. A `window_resize` right after
+already counts with the new position.
+
+See also: [`window_resize`](#window_resize), [`window_create`](#window_create).
+
+<a id="window_resize"></a>
+
+### `window_resize(handle, w, h)`
+
+- `handle`: the window's number; 0, the current one.
+- `w`, `h`: the new outer size (with the borders).
+
+Changes the window's size. Like `window_move`, Intuition does it a moment later.
+
+See also: [`window_move`](#window_move), [`window_border_top`](#window_border_top).
+
+<a id="window_to_front"></a>
+
+### `window_to_front(handle)`
+
+- `handle`: the window's number; 0, the current one.
+
+Puts the window in front of the others on its screen.
+
+See also: [`window_to_back`](#window_to_back), [`window_activate`](#window_activate).
+
+<a id="window_to_back"></a>
+
+### `window_to_back(handle)`
+
+- `handle`: the window's number; 0, the current one.
+
+Puts the window behind the others on its screen.
+
+See also: [`window_to_front`](#window_to_front).
+
+<a id="window_activate"></a>
+
+### `window_activate(handle)`
+
+- `handle`: the window's number; 0, the current one.
+
+Makes it the active window, the one that gets the keyboard. It does not bring it to the front: for that,
+`window_to_front`.
+
+See also: [`window_to_front`](#window_to_front).
+
+<a id="window_use"></a>
+
+### `window_use(handle)` → `Bool`
+
+- `handle`: the number of a `window_create` window, or 0 for the declared window (`Window X ... end`) opened last.
+
+Makes it the current window: the `gfx_*` functions draw in it and number 0 of the other functions is this one.
+Returns `false` if that window is not open, and then nothing changes.
+
+See also: [`window_create`](#window_create), [`gfx_pen`](#gfx_pen).
+
+<a id="screen_to_front"></a>
+
+### `screen_to_front()`
+
+Brings the program's screen (the `screen_open` one) to the front. Without a screen of its own it does nothing.
+
+See also: [`screen_to_back`](#screen_to_back), [`screen_open`](#screen_open).
+
+<a id="screen_to_back"></a>
+
+### `screen_to_back()`
+
+Sends the program's screen to the back, showing the one below (the Workbench). Without a screen of its own it does nothing.
+
+See also: [`screen_to_front`](#screen_to_front).
+
+<a id="gadget_id"></a>
+
+### `gadget_id()` → `Int`
+
+Returns the number of the last gadget used. Check it in the `EventLoop`'s `On Gadget` and compare it with what its
+`*_create` returned.
+
+See also: [`button_create`](#button_create), [`event_window`](#event_window).
+
+<a id="gadget_width"></a>
+
+### `gadget_width(gadget)` → `Int`
+
+- `gadget`: the gadget's number.
+
+Returns its width in pixels, also when it was created with width 0 and Dash measured it. 0 if it is not a gadget.
+
+See also: [`gadget_height`](#gadget_height).
+
+<a id="gadget_height"></a>
+
+### `gadget_height(gadget)` → `Int`
+
+- `gadget`: the gadget's number.
+
+Returns its height in pixels, also when it was created with height 0. 0 if it is not a gadget.
+
+See also: [`gadget_width`](#gadget_width).
+
+<a id="button_create"></a>
+
+### `button_create(win, x, y, w, h, label)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`: the top left corner.
+- `w`, `h`: the size; 0 lets Dash measure it from the text.
+- `label`: the text; a `_` underlines the letter that presses it from the keyboard.
+
+Creates a button. Pressing it sends `On Gadget` with `gadget_id()` equal to the number it returns. Returns 0 if it
+could not be created.
+
+See also: [`button_disable`](#button_disable), [`gadget_id`](#gadget_id).
+
+<a id="button_enable"></a>
+
+### `button_enable(gad)`
+
+- `gad`: the gadget's number.
+
+Lets a disabled gadget be used again. It works for any gadget, not only buttons.
+
+See also: [`button_disable`](#button_disable).
+
+<a id="button_disable"></a>
+
+### `button_disable(gad)`
+
+- `gad`: the gadget's number.
+
+Disables the gadget: it shows in grey and does not respond to the mouse or its key. It works for any gadget.
+
+See also: [`button_enable`](#button_enable).
+
+<a id="textfield_create"></a>
+
+### `textfield_create(win, x, y, w, h, maxlen)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size; 0 lets Dash measure it (ten letters wide).
+- `maxlen`: the most letters it holds; 0 = 64.
+
+Creates a text field. It has the system's editing keys and copy and paste. `On Gadget` arrives when Return or Tab
+is pressed.
+
+See also: [`textfield_get`](#textfield_get), [`textfield_set`](#textfield_set), [`integer_create`](#integer_create).
+
+<a id="textfield_get"></a>
+
+### `textfield_get(gad)` → `String`
+
+- `gad`: the field's number.
+
+Returns what is typed, even if Return was not pressed yet. `""` if it is not a field.
+
+See also: [`textfield_set`](#textfield_set).
+
+<a id="textfield_set"></a>
+
+### `textfield_set(gad, text)`
+
+- `gad`: the field's number.
+- `text`: the new text.
+
+Changes what the field shows.
+
+See also: [`textfield_get`](#textfield_get).
+
+<a id="checkbox_create"></a>
+
+### `checkbox_create(win, x, y, label)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`: where the box goes; the text goes to its right.
+- `label`: the text; a `_` underlines its key.
+
+Creates an unticked checkbox. Each click, or its key, ticks or unticks it and sends `On Gadget`.
+
+See also: [`checkbox_get`](#checkbox_get), [`checkbox_set`](#checkbox_set).
+
+<a id="checkbox_get"></a>
+
+### `checkbox_get(gad)` → `Bool`
+
+- `gad`: the checkbox's number.
+
+Returns `true` if it is ticked.
+
+See also: [`checkbox_set`](#checkbox_set).
+
+<a id="checkbox_set"></a>
+
+### `checkbox_set(gad, state)`
+
+- `gad`: the checkbox's number.
+- `state`: `true` ticks it, `false` unticks it.
+
+It does not send `On Gadget`.
+
+See also: [`checkbox_get`](#checkbox_get).
+
+<a id="slider_create"></a>
+
+### `slider_create(win, x, y, w, h, min, max, value)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size. Wider than tall is horizontal.
+- `min`, `max`: the value at the start and at the end.
+- `value`: the starting value; out of range, it stays at `min` or `max`.
+
+Creates a slider. It sends `On Gadget` while it is dragged, not only when it is let go.
+
+See also: [`slider_get`](#slider_get), [`slider_set`](#slider_set).
+
+<a id="slider_get"></a>
+
+### `slider_get(gad)` → `Int`
+
+- `gad`: the slider's number.
+
+Returns its value, between `min` and `max`.
+
+See also: [`slider_set`](#slider_set).
+
+<a id="slider_set"></a>
+
+### `slider_set(gad, value)`
+
+- `gad`: the slider's number.
+- `value`: the new value.
+
+Moves the slider. It does not send `On Gadget`.
+
+See also: [`slider_get`](#slider_get).
+
+<a id="listview_create"></a>
+
+### `listview_create(win, x, y, w, h)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size.
+
+Creates an empty list with its scroll bar. Lines are added with `listview_add`. Choosing one sends `On Gadget`.
+
+See also: [`listview_add`](#listview_add), [`listview_selected`](#listview_selected), [`listview_clear`](#listview_clear).
+
+<a id="listview_add"></a>
+
+### `listview_add(gad, text)`
+
+- `gad`: the list's number.
+- `text`: the line.
+
+Adds a line at the end. The list keeps its own copy of the text.
+
+See also: [`listview_clear`](#listview_clear).
+
+<a id="listview_clear"></a>
+
+### `listview_clear(gad)`
+
+- `gad`: the list's number.
+
+Removes every line and leaves no line chosen.
+
+See also: [`listview_add`](#listview_add).
+
+<a id="listview_selected"></a>
+
+### `listview_selected(gad)` → `Int`
+
+- `gad`: the list's number.
+
+Returns the chosen line, counting from 0, or -1 if there is none.
+
+See also: [`listview_create`](#listview_create).
+
+<a id="cycle_create"></a>
+
+### `cycle_create(win, x, y, w, h, options)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size; 0 lets Dash measure it from the longest option.
+- `options`: the options separated by `|`: `"Low|Medium|High"`.
+
+Creates a gadget that shows one option and moves to the next with each click. It starts at the first, 0. It sends
+`On Gadget` when it changes.
+
+See also: [`cycle_get`](#cycle_get), [`cycle_set`](#cycle_set), [`radio_create`](#radio_create).
+
+<a id="cycle_get"></a>
+
+### `cycle_get(gad)` → `Int`
+
+- `gad`: the gadget's number.
+
+Returns the chosen option, from 0. -1 if it is not a cycle gadget.
+
+See also: [`cycle_set`](#cycle_set).
+
+<a id="cycle_set"></a>
+
+### `cycle_set(gad, index)`
+
+- `gad`: the gadget's number.
+- `index`: the option, from 0.
+
+Chooses that option. It does not send `On Gadget`.
+
+See also: [`cycle_get`](#cycle_get).
+
+<a id="radio_create"></a>
+
+### `radio_create(win, x, y, options)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`: where the first button goes; the others go below, with their text to the right.
+- `options`: the options separated by `|`.
+
+Creates a group of radio buttons, only one of them chosen. It starts at the first, 0. It sends `On Gadget` when it
+changes.
+
+See also: [`radio_get`](#radio_get), [`radio_set`](#radio_set), [`cycle_create`](#cycle_create).
+
+<a id="radio_get"></a>
+
+### `radio_get(gad)` → `Int`
+
+- `gad`: the group's number.
+
+Returns the chosen button, from 0. -1 if it is not a radio group.
+
+See also: [`radio_set`](#radio_set).
+
+<a id="radio_set"></a>
+
+### `radio_set(gad, index)`
+
+- `gad`: the group's number.
+- `index`: the button, from 0.
+
+Chooses that button. It does not send `On Gadget`.
+
+See also: [`radio_get`](#radio_get).
+
+<a id="integer_create"></a>
+
+### `integer_create(win, x, y, w, h, value)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size.
+- `value`: the starting number.
+
+Creates a field that only takes whole numbers, up to 10 digits. `On Gadget` arrives when Return or Tab is pressed.
+
+See also: [`integer_get`](#integer_get), [`integer_set`](#integer_set), [`textfield_create`](#textfield_create).
+
+<a id="integer_get"></a>
+
+### `integer_get(gad)` → `Int`
+
+- `gad`: the field's number.
+
+Returns the number typed, even if Return was not pressed yet. -1 if it is not a number field.
+
+See also: [`integer_set`](#integer_set).
+
+<a id="integer_set"></a>
+
+### `integer_set(gad, value)`
+
+- `gad`: the field's number.
+- `value`: the new number.
+
+Changes the number it shows.
+
+See also: [`integer_get`](#integer_get).
+
+<a id="palette_create"></a>
+
+### `palette_create(win, x, y, w, h, depth)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size.
+- `depth`: how many colours it shows: 2 to the power of `depth` (3 = 8 colours); 0 = 4 colours.
+
+Creates a gadget with the screen's colours to pick one. It starts at colour 1. It sends `On Gadget` on a pick.
+
+See also: [`palette_get`](#palette_get), [`palette_set`](#palette_set), [`dialog_color`](#dialog_color).
+
+<a id="palette_get"></a>
+
+### `palette_get(gad)` → `Int`
+
+- `gad`: the gadget's number.
+
+Returns the chosen colour. -1 if it is not a palette gadget.
+
+See also: [`palette_set`](#palette_set).
+
+<a id="palette_set"></a>
+
+### `palette_set(gad, color)`
+
+- `gad`: the gadget's number.
+- `color`: the colour.
+
+Chooses that colour. It does not send `On Gadget`.
+
+See also: [`palette_get`](#palette_get).
+
+<a id="number_create"></a>
+
+### `number_create(win, x, y, w, h, value)` → `Int`
+
+- `win`: the window; 0, the current one.
+- `x`, `y`, `w`, `h`: position and size.
+- `value`: the number it shows.
+
+Creates a bordered box that shows a number and cannot be edited. For a counter or a result.
+
+See also: [`number_set`](#number_set).
+
+<a id="number_set"></a>
+
+### `number_set(gad, value)`
+
+- `gad`: the gadget's number.
+- `value`: the new number.
+
+Changes the number it shows.
+
+See also: [`number_create`](#number_create).
+
+<a id="dialog_file"></a>
+
+### `dialog_file(title, pattern, save_mode)` → `String`
+
+- `title`: the requester's title.
+- `pattern`: which files show, with AmigaDOS wildcards: `"#?.dash"`; `""` = all of them.
+- `save_mode`: `true` to save (a new name can be typed), `false` to open.
+
+Opens the system's file requester (ASL) and waits. Returns the full path of the chosen file, or `""` if it was
+cancelled. Next time it opens in the last drawer.
+
+See also: [`dialog_file_at`](#dialog_file_at), [`file_open_dialog`](#file_open_dialog).
+
+<a id="dialog_file_at"></a>
+
+### `dialog_file_at(title, pattern, save_mode, drawer, file)` → `String`
+
+- `title`, `pattern`, `save_mode`: as in `dialog_file`.
+- `drawer`: the drawer it opens in; `""` = the last one.
+- `file`: the name already typed; `""` = none.
+
+Like `dialog_file`, starting in that drawer with that name. For "Save as..." with the open file's name.
+
+See also: [`dialog_file`](#dialog_file).
+
+<a id="dialog_color"></a>
+
+### `dialog_color(title, initial)` → `Int`
+
+- `title`: the window's title.
+- `initial`: the colour chosen at the start.
+
+Opens a window with the screen's colours and waits. You pick with a click, or with the arrows and Return. Returns
+the chosen colour; with Esc or the close button, `initial`.
+
+See also: [`palette_create`](#palette_create).
+
+<a id="dialog_screen_mode"></a>
+
+### `dialog_screen_mode(title)` → `Bool`
+
+- `title`: the requester's title.
+
+Opens the system's screen mode requester, starting at the Workbench's mode, and waits. Returns `true` if one was
+chosen: then `screen_mode_id`, `screen_mode_width`, `screen_mode_height` and `screen_mode_depth` give it, for
+`screen_open_mode`. `false` if it was cancelled.
+
+See also: [`screen_mode_id`](#screen_mode_id), [`screen_open_mode`](#screen_open_mode).
+
+<a id="screen_mode_id"></a>
+
+### `screen_mode_id()` → `Int`
+
+Returns the mode chosen in the last `dialog_screen_mode`, the number `screen_open_mode` takes.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_mode`](#screen_open_mode).
+
+<a id="screen_mode_width"></a>
+
+### `screen_mode_width()` → `Int`
+
+Returns the width chosen in the last `dialog_screen_mode`.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode).
+
+<a id="screen_mode_height"></a>
+
+### `screen_mode_height()` → `Int`
+
+Returns the height chosen in the last `dialog_screen_mode`.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode).
+
+<a id="screen_mode_depth"></a>
+
+### `screen_mode_depth()` → `Int`
+
+Returns the depth chosen in the last `dialog_screen_mode`: 3 is 8 colours, 8 is 256.
+
+See also: [`dialog_screen_mode`](#dialog_screen_mode).
+
+<a id="dialog_font"></a>
+
+### `dialog_font(title)` → `String`
+
+- `title`: the requester's title.
+
+Opens the system's font requester and waits. Returns the chosen font as `"name.font/size"` (`"topaz.font/8"`),
+or `""` if it was cancelled. To open it, the name and the size go separately to `font_open`.
+
+See also: [`font_open`](#font_open).
+
+<a id="rtg_functions"></a>
 
 ## RTG (CyberGraphX / Picasso96)
 
+Graphics cards (RTG) with CyberGraphX or Picasso96: 16, 24 or 32-bit screens where each pixel carries its RGB
+colour, without a palette.
+
+`rtg_available` says whether there is an RTG library and `rtg_is_active` whether the drawing screen is true colour.
+Colours go as `0xRRGGBB` (`rtg_rgb` builds them). On a palette screen, `rtg_write_pixel` and `rtg_fill_rect` use the
+palette's closest colour; `rtg_write_array` and `rtg_read_array` only work on RTG. To draw with RGB on any screen,
+there are also `color_pen` and `gfx_rgb_draw`.
+
+**Example** (`tests/test_doc_rtg.dash`, which is also a test: it runs with the others):
+
+```dash
+# RTG: colores RGB que valen con tarjeta gráfica y sin ella. Sin tarjeta (como en el emulador de las pruebas),
+# rtg_fill_rect y rtg_write_pixel usan el color más parecido de la paleta.
+
+Main
+    c = rtg_rgb(255, 128, 0)
+    Print "rojo de 0x#{str_from_int(c, 16)}: #{rtg_rgb_r(c)}"
+    screen_open_custom(320, 200, 3, "RTG")         # una pantalla de paleta
+    Print "con color verdadero: #{rtg_is_active()}"
+    gfx_rgb8(5, 255, 0, 0)
+    gfx_rgb8(6, 255, 128, 0)
+    rtg_fill_rect(10, 20, 30, 30, rtg_rgb(250, 10, 0))
+    rtg_write_pixel(100, 50, c)
+    Print "rojo: color #{gfx_pixel_read(20, 30)}, naranja: color #{gfx_pixel_read(100, 50)}"
+    screen_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `rtg_available()` | `BOOL` | Check if CyberGraphX or Picasso96 is available |  |
-| `rtg_is_active()` | `BOOL` | Check if current screen is using RTG |  |
-| `rtg_get_depth()` | `LONG` | Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_get_width()` | `LONG` | Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_get_height()` | `LONG` | Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
-| `rtg_alloc_bitmap(width, height, depth)` | `APTR` | Allocate RTG-compatible bitmap |  |
-| `rtg_free_bitmap(bitmap)` | `void` | Free RTG bitmap |  |
-| `rtg_write_pixel(x, y, rgb)` | `void` | Write single pixel with 24-bit RGB color |  |
-| `rtg_read_pixel(x, y)` | `LONG` | Read pixel, returns 24-bit RGB color |  |
-| `rtg_fill_rect(x, y, w, h, rgb)` | `void` | Fill rectangle with 24-bit RGB color |  |
-| `rtg_write_array(buffer, bpr, x, y, w, h)` | `void` | Write pixel array (buffer is ARGB 32-bit, bpr is bytes per row) |  |
-| `rtg_read_array(buffer, bpr, x, y, w, h)` | `void` | Read pixel array from screen into buffer |  |
-| `rtg_rgb(r, g, b)` | `LONG` | Create 24-bit RGB color value from components |  |
-| `rtg_argb(a, r, g, b)` | `LONG` | Create 32-bit ARGB color value from components |  |
-| `rtg_rgb_r(color)` | `LONG` | Extract red component from RGB color |  |
-| `rtg_rgb_g(color)` | `LONG` | Extract green component from RGB color |  |
-| `rtg_rgb_b(color)` | `LONG` | Extract blue component from RGB color |  |
-| `rtg_best_mode(width, height, depth)` | `LONG` | Find best RTG display mode for given dimensions |  |
-| `rtg_open_screen(width, height, depth, title)` | `BOOL` | Open RTG screen with specified dimensions |  |
-| `rtg_blit(src, sx, sy, dx, dy, w, h)` | `void` | Blit from bitmap to screen |  |
-| `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)` | `void` | Scaled blit from bitmap to screen |  |
+| [`rtg_available()`](#rtg_available) | Bool | Check if CyberGraphX or Picasso96 is available |  |
+| [`rtg_is_active()`](#rtg_is_active) | Bool | Check if current screen is using RTG |  |
+| [`rtg_get_depth()`](#rtg_get_depth) | Int | Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_get_width()`](#rtg_get_width) | Int | Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_get_height()`](#rtg_get_height) | Int | Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| [`rtg_alloc_bitmap(width, height, depth)`](#rtg_alloc_bitmap) | Int (address) | Allocate RTG-compatible bitmap |  |
+| [`rtg_free_bitmap(bitmap)`](#rtg_free_bitmap) | — | Free RTG bitmap |  |
+| [`rtg_write_pixel(x, y, rgb)`](#rtg_write_pixel) | — | Write single pixel with 24-bit RGB color |  |
+| [`rtg_read_pixel(x, y)`](#rtg_read_pixel) | Int | Read pixel, returns 24-bit RGB color |  |
+| [`rtg_fill_rect(x, y, w, h, rgb)`](#rtg_fill_rect) | — | Fill rectangle with 24-bit RGB color |  |
+| [`rtg_write_array(buffer, bpr, x, y, w, h)`](#rtg_write_array) | — | Write pixel array (buffer is ARGB 32-bit, bpr is bytes per row) |  |
+| [`rtg_read_array(buffer, bpr, x, y, w, h)`](#rtg_read_array) | — | Read pixel array from screen into buffer |  |
+| [`rtg_rgb(r, g, b)`](#rtg_rgb) | Int | Create 24-bit RGB color value from components |  |
+| [`rtg_argb(a, r, g, b)`](#rtg_argb) | Int | Create 32-bit ARGB color value from components |  |
+| [`rtg_rgb_r(color)`](#rtg_rgb_r) | Int | Extract red component from RGB color |  |
+| [`rtg_rgb_g(color)`](#rtg_rgb_g) | Int | Extract green component from RGB color |  |
+| [`rtg_rgb_b(color)`](#rtg_rgb_b) | Int | Extract blue component from RGB color |  |
+| [`rtg_best_mode(width, height, depth)`](#rtg_best_mode) | Int | Find best RTG display mode for given dimensions |  |
+| [`rtg_open_screen(width, height, depth, title)`](#rtg_open_screen) | Bool | Open RTG screen with specified dimensions |  |
+| [`rtg_blit(src, sx, sy, dx, dy, w, h)`](#rtg_blit) | — | Blit from bitmap to screen |  |
+| [`rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`](#rtg_scale_blit) | — | Scaled blit from bitmap to screen |  |
+
+<a id="rtg_available"></a>
+
+### `rtg_available()` → `Bool`
+
+Returns `true` if CyberGraphX or Picasso96 is installed (its `cybergraphics.library`).
+
+See also: [`rtg_is_active`](#rtg_is_active).
+
+<a id="rtg_is_active"></a>
+
+### `rtg_is_active()` → `Bool`
+
+Returns `true` if the screen being drawn on belongs to a graphics card and is true colour.
+
+See also: [`rtg_available`](#rtg_available).
+
+<a id="rtg_get_depth"></a>
+
+### `rtg_get_depth()` → `Int`
+
+Returns the depth in bits of the program's screen or, without one, the Workbench's: 8 palette, 16, 24 or 32 true colour.
+
+See also: [`rtg_get_width`](#rtg_get_width).
+
+<a id="rtg_get_width"></a>
+
+### `rtg_get_width()` → `Int`
+
+Returns the width of the program's screen or, without one, the Workbench's.
+
+See also: [`rtg_get_height`](#rtg_get_height).
+
+<a id="rtg_get_height"></a>
+
+### `rtg_get_height()` → `Int`
+
+Returns the height of the program's screen or, without one, the Workbench's.
+
+See also: [`rtg_get_width`](#rtg_get_width).
+
+<a id="rtg_alloc_bitmap"></a>
+
+### `rtg_alloc_bitmap(width, height, depth)` → `Int (address)`
+
+- `width`, `height`: the size.
+- `depth`: the depth in bits.
+
+Asks for an off-screen bitmap in the card's format, for `rtg_blit`. Returns its address, or 0. Free it with
+`rtg_free_bitmap`.
+
+See also: [`rtg_free_bitmap`](#rtg_free_bitmap), [`rtg_blit`](#rtg_blit).
+
+<a id="rtg_free_bitmap"></a>
+
+### `rtg_free_bitmap(bitmap)`
+
+- `bitmap`: the one from `rtg_alloc_bitmap`.
+
+Frees it.
+
+See also: [`rtg_alloc_bitmap`](#rtg_alloc_bitmap).
+
+<a id="rtg_write_pixel"></a>
+
+### `rtg_write_pixel(x, y, rgb)`
+
+- `x`, `y`: the point.
+- `rgb`: the `0xRRGGBB` colour.
+
+Paints the pixel; on a palette screen, with the closest colour.
+
+See also: [`rtg_read_pixel`](#rtg_read_pixel), [`rtg_fill_rect`](#rtg_fill_rect).
+
+<a id="rtg_read_pixel"></a>
+
+### `rtg_read_pixel(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns its `0xRRGGBB` colour.
+
+See also: [`rtg_write_pixel`](#rtg_write_pixel), [`gfx_pixel_rgb`](#gfx_pixel_rgb).
+
+<a id="rtg_fill_rect"></a>
+
+### `rtg_fill_rect(x, y, w, h, rgb)`
+
+- `x`, `y`: the corner.
+- `w`, `h`: the size.
+- `rgb`: the `0xRRGGBB` colour.
+
+Fills the rectangle; on a palette screen, with the closest colour.
+
+See also: [`rtg_write_pixel`](#rtg_write_pixel).
+
+<a id="rtg_write_array"></a>
+
+### `rtg_write_array(buffer, bpr, x, y, w, h)`
+
+- `buffer`: the pixels, 4 bytes each (alpha, red, green, blue).
+- `bpr`: the bytes per buffer row (usually `w * 4`).
+- `x`, `y`, `w`, `h`: where and how much.
+
+Copies the block to the screen in one go. RTG only: on a palette screen it does nothing (for that, `gfx_rgb_draw`).
+
+See also: [`rtg_read_array`](#rtg_read_array), [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="rtg_read_array"></a>
+
+### `rtg_read_array(buffer, bpr, x, y, w, h)`
+
+- `buffer`, `bpr`, `x`, `y`, `w`, `h`: as in `rtg_write_array`.
+
+Reads the block from the screen into the buffer. RTG only.
+
+See also: [`rtg_write_array`](#rtg_write_array).
+
+<a id="rtg_rgb"></a>
+
+### `rtg_rgb(r, g, b)` → `Int`
+
+- `r`, `g`, `b`: 0 to 255.
+
+Returns the `0xRRGGBB` colour.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r), [`rtg_argb`](#rtg_argb).
+
+<a id="rtg_argb"></a>
+
+### `rtg_argb(a, r, g, b)` → `Int`
+
+- `a`, `r`, `g`, `b`: 0 to 255; `a` is the opacity.
+
+Returns the `0xAARRGGBB` colour, for `rtg_write_array` buffers.
+
+See also: [`rtg_rgb`](#rtg_rgb).
+
+<a id="rtg_rgb_r"></a>
+
+### `rtg_rgb_r(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its red, 0 to 255.
+
+See also: [`rtg_rgb_g`](#rtg_rgb_g), [`rtg_rgb_b`](#rtg_rgb_b).
+
+<a id="rtg_rgb_g"></a>
+
+### `rtg_rgb_g(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its green, 0 to 255.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r).
+
+<a id="rtg_rgb_b"></a>
+
+### `rtg_rgb_b(color)` → `Int`
+
+- `color`: a `0xRRGGBB` colour.
+
+Returns its blue, 0 to 255.
+
+See also: [`rtg_rgb_r`](#rtg_rgb_r).
+
+<a id="rtg_best_mode"></a>
+
+### `rtg_best_mode(width, height, depth)` → `Int`
+
+- `width`, `height`, `depth`: what you want.
+
+Returns the RTG screen mode that fits best, or -1 if none (or no RTG).
+
+See also: [`rtg_open_screen`](#rtg_open_screen), [`screen_open_mode`](#screen_open_mode).
+
+<a id="rtg_open_screen"></a>
+
+### `rtg_open_screen(width, height, depth, title)` → `Bool`
+
+- `width`, `height`: the size.
+- `depth`: 16, 24 or 32 bits.
+- `title`: the title.
+
+Opens a screen of your own on the graphics card; if there is no mode of that size, it tries 640 x 480. It closes any
+screen of your own first. Returns `false` without RTG or without a mode.
+
+See also: [`rtg_best_mode`](#rtg_best_mode), [`screen_close`](#screen_close).
+
+<a id="rtg_blit"></a>
+
+### `rtg_blit(src, sx, sy, dx, dy, w, h)`
+
+- `src`: a bitmap from `rtg_alloc_bitmap`.
+- `sx`, `sy`: the source corner.
+- `dx`, `dy`: where it goes.
+- `w`, `h`: the size.
+
+Copies that part of the bitmap to the `gfx_*` target.
+
+See also: [`rtg_scale_blit`](#rtg_scale_blit).
+
+<a id="rtg_scale_blit"></a>
+
+### `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`
+
+- `src`: a bitmap from `rtg_alloc_bitmap`.
+- `sx`, `sy`, `sw`, `sh`: the source part.
+- `dx`, `dy`, `dw`, `dh`: where it goes and at what size.
+
+Like `rtg_blit`, enlarging or reducing.
+
+See also: [`rtg_blit`](#rtg_blit).
+
+<a id="mui_functions"></a>
 
 ## MUI
 
+Interfaces with MUI: windows that lay themselves out, adapt to the font and the size, and that the user sets up
+from the MUI preferences. It works with MUI 3.8 or MUI 5, on a 68020 or better.
+
+**How it is built.** MUI objects are numbers kept in variables. The window is described top down, as a tree, with
+a stack of groups:
+
+1. `mui_app_begin(title, base)`: the application. Returns 0 if there is no MUI: the program has to say so and end.
+2. `win = mui_window_begin(title, id)` ... `mui_window_end()`: a window. Inside, groups (`mui_vgroup_begin`,
+   `mui_hgroup_begin`, `mui_columns_begin`, `mui_frame_begin`... up to their `mui_group_end`) and objects
+   (`mui_button`, `mui_string`, `mui_list`...). Each object goes into the open group.
+3. Events: `mui_on_press(button, 1)`, `mui_on_change(checkbox, 2)`... give a number to each thing of interest. The
+   numbers are the program's, greater than 0.
+4. `mui_window_open(win)` and the loop: `ev = mui_wait_event()` waits and returns the event's number, or -1 to quit
+   (the close button of the first window, by default).
+5. `mui_app_end()` at the end (otherwise it happens on its own).
+
+**Values.** `mui_get_value` and `mui_set_value` read and change an object's value (the checkbox, the slider, the
+option, the chosen line...); `mui_get_text` and `mui_set_text`, its text.
+
+**The visual editor.** Windows can be drawn with the editor in Forja or in the VS Code extension, which saves a
+`.dashui`; the program uses it with `import "window.dashui"` (see `docs/MUI_EDITOR.md`). The API's design is in
+`docs/MUI_DISEÑO.md`.
+
+**Example** (`tests/test_doc_mui.dash`, which is also a test: it runs with the others):
+
+```dash
+# MUI: una ventana con un formulario, una lista y botones, y su bucle de eventos.
+
+const ID_GUARDAR = 1
+const ID_LISTA = 2
+
+Main
+    if mui_app_begin("Ejemplo", "EJEMPLO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Preferencias", 0)
+        mui_columns_begin(2)                       # un formulario: etiqueta y campo en cada fila
+            mui_label("Nombre:")
+            nombre = mui_string("Amiga", 40)
+            mui_label("Colores:")
+            colores = mui_cycle("2|4|8|16")
+            mui_label("Sonido:")
+            sonido = mui_checkbox(true)
+        mui_group_end()
+        maquinas = mui_list()
+        mui_hgroup_begin()
+            guardar = mui_button("_Guardar")
+            mui_space()
+            cancelar = mui_button("_Cancelar")
+        mui_group_end()
+    mui_window_end()
+    mui_list_add(maquinas, "A500")
+    mui_list_add(maquinas, "Lorraine")
+    mui_list_add(maquinas, "A1200")
+    cuantos = [2, 4, 8, 16]
+    mui_on_press(guardar, ID_GUARDAR)
+    mui_on_change(maquinas, ID_LISTA)
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+
+    mui_set_value(maquinas, 1)                     # para la prueba: elige una línea y pulsa Guardar
+    mui_press(guardar)
+    ev = mui_wait_event()
+    while ev != -1
+        if ev == ID_LISTA
+            Print "elegida: " + mui_list_get(maquinas, mui_get_value(maquinas))
+        elif ev == ID_GUARDAR
+            n = cuantos[mui_get_value(colores)]    # la opción elegida, desde 0
+            Print "guardado: " + mui_get_text(nombre) + ", #{n} colores, sonido #{mui_get_value(sonido)}"
+            ev = -1
+        end
+        if ev != -1
+            ev = mui_wait_event()
+        end
+    end
+    mui_app_end()
+    Print "fin"
+end
+```
+
+**Example** (`tests/test_doc_mui_lienzo.dash`, which is also a test: it runs with the others):
+
+```dash
+# MUI: una zona de dibujo que MUI repinta cuando hace falta, con los gfx_, y que responde a los clics.
+
+const ID_CLIC = 1
+const ID_FIN = 2
+
+var centro: Int = -1
+
+# MUI la llama al abrir, al cambiar de tamaño y con mui_canvas_redraw; x, y es la esquina de la zona
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(0)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(2)
+    gfx_circle_fill(x + ancho / 2, y + alto / 2, alto / 3)
+    centro = gfx_pixel_read(x + ancho / 2, y + alto / 2)
+end
+
+Main
+    if mui_app_begin("Lienzo", "LIENZO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Lienzo", 0)
+        lienzo = mui_canvas(160, 100)
+    mui_window_end()
+    mui_canvas_on_draw(lienzo, pinta)
+    mui_canvas_on_input(lienzo, ID_CLIC)       # antes de abrir la ventana
+    mui_window_open(win)
+    Print "dibujada, el centro es del color #{centro}"
+
+    mui_timer(1500, ID_FIN)                    # para la prueba: acaba sola
+    ev = mui_wait_event()
+    while ev != -1 and ev != ID_FIN
+        if ev == ID_CLIC and mui_canvas_key(lienzo) == -1
+            Print "clic en #{mui_canvas_mouse_x(lienzo)}, #{mui_canvas_mouse_y(lienzo)}"
+            mui_canvas_redraw(lienzo)
+        end
+        ev = mui_wait_event()
+    end
+    Print "clic: botón #{mui_canvas_button(lienzo)}"
+    mui_app_end()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
-| `mui_text_editor(lines)` | `APTR` | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
-| `mui_window_open_back(win)` | `LONG` | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
-| `mui_window_activate(win)` | `void` | Make a window the active one, in front of the others (it opens if it is closed) |  |
-| `mui_window_dispose(window)` | `void` | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
-| `mui_request(window, title, text, buttons)` | `LONG` | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
-| `mui_set_background(obj, r, g, b)` | `void` | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
-| `mui_set_text_pen(obj, r, g, b)` | `void` | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
-| `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)` | `void` | The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, combo), inactive and active, and their cursor; the windows opened after it take them. The text stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128 |  |
-| `mui_app_rexx(app, func)` | `void` | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
-| `mui_rexx_fail(rc)` | `void` | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
-| `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
-| `mui_window_begin(title, id)` | `APTR` | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
-| `mui_window_end()` | `void` | End the window started with mui_window_begin |  |
-| `mui_window_open(win)` | `LONG` | Open a window; false if it could not open |  |
-| `mui_window_close(win)` | `void` | Close a window (it still exists) |  |
-| `mui_window_active(win)` | `LONG` | 1 if the window is the active one (several windows from one .dashui share event numbers; dashweb D32) |  |
-| `mui_vgroup_begin()` | `APTR` | Start a vertical group inside the open group |  |
-| `mui_hgroup_begin()` | `APTR` | Start a horizontal group inside the open group |  |
-| `mui_group_end()` | `void` | End the open group |  |
-| `mui_text(text)` | `APTR` | Text object (MUI text codes allowed) |  |
-| `mui_button(label)` | `APTR` | Button (an underscore before a letter makes it the keyboard shortcut) |  |
-| `mui_on_press(obj, id)` | `void` | mui_wait_event returns id when the button is pressed |  |
-| `mui_on_close(win, id)` | `void` | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
-| `mui_on_drop(obj, id)` | `void` | mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: anywhere on it); app_drop gives their paths, app_drop_x/y where they fell |  |
-| `mui_press(obj)` | `void` | Send the mui_on_press event of a button as if it were pressed |  |
-| `mui_label(text)` | `APTR` | Label for a form row (right-aligned) |  |
-| `mui_string(initial, maxlen)` | `APTR` | Text field with up to maxlen characters |  |
-| `mui_checkbox(checked)` | `APTR` | Checkbox |  |
-| `mui_cycle(options)` | `APTR` | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
-| `mui_slider(min, max, value)` | `APTR` | Horizontal slider |  |
-| `mui_gauge(max)` | `APTR` | Progress bar from 0 to max |  |
-| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0 |  |
-| `mui_set_value(obj, value)` | `void` | Set the value (fires mui_on_change like the user would) |  |
-| `mui_get_text(obj)` | `STRPTR` | Text of a text field, text, button or window title |  |
-| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button, menu item or window title |  |
-| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object, a menu item or a whole menu |  |
-| `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
-| `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
-| `mui_list()` | `APTR` | List of texts with scroller; its value is the selected line (-1 none) |  |
-| `mui_list_add(list, text)` | `void` | Add a line at the end |  |
-| `mui_list_insert(list, pos, text)` | `void` | Insert a line at pos (0 = first) |  |
-| `mui_list_remove(list, pos)` | `void` | Remove the line at pos |  |
-| `mui_list_clear(list)` | `void` | Remove all lines |  |
-| `mui_list_count(list)` | `LONG` | Number of lines |  |
-| `mui_list_get(list, pos)` | `STRPTR` | Text of the line at pos ("" outside the list) |  |
-| `mui_list_quiet(list, quiet)` | `void` | While quiet the list is not redrawn (adding many lines) |  |
-| `mui_on_double(list, id)` | `void` | mui_wait_event returns id on a double click in the list |  |
-| `mui_frame_begin(title, horizontal)` | `APTR` | Start a group with a frame and a title ("" = none) |  |
-| `mui_columns_begin(columns)` | `APTR` | Start a grid group with that many columns (forms: label, field...) |  |
-| `mui_register_begin(titles)` | `APTR` | Start tabs ("One\|Two"); each child is a page; value = page shown |  |
-| `mui_scroll_begin()` | `APTR` | Start an area with scrollbars (contents bigger than the window) |  |
-| `mui_space()` | `APTR` | Empty space that takes what is left |  |
-| `mui_balance()` | `APTR` | Bar the user drags to share the space between its neighbours |  |
-| `mui_weight(obj, weight)` | `void` | Share of the free space an object gets (100 by default) |  |
-| `mui_set_visible(obj, visible)` | `void` | Show or hide an object (the window relayouts) |  |
-| `mui_menu_begin(title)` | `APTR` | Start a menu of the window being built |  |
-| `mui_menu_item(title, key, id)` | `APTR` | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
-| `mui_menu_check(title, key, id, checked)` | `APTR` | Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
-| `mui_submenu_begin(title)` | `APTR` | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
-| `mui_submenu_end()` | `void` | End the submenu |  |
-| `mui_menu_separator()` | `void` | Separator line in the menu |  |
-| `mui_context_menu_begin(title)` | `APTR` | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
-| `mui_set_context_menu(object, menu)` | `void` | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
-| `mui_menu_end()` | `void` | End the menu |  |
-| `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
-| `mui_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |
-| `mui_canvas_on_input(canvas, id)` | `void` | mui_wait_event returns id on a click, wheel or key over the area (call before opening the window) |  |
-| `mui_canvas_redraw(canvas)` | `void` | Draw the area again now |  |
-| `mui_canvas_buffered(canvas, on)` | `void` | Draw the area in a bitmap of its own and show it at once when done (no half-drawn area; the same coordinates; mui_canvas_update still draws on the window) |  |
-| `mui_canvas_update(canvas)` | `void` | Call the draw function now without clearing the area (it paints only what changed) |  |
-| `mui_canvas_update_area(canvas, x, y, w, h)` | `void` | Like mui_canvas_update, only the zone w x h at x, y of the area (from its corner): the drawing is clipped to it and, with mui_canvas_buffered, only it goes from the buffer to the window |  |
-| `mui_canvas_updating()` | `BOOL` | In the draw function: true if it runs for mui_canvas_update (the rest is still there) |  |
-| `mui_canvas_on_move(canvas, id)` | `void` | mui_wait_event returns id when the pointer moves over the area or leaves it, without a click (the moves that come meanwhile make one; call before opening the window) |  |
-| `mui_canvas_pointer_x(canvas)` | `LONG` | X of the pointer now, from the area's left edge (clicked or not) |  |
-| `mui_canvas_pointer_y(canvas)` | `LONG` | Y of the pointer now, from the area's top edge (clicked or not) |  |
-| `mui_canvas_pointer_inside(canvas)` | `BOOL` | True if the pointer is over the area now |  |
-| `mui_canvas_set_pointer(canvas, shape)` | `void` | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, 4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to normal outside it (Lorraine D16) |  |
-| `mui_canvas_take_tab(canvas, on)` | `void` | With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous gadget; away from it they move between gadgets as always (Lorraine D48) |  |
-| `mui_canvas_mouse_x(canvas)` | `LONG` | X of the last click or wheel, from the area's left edge |  |
-| `mui_canvas_mouse_y(canvas)` | `LONG` | Y of the last click or wheel, from the area's top edge |  |
-| `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |
-| `mui_canvas_wheel(canvas)` | `LONG` | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
-| `mui_canvas_key(canvas)` | `LONG` | Raw key code of the last input, -1 if it was not a key |  |
-| `mui_canvas_on_drag(canvas, id)` | `void` | Event id when the area is dragged (moved with the left button down after pressing it on the area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out of the area). Call before opening the window |  |
-| `mui_canvas_drag(canvas)` | `LONG` | The last drag event: 1 moving with the button down, 2 let go (0 before any) |  |
-| `mui_canvas_qualifiers(canvas)` | `LONG` | Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up (Shift + Ctrl = 3); q & 1 tells Shift |  |
-| `mui_canvas_char(canvas)` | `STRPTR` | Character of the last key in the area, with shift and the keymap ("" if none; dashweb D31) |  |
-| `mui_scrollbar(vertical)` | `APTR` | Scrollbar; its value is the first line shown |  |
-| `mui_set_range(scrollbar, total, visible)` | `void` | Size of the document and of the part that fits |  |
-| `mui_wait_event_signals(mask)` | `LONG` | Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which |  |
-| `mui_signals()` | `LONG` | Signals of the mask that woke the last mui_wait_event_signals |  |
-| `mui_timer(ms, id)` | `void` | In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels) |  |
-| `mui_image(file)` | `APTR` | Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file |  |
-| `mui_image_button(file)` | `APTR` | Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture |  |
-| `mui_image_toggle(file, group, selected)` | `APTR` | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
-| `mui_combo(text, options)` | `APTR` | Text field with a list that drops down (font, size; options "A\|B"): write or pick a line (double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return or when a line is picked |  |
-| `mui_help(obj, text)` | `void` | Bubble help shown when the pointer rests on the object |  |
-| `mui_window_move(win, dx, dy)` | `void` | Move an open window by dx, dy pixels (windows of one .dashui open in the same place) |  |
-| `mui_set_active(win, obj)` | `void` | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
-| `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
-| `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
-| `mui_window_screen(win, name)` | `BOOL` | The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen |  |
-| `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |
-| `mui_width(obj)` | `LONG` | Width of an object on screen in pixels (0 before its window opens) |  |
-| `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |
-| `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
-| `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |
+| [`mui_app_begin(title, base)`](#mui_app_begin) | Int (address) | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| [`mui_text_editor(lines)`](#mui_text_editor) | Int (address) | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
+| [`mui_window_open_back(win)`](#mui_window_open_back) | Int | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
+| [`mui_window_activate(win)`](#mui_window_activate) | — | Make a window the active one, in front of the others (it opens if it is closed) |  |
+| [`mui_window_dispose(window)`](#mui_window_dispose) | — | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
+| [`mui_request(window, title, text, buttons)`](#mui_request) | Int | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
+| [`mui_set_background(obj, r, g, b)`](#mui_set_background) | — | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
+| [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
+| [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, combo), inactive and active, and their cursor; the windows opened after it take them. The text stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128 |  |
+| [`mui_app_rexx(app, func)`](#mui_app_rexx) | — | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
+| [`mui_rexx_fail(rc)`](#mui_rexx_fail) | — | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
+| [`mui_app_end()`](#mui_app_end) | — | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
+| [`mui_window_begin(title, id)`](#mui_window_begin) | Int (address) | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
+| [`mui_window_end()`](#mui_window_end) | — | End the window started with mui_window_begin |  |
+| [`mui_window_open(win)`](#mui_window_open) | Int | Open a window; false if it could not open |  |
+| [`mui_window_close(win)`](#mui_window_close) | — | Close a window (it still exists) |  |
+| [`mui_window_active(win)`](#mui_window_active) | Int | 1 if the window is the active one (several windows from one .dashui share event numbers; dashweb D32) |  |
+| [`mui_vgroup_begin()`](#mui_vgroup_begin) | Int (address) | Start a vertical group inside the open group |  |
+| [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (address) | Start a horizontal group inside the open group |  |
+| [`mui_group_end()`](#mui_group_end) | — | End the open group |  |
+| [`mui_text(text)`](#mui_text) | Int (address) | Text object (MUI text codes allowed) |  |
+| [`mui_button(label)`](#mui_button) | Int (address) | Button (an underscore before a letter makes it the keyboard shortcut) |  |
+| [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event returns id when the button is pressed |  |
+| [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
+| [`mui_on_drop(obj, id)`](#mui_on_drop) | — | mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: anywhere on it); app_drop gives their paths, app_drop_x/y where they fell |  |
+| [`mui_press(obj)`](#mui_press) | — | Send the mui_on_press event of a button as if it were pressed |  |
+| [`mui_label(text)`](#mui_label) | Int (address) | Label for a form row (right-aligned) |  |
+| [`mui_string(initial, maxlen)`](#mui_string) | Int (address) | Text field with up to maxlen characters |  |
+| [`mui_checkbox(checked)`](#mui_checkbox) | Int (address) | Checkbox |  |
+| [`mui_cycle(options)`](#mui_cycle) | Int (address) | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
+| [`mui_slider(min, max, value)`](#mui_slider) | Int (address) | Horizontal slider |  |
+| [`mui_gauge(max)`](#mui_gauge) | Int (address) | Progress bar from 0 to max |  |
+| [`mui_get_value(obj)`](#mui_get_value) | Int | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0 |  |
+| [`mui_set_value(obj, value)`](#mui_set_value) | — | Set the value (fires mui_on_change like the user would) |  |
+| [`mui_get_text(obj)`](#mui_get_text) | String | Text of a text field, text, button or window title |  |
+| [`mui_set_text(obj, text)`](#mui_set_text) | — | Change the text of a text field, text, button, menu item or window title |  |
+| [`mui_set_enabled(obj, enabled)`](#mui_set_enabled) | — | Enable or disable (ghost) an object, a menu item or a whole menu |  |
+| [`mui_on_change(obj, id)`](#mui_on_change) | — | mui_wait_event returns id when the value or text changes |  |
+| [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
+| [`mui_list()`](#mui_list) | Int (address) | List of texts with scroller; its value is the selected line (-1 none) |  |
+| [`mui_list_add(list, text)`](#mui_list_add) | — | Add a line at the end |  |
+| [`mui_list_insert(list, pos, text)`](#mui_list_insert) | — | Insert a line at pos (0 = first) |  |
+| [`mui_list_remove(list, pos)`](#mui_list_remove) | — | Remove the line at pos |  |
+| [`mui_list_clear(list)`](#mui_list_clear) | — | Remove all lines |  |
+| [`mui_list_count(list)`](#mui_list_count) | Int | Number of lines |  |
+| [`mui_list_get(list, pos)`](#mui_list_get) | String | Text of the line at pos ("" outside the list) |  |
+| [`mui_list_quiet(list, quiet)`](#mui_list_quiet) | — | While quiet the list is not redrawn (adding many lines) |  |
+| [`mui_on_double(list, id)`](#mui_on_double) | — | mui_wait_event returns id on a double click in the list |  |
+| [`mui_frame_begin(title, horizontal)`](#mui_frame_begin) | Int (address) | Start a group with a frame and a title ("" = none) |  |
+| [`mui_columns_begin(columns)`](#mui_columns_begin) | Int (address) | Start a grid group with that many columns (forms: label, field...) |  |
+| [`mui_register_begin(titles)`](#mui_register_begin) | Int (address) | Start tabs ("One\|Two"); each child is a page; value = page shown |  |
+| [`mui_scroll_begin()`](#mui_scroll_begin) | Int (address) | Start an area with scrollbars (contents bigger than the window) |  |
+| [`mui_space()`](#mui_space) | Int (address) | Empty space that takes what is left |  |
+| [`mui_balance()`](#mui_balance) | Int (address) | Bar the user drags to share the space between its neighbours |  |
+| [`mui_weight(obj, weight)`](#mui_weight) | — | Share of the free space an object gets (100 by default) |  |
+| [`mui_set_visible(obj, visible)`](#mui_set_visible) | — | Show or hide an object (the window relayouts) |  |
+| [`mui_menu_begin(title)`](#mui_menu_begin) | Int (address) | Start a menu of the window being built |  |
+| [`mui_menu_item(title, key, id)`](#mui_menu_item) | Int (address) | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
+| [`mui_menu_check(title, key, id, checked)`](#mui_menu_check) | Int (address) | Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
+| [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (address) | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
+| [`mui_submenu_end()`](#mui_submenu_end) | — | End the submenu |  |
+| [`mui_menu_separator()`](#mui_menu_separator) | — | Separator line in the menu |  |
+| [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (address) | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
+| [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
+| [`mui_menu_end()`](#mui_menu_end) | — | End the menu |  |
+| [`mui_canvas(min_width, min_height)`](#mui_canvas) | Int (address) | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
+| [`mui_canvas_on_draw(canvas, func)`](#mui_canvas_on_draw) | — | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |
+| [`mui_canvas_on_input(canvas, id)`](#mui_canvas_on_input) | — | mui_wait_event returns id on a click, wheel or key over the area (call before opening the window) |  |
+| [`mui_canvas_redraw(canvas)`](#mui_canvas_redraw) | — | Draw the area again now |  |
+| [`mui_canvas_buffered(canvas, on)`](#mui_canvas_buffered) | — | Draw the area in a bitmap of its own and show it at once when done (no half-drawn area; the same coordinates; mui_canvas_update still draws on the window) |  |
+| [`mui_canvas_update(canvas)`](#mui_canvas_update) | — | Call the draw function now without clearing the area (it paints only what changed) |  |
+| [`mui_canvas_update_area(canvas, x, y, w, h)`](#mui_canvas_update_area) | — | Like mui_canvas_update, only the zone w x h at x, y of the area (from its corner): the drawing is clipped to it and, with mui_canvas_buffered, only it goes from the buffer to the window |  |
+| [`mui_canvas_updating()`](#mui_canvas_updating) | Bool | In the draw function: true if it runs for mui_canvas_update (the rest is still there) |  |
+| [`mui_canvas_on_move(canvas, id)`](#mui_canvas_on_move) | — | mui_wait_event returns id when the pointer moves over the area or leaves it, without a click (the moves that come meanwhile make one; call before opening the window) |  |
+| [`mui_canvas_pointer_x(canvas)`](#mui_canvas_pointer_x) | Int | X of the pointer now, from the area's left edge (clicked or not) |  |
+| [`mui_canvas_pointer_y(canvas)`](#mui_canvas_pointer_y) | Int | Y of the pointer now, from the area's top edge (clicked or not) |  |
+| [`mui_canvas_pointer_inside(canvas)`](#mui_canvas_pointer_inside) | Bool | True if the pointer is over the area now |  |
+| [`mui_canvas_set_pointer(canvas, shape)`](#mui_canvas_set_pointer) | — | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, 4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to normal outside it (Lorraine D16) |  |
+| [`mui_canvas_take_tab(canvas, on)`](#mui_canvas_take_tab) | — | With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous gadget; away from it they move between gadgets as always (Lorraine D48) |  |
+| [`mui_canvas_mouse_x(canvas)`](#mui_canvas_mouse_x) | Int | X of the last click or wheel, from the area's left edge |  |
+| [`mui_canvas_mouse_y(canvas)`](#mui_canvas_mouse_y) | Int | Y of the last click or wheel, from the area's top edge |  |
+| [`mui_canvas_button(canvas)`](#mui_canvas_button) | Int | 1 if the last input was a left click, else 0 |  |
+| [`mui_canvas_wheel(canvas)`](#mui_canvas_wheel) | Int | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
+| [`mui_canvas_key(canvas)`](#mui_canvas_key) | Int | Raw key code of the last input, -1 if it was not a key |  |
+| [`mui_canvas_on_drag(canvas, id)`](#mui_canvas_on_drag) | — | Event id when the area is dragged (moved with the left button down after pressing it on the area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out of the area). Call before opening the window |  |
+| [`mui_canvas_drag(canvas)`](#mui_canvas_drag) | Int | The last drag event: 1 moving with the button down, 2 let go (0 before any) |  |
+| [`mui_canvas_qualifiers(canvas)`](#mui_canvas_qualifiers) | Int | Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up (Shift + Ctrl = 3); q & 1 tells Shift |  |
+| [`mui_canvas_char(canvas)`](#mui_canvas_char) | String | Character of the last key in the area, with shift and the keymap ("" if none; dashweb D31) |  |
+| [`mui_scrollbar(vertical)`](#mui_scrollbar) | Int (address) | Scrollbar; its value is the first line shown |  |
+| [`mui_set_range(scrollbar, total, visible)`](#mui_set_range) | — | Size of the document and of the part that fits |  |
+| [`mui_wait_event_signals(mask)`](#mui_wait_event_signals) | Int | Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which |  |
+| [`mui_signals()`](#mui_signals) | Int | Signals of the mask that woke the last mui_wait_event_signals |  |
+| [`mui_timer(ms, id)`](#mui_timer) | — | In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels) |  |
+| [`mui_image(file)`](#mui_image) | Int (address) | Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file |  |
+| [`mui_image_button(file)`](#mui_image_button) | Int (address) | Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture |  |
+| [`mui_image_toggle(file, group, selected)`](#mui_image_toggle) | Int (address) | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
+| [`mui_combo(text, options)`](#mui_combo) | Int (address) | Text field with a list that drops down (font, size; options "A\|B"): write or pick a line (double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return or when a line is picked |  |
+| [`mui_help(obj, text)`](#mui_help) | — | Bubble help shown when the pointer rests on the object |  |
+| [`mui_window_move(win, dx, dy)`](#mui_window_move) | — | Move an open window by dx, dy pixels (windows of one .dashui open in the same place) |  |
+| [`mui_set_active(win, obj)`](#mui_set_active) | — | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
+| [`mui_window_size(win, width_pct, height_pct)`](#mui_window_size) | — | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
+| [`mui_window_fullscreen(win)`](#mui_window_fullscreen) | — | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
+| [`mui_window_screen(win, name)`](#mui_window_screen) | Bool | The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen |  |
+| [`mui_window_own_screen(win)`](#mui_window_own_screen) | Bool | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |
+| [`mui_width(obj)`](#mui_width) | Int | Width of an object on screen in pixels (0 before its window opens) |  |
+| [`mui_height(obj)`](#mui_height) | Int | Height of an object on screen in pixels (0 before its window opens) |  |
+| [`mui_wait_event()`](#mui_wait_event) | Int | Wait for the next event and return its number; -1 to quit |  |
+| [`mui_poll_event()`](#mui_poll_event) | Int | Like mui_wait_event without waiting: 0 when there is no event |  |
+
+<a id="mui_app_begin"></a>
+
+### `mui_app_begin(title, base)` → `Int (address)`
+
+- `title`: the application's name, the one MUI shows in its preferences and in Exchange.
+- `base`: the name of its ARexx port, in capitals (`"MYPROG"`); the port is `base` plus `.1`.
+
+Opens `muimaster.library` and creates the application. It goes before anything else of MUI. Returns 0 if there is
+no MUI or the CPU is a 68000: the program has to warn and end.
+
+See also: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_text_editor"></a>
+
+### `mui_text_editor(lines)` → `Int (address)`
+
+- `lines`: how many lines high.
+
+A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
+change all of it; `mui_on_ack` fires on Amiga+Return.
+
+See also: [`mui_string`](#mui_string).
+
+<a id="mui_window_open_back"></a>
+
+### `mui_window_open_back(win)` → `Int`
+
+- `win`: the window.
+
+Opens it without making it the active one: the keyboard stays where it was. Returns 0 if it could not.
+
+See also: [`mui_window_open`](#mui_window_open).
+
+<a id="mui_window_activate"></a>
+
+### `mui_window_activate(win)`
+
+- `win`: the window.
+
+Brings it to the front and makes it the active one. If it is closed, it opens it.
+
+See also: [`mui_window_active`](#mui_window_active).
+
+<a id="mui_window_dispose"></a>
+
+### `mui_window_dispose(window)`
+
+- `win`: the window.
+
+Closes it, removes it from the application and frees it with all its objects, which can no longer be used. For
+windows made over and over, like a preview. With 0 or a window that is gone, it does nothing.
+
+See also: [`mui_window_close`](#mui_window_close).
+
+<a id="mui_request"></a>
+
+### `mui_request(window, title, text, buttons)` → `Int`
+
+- `window`: the window it shows over; 0 = over the application.
+- `title`: the title.
+- `text`: the question; it takes MUI's text codes.
+- `buttons`: the buttons separated by `|`, with `_` for their key: `"_Save|_Discard|_Cancel"`.
+
+Asks and waits; meanwhile the application's windows do not respond. Returns the chosen button: 1, 2... from the
+left, and 0 the last one (also with Esc).
+
+See also: [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_set_background"></a>
+
+### `mui_set_background(obj, r, g, b)`
+
+- `obj`: a group, a text, a label, a button, a list or a window.
+- `r`, `g`, `b`: the colour, from 0 to 255.
+
+A background in that colour. The objects inside take it if they have none of their own.
+
+See also: [`mui_set_text_pen`](#mui_set_text_pen).
+
+<a id="mui_set_text_pen"></a>
+
+### `mui_set_text_pen(obj, r, g, b)`
+
+- `obj`: a text, a label or a button.
+- `r`, `g`, `b`: the colour, from 0 to 255.
+
+The colour of its text; it stays after a `mui_set_text`.
+
+See also: [`mui_set_background`](#mui_set_background).
+
+<a id="mui_app_field_colors"></a>
+
+### `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`
+
+- `r`, `g`, `b`: the background of fields without the cursor (0 to 255).
+- `active_r`, `active_g`, `active_b`: the background of the field with the cursor.
+- `cursor_r`, `cursor_g`, `cursor_b`: the cursor's colour.
+
+The colours of every text field in the application (`mui_string`, `mui_text_editor`, `mui_combo`) in windows opened
+afterwards. The text stays black: pick light backgrounds, or greys it can be read on.
+
+See also: [`mui_set_background`](#mui_set_background).
+
+<a id="mui_app_rexx"></a>
+
+### `mui_app_rexx(app, func)`
+
+- `app`: the application (what `mui_app_begin` returned).
+- `func`: a function `f(command: String) -> String`.
+
+Every ARexx command reaching the application's port that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...)
+calls `func` with the whole line. What it returns is the RESULT. It runs while `mui_wait_event` waits.
+
+See also: [`mui_rexx_fail`](#mui_rexx_fail).
+
+<a id="mui_rexx_fail"></a>
+
+### `mui_rexx_fail(rc)`
+
+- `rc`: the code: 5 warning, 10 error, 20 failure.
+
+Inside the `mui_app_rexx` function, makes the command end with that RC. With an RC there is no RESULT.
+
+See also: [`mui_app_rexx`](#mui_app_rexx).
+
+<a id="mui_app_end"></a>
+
+### `mui_app_end()`
+
+Disposes of the application with all its windows and objects and closes MUI. If the program does not call it, it
+happens on its own at the end. Afterwards no MUI object is valid.
+
+See also: [`mui_app_begin`](#mui_app_begin).
+
+<a id="mui_window_begin"></a>
+
+### `mui_window_begin(title, id)` → `Int (address)`
+
+- `title`: the title.
+- `id`: 1 to 255 so MUI remembers its size and place from one run to the next (each window its own); 0 = none.
+
+Starts describing a window with a vertical group inside: what is created up to `mui_window_end` goes in it.
+Returns the window, for `mui_window_open` and the rest.
+
+See also: [`mui_window_end`](#mui_window_end), [`mui_window_open`](#mui_window_open).
+
+<a id="mui_window_end"></a>
+
+### `mui_window_end()`
+
+Ends the window started with `mui_window_begin` and adds it to the application. The groups opened inside must be
+closed with their `mui_group_end`. The window does not show until `mui_window_open`.
+
+See also: [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_window_open"></a>
+
+### `mui_window_open(win)` → `Int`
+
+- `win`: the window.
+
+Opens it and makes it the active one. Returns 0 if it could not: it does not fit on the screen or memory is short.
+
+See also: [`mui_window_close`](#mui_window_close), [`mui_window_open_back`](#mui_window_open_back).
+
+<a id="mui_window_close"></a>
+
+### `mui_window_close(win)`
+
+- `win`: the window.
+
+Closes it. It still exists with all its objects and values: `mui_window_open` opens it again as it was.
+
+See also: [`mui_window_open`](#mui_window_open), [`mui_window_dispose`](#mui_window_dispose).
+
+<a id="mui_window_active"></a>
+
+### `mui_window_active(win)` → `Int`
+
+- `win`: the window.
+
+Returns 1 if it is the active window, otherwise 0. Useful when several windows from a `.dashui` give the same event
+number.
+
+See also: [`mui_window_activate`](#mui_window_activate).
+
+<a id="mui_vgroup_begin"></a>
+
+### `mui_vgroup_begin()` → `Int (address)`
+
+Starts a group that places its objects one under the other, inside the open group. It ends with `mui_group_end`.
+Returns the group, for `mui_set_visible`, `mui_weight` or `mui_set_background`.
+
+See also: [`mui_hgroup_begin`](#mui_hgroup_begin), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_hgroup_begin"></a>
+
+### `mui_hgroup_begin()` → `Int (address)`
+
+Starts a group that places its objects side by side. It ends with `mui_group_end`. Returns the group.
+
+See also: [`mui_vgroup_begin`](#mui_vgroup_begin), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_group_end"></a>
+
+### `mui_group_end()`
+
+Ends the last open group (of any kind: `mui_vgroup_begin`, `mui_frame_begin`, `mui_register_begin`...). The next
+objects go into the outer group again.
+
+See also: [`mui_vgroup_begin`](#mui_vgroup_begin).
+
+<a id="mui_text"></a>
+
+### `mui_text(text)` → `Int (address)`
+
+- `text`: the text. It takes MUI's codes: `"\33c"` centred, `"\33r"` right aligned, `"\33b"` bold.
+
+A text that is not edited. `mui_set_text` changes it.
+
+See also: [`mui_label`](#mui_label), [`mui_set_text`](#mui_set_text).
+
+<a id="mui_button"></a>
+
+### `mui_button(label)` → `Int (address)`
+
+- `label`: the text; a `_` before a letter makes it its key.
+
+A button. Pressing it fires the `mui_on_press` event.
+
+See also: [`mui_on_press`](#mui_on_press), [`mui_image_button`](#mui_image_button).
+
+<a id="mui_on_press"></a>
+
+### `mui_on_press(obj, id)`
+
+- `obj`: a button (or a picture button).
+- `id`: the event number, greater than 0.
+
+From now on, pressing the button makes `mui_wait_event` return `id`.
+
+See also: [`mui_wait_event`](#mui_wait_event), [`mui_press`](#mui_press).
+
+<a id="mui_on_close"></a>
+
+### `mui_on_close(win, id)`
+
+- `win`: the window.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when that window's close button is pressed; the window does not close by itself.
+Without calling it, closing the first window returns -1 (quit) and the others just close, with no event.
+
+See also: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_on_drop"></a>
+
+### `mui_on_drop(obj, id)`
+
+- `obj`: the object, or a window (anywhere on it).
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when Workbench icons are dropped on the object. `app_drop` gives their paths.
+
+See also: [`app_drop`](#app_drop).
+
+<a id="mui_press"></a>
+
+### `mui_press(obj)`
+
+- `obj`: a button.
+
+Fires its `mui_on_press` event as if it had been pressed. For shortcuts of your own and for tests.
+
+See also: [`mui_on_press`](#mui_on_press).
+
+<a id="mui_label"></a>
+
+### `mui_label(text)` → `Int (address)`
+
+- `text`: the text.
+
+The label of a form row: right aligned, to go in front of its field in a `mui_columns_begin(2)`.
+
+See also: [`mui_columns_begin`](#mui_columns_begin), [`mui_text`](#mui_text).
+
+<a id="mui_string"></a>
+
+### `mui_string(initial, maxlen)` → `Int (address)`
+
+- `initial`: the starting text.
+- `maxlen`: the most letters it holds.
+
+A one-line text field. `mui_get_text` reads it; `mui_on_ack` fires on Return and `mui_on_change` on every change.
+
+See also: [`mui_get_text`](#mui_get_text), [`mui_on_ack`](#mui_on_ack), [`mui_text_editor`](#mui_text_editor).
+
+<a id="mui_checkbox"></a>
+
+### `mui_checkbox(checked)` → `Int (address)`
+
+- `checked`: whether it starts ticked.
+
+A checkbox. `mui_get_value` gives 1 ticked and 0 unticked; `mui_on_change` fires when it changes.
+
+See also: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_cycle"></a>
+
+### `mui_cycle(options)` → `Int (address)`
+
+- `options`: the options separated by `|`: `"Low|Medium|High"`.
+
+A gadget that moves to the next option with each click. `mui_get_value` gives the chosen one, from 0.
+
+See also: [`mui_get_value`](#mui_get_value), [`mui_register_begin`](#mui_register_begin).
+
+<a id="mui_slider"></a>
+
+### `mui_slider(min, max, value)` → `Int (address)`
+
+- `min`, `max`: the ends.
+- `value`: the starting value.
+
+A horizontal slider. `mui_get_value` gives its value; `mui_on_change` fires while it moves.
+
+See also: [`mui_gauge`](#mui_gauge), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_gauge"></a>
+
+### `mui_gauge(max)` → `Int (address)`
+
+- `max`: the value of the full bar.
+
+A progress bar, empty at the start. `mui_set_value(bar, n)` fills it up to `n`.
+
+See also: [`mui_set_value`](#mui_set_value).
+
+<a id="mui_get_value"></a>
+
+### `mui_get_value(obj)` → `Int`
+
+- `obj`: the object.
+
+Returns its value: checkbox 1 or 0; a cycle's option or the tab, from 0; a slider's or a gauge's level; a list's
+chosen line (-1 none); a menu item's check mark; a scroll bar's position. 0 on an object without a value.
+
+See also: [`mui_set_value`](#mui_set_value), [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_value"></a>
+
+### `mui_set_value(obj, value)`
+
+- `obj`: the object.
+- `value`: the new value, as in `mui_get_value`.
+
+Changes the value. It fires the `mui_on_change` event as if the user had done it.
+
+See also: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_get_text"></a>
+
+### `mui_get_text(obj)` → `String`
+
+- `obj`: a text field, a text, a button or a window.
+
+Returns its text (for a window, the title).
+
+See also: [`mui_set_text`](#mui_set_text), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_set_text"></a>
+
+### `mui_set_text(obj, text)`
+
+- `obj`: a text field, a text, a button, a menu item, a picture or a window.
+- `text`: the new text (for a picture, the file).
+
+Changes its text; for a window, the title.
+
+See also: [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_enabled"></a>
+
+### `mui_set_enabled(obj, enabled)`
+
+- `obj`: an object, a menu item or a whole menu.
+- `enabled`: `false` disables it (greyed out, no response); `true` enables it again.
+
+See also: [`mui_set_visible`](#mui_set_visible).
+
+<a id="mui_on_change"></a>
+
+### `mui_on_change(obj, id)`
+
+- `obj`: the object.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when its value or text changes: a checkbox, a cycle, a slider, a list's line, the
+tab, a text field.
+
+See also: [`mui_get_value`](#mui_get_value), [`mui_on_ack`](#mui_on_ack).
+
+<a id="mui_on_ack"></a>
+
+### `mui_on_ack(obj, id)`
+
+- `obj`: a text field, a `mui_text_editor` or a `mui_combo`.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when Return is pressed in the field (Amiga+Return in the multi-line one; in a combo,
+also on choosing a line).
+
+See also: [`mui_on_change`](#mui_on_change), [`mui_string`](#mui_string).
+
+<a id="mui_list"></a>
+
+### `mui_list()` → `Int (address)`
+
+A list of texts with its scroll bar. Its value (`mui_get_value`) is the chosen line, from 0, or -1 if there is none;
+`mui_on_change` fires on a choice and `mui_on_double` on a double click.
+
+See also: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double).
+
+<a id="mui_list_add"></a>
+
+### `mui_list_add(list, text)`
+
+- `list`: the list (or a `mui_combo`).
+- `text`: the line; the list keeps its own copy.
+
+Adds the line at the end.
+
+See also: [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+
+<a id="mui_list_insert"></a>
+
+### `mui_list_insert(list, pos, text)`
+
+- `list`: the list.
+- `pos`: where, from 0; the following ones move down.
+- `text`: the line.
+
+See also: [`mui_list_add`](#mui_list_add).
+
+<a id="mui_list_remove"></a>
+
+### `mui_list_remove(list, pos)`
+
+- `list`: the list.
+- `pos`: the line to remove, from 0.
+
+See also: [`mui_list_clear`](#mui_list_clear).
+
+<a id="mui_list_clear"></a>
+
+### `mui_list_clear(list)`
+
+- `list`: the list.
+
+Removes every line.
+
+See also: [`mui_list_remove`](#mui_list_remove).
+
+<a id="mui_list_count"></a>
+
+### `mui_list_count(list)` → `Int`
+
+- `list`: the list.
+
+Returns how many lines it has.
+
+See also: [`mui_list_get`](#mui_list_get).
+
+<a id="mui_list_get"></a>
+
+### `mui_list_get(list, pos)` → `String`
+
+- `list`: the list.
+- `pos`: the line, from 0.
+
+Returns its text; `""` if there is no such line.
+
+See also: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_value).
+
+<a id="mui_list_quiet"></a>
+
+### `mui_list_quiet(list, quiet)`
+
+- `list`: the list.
+- `quiet`: `true` stops redrawing it; `false` redraws it with everything new.
+
+To add many lines at once without each one being drawn.
+
+See also: [`mui_list_add`](#mui_list_add).
+
+<a id="mui_on_double"></a>
+
+### `mui_on_double(list, id)`
+
+- `list`: the list.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` on a double click on a line; `mui_get_value` says which.
+
+See also: [`mui_list`](#mui_list).
+
+<a id="mui_frame_begin"></a>
+
+### `mui_frame_begin(title, horizontal)` → `Int (address)`
+
+- `title`: the frame's title; `""` = no title.
+- `horizontal`: `true` places the objects side by side; `false`, one under the other.
+
+Starts a group with a frame around it. It ends with `mui_group_end`.
+
+See also: [`mui_group_end`](#mui_group_end).
+
+<a id="mui_columns_begin"></a>
+
+### `mui_columns_begin(columns)` → `Int (address)`
+
+- `columns`: how many columns.
+
+Starts a grid group: the objects fill the rows left to right. With 2 columns, a label and its field per row, you
+get a form with everything aligned. It ends with `mui_group_end`.
+
+See also: [`mui_label`](#mui_label), [`mui_group_end`](#mui_group_end).
+
+<a id="mui_register_begin"></a>
+
+### `mui_register_begin(titles)` → `Int (address)`
+
+- `titles`: the tab titles separated by `|`: `"General|Advanced"`.
+
+Starts a tab group: each direct child (usually a group) is a page. `mui_get_value` says which page shows, from 0,
+and `mui_set_value` changes page. It ends with `mui_group_end`.
+
+See also: [`mui_group_end`](#mui_group_end), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_scroll_begin"></a>
+
+### `mui_scroll_begin()` → `Int (address)`
+
+Starts an area with scroll bars, for contents bigger than the window. It ends with `mui_group_end`.
+
+See also: [`mui_group_end`](#mui_group_end).
+
+<a id="mui_space"></a>
+
+### `mui_space()` → `Int (address)`
+
+An empty space that stretches and takes up what is left. Between two buttons of a horizontal group, it pushes them
+to the ends.
+
+See also: [`mui_weight`](#mui_weight).
+
+<a id="mui_balance"></a>
+
+### `mui_balance()` → `Int (address)`
+
+A bar between two objects that the user drags to share the space between them (a list and a text, for instance).
+
+See also: [`mui_weight`](#mui_weight).
+
+<a id="mui_weight"></a>
+
+### `mui_weight(obj, weight)`
+
+- `obj`: the object.
+- `weight`: its weight; 100 by default.
+
+How much of the free space the object takes compared with its neighbours: at 200 it grows twice as much as one at
+100.
+
+See also: [`mui_space`](#mui_space), [`mui_balance`](#mui_balance).
+
+<a id="mui_set_visible"></a>
+
+### `mui_set_visible(obj, visible)`
+
+- `obj`: the object or the group.
+- `visible`: `false` hides it, `true` shows it.
+
+The window lays itself out again to give or take its space.
+
+See also: [`mui_set_enabled`](#mui_set_enabled).
+
+<a id="mui_menu_begin"></a>
+
+### `mui_menu_begin(title)` → `Int (address)`
+
+- `title`: the menu's title on the bar.
+
+Starts a menu of the window being described (between `mui_window_begin` and `mui_window_end`). Its items go up to
+`mui_menu_end`.
+
+See also: [`mui_menu_item`](#mui_menu_item), [`mui_menu_end`](#mui_menu_end).
+
+<a id="mui_menu_item"></a>
+
+### `mui_menu_item(title, key, id)` → `Int (address)`
+
+- `title`: the item's text.
+- `key`: the shortcut letter with Amiga (`"S"` = Amiga+S); `""` none.
+- `id`: the event number it gives when chosen.
+
+An item of the open menu. Returns the item, for `mui_set_enabled` or `mui_set_text`.
+
+See also: [`mui_menu_check`](#mui_menu_check), [`mui_menu_separator`](#mui_menu_separator).
+
+<a id="mui_menu_check"></a>
+
+### `mui_menu_check(title, key, id, checked)` → `Int (address)`
+
+- `title`, `key`, `id`: as in `mui_menu_item`.
+- `checked`: whether it starts checked.
+
+An item with a check mark: choosing it toggles the mark and gives `id`. `mui_get_value` and `mui_set_value` read
+and set the mark.
+
+See also: [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_submenu_begin"></a>
+
+### `mui_submenu_begin(title)` → `Int (address)`
+
+- `title`: the text of the item that opens the submenu.
+
+Starts a submenu inside the open menu; its items go up to `mui_submenu_end`. One level only.
+
+See also: [`mui_submenu_end`](#mui_submenu_end).
+
+<a id="mui_submenu_end"></a>
+
+### `mui_submenu_end()`
+
+Ends the submenu.
+
+See also: [`mui_submenu_begin`](#mui_submenu_begin).
+
+<a id="mui_menu_separator"></a>
+
+### `mui_menu_separator()`
+
+A line between menu items.
+
+See also: [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_context_menu_begin"></a>
+
+### `mui_context_menu_begin(title)` → `Int (address)`
+
+- `title`: the menu's title.
+
+Starts a context menu, anywhere in the program; its items as in a menu, up to `mui_menu_end`. Returns the menu, for
+`mui_set_context_menu`.
+
+See also: [`mui_set_context_menu`](#mui_set_context_menu), [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_set_context_menu"></a>
+
+### `mui_set_context_menu(object, menu)`
+
+- `object`: the object.
+- `menu`: the menu from `mui_context_menu_begin`; 0 = none.
+
+The right button over the object opens that menu, and its items give their events. On a drawing area,
+`mui_canvas_mouse_x` and `_y` say where it was pressed.
+
+See also: [`mui_context_menu_begin`](#mui_context_menu_begin).
+
+<a id="mui_menu_end"></a>
+
+### `mui_menu_end()`
+
+Ends the open menu, or the context menu.
+
+See also: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#mui_context_menu_begin).
+
+<a id="mui_canvas"></a>
+
+### `mui_canvas(min_width, min_height)` → `Int (address)`
+
+- `min_width`, `min_height`: the minimum size in pixels; it grows with the window.
+
+An area where the program draws with the `gfx_*` functions. You do not draw on it whenever you like: MUI calls the
+`mui_canvas_on_draw` function each time it is needed (on opening, on resizing, when uncovered) and when the program
+asks with `mui_canvas_redraw`. To respond to the mouse and the keyboard, `mui_canvas_on_input`.
+
+See also: [`mui_canvas_on_draw`](#mui_canvas_on_draw), [`mui_canvas_redraw`](#mui_canvas_redraw), [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_on_draw"></a>
+
+### `mui_canvas_on_draw(canvas, func)`
+
+- `canvas`: the drawing area.
+- `func`: a function `f(x: Int, y: Int, width: Int, height: Int)`.
+
+The function that draws the area. `x`, `y` is the area's corner inside the window and `width`, `height` its current
+size: you draw from `x` to `x + width - 1`. What goes outside is clipped. Inside it, the `gfx_*` functions draw on
+the area.
+
+See also: [`mui_canvas`](#mui_canvas), [`mui_canvas_redraw`](#mui_canvas_redraw), [`mui_canvas_updating`](#mui_canvas_updating).
+
+<a id="mui_canvas_on_input"></a>
+
+### `mui_canvas_on_input(canvas, id)`
+
+- `canvas`: the drawing area.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` on a click, the mouse wheel or a key over the area. Then `mui_canvas_button`,
+`mui_canvas_wheel` or `mui_canvas_key` say what it was, and `mui_canvas_mouse_x`, `_y` where. Call it before
+opening the window.
+
+See also: [`mui_canvas_button`](#mui_canvas_button), [`mui_canvas_key`](#mui_canvas_key), [`mui_canvas_mouse_x`](#mui_canvas_mouse_x).
+
+<a id="mui_canvas_redraw"></a>
+
+### `mui_canvas_redraw(canvas)`
+
+- `canvas`: the drawing area.
+
+Asks MUI to clear it and draw it again now, calling its function. Call it from the main program, never from another
+task.
+
+See also: [`mui_canvas_update`](#mui_canvas_update), [`mui_canvas_on_draw`](#mui_canvas_on_draw).
+
+<a id="mui_canvas_buffered"></a>
+
+### `mui_canvas_buffered(canvas, on)`
+
+- `canvas`: the drawing area.
+- `on`: `true` turns it on.
+
+The area is drawn on a separate picture and shown at once when the function ends: it is never seen half drawn. The
+coordinates are the same. It uses the memory of a picture the size of the area.
+
+See also: [`mui_canvas_update_area`](#mui_canvas_update_area).
+
+<a id="mui_canvas_update"></a>
+
+### `mui_canvas_update(canvas)`
+
+- `canvas`: the drawing area.
+
+Calls the drawing function without clearing the area first: inside, `mui_canvas_updating()` is `true` and painting
+what changed is enough. Faster than `mui_canvas_redraw` for a cursor or a counter.
+
+See also: [`mui_canvas_updating`](#mui_canvas_updating), [`mui_canvas_update_area`](#mui_canvas_update_area).
+
+<a id="mui_canvas_update_area"></a>
+
+### `mui_canvas_update_area(canvas, x, y, w, h)`
+
+- `canvas`: the drawing area.
+- `x`, `y`, `w`, `h`: the part to repaint, counting from the area's corner.
+
+Like `mui_canvas_update`, but drawing is clipped to that part. With `mui_canvas_buffered`, only that part goes to
+the window.
+
+See also: [`mui_canvas_update`](#mui_canvas_update).
+
+<a id="mui_canvas_updating"></a>
+
+### `mui_canvas_updating()` → `Bool`
+
+Inside the drawing function, returns `true` if `mui_canvas_update` called it (the old picture is still on the area)
+and `false` if it has to be drawn whole.
+
+See also: [`mui_canvas_update`](#mui_canvas_update).
+
+<a id="mui_canvas_on_move"></a>
+
+### `mui_canvas_on_move(canvas, id)`
+
+- `canvas`: the drawing area.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when the pointer moves over the area, or leaves it, without a click. Several moves
+arriving while the program is busy count as one. Call it before opening the window.
+
+See also: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x), [`mui_canvas_pointer_inside`](#mui_canvas_pointer_inside).
+
+<a id="mui_canvas_pointer_x"></a>
+
+### `mui_canvas_pointer_x(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the pointer's X right now, from the area's left edge, with or without a click.
+
+See also: [`mui_canvas_pointer_y`](#mui_canvas_pointer_y), [`mui_canvas_on_move`](#mui_canvas_on_move).
+
+<a id="mui_canvas_pointer_y"></a>
+
+### `mui_canvas_pointer_y(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the pointer's Y right now, from the area's top edge.
+
+See also: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x).
+
+<a id="mui_canvas_pointer_inside"></a>
+
+### `mui_canvas_pointer_inside(canvas)` → `Bool`
+
+- `canvas`: the drawing area.
+
+Returns `true` if the pointer is over the area now.
+
+See also: [`mui_canvas_on_move`](#mui_canvas_on_move).
+
+<a id="mui_canvas_set_pointer"></a>
+
+### `mui_canvas_set_pointer(canvas, shape)`
+
+- `canvas`: the drawing area.
+- `shape`: 0 normal, 1 text (an I beam), 2 resize sideways, 3 up and down, 4 busy.
+
+The pointer's shape while it is over the area. It changes at once if it is already there and goes back to normal
+on leaving.
+
+See also: [`mui_canvas_pointer_inside`](#mui_canvas_pointer_inside).
+
+<a id="mui_canvas_take_tab"></a>
+
+### `mui_canvas_take_tab(canvas, on)`
+
+- `canvas`: the drawing area.
+- `on`: `true` turns it on.
+
+With the pointer over the area, Tab and Shift+Tab reach the area as keys (code 66) instead of moving to the window's
+next object. It needs `mui_canvas_on_input`.
+
+See also: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_canvas_mouse_x"></a>
+
+### `mui_canvas_mouse_x(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the X of the last click, wheel or drag, counting from the area's left edge.
+
+See also: [`mui_canvas_mouse_y`](#mui_canvas_mouse_y), [`mui_canvas_pointer_x`](#mui_canvas_pointer_x).
+
+<a id="mui_canvas_mouse_y"></a>
+
+### `mui_canvas_mouse_y(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the Y of the last click, wheel or drag, counting from the area's top edge.
+
+See also: [`mui_canvas_mouse_x`](#mui_canvas_mouse_x).
+
+<a id="mui_canvas_button"></a>
+
+### `mui_canvas_button(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns 1 if the last thing was a left click, 2 if it was the right one with a context menu, and 0 if it was not a
+click.
+
+See also: [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_wheel"></a>
+
+### `mui_canvas_wheel(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns 1 if the last thing was the mouse wheel upwards, -1 downwards, and 0 if it was not the wheel.
+
+See also: [`mui_canvas_on_input`](#mui_canvas_on_input).
+
+<a id="mui_canvas_key"></a>
+
+### `mui_canvas_key(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the raw code of the last key pressed over the area, or -1 if the last thing was not a key.
+`mui_canvas_char` gives the letter.
+
+See also: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#mui_canvas_qualifiers).
+
+<a id="mui_canvas_on_drag"></a>
+
+### `mui_canvas_on_drag(canvas, id)`
+
+- `canvas`: the drawing area.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` while dragging (pressing on the area and moving with the button held) and on release.
+`mui_canvas_drag` says which and `mui_canvas_mouse_x`, `_y` where, even outside the area. Call it before opening the
+window.
+
+See also: [`mui_canvas_drag`](#mui_canvas_drag).
+
+<a id="mui_canvas_drag"></a>
+
+### `mui_canvas_drag(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the last drag event: 1 moving with the button held, 2 on release, 0 before any.
+
+See also: [`mui_canvas_on_drag`](#mui_canvas_on_drag).
+
+<a id="mui_canvas_qualifiers"></a>
+
+### `mui_canvas_qualifiers(canvas)` → `Int`
+
+- `canvas`: the drawing area.
+
+Returns the keys that were held during the last key, click or wheel, added up: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga.
+`q & 2` tells whether Ctrl was held.
+
+See also: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_canvas_char"></a>
+
+### `mui_canvas_char(canvas)` → `String`
+
+- `canvas`: the drawing area.
+
+Returns the character of the last key, with Shift and the keymap applied (`"A"`, `"ñ"`); `""` if the key gives
+none.
+
+See also: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_scrollbar"></a>
+
+### `mui_scrollbar(vertical)` → `Int (address)`
+
+- `vertical`: `true` vertical, `false` horizontal.
+
+A standalone scroll bar, to go next to a drawing area. `mui_set_range` says how big the document is; its value
+(`mui_get_value`) is the first line shown, and `mui_on_change` fires when it moves.
+
+See also: [`mui_set_range`](#mui_set_range), [`mui_canvas`](#mui_canvas).
+
+<a id="mui_set_range"></a>
+
+### `mui_set_range(scrollbar, total, visible)`
+
+- `scrollbar`: the bar.
+- `total`: the document's size (lines, pixels...).
+- `visible`: how much of it fits in view.
+
+The knob's size comes from the two.
+
+See also: [`mui_scrollbar`](#mui_scrollbar).
+
+<a id="mui_wait_event_signals"></a>
+
+### `mui_wait_event_signals(mask)` → `Int`
+
+- `mask`: the signals that also wake it: `net_signal()` (network), `task_signal()` (tasks), `file_notify_signal()`
+  (watched files), joined with `|`.
+
+Like `mui_wait_event`, but returns 0 when one of those signals arrives; `mui_signals()` says which.
+
+See also: [`mui_signals`](#mui_signals), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_signals"></a>
+
+### `mui_signals()` → `Int`
+
+Returns the mask signals that woke the last `mui_wait_event_signals`: check them with `&`.
+
+See also: [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="mui_timer"></a>
+
+### `mui_timer(ms, id)`
+
+- `ms`: in how many milliseconds; 0 cancels any pending one.
+- `id`: the event number.
+
+`mui_wait_event` will return `id` once that time has passed. To repeat it, call it again when it arrives.
+
+See also: [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_image"></a>
+
+### `mui_image(file)` → `Int (address)`
+
+- `file`: the picture file: always ILBM; PNG, JPEG or GIF if their datatypes are installed.
+
+A picture. `mui_set_text` changes the file.
+
+See also: [`mui_image_button`](#mui_image_button), [`image_load`](#image_load).
+
+<a id="mui_image_button"></a>
+
+### `mui_image_button(file)` → `Int (address)`
+
+- `file`: the picture file.
+
+A button with a picture, like those of a toolbar. It responds to `mui_on_press` like a button; `mui_set_text`
+changes the picture.
+
+See also: [`mui_image_toggle`](#mui_image_toggle), [`mui_on_press`](#mui_on_press).
+
+<a id="mui_image_toggle"></a>
+
+### `mui_image_toggle(file, group, selected)` → `Int (address)`
+
+- `file`: the picture file.
+- `group`: 0 = on its own; greater than 0 = pressing one releases the others of the same group (like alignment).
+- `selected`: whether it starts pressed.
+
+A picture button that stays pressed, like bold or italic. `mui_get_value` gives 1 or 0 and `mui_on_change` fires on
+a change; in a group, only the one pressed fires.
+
+See also: [`mui_image_button`](#mui_image_button), [`mui_on_change`](#mui_on_change).
+
+<a id="mui_combo"></a>
+
+### `mui_combo(text, options)` → `Int (address)`
+
+- `text`: the starting text.
+- `options`: the list's lines, separated by `|`.
+
+A text field with a drop-down list: you type or pick a line. `mui_get_text` reads it, `mui_list_add` and the other
+`mui_list_*` functions change the list, and `mui_on_ack` fires on Return or on a pick.
+
+See also: [`mui_string`](#mui_string), [`mui_on_ack`](#mui_on_ack), [`mui_list_add`](#mui_list_add).
+
+<a id="mui_help"></a>
+
+### `mui_help(obj, text)`
+
+- `obj`: the object.
+- `text`: the help.
+
+A bubble with the text, shown when the pointer rests a moment over the object.
+
+<a id="mui_window_move"></a>
+
+### `mui_window_move(win, dx, dy)`
+
+- `win`: an open window.
+- `dx`, `dy`: how many pixels it moves.
+
+Shifts the window. Those of a `.dashui` all open in the same place: this keeps them from piling up.
+
+See also: [`mui_window_size`](#mui_window_size).
+
+<a id="mui_set_active"></a>
+
+### `mui_set_active(win, obj)`
+
+- `win`: the window.
+- `obj`: one of its objects, usually a text field.
+
+Makes it the active object: the cursor goes to that field and you can type without clicking.
+
+See also: [`mui_string`](#mui_string).
+
+<a id="mui_window_size"></a>
+
+### `mui_window_size(win, width_pct, height_pct)`
+
+- `win`: the window, before opening it.
+- `width_pct`, `height_pct`: its size as a percentage of the visible screen.
+
+The window opens at that size and centred. If it has an `id`, what MUI remembers rules on later runs.
+
+See also: [`mui_window_fullscreen`](#mui_window_fullscreen), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_window_fullscreen"></a>
+
+### `mui_window_fullscreen(win)`
+
+- `win`: the window, before opening it.
+
+It takes the whole screen, without borders, title bar or gadgets, and opens active.
+
+See also: [`mui_window_own_screen`](#mui_window_own_screen).
+
+<a id="mui_window_screen"></a>
+
+### `mui_window_screen(win, name)` → `Bool`
+
+- `win`: the window, before opening it.
+- `name`: the name of a public screen: the `screen_clone_wb` one or another.
+
+The window opens, normally, on that screen. Returns `false` if that screen does not exist.
+
+See also: [`screen_clone_wb`](#screen_clone_wb), [`mui_window_own_screen`](#mui_window_own_screen).
+
+<a id="mui_window_own_screen"></a>
+
+### `mui_window_own_screen(win)` → `Bool`
+
+- `win`: the window, before opening it.
+
+The window fills a screen of its own, like the public one. Returns `false` if it could not; then it opens on the
+public screen.
+
+See also: [`mui_window_fullscreen`](#mui_window_fullscreen).
+
+<a id="mui_width"></a>
+
+### `mui_width(obj)` → `Int`
+
+- `obj`: the object.
+
+Returns its on-screen width in pixels; 0 before its window opens.
+
+See also: [`mui_height`](#mui_height).
+
+<a id="mui_height"></a>
+
+### `mui_height(obj)` → `Int`
+
+- `obj`: the object.
+
+Returns its on-screen height in pixels; 0 before its window opens.
+
+See also: [`mui_width`](#mui_width).
+
+<a id="mui_wait_event"></a>
+
+### `mui_wait_event()` → `Int`
+
+Waits, using no CPU, for the next event and returns its number; -1 to quit (the first window's close button without
+`mui_on_close`, the ARexx QUIT command, Exchange). It goes in the main loop: `while ev != -1`.
+
+See also: [`mui_poll_event`](#mui_poll_event), [`mui_wait_event_signals`](#mui_wait_event_signals), [`mui_timer`](#mui_timer).
+
+<a id="mui_poll_event"></a>
+
+### `mui_poll_event()` → `Int`
+
+Like `mui_wait_event` without waiting: returns 0 if there is no event. For a loop that does other things at the same
+time; if it only waits, `mui_wait_event` or `mui_timer` use less.
+
+See also: [`mui_wait_event`](#mui_wait_event).
+
+<a id="dashos_functions"></a>
 
 ## DashOS (only with ./dash --dashos)
 
+The calls to the kernel of DashOS, the ARM system being built with Dash. They only exist when compiling with
+`./dash --dashos`; on the Amiga they are a compile error.
+
+**Handles.** Everything in the system (a channel, a timer, a memory object, a process) is handled with a handle: a
+number with rights (1 read, 2 write, 4 pass). A handle can be copied with fewer rights (`handle_copy`), passed to
+another program over a channel (`channel_pass`) or withdrawn later (`handle_revocable`). Whoever lacks the handle
+cannot touch the thing.
+
+**Channels.** `channel_create` gives one end and `channel_other` the other: what is sent on one is received on the
+other, up to 256 bytes per message and up to 8 handles.
+
+**Processes and groups.** `process_start` launches a program with the handles it is given (`process_give`); a group
+(`group_create`) gives them a memory budget and can be ended all at once.
+
+Errors are negative numbers; `dashos_error_text` explains them.
+
+**Example** (`tests/dashos/test_dashos_channels.dash`, which is also a test: it runs with the others):
+
+```dash
+# Test (solo DashOS, A7): canales, llaves, temporizadores y memoria de DashOS. En qemu-aarch64 corre sobre la
+# imitación de runtime/dashos/plat.c; en DashOS, sobre su kernel.
+Main
+    a = channel_create()
+    b = channel_other()
+    r = channel_send(b, "hola")
+    m = channel_receive(a)
+    Print "canal: #{m} #{r}"
+
+    # una copia marcada de b viaja por otro canal (no por el suyo): quien la use escribe con marca 7
+    x = channel_create()
+    y = channel_other()
+    c = handle_copy(b, 6, 7)
+    channel_pass(c)
+    channel_send(y, "toma")
+    m = channel_receive(x)
+    n = channel_handles()
+    k = channel_handle(0)
+    channel_send(k, "adiós")
+    m2 = channel_receive(a)
+    Print "llaves: #{n} recibida, marca #{channel_mark()}"
+    Print "por la llave recibida: #{m2}"
+
+    buf = buffer_alloc(16)
+    buffer_set_byte(buf, 0, 1)
+    buffer_set_byte(buf, 1, 2)
+    buffer_set_byte(buf, 2, 3)
+    channel_send_buffer(b, buf, 3)
+    out = buffer_alloc(256)
+    n = channel_receive_buffer(a, out, 256)
+    Print "búfer: #{n} bytes, #{buffer_get_byte(out, 0)} #{buffer_get_byte(out, 1)} #{buffer_get_byte(out, 2)}"
+
+    rv = handle_revocable(b)
+    handle_revoke(handle_revoker())
+    e = channel_send(rv, "x")
+    Print "revocada: #{e}"
+
+    t = timer_create(b, 20, 0)
+    n = channel_receive_buffer(a, out, 256)
+    Print "temporizador: #{n} bytes, #{buffer_get_byte(out, 0)} vez"
+    handle_close(t)
+
+    mem = memory_create(4096)
+    p1 = memory_map(mem, true)
+    p2 = memory_map(mem, false)
+    buffer_set_byte(p1, 100, 42)
+    Print "memoria compartida: #{buffer_get_byte(p2, 100)}"
+    memory_unmap(p1)
+    memory_unmap(p2)
+
+    handle_close(b)
+    handle_close(k)
+    handle_close(rv)
+    m = channel_receive(a)
+    e = channel_error()
+    Print "cerrado: #{e} #{dashos_error_text(e)}"
+    e = channel_send(mem, "x")
+    Print "tipo: #{e} #{dashos_error_text(e)}"
+    handle_close(mem)
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `channel_create()` | `LONG` | A new channel: one of its two ends (the other, channel_other); a negative error |  |
-| `channel_other()` | `LONG` | The other end of the last channel_create (what is written on one end is read on the other) |  |
-| `channel_pass(handle)` | `LONG` | Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; up to 8 per message; 0, or -1 if there are 8 already |  |
-| `channel_send(handle, text)` | `LONG` | Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a negative error |  |
-| `channel_send_buffer(handle, buffer, length)` | `LONG` | Sends length bytes (up to 256) of a buffer: 0 or a negative error |  |
-| `channel_receive(handle)` | `STRPTR` | Waits for the next message of the channel and gives it as text; nil on error (channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark |  |
-| `channel_receive_buffer(handle, buffer, max)` | `LONG` | Waits for the next message and copies it to a buffer (max bytes, 256 is enough): its length or a negative error |  |
-| `channel_handles()` | `LONG` | How many handles came with the last message received |  |
-| `channel_handle(i)` | `LONG` | Handle i (from 0) of the last message received; 0 if there is none |  |
-| `channel_mark()` | `LONG` | The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 unmarked or the kernel (timers) |  |
-| `channel_error()` | `LONG` | The error of the last channel_receive (0: none; -4: the other end closed) |  |
-| `handle_copy(handle, rights, mark)` | `LONG` | A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a mark if it had none (0: keep its own): the new handle or a negative error |  |
-| `handle_close(handle)` | `LONG` | Closes a handle (the last one of a channel end closes that end): 0 or a negative error |  |
-| `handle_revocable(handle)` | `LONG` | A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a negative error |  |
-| `handle_revoker()` | `LONG` | The revoker of the last handle_revocable |  |
-| `handle_revoke(revoker)` | `LONG` | Revokes the handle of a revoker and the copies made from it: from then on they are worth nothing: 0 or a negative error |  |
-| `timer_create(handle, first_ms, period_ms)` | `LONG` | A timer that sends a message to the other end of the channel after first_ms, and then every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a negative error |  |
-| `memory_create(size)` | `LONG` | A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program (shared memory): its handle or a negative error |  |
-| `memory_map(handle, writable)` | `APTR` | Maps a memory object in this program, for buffer_* (writable: true to write in it): the buffer, or 0 |  |
-| `memory_unmap(buffer)` | `LONG` | Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative error |  |
-| `process_give(handle)` | `LONG` | A handle for the next process_start: the new program gets them as handles 1, 2... in this order; up to 16; 0, or -1 if there are 16 already |  |
-| `process_group(group)` | `void` | The group of the next processes started (0: this program's own) |  |
-| `process_start(memory, size)` | `LONG` | Starts a program from the ELF in a memory object (its first size bytes), with the handles of process_give: the process or a negative error |  |
-| `process_start_buffer(buffer, length)` | `LONG` | process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB) |  |
-| `process_kill(process)` | `LONG` | Ends a process: 0 or a negative error |  |
-| `process_wait(process)` | `LONG` | Waits for a process to end: its exit code (how it ended: process_end), or a negative error |  |
-| `process_end()` | `LONG` | How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed |  |
-| `group_create(bytes)` | `LONG` | A group with a memory budget taken from this program's: what its processes create is charged to it: the group or a negative error |  |
-| `group_kill(group)` | `LONG` | Ends every process of a group and frees all it had: 0 or a negative error |  |
-| `group_used(group)` | `LONG` | The bytes a group has used (0: this program's group), or a negative error |  |
-| `group_limit(group)` | `LONG` | The budget of a group in bytes (0: this program's group), or a negative error |  |
-| `dashos_error_text(code)` | `STRPTR` | What a negative error of DashOS means, as text |  |
+| [`channel_create()`](#channel_create) | Int | A new channel: one of its two ends (the other, channel_other); a negative error |  |
+| [`channel_other()`](#channel_other) | Int | The other end of the last channel_create (what is written on one end is read on the other) |  |
+| [`channel_pass(handle)`](#channel_pass) | Int | Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; up to 8 per message; 0, or -1 if there are 8 already |  |
+| [`channel_send(handle, text)`](#channel_send) | Int | Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a negative error |  |
+| [`channel_send_buffer(handle, buffer, length)`](#channel_send_buffer) | Int | Sends length bytes (up to 256) of a buffer: 0 or a negative error |  |
+| [`channel_receive(handle)`](#channel_receive) | String | Waits for the next message of the channel and gives it as text; nil on error (channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark |  |
+| [`channel_receive_buffer(handle, buffer, max)`](#channel_receive_buffer) | Int | Waits for the next message and copies it to a buffer (max bytes, 256 is enough): its length or a negative error |  |
+| [`channel_handles()`](#channel_handles) | Int | How many handles came with the last message received |  |
+| [`channel_handle(i)`](#channel_handle) | Int | Handle i (from 0) of the last message received; 0 if there is none |  |
+| [`channel_mark()`](#channel_mark) | Int | The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 unmarked or the kernel (timers) |  |
+| [`channel_error()`](#channel_error) | Int | The error of the last channel_receive (0: none; -4: the other end closed) |  |
+| [`handle_copy(handle, rights, mark)`](#handle_copy) | Int | A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a mark if it had none (0: keep its own): the new handle or a negative error |  |
+| [`handle_close(handle)`](#handle_close) | Int | Closes a handle (the last one of a channel end closes that end): 0 or a negative error |  |
+| [`handle_revocable(handle)`](#handle_revocable) | Int | A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a negative error |  |
+| [`handle_revoker()`](#handle_revoker) | Int | The revoker of the last handle_revocable |  |
+| [`handle_revoke(revoker)`](#handle_revoke) | Int | Revokes the handle of a revoker and the copies made from it: from then on they are worth nothing: 0 or a negative error |  |
+| [`timer_create(handle, first_ms, period_ms)`](#timer_create) | Int | A timer that sends a message to the other end of the channel after first_ms, and then every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a negative error |  |
+| [`memory_create(size)`](#memory_create) | Int | A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program (shared memory): its handle or a negative error |  |
+| [`memory_map(handle, writable)`](#memory_map) | Int (address) | Maps a memory object in this program, for buffer_* (writable: true to write in it): the buffer, or 0 |  |
+| [`memory_unmap(buffer)`](#memory_unmap) | Int | Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative error |  |
+| [`process_give(handle)`](#process_give) | Int | A handle for the next process_start: the new program gets them as handles 1, 2... in this order; up to 16; 0, or -1 if there are 16 already |  |
+| [`process_group(group)`](#process_group) | — | The group of the next processes started (0: this program's own) |  |
+| [`process_start(memory, size)`](#process_start) | Int | Starts a program from the ELF in a memory object (its first size bytes), with the handles of process_give: the process or a negative error |  |
+| [`process_start_buffer(buffer, length)`](#process_start_buffer) | Int | process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB) |  |
+| [`process_kill(process)`](#process_kill) | Int | Ends a process: 0 or a negative error |  |
+| [`process_wait(process)`](#process_wait) | Int | Waits for a process to end: its exit code (how it ended: process_end), or a negative error |  |
+| [`process_end()`](#process_end) | Int | How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed |  |
+| [`group_create(bytes)`](#group_create) | Int | A group with a memory budget taken from this program's: what its processes create is charged to it: the group or a negative error |  |
+| [`group_kill(group)`](#group_kill) | Int | Ends every process of a group and frees all it had: 0 or a negative error |  |
+| [`group_used(group)`](#group_used) | Int | The bytes a group has used (0: this program's group), or a negative error |  |
+| [`group_limit(group)`](#group_limit) | Int | The budget of a group in bytes (0: this program's group), or a negative error |  |
+| [`dashos_error_text(code)`](#dashos_error_text) | String | What a negative error of DashOS means, as text |  |
+
+<a id="channel_create"></a>
+
+### `channel_create()` → `Int`
+
+Creates a channel and returns the handle of one of its ends (the other, `channel_other`), or a negative error.
+
+See also: [`channel_other`](#channel_other), [`channel_send`](#channel_send).
+
+<a id="channel_other"></a>
+
+### `channel_other()` → `Int`
+
+Returns the handle of the other end of the last `channel_create`.
+
+See also: [`channel_create`](#channel_create).
+
+<a id="channel_pass"></a>
+
+### `channel_pass(handle)` → `Int`
+
+- `handle`: the handle.
+
+Puts it in the next `channel_send`: it leaves this program (the pass right is needed). Up to 8 per message. Returns 0, or -1 if there are 8 already.
+
+See also: [`channel_send`](#channel_send), [`channel_handles`](#channel_handles).
+
+<a id="channel_send"></a>
+
+### `channel_send(handle, text)` → `Int`
+
+- `handle`: the handle.
+- `text`: up to 256 bytes.
+
+Sends it to the other end without waiting. Returns 0, or a negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="channel_send_buffer"></a>
+
+### `channel_send_buffer(handle, buffer, length)` → `Int`
+
+- `handle`: the handle.
+- `buffer`, `length`: up to 256 bytes.
+
+Like `channel_send`, with binary data. Returns 0, or a negative error.
+
+See also: [`channel_send`](#channel_send).
+
+<a id="channel_receive"></a>
+
+### `channel_receive(handle)` → `String`
+
+- `handle`: the handle.
+
+Waits for the next message and returns it as a text, or `nil` on an error (`channel_error`). Its handles, with `channel_handles`; who sent it, with `channel_mark`.
+
+See also: [`channel_handles`](#channel_handles), [`channel_mark`](#channel_mark), [`channel_error`](#channel_error).
+
+<a id="channel_receive_buffer"></a>
+
+### `channel_receive_buffer(handle, buffer, max)` → `Int`
+
+- `handle`: the handle.
+- `buffer`, `max`: where and how much fits (256 is enough).
+
+Waits for the next message and copies it. Returns its length or a negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="channel_handles"></a>
+
+### `channel_handles()` → `Int`
+
+Returns how many handles came with the last message received.
+
+See also: [`channel_handle`](#channel_handle).
+
+<a id="channel_handle"></a>
+
+### `channel_handle(i)` → `Int`
+
+- `i`: the handle, from 0.
+
+Returns that handle of the last message received; 0 if none.
+
+See also: [`channel_handles`](#channel_handles).
+
+<a id="channel_mark"></a>
+
+### `channel_mark()` → `Int`
+
+Returns the mark of the handle the last message was written with (`handle_copy`): who sent it. 0 without a mark or from the kernel (timers).
+
+See also: [`handle_copy`](#handle_copy).
+
+<a id="channel_error"></a>
+
+### `channel_error()` → `Int`
+
+Returns the last `channel_receive` error: 0 none, -4 the other end closed.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="handle_copy"></a>
+
+### `handle_copy(handle, rights, mark)` → `Int`
+
+- `handle`: the handle.
+- `rights`: the copy's rights, the same or fewer: 1 read, 2 write, 4 pass, added up.
+- `mark`: a mark for the copy if the handle had none (0: its own).
+
+Returns the new handle or a negative error.
+
+See also: [`channel_mark`](#channel_mark), [`handle_close`](#handle_close).
+
+<a id="handle_close"></a>
+
+### `handle_close(handle)` → `Int`
+
+- `handle`: the handle.
+
+Closes it; the last handle of a channel end closes that end. Returns 0, or a negative error.
+
+See also: [`handle_copy`](#handle_copy).
+
+<a id="handle_revocable"></a>
+
+### `handle_revocable(handle)` → `Int`
+
+- `handle`: the handle.
+
+Returns a copy that can be withdrawn later (its revoker, `handle_revoker`), or a negative error.
+
+See also: [`handle_revoker`](#handle_revoker), [`handle_revoke`](#handle_revoke).
+
+<a id="handle_revoker"></a>
+
+### `handle_revoker()` → `Int`
+
+Returns the revoker of the last `handle_revocable`.
+
+See also: [`handle_revoke`](#handle_revoke).
+
+<a id="handle_revoke"></a>
+
+### `handle_revoke(revoker)` → `Int`
+
+- `revoker`: the revoker.
+
+Withdraws the handle and every copy made from it: from then on they are not valid. Returns 0, or a negative error.
+
+See also: [`handle_revocable`](#handle_revocable).
+
+<a id="timer_create"></a>
+
+### `timer_create(handle, first_ms, period_ms)` → `Int`
+
+- `handle`: one end of a channel.
+- `first_ms`: when the first message arrives.
+- `period_ms`: how often the next ones; 0 just once. In steps of 10 ms.
+
+A timer that sends messages to the other end of the channel; it stops when its handle closes. Returns the handle or a
+negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="memory_create"></a>
+
+### `memory_create(size)` → `Int`
+
+- `size`: up to 4 MB.
+
+A zeroed memory object that can be passed to another program (shared memory). Returns its handle or a negative error.
+
+See also: [`memory_map`](#memory_map).
+
+<a id="memory_map"></a>
+
+### `memory_map(handle, writable)` → `Int (address)`
+
+- `handle`: the handle.
+- `writable`: `true` to write.
+
+Maps it into this program's memory and returns a buffer for the `buffer_*` functions, or 0.
+
+See also: [`memory_unmap`](#memory_unmap), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="memory_unmap"></a>
+
+### `memory_unmap(buffer)` → `Int`
+
+- `buffer`: what `memory_map` gave.
+
+Unmaps it; the object lives on while it has handles. Returns 0, or a negative error.
+
+See also: [`memory_map`](#memory_map).
+
+<a id="process_give"></a>
+
+### `process_give(handle)` → `Int`
+
+- `handle`: the handle.
+
+A handle for the next `process_start`: the new program gets them as handles 1, 2... in this order. Up to 16. Returns 0, or -1 if there are 16 already.
+
+See also: [`process_start`](#process_start).
+
+<a id="process_group"></a>
+
+### `process_group(group)`
+
+- `group`: the group of the following processes; 0 this program's.
+
+See also: [`group_create`](#group_create).
+
+<a id="process_start"></a>
+
+### `process_start(memory, size)` → `Int`
+
+- `memory`: a memory object holding the program (ELF).
+- `size`: its first bytes making it up.
+
+Launches it with the `process_give` handles. Returns the process or a negative error.
+
+See also: [`process_wait`](#process_wait), [`process_start_buffer`](#process_start_buffer).
+
+<a id="process_start_buffer"></a>
+
+### `process_start_buffer(buffer, length)` → `Int`
+
+- `buffer`, `length`: the ELF, up to 4 MB.
+
+Like `process_start`, with the program in a buffer.
+
+See also: [`process_start`](#process_start).
+
+<a id="process_kill"></a>
+
+### `process_kill(process)` → `Int`
+
+- `process`: the process.
+
+Ends it. Returns 0, or a negative error.
+
+See also: [`process_wait`](#process_wait).
+
+<a id="process_wait"></a>
+
+### `process_wait(process)` → `Int`
+
+- `process`: the process.
+
+Waits for it to end and returns its exit code (how it ended, `process_end`), or a negative error.
+
+See also: [`process_end`](#process_end).
+
+<a id="process_end"></a>
+
+### `process_end()` → `Int`
+
+Returns how the process of the last `process_wait` ended: 0 exited, 1 killed, 2 crashed.
+
+See also: [`process_wait`](#process_wait).
+
+<a id="group_create"></a>
+
+### `group_create(bytes)` → `Int`
+
+- `bytes`: the budget, taken from this program's.
+
+A group: what its processes create is charged there. Returns the group or a negative error.
+
+See also: [`process_group`](#process_group), [`group_kill`](#group_kill).
+
+<a id="group_kill"></a>
+
+### `group_kill(group)` → `Int`
+
+- `group`: the group.
+
+Ends all its processes and releases everything it held. Returns 0, or a negative error.
+
+See also: [`group_create`](#group_create).
+
+<a id="group_used"></a>
+
+### `group_used(group)` → `Int`
+
+- `group`: the group; 0 this program's.
+
+Returns the bytes it has spent, or a negative error.
+
+See also: [`group_limit`](#group_limit).
+
+<a id="group_limit"></a>
+
+### `group_limit(group)` → `Int`
+
+- `group`: the group; 0 this program's.
+
+Returns its budget in bytes, or a negative error.
+
+See also: [`group_used`](#group_used).
+
+<a id="dashos_error_text"></a>
+
+### `dashos_error_text(code)` → `String`
+
+- `code`: a negative DashOS error.
+
+Returns what it means, as a text.

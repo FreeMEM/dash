@@ -3,6 +3,8 @@
 *[English](QUICK_REFERENCE.en.md) | Castellano*
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
+Una línea por cosa. Cada builtin explicado, con sus parámetros y ejemplos que se prueban: [BUILTINS.md](BUILTINS.md).
+
 ## Compilar
 ```
 ./dash prog.dash -o prog            # gcc -O2, 68000, pila mínima de 16 KB
@@ -372,11 +374,11 @@ mouse_y()                   # Posición Y
 mouse_button(0)             # Botón izquierdo (0=izquierdo, 1=derecho)
 
 # Joystick (puerto 0 o 1)
-joy_x(0)                    # X: -1, 0 o 1
-joy_y(0)                    # Y: -1, 0 o 1
-joy_button(0)               # Botón de disparo (también joy_fire(0))
-joy_up(0) joy_down(0)       # Direcciones como Bool
-joy_left(0) joy_right(0)
+joy_x(1)                    # X: -1, 0 o 1
+joy_y(1)                    # Y: -1, 0 o 1
+joy_button(1)               # Botón de disparo (también joy_fire(1))
+joy_up(1) joy_down(1)       # Direcciones como Bool
+joy_left(1) joy_right(1)
 ```
 
 ## Funciones de audio
@@ -568,8 +570,8 @@ gfx_text_at(x, 100, text)
 
 ### Movimiento con joystick
 ```
-x = x + joy_x(0) * speed
-y = y + joy_y(0) * speed
+x = x + joy_x(1) * speed
+y = y + joy_y(1) * speed
 ```
 
 ### Bucle de lectura de fichero

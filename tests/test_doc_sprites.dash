@@ -1,0 +1,58 @@
+# Gráficos avanzados: un BOB de dos fotogramas dibujado desde el programa, que se mueve sobre un fondo y choca con
+# otro, y un sprite de hardware hecho fila a fila.
+# expect-out: nave: 2 fotogramas de 16 x 16
+# expect-out: choque a 10 pixeles: false
+# expect-out: choque encima: true
+# expect-out: fondo devuelto: 3
+# expect-out: sprite: true
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 3, "Sprites")
+    gfx_clear_color(3)                             # el fondo
+
+    bob_create(0, 32, 16, 3)                       # 32 x 16: dos fotogramas cuadrados
+    bitmap_draw_to(0)                              # los gfx_ dibujan en el BOB
+    gfx_pen(1)
+    gfx_circle_fill(7, 7, 6)                       # el fotograma 0
+    gfx_pen(2)
+    gfx_rect(18, 2, 29, 13)                        # el fotograma 1
+    bitmap_draw_screen()                           # y otra vez en la pantalla
+    Print "nave: #{bob_frames(0)} fotogramas de #{bob_width(0)} x #{bob_height(0)}"
+
+    bob_create(1, 16, 16, 3)
+    bitmap_draw_to(1)
+    gfx_pen(4)
+    gfx_circle_fill(7, 7, 6)
+    bitmap_draw_screen()
+
+    bob_pos(1, 100, 100)
+    bob_draw(1)
+    bob_pos(0, 126, 100)                           # 10 píxeles a la derecha del otro
+    bob_draw(0)
+    Print "choque a 10 pixeles: #{bob_collision(0, 1)}"
+    bob_pos(0, 104, 100)
+    bob_draw(0)                                    # quita el de antes y lo pinta en el sitio nuevo
+    Print "choque encima: #{bob_collision(0, 1)}"
+    bob_erase(0)                                   # en orden inverso al que se pintaron
+    bob_erase(1)
+    Print "fondo devuelto: #{gfx_pixel_read(107, 107)}"
+
+    ok = sprite_create(0, 16, 8)
+    fila = 0
+    while fila < 8
+        sprite_set_row(0, fila, 0x3C3C, 0x0FF0)    # colores 1, 2 y 3 del sprite
+        fila = fila + 1
+    end
+    sprite_color(0, 0, 15, 15, 0)
+    sprite_pos(0, 160, 50)
+    sprite_show(0)
+    Print "sprite: #{ok}"
+    time_delay(50)
+
+    sprite_free(0)
+    bob_free(0)
+    bob_free(1)
+    screen_close()
+    Print "fin"
+end

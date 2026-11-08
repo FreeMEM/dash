@@ -1,0 +1,42 @@
+# Ventanas: una ventana declarada, sus gadgets y su bucle de eventos.
+# expect-out: nombre: Amiga, sonido: true, modo: PAL
+# expect-out: fin
+
+Window Prefs
+    title "Preferencias"
+    width 270
+    height 130
+end
+
+Main
+    Prefs.open
+    alto = screen_font_height() + 6                # una fila de gadgets, con la fuente de la pantalla
+    gfx_pen(1)
+    gfx_text_at(8, 4 + alto - 5, "Nombre")         # la etiqueta del campo, en su fila
+    nombre = textfield_create(0, 70, 4, 180, alto, 40)     # 0: la ventana actual
+    sonido = checkbox_create(0, 70, alto + 8, "_Sonido")
+    modo = cycle_create(0, 70, 2 * alto + 12, 0, alto, "NTSC|PAL")
+    aceptar = button_create(0, 70, 3 * alto + 16, 0, alto, "_Aceptar")
+
+    textfield_set(nombre, "Amiga")
+    checkbox_set(sonido, true)
+    cycle_set(modo, 1)
+    modos = ["NTSC", "PAL"]
+
+    EventLoop
+        On Gadget
+            if gadget_id() == aceptar
+                Stop
+            end
+        end
+        On Timer 1500                              # para la prueba: sin nadie que pulse, acaba sola
+            Stop
+        end
+        On Close
+            Stop
+        end
+    end
+    Print "nombre: #{textfield_get(nombre)}, sonido: #{checkbox_get(sonido)}, modo: #{modos[cycle_get(modo)]}"
+    Prefs.close
+    Print "fin"
+end
