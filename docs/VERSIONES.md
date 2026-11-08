@@ -67,7 +67,7 @@ dock. Lo que ya compilaba sigue igual.
 - **Arreglo (fuga de memoria):** las funciones que solo leen sus textos recibían una copia que no se liberaba nunca
   cuando el texto era calculado. Ahora reciben el texto tal cual: `tooltype`, `date_text`, `file_copy`, `notify`,
   `screen_font_text_width`, `wifi_read`, `net_driver_read`, `rexx_reply`, `dir_change`, `input_text` y las que
-  cargan o guardan ficheros. Era la memoria que perdía el fondo de Trasfondo con las horas.
+  cargan o guardan ficheros. Era la memoria que perdía el fondo de Trasfondo con las horas (lo contó Oskisrp).
 - **Arreglo (`./dash`):** en un programa muy largo, un salto que había que alargar podía pisar la instrucción
   siguiente.
 - **Arreglo (`./dash --debug`):** una función que nadie llama ya no deja datos de depuración que apuntan a otra
