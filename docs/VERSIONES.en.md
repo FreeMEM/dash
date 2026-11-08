@@ -32,6 +32,28 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.6.4 (2026-11-08)
+
+The builtins documentation, expanded, and the fixes that came up while writing it. What compiled before still does
+the same.
+
+- **Documentation:** all 961 functions in [BUILTINS.en.md](BUILTINS.en.md) are now explained: what they take, what
+  they return and which other functions go with them. Each group starts with an introduction and a complete example.
+  Each example is also a test that runs in the emulator. The table shows Dash types (`Int`, `String`...).
+- **Fix:** `joy_x` and `joy_y` did not report up or down, and `joy_button` read the second button instead of fire.
+- **Fix:** `wait_key` returned 0 if another message arrived before the key, and `wait_click` used all the CPU while
+  waiting.
+- **Fix:** `gfx_flood` did not fill in a `window_create` window.
+- **Fix:** `tilemap_draw` left empty the cells after the first mirrored cell.
+- **Fix:** on a screen of your own, `color_pen` gave colour 1 for any colour; `rtg_write_pixel` and `rtg_fill_rect`
+  on a palette screen painted almost everything in the last colour. They now use the palette's closest colour.
+- **Fix:** `random_range` with `max` below `min` could divide by zero; it now returns `min`.
+- **Fix (`./dash --gcc`):** quotes inside an interpolation (`"#{f("x")}"`) were a syntax error. `./dash` already
+  got it right.
+- **Fix:** a character (`t[i]`) where a string goes, as in `str_find` or `str_replace`, went as a meaningless
+  number. It now goes as a one-letter string, on both paths.
+- Tested on an emulated A1200 (3.1), A500 and A1200 with OS 3.2.
+
 ### 2.6.3 (2026-11-08)
 
 One `./dash --gcc` fix and Forja 0.5.1 in the package. What compiled before still does the same.

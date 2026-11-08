@@ -33,6 +33,30 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.6.4 (2026-11-08)
+
+La documentación de los builtins, ampliada, y los arreglos que salieron al escribirla. Lo que ya compilaba sigue
+igual.
+
+- **Documentación:** las 961 funciones de [BUILTINS.md](BUILTINS.md) tienen ya su explicación: qué recibe, qué
+  devuelve y con qué otras funciones va. Cada grupo empieza con una introducción y un ejemplo completo. Cada ejemplo
+  es también un test que se prueba en el emulador. La tabla da los tipos de Dash (`Int`, `String`...).
+- **Arreglo:** `joy_x` y `joy_y` no daban arriba ni abajo, y `joy_button` miraba el segundo botón en vez del
+  disparo.
+- **Arreglo:** `wait_key` volvía con 0 si llegaba otro mensaje antes de la tecla, y `wait_click` gastaba toda la
+  CPU mientras esperaba.
+- **Arreglo:** `gfx_flood` no rellenaba en una ventana de `window_create`.
+- **Arreglo:** `tilemap_draw` dejaba vacías las celdas que seguían a la primera celda en espejo.
+- **Arreglo:** en una pantalla propia, `color_pen` daba el color 1 para cualquier color; `rtg_write_pixel` y
+  `rtg_fill_rect` en una pantalla de paleta pintaban casi todo en el último color. Ahora usan el más parecido de la
+  paleta.
+- **Arreglo:** `random_range` con `max` menor que `min` podía dividir por cero; ahora devuelve `min`.
+- **Arreglo (`./dash --gcc`):** unas comillas dentro de una interpolación (`"#{f("x")}"`) daban error de sintaxis.
+  Con `./dash` ya iba bien.
+- **Arreglo:** un carácter (`t[i]`) donde va un texto, como en `str_find` o `str_replace`, iba como un número sin
+  sentido. Ahora va como un texto de una letra, por los dos caminos.
+- Probado en A1200 (3.1), A500 y A1200 con OS 3.2 emulados.
+
 ### 2.6.3 (2026-11-08)
 
 Un arreglo de `./dash --gcc` y Forja 0.5.1 en el paquete. Lo que ya compilaba sigue igual.
