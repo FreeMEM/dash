@@ -40,7 +40,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9b. Fuentes, transparencia, RGB, imágenes, TrueType e imágenes decodificadas, con
   `tests/test_doc_fuentes.dash`.
 - [x] T9c. Red, TLS y red en una tarea aparte, con `tests/test_doc_red.dash` (servidor de eco del runner).
-- [ ] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), en dos tandas.
+- [x] T9d. Tareas, reloj, traducciones y escritorio (`TASK_FUNCTIONS`, 89), con `tests/test_doc_tareas.dash`.
 - [x] T9e. Argumentos, zlib, UTF-8, Double, matemáticas, expresiones regulares, portapapeles, ordenar, JSON, con
   `tests/test_doc_varios.dash`.
 - [x] T9f. Sistema y programa (`SYSPROG_FUNCTIONS`), con `tests/test_doc_sysprog.dash`.
@@ -122,3 +122,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   - Arreglo: en una pantalla de paleta, `rtg_write_pixel` y `rtg_fill_rect` usaban los bits altos de r, g y b como
     número de color, recortado a 15 (casi todo salía en el 15, o el último de la pantalla); ahora el más parecido de
     la paleta (FindColor). `tests/test_doc_rtg.dash` lo comprueba (con el código de antes, rojo y naranja daban 7).
+- 2026-11-08: T9d. Tareas y escritorio (89). Sin fallos en lo probado. `desktop_canvas`, WiFi, USB y las curvas
+  del ratón sin ejemplo propio (necesitan el Workbench cargado o hardware); los cubren sus tests.

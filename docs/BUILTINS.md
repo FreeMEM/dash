@@ -4690,97 +4690,1003 @@ Ver también: [`gfx_rgb_draw`](#gfx_rgb_draw).
 
 ## Tareas, reloj, traducciones y escritorio
 
+Lo que necesitan los programas que viven en el escritorio, como Trasfondo: trabajo en otro proceso, commodities
+para Exchange, el reloj y el idioma del usuario, ficheros vigilados, el fondo del escritorio, y datos del sistema
+(discos, red, temperatura, CPU por tarea, ratones USB).
+
+**Tareas.** `task_start(f, arg)` ejecuta una función en otro proceso mientras el programa sigue. La función solo
+puede usar números, booleanos y builtins que no den textos ni listas (el compilador lo comprueba): los textos de
+Dash no se pueden compartir entre procesos. `task_done` dice si acabó, `task_result` da lo que devolvió y
+`task_free` la olvida.
+
+**Commodities.** `cx_broker` pone el programa en Exchange, `cx_hotkey` le da una tecla rápida y `cx_wait` espera
+sus órdenes sin gastar CPU.
+
+**Traducciones.** `tr(n, "texto")` da el texto número `n` del catálogo del programa en el idioma del usuario, o el
+de dentro del programa si no hay catálogo (`@catalog` y `tools/catalogo.py`).
+
+**Ejemplo** (`tests/test_doc_tareas.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Tareas y escritorio: un cálculo en otro proceso mientras el programa sigue, una sola copia del programa, el reloj,
+# un texto traducible y los discos montados.
+
+# Corre en otro proceso: solo números y builtins que no den textos ni listas
+func sumar(hasta: Int) -> Int
+    total = 0
+    i = 1
+    while i <= hasta
+        total = total + i
+        i = i + 1
+    end
+    return total
+end
+
+Main
+    t = task_start(sumar, 1000)
+    while not task_done(t)
+        time_delay(1)                              # aquí el programa haría otras cosas
+    end
+    Print "la tarea sumó #{task_result(t)}"
+    task_free(t)
+
+    Print "única copia: #{single_instance("DOCTAREAS")}"
+
+    clock_read()
+    Print "año válido: #{clock_year() >= 1978 and clock_month() >= 1 and clock_month() <= 12}"
+    Print "sin catálogo: " + tr(1, "Hola")
+
+    hay_ram = false
+    n = disks_read(2000)
+    i = 0
+    while i < n
+        if disk_name(i) == "Ram Disk"
+            hay_ram = true
+        end
+        i = i + 1
+    end
+    Print "RAM montado: #{hay_ram}"
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `task_start(func, arg)` | Int | Ejecuta una función f(arg: Int) -> Int en otro proceso: una de Dash que solo use Int, Bool, Float y builtins que no den textos ni listas (el compilador lo comprueba), o una de C (@extern, @native: malloc/free sí, textos y listas de Dash no); 128 KB de pila, la prioridad del programa: la tarea, o 0 |  |
-| `task_start_with(func, arg, stack, priority)` | Int | task_start con su pila en bytes (0: 128 KB) y su prioridad respecto a la del programa (-1: solo corre cuando el programa espera) |  |
-| `task_done(task)` | Bool | True cuando la función ha acabado (no espera) |  |
-| `desktop_canvas(x, y, width, height)` | Int (dirección) | Una zona del escritorio del Workbench (debajo de la barra de título de la pantalla), detrás de los iconos y sin clics, en modo fondo o no, planar o RTG; x o y negativas: desde el borde derecho o el de abajo (-1 lo toca). 0 si no se puede |  |
-| `desktop_canvas_on_draw(canvas, func)` | — | La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (desde 0, 0), sobre el fondo de escritorio que hay debajo |  |
-| `desktop_canvas_update(canvas)` | — | Dibuja otra vez la zona ya y enseña lo que cambió, sin tocar los iconos |  |
-| `desktop_canvas_update_area(canvas, x, y, width, height)` | — | desktop_canvas_update solo en esa parte de la zona: el dibujo se recorta a ella y solo se compara ella (lo demás se queda como estaba; donde el escritorio se repintó entretanto, también se dibuja) |  |
-| `desktop_canvas_veil(canvas, rgb, alpha)` | — | El fondo de debajo del dibujo mezclado con rgb (0xRRGGBB) con alpha (0-255; 0: ninguno), una vez y otra solo donde el escritorio lo repinta: como un gfx_blend_rect sobre toda la zona en cada dibujo, sin su coste. Quita los velos de desktop_canvas_veil_rect. Se ve desde el siguiente desktop_canvas_update |  |
-| `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` | Bool | Un velo más, solo en ese rectángulo, mezclado una vez sobre el de desktop_canvas_veil (que los quita: llamarlo antes): una caja que siempre está. Hasta 16; false si no caben más |  |
-| `desktop_canvas_drawing(x, y, width, height)` | Bool | Dentro de la función de dibujo: true si ese rectángulo llega a la parte que se dibuja (toda la zona, o la de desktop_canvas_update_area con lo que repintó el escritorio), para saltarse lo que no se vería. Fuera de ella, siempre true |  |
-| `desktop_canvas_free(canvas)` | — | Vuelve a poner el fondo de escritorio en la zona (al acabar el programa también) |  |
-| `break_check()` | Bool | True si llegó un Ctrl-C ("Break" en el Shell, u otra copia: single_instance); se borra |  |
-| `single_instance(name)` | Bool | Una sola copia a la vez: false si corre otra copia del programa (un puerto público con ese nombre), que recibe un Ctrl-C; si no, true (el puerto es del programa hasta que acaba) |  |
-| `tooltype(name, default)` | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
-| `cx_broker(name, title, description, priority)` | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
-| `cx_hotkey(description)` | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
-| `cx_key_add(description, n)` | Bool | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
-| `cx_command()` | Int | La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su tecla) |  |
-| `cx_wait(ms)` | Int | Espera, sin gastar nada, hasta que llegue una orden (la da como cx_command), un Ctrl-C (-1, se borra) o pasen ms milisegundos (0) |  |
-| `disks_read(ms)` | Int | Lee los volúmenes montados (con disco dentro), su tamaño y su espacio libre, preguntando a todos a la vez y esperando como mucho ms milisegundos: cuántos hay. No pide ningún disco |  |
-| `disk_name(i)` | String | El nombre del volumen i (de 0 a disks_read() - 1) del último disks_read, sin los dos puntos |  |
-| `disk_kb(i)` | Int | El tamaño del volumen i en KB (como lo enseña Info); -1 si no contestó a tiempo |  |
-| `disk_free_kb(i)` | Int | El espacio libre del volumen i en KB; -1 si no contestó a tiempo |  |
-| `net_ifs_read()` | Int | Lee las interfaces de red de Roadshow (también lo0), su estado y sus bytes: cuántas hay; -1 sin pila TCP/IP o con una que no lo dice (AmiTCP, Miami) |  |
-| `net_if_name(i)` | String | El nombre de la interfaz i (de 0 a net_ifs_read() - 1) del último net_ifs_read |  |
-| `net_if_up(i)` | Bool | True si la interfaz i está levantada (conectada) |  |
-| `net_if_bytes_in(i)` | Int | Los bytes recibidos por la interfaz i (los 32 bits bajos: la diferencia entre dos lecturas son los bytes de entretanto, aunque pase de 2 GB) |  |
-| `net_if_bytes_out(i)` | Int | Los bytes enviados por la interfaz i (los 32 bits bajos, como net_if_bytes_in) |  |
-| `pistorm_temperature()` | Int | La temperatura de la Raspberry Pi de una PiStorm (Emu68), en décimas de grado Celsius (523: 52,3), de su firmware por el mailbox.resource de Emu68; -1 sin Emu68 |  |
-| `wifi_read(interface, ms)` | Int | Pide al driver SANA-II de una interfaz de Roadshow su señal WiFi, esperando como mucho ms milisegundos: 0 leída (wifi_signal, wifi_noise), 1 no contestó a tiempo, 2 el driver no lo dice, 3 no hay esa interfaz, 4 el driver da un error (desconectado), 5 la pila tiene el driver solo para ella, -1 sin Roadshow |  |
-| `wifi_read_device(driver, unit, ms)` | Int | Como wifi_read, preguntando directamente a un driver SANA-II en uso ("wifipi.device", unidad 0), con cualquier pila TCP/IP: 0 leída, 1 no contestó a tiempo, 2 el driver no lo dice, 3 no hay ese driver en uso, 4 desconectado, 5 la pila lo tiene solo para ella |  |
-| `net_drivers_read()` | Int | Lee los drivers de red SANA-II en uso, con cualquier pila TCP/IP (los de DEVS:Networks que algo tiene abiertos): cuántos |  |
-| `net_driver_name(i)` | String | El nombre del driver i (de 0 a net_drivers_read() - 1) del último net_drivers_read ("wifipi.device") |  |
-| `net_driver_read(driver, unit, ms)` | Int | Pide a un driver SANA-II en uso sus paquetes de entrada y salida, esperando como mucho ms: los códigos de wifi_read_device (0 leído: net_driver_packets_in, net_driver_packets_out) |  |
-| `net_driver_has_bytes()` | Bool | True si el driver del último net_driver_read cuenta bytes (sus paquetes IPv4, IPv6 y ARP): net_driver_bytes_in y net_driver_bytes_out |  |
-| `net_driver_bytes_in()` | Int | Los bytes recibidos por el driver del último net_driver_read (los 32 bits bajos), si net_driver_has_bytes |  |
-| `net_driver_bytes_out()` | Int | Los bytes enviados por el driver del último net_driver_read, si net_driver_has_bytes |  |
-| `net_driver_packets_in()` | Int | Los paquetes recibidos por el driver del último net_driver_read que dio 0 |  |
-| `net_driver_packets_out()` | Int | Los paquetes enviados por el driver del último net_driver_read que dio 0 |  |
-| `wifi_signal()` | Int | El nivel de señal del último wifi_read que dio 0, en dBm (-30 muy bueno, -90 muy malo) |  |
-| `wifi_noise()` | Int | El nivel de ruido del último wifi_read que dio 0, en dBm |  |
-| `usb_hid_read()` | Int | Lee los dispositivos USB (cada interfaz) que lleva la hid.class de Poseidon: cuántos; -1 sin poseidon.library 4 |  |
-| `usb_hid_name(i)` | String | El nombre del producto del dispositivo USB i (de 0 a usb_hid_read() - 1) del último usb_hid_read |  |
-| `usb_hid_maker(i)` | String | El fabricante del dispositivo USB i |  |
-| `usb_hid_vendor(i)` | Int | El VendorID del dispositivo USB i |  |
-| `usb_hid_product(i)` | Int | El ProductID del dispositivo USB i |  |
-| `usb_hid_kind(i)` | Int | Qué es el dispositivo USB i: 1 ratón, 2 teclado, 0 otra cosa (muchos trackpads) |  |
-| `usb_hid_emitter(i)` | Int | El emisor del dispositivo USB i: el número de la tarea de hid.class que envía sus movimientos, para mouse_curve |  |
-| `mouse_curve(emitter, factors)` | Bool | La curva de aceleración de un ratón: el emisor 0 es el ratón del Amiga (y todo movimiento que no venga de un ratón USB); si no, uno de usb_hid_emitter. factors: una lista de centésimas (100 = tal cual), la entrada i para un movimiento de i unidades, la última desde ahí (hasta 32); [] la quita. Las fracciones que sobran se guardan. False si input.device no se abre o ya hay 16 emisores |  |
-| `mouse_curve_events(emitter)` | Int | Cuántos movimientos ha escalado la curva de un emisor |  |
-| `mouse_curves_off()` | — | Quita ya las curvas de input.device (al acabar el programa también); un mouse_curve las vuelve a poner. Bajo el parche de otro programa queda un puente que lo deja pasar todo |  |
-| `mouse_patch_left()` | Int | Cuántos puentes quedaron bajo el parche de otro programa en input.device (lo dejan pasar todo, para siempre) |  |
-| `mouse_prefs_ticks()` | Int | La velocidad del ratón del sistema (preferencias de Input): 1 la más rápida, 2, 4 la más lenta |  |
-| `mouse_prefs_accel()` | Bool | True si está puesta la aceleración del ratón del sistema (preferencias de Input) |  |
-| `mouse_prefs_set(ticks, accel)` | — | Pone la velocidad y la aceleración del ratón del sistema; vuelven a ser como eran al acabar el programa |  |
-| `tr(id, text)` | String | El texto número id del catálogo del programa (@catalog) en el idioma del usuario; text (el del propio programa) sin catálogo, sin ese número o sin locale.library |  |
-| `catalog_open(name, version)` | Bool | Abre otro catálogo ("X.catalog", versión 0: cualquiera) en los idiomas del usuario en vez del que se usa; false si no hay (tr da los textos del propio programa) |  |
-| `catalog_language()` | String | El idioma del catálogo que se usa ("english"); "" si no hay |  |
-| `clock_read()` | — | Toma la fecha y la hora del reloj del sistema: clock_year, clock_month... dan sus partes |  |
-| `clock_year()` | Int | El año del último clock_read (1978...) |  |
-| `clock_month()` | Int | El mes del último clock_read (1 a 12) |  |
-| `clock_day()` | Int | El día del mes del último clock_read (1 a 31) |  |
-| `clock_weekday()` | Int | El día de la semana del último clock_read: 0 domingo, 1 lunes ... 6 sábado |  |
-| `clock_hour()` | Int | La hora del último clock_read (0 a 23) |  |
-| `clock_minute()` | Int | El minuto del último clock_read |  |
-| `clock_second()` | Int | El segundo del último clock_read |  |
-| `date_text(format)` | String | La fecha y la hora de ahora como dice format, con el FormatDate de locale.library en el idioma y el país del usuario: %A día, %d-%m-%Y, %b mes, %H:%M:%S... (en inglés sin locale.library) |  |
-| `locale_gmt_offset()` | Int | Cuántos minutos va el reloj del Amiga por delante de GMT (60 en España en invierno), de Locale; 0 sin locale.library. Así guarda git sus horas ("+0100") |  |
-| `locale_decimal_point()` | String | Lo que va antes de los decimales en el país del usuario: "," en España, "." en inglés (también sin locale.library) |  |
-| `locale_group_separator()` | String | Lo que separa los miles en el país del usuario: "." en España (1.234,5), "," en inglés (1,234.5); puede ser "" |  |
-| `locale_date_order()` | String | El orden de día, mes y año en la fecha corta del usuario: "DMY", "MDY" o "YMD" |  |
-| `program_version()` | String | El nombre y la versión del programa de @version ("Trasfondo 0.7"); "" sin ella |  |
-| `file_notify(path)` | Int | Vigila un fichero (puede no existir aún): su número (1 a 8), 0 si no se puede vigilar. cx_wait da 7 cuando cambia; file_changed(n) dice si cambió |  |
-| `file_changed(n)` | Bool | True si el fichero vigilado con ese número cambió desde el último file_changed |  |
-| `file_notify_end(n)` | — | Deja de vigilar ese fichero (al acabar el programa se dejan todos) |  |
-| `file_notify_signal()` | Int | La señal de los ficheros vigilados, para mui_wait_event_signals (0 antes de un file_notify) |  |
-| `run_program(command)` | Bool | Empieza una orden ("SYS:Prefs/Font", "\"Work:Mi Prog\" arg") en otro proceso sin esperar, con su entrada y su salida en NIL:; false si no pudo empezar |  |
-| `program_relaunch()` | — | Al acabar el programa, lo vuelve a empezar (después de todo lo de su final, también el puerto de single_instance) como empezó: desde el Workbench (3.5+: con su icono) o desde un Shell con sus argumentos. Para actualizarse |  |
-| `dos_requesters(on)` | — | false: sin requesters de "Inserta el volumen" ni de errores de disco para este programa (la llamada falla en su lugar); true: como antes. Al acabar el programa vuelven |  |
-| `base64_to_file(text, file)` | Int | Escribe en un fichero los bytes de un texto en base64 (sin mirar espacios ni saltos de línea, con relleno = o sin él): los bytes escritos, o -1 si el texto no es base64 (y entonces no hay fichero) o no se puede escribir |  |
-| `cpu_start()` | Bool | Empieza a contar la CPU de cada tarea (los ganchos de cambio de tarea de exec; una tarea con ganchos de otro programa no se cuenta): false sin EClock o antes del OS 2.04 |  |
-| `cpu_sample()` | Int | Toma una muestra: el número de tareas, con la CPU que gastó cada una desde la muestra anterior (o cpu_start), de más a menos; también engancha las tareas empezadas desde entonces |  |
-| `cpu_task_name(i)` | String | El nombre de la tarea i de la última muestra, desde 0 (de un proceso de Shell, su orden) |  |
-| `cpu_task_load(i)` | Int | La CPU de la tarea i de la última muestra, en tanto por mil |  |
-| `cpu_total()` | Int | La CPU de todas las tareas contadas en la última muestra, en tanto por mil (lo demás es reposo) |  |
-| `cpu_stop()` | — | Quita los ganchos de las tareas (al acabar el programa también) |  |
-| `task_signal()` | Int | La máscara de señal que cada tarea envía al programa cuando acaba su función (para mui_wait_event_signals); 0 si no queda ninguna libre |  |
-| `task_result(task)` | Int | Lo que devolvió la función (la espera si no ha acabado) |  |
-| `task_free(task)` | — | Olvida la tarea (la espera si sigue en marcha); al acabar, el programa espera a las que queden |  |
+| [`task_start(func, arg)`](#task_start) | Int | Ejecuta una función f(arg: Int) -> Int en otro proceso: una de Dash que solo use Int, Bool, Float y builtins que no den textos ni listas (el compilador lo comprueba), o una de C (@extern, @native: malloc/free sí, textos y listas de Dash no); 128 KB de pila, la prioridad del programa: la tarea, o 0 |  |
+| [`task_start_with(func, arg, stack, priority)`](#task_start_with) | Int | task_start con su pila en bytes (0: 128 KB) y su prioridad respecto a la del programa (-1: solo corre cuando el programa espera) |  |
+| [`task_done(task)`](#task_done) | Bool | True cuando la función ha acabado (no espera) |  |
+| [`desktop_canvas(x, y, width, height)`](#desktop_canvas) | Int (dirección) | Una zona del escritorio del Workbench (debajo de la barra de título de la pantalla), detrás de los iconos y sin clics, en modo fondo o no, planar o RTG; x o y negativas: desde el borde derecho o el de abajo (-1 lo toca). 0 si no se puede |  |
+| [`desktop_canvas_on_draw(canvas, func)`](#desktop_canvas_on_draw) | — | La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (desde 0, 0), sobre el fondo de escritorio que hay debajo |  |
+| [`desktop_canvas_update(canvas)`](#desktop_canvas_update) | — | Dibuja otra vez la zona ya y enseña lo que cambió, sin tocar los iconos |  |
+| [`desktop_canvas_update_area(canvas, x, y, width, height)`](#desktop_canvas_update_area) | — | desktop_canvas_update solo en esa parte de la zona: el dibujo se recorta a ella y solo se compara ella (lo demás se queda como estaba; donde el escritorio se repintó entretanto, también se dibuja) |  |
+| [`desktop_canvas_veil(canvas, rgb, alpha)`](#desktop_canvas_veil) | — | El fondo de debajo del dibujo mezclado con rgb (0xRRGGBB) con alpha (0-255; 0: ninguno), una vez y otra solo donde el escritorio lo repinta: como un gfx_blend_rect sobre toda la zona en cada dibujo, sin su coste. Quita los velos de desktop_canvas_veil_rect. Se ve desde el siguiente desktop_canvas_update |  |
+| [`desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)`](#desktop_canvas_veil_rect) | Bool | Un velo más, solo en ese rectángulo, mezclado una vez sobre el de desktop_canvas_veil (que los quita: llamarlo antes): una caja que siempre está. Hasta 16; false si no caben más |  |
+| [`desktop_canvas_drawing(x, y, width, height)`](#desktop_canvas_drawing) | Bool | Dentro de la función de dibujo: true si ese rectángulo llega a la parte que se dibuja (toda la zona, o la de desktop_canvas_update_area con lo que repintó el escritorio), para saltarse lo que no se vería. Fuera de ella, siempre true |  |
+| [`desktop_canvas_free(canvas)`](#desktop_canvas_free) | — | Vuelve a poner el fondo de escritorio en la zona (al acabar el programa también) |  |
+| [`break_check()`](#break_check) | Bool | True si llegó un Ctrl-C ("Break" en el Shell, u otra copia: single_instance); se borra |  |
+| [`single_instance(name)`](#single_instance) | Bool | Una sola copia a la vez: false si corre otra copia del programa (un puerto público con ese nombre), que recibe un Ctrl-C; si no, true (el puerto es del programa hasta que acaba) |  |
+| [`tooltype(name, default)`](#tooltype) | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
+| [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
+| [`cx_hotkey(description)`](#cx_hotkey) | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
+| [`cx_command()`](#cx_command) | Int | La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su tecla) |  |
+| [`cx_wait(ms)`](#cx_wait) | Int | Espera, sin gastar nada, hasta que llegue una orden (la da como cx_command), un Ctrl-C (-1, se borra) o pasen ms milisegundos (0) |  |
+| [`disks_read(ms)`](#disks_read) | Int | Lee los volúmenes montados (con disco dentro), su tamaño y su espacio libre, preguntando a todos a la vez y esperando como mucho ms milisegundos: cuántos hay. No pide ningún disco |  |
+| [`disk_name(i)`](#disk_name) | String | El nombre del volumen i (de 0 a disks_read() - 1) del último disks_read, sin los dos puntos |  |
+| [`disk_kb(i)`](#disk_kb) | Int | El tamaño del volumen i en KB (como lo enseña Info); -1 si no contestó a tiempo |  |
+| [`disk_free_kb(i)`](#disk_free_kb) | Int | El espacio libre del volumen i en KB; -1 si no contestó a tiempo |  |
+| [`net_ifs_read()`](#net_ifs_read) | Int | Lee las interfaces de red de Roadshow (también lo0), su estado y sus bytes: cuántas hay; -1 sin pila TCP/IP o con una que no lo dice (AmiTCP, Miami) |  |
+| [`net_if_name(i)`](#net_if_name) | String | El nombre de la interfaz i (de 0 a net_ifs_read() - 1) del último net_ifs_read |  |
+| [`net_if_up(i)`](#net_if_up) | Bool | True si la interfaz i está levantada (conectada) |  |
+| [`net_if_bytes_in(i)`](#net_if_bytes_in) | Int | Los bytes recibidos por la interfaz i (los 32 bits bajos: la diferencia entre dos lecturas son los bytes de entretanto, aunque pase de 2 GB) |  |
+| [`net_if_bytes_out(i)`](#net_if_bytes_out) | Int | Los bytes enviados por la interfaz i (los 32 bits bajos, como net_if_bytes_in) |  |
+| [`pistorm_temperature()`](#pistorm_temperature) | Int | La temperatura de la Raspberry Pi de una PiStorm (Emu68), en décimas de grado Celsius (523: 52,3), de su firmware por el mailbox.resource de Emu68; -1 sin Emu68 |  |
+| [`wifi_read(interface, ms)`](#wifi_read) | Int | Pide al driver SANA-II de una interfaz de Roadshow su señal WiFi, esperando como mucho ms milisegundos: 0 leída (wifi_signal, wifi_noise), 1 no contestó a tiempo, 2 el driver no lo dice, 3 no hay esa interfaz, 4 el driver da un error (desconectado), 5 la pila tiene el driver solo para ella, -1 sin Roadshow |  |
+| [`wifi_read_device(driver, unit, ms)`](#wifi_read_device) | Int | Como wifi_read, preguntando directamente a un driver SANA-II en uso ("wifipi.device", unidad 0), con cualquier pila TCP/IP: 0 leída, 1 no contestó a tiempo, 2 el driver no lo dice, 3 no hay ese driver en uso, 4 desconectado, 5 la pila lo tiene solo para ella |  |
+| [`net_drivers_read()`](#net_drivers_read) | Int | Lee los drivers de red SANA-II en uso, con cualquier pila TCP/IP (los de DEVS:Networks que algo tiene abiertos): cuántos |  |
+| [`net_driver_name(i)`](#net_driver_name) | String | El nombre del driver i (de 0 a net_drivers_read() - 1) del último net_drivers_read ("wifipi.device") |  |
+| [`net_driver_read(driver, unit, ms)`](#net_driver_read) | Int | Pide a un driver SANA-II en uso sus paquetes de entrada y salida, esperando como mucho ms: los códigos de wifi_read_device (0 leído: net_driver_packets_in, net_driver_packets_out) |  |
+| [`net_driver_has_bytes()`](#net_driver_has_bytes) | Bool | True si el driver del último net_driver_read cuenta bytes (sus paquetes IPv4, IPv6 y ARP): net_driver_bytes_in y net_driver_bytes_out |  |
+| [`net_driver_bytes_in()`](#net_driver_bytes_in) | Int | Los bytes recibidos por el driver del último net_driver_read (los 32 bits bajos), si net_driver_has_bytes |  |
+| [`net_driver_bytes_out()`](#net_driver_bytes_out) | Int | Los bytes enviados por el driver del último net_driver_read, si net_driver_has_bytes |  |
+| [`net_driver_packets_in()`](#net_driver_packets_in) | Int | Los paquetes recibidos por el driver del último net_driver_read que dio 0 |  |
+| [`net_driver_packets_out()`](#net_driver_packets_out) | Int | Los paquetes enviados por el driver del último net_driver_read que dio 0 |  |
+| [`wifi_signal()`](#wifi_signal) | Int | El nivel de señal del último wifi_read que dio 0, en dBm (-30 muy bueno, -90 muy malo) |  |
+| [`wifi_noise()`](#wifi_noise) | Int | El nivel de ruido del último wifi_read que dio 0, en dBm |  |
+| [`usb_hid_read()`](#usb_hid_read) | Int | Lee los dispositivos USB (cada interfaz) que lleva la hid.class de Poseidon: cuántos; -1 sin poseidon.library 4 |  |
+| [`usb_hid_name(i)`](#usb_hid_name) | String | El nombre del producto del dispositivo USB i (de 0 a usb_hid_read() - 1) del último usb_hid_read |  |
+| [`usb_hid_maker(i)`](#usb_hid_maker) | String | El fabricante del dispositivo USB i |  |
+| [`usb_hid_vendor(i)`](#usb_hid_vendor) | Int | El VendorID del dispositivo USB i |  |
+| [`usb_hid_product(i)`](#usb_hid_product) | Int | El ProductID del dispositivo USB i |  |
+| [`usb_hid_kind(i)`](#usb_hid_kind) | Int | Qué es el dispositivo USB i: 1 ratón, 2 teclado, 0 otra cosa (muchos trackpads) |  |
+| [`usb_hid_emitter(i)`](#usb_hid_emitter) | Int | El emisor del dispositivo USB i: el número de la tarea de hid.class que envía sus movimientos, para mouse_curve |  |
+| [`mouse_curve(emitter, factors)`](#mouse_curve) | Bool | La curva de aceleración de un ratón: el emisor 0 es el ratón del Amiga (y todo movimiento que no venga de un ratón USB); si no, uno de usb_hid_emitter. factors: una lista de centésimas (100 = tal cual), la entrada i para un movimiento de i unidades, la última desde ahí (hasta 32); [] la quita. Las fracciones que sobran se guardan. False si input.device no se abre o ya hay 16 emisores |  |
+| [`mouse_curve_events(emitter)`](#mouse_curve_events) | Int | Cuántos movimientos ha escalado la curva de un emisor |  |
+| [`mouse_curves_off()`](#mouse_curves_off) | — | Quita ya las curvas de input.device (al acabar el programa también); un mouse_curve las vuelve a poner. Bajo el parche de otro programa queda un puente que lo deja pasar todo |  |
+| [`mouse_patch_left()`](#mouse_patch_left) | Int | Cuántos puentes quedaron bajo el parche de otro programa en input.device (lo dejan pasar todo, para siempre) |  |
+| [`mouse_prefs_ticks()`](#mouse_prefs_ticks) | Int | La velocidad del ratón del sistema (preferencias de Input): 1 la más rápida, 2, 4 la más lenta |  |
+| [`mouse_prefs_accel()`](#mouse_prefs_accel) | Bool | True si está puesta la aceleración del ratón del sistema (preferencias de Input) |  |
+| [`mouse_prefs_set(ticks, accel)`](#mouse_prefs_set) | — | Pone la velocidad y la aceleración del ratón del sistema; vuelven a ser como eran al acabar el programa |  |
+| [`tr(id, text)`](#tr) | String | El texto número id del catálogo del programa (@catalog) en el idioma del usuario; text (el del propio programa) sin catálogo, sin ese número o sin locale.library |  |
+| [`catalog_open(name, version)`](#catalog_open) | Bool | Abre otro catálogo ("X.catalog", versión 0: cualquiera) en los idiomas del usuario en vez del que se usa; false si no hay (tr da los textos del propio programa) |  |
+| [`catalog_language()`](#catalog_language) | String | El idioma del catálogo que se usa ("english"); "" si no hay |  |
+| [`clock_read()`](#clock_read) | — | Toma la fecha y la hora del reloj del sistema: clock_year, clock_month... dan sus partes |  |
+| [`clock_year()`](#clock_year) | Int | El año del último clock_read (1978...) |  |
+| [`clock_month()`](#clock_month) | Int | El mes del último clock_read (1 a 12) |  |
+| [`clock_day()`](#clock_day) | Int | El día del mes del último clock_read (1 a 31) |  |
+| [`clock_weekday()`](#clock_weekday) | Int | El día de la semana del último clock_read: 0 domingo, 1 lunes ... 6 sábado |  |
+| [`clock_hour()`](#clock_hour) | Int | La hora del último clock_read (0 a 23) |  |
+| [`clock_minute()`](#clock_minute) | Int | El minuto del último clock_read |  |
+| [`clock_second()`](#clock_second) | Int | El segundo del último clock_read |  |
+| [`date_text(format)`](#date_text) | String | La fecha y la hora de ahora como dice format, con el FormatDate de locale.library en el idioma y el país del usuario: %A día, %d-%m-%Y, %b mes, %H:%M:%S... (en inglés sin locale.library) |  |
+| [`locale_gmt_offset()`](#locale_gmt_offset) | Int | Cuántos minutos va el reloj del Amiga por delante de GMT (60 en España en invierno), de Locale; 0 sin locale.library. Así guarda git sus horas ("+0100") |  |
+| [`locale_decimal_point()`](#locale_decimal_point) | String | Lo que va antes de los decimales en el país del usuario: "," en España, "." en inglés (también sin locale.library) |  |
+| [`locale_group_separator()`](#locale_group_separator) | String | Lo que separa los miles en el país del usuario: "." en España (1.234,5), "," en inglés (1,234.5); puede ser "" |  |
+| [`locale_date_order()`](#locale_date_order) | String | El orden de día, mes y año en la fecha corta del usuario: "DMY", "MDY" o "YMD" |  |
+| [`program_version()`](#program_version) | String | El nombre y la versión del programa de @version ("Trasfondo 0.7"); "" sin ella |  |
+| [`file_notify(path)`](#file_notify) | Int | Vigila un fichero (puede no existir aún): su número (1 a 8), 0 si no se puede vigilar. cx_wait da 7 cuando cambia; file_changed(n) dice si cambió |  |
+| [`file_changed(n)`](#file_changed) | Bool | True si el fichero vigilado con ese número cambió desde el último file_changed |  |
+| [`file_notify_end(n)`](#file_notify_end) | — | Deja de vigilar ese fichero (al acabar el programa se dejan todos) |  |
+| [`file_notify_signal()`](#file_notify_signal) | Int | La señal de los ficheros vigilados, para mui_wait_event_signals (0 antes de un file_notify) |  |
+| [`run_program(command)`](#run_program) | Bool | Empieza una orden ("SYS:Prefs/Font", "\"Work:Mi Prog\" arg") en otro proceso sin esperar, con su entrada y su salida en NIL:; false si no pudo empezar |  |
+| [`program_relaunch()`](#program_relaunch) | — | Al acabar el programa, lo vuelve a empezar (después de todo lo de su final, también el puerto de single_instance) como empezó: desde el Workbench (3.5+: con su icono) o desde un Shell con sus argumentos. Para actualizarse |  |
+| [`dos_requesters(on)`](#dos_requesters) | — | false: sin requesters de "Inserta el volumen" ni de errores de disco para este programa (la llamada falla en su lugar); true: como antes. Al acabar el programa vuelven |  |
+| [`base64_to_file(text, file)`](#base64_to_file) | Int | Escribe en un fichero los bytes de un texto en base64 (sin mirar espacios ni saltos de línea, con relleno = o sin él): los bytes escritos, o -1 si el texto no es base64 (y entonces no hay fichero) o no se puede escribir |  |
+| [`cpu_start()`](#cpu_start) | Bool | Empieza a contar la CPU de cada tarea (los ganchos de cambio de tarea de exec; una tarea con ganchos de otro programa no se cuenta): false sin EClock o antes del OS 2.04 |  |
+| [`cpu_sample()`](#cpu_sample) | Int | Toma una muestra: el número de tareas, con la CPU que gastó cada una desde la muestra anterior (o cpu_start), de más a menos; también engancha las tareas empezadas desde entonces |  |
+| [`cpu_task_name(i)`](#cpu_task_name) | String | El nombre de la tarea i de la última muestra, desde 0 (de un proceso de Shell, su orden) |  |
+| [`cpu_task_load(i)`](#cpu_task_load) | Int | La CPU de la tarea i de la última muestra, en tanto por mil |  |
+| [`cpu_total()`](#cpu_total) | Int | La CPU de todas las tareas contadas en la última muestra, en tanto por mil (lo demás es reposo) |  |
+| [`cpu_stop()`](#cpu_stop) | — | Quita los ganchos de las tareas (al acabar el programa también) |  |
+| [`task_signal()`](#task_signal) | Int | La máscara de señal que cada tarea envía al programa cuando acaba su función (para mui_wait_event_signals); 0 si no queda ninguna libre |  |
+| [`task_result(task)`](#task_result) | Int | Lo que devolvió la función (la espera si no ha acabado) |  |
+| [`task_free(task)`](#task_free) | — | Olvida la tarea (la espera si sigue en marcha); al acabar, el programa espera a las que queden |  |
+
+<a id="task_start"></a>
+
+### `task_start(func, arg)` → `Int`
+
+- `func`: una función `f(arg: Int) -> Int` de Dash, que solo use `Int`, `Bool`, `Float` y builtins que no den textos
+  ni listas; o una de C (`@native`, `@extern`).
+- `arg`: el número que recibe.
+
+La ejecuta en otro proceso, con 128 KB de pila y la prioridad del programa, y vuelve enseguida. Devuelve la tarea, o
+0 si no pudo. El programa espera al acabar a las que sigan.
+
+Ver también: [`task_done`](#task_done), [`task_result`](#task_result), [`task_free`](#task_free), [`task_start_with`](#task_start_with).
+
+<a id="task_start_with"></a>
+
+### `task_start_with(func, arg, stack, priority)` → `Int`
+
+- `func`, `arg`: como en `task_start`.
+- `stack`: la pila en bytes; 0 = 128 KB.
+- `priority`: respecto a la del programa; -1 = solo corre cuando el programa espera.
+
+Ver también: [`task_start`](#task_start).
+
+<a id="task_done"></a>
+
+### `task_done(task)` → `Bool`
+
+- `task`: el número de `task_start`.
+
+Devuelve `true` cuando la función ha acabado, sin esperar.
+
+Ver también: [`task_result`](#task_result), [`task_signal`](#task_signal).
+
+<a id="desktop_canvas"></a>
+
+### `desktop_canvas(x, y, width, height)` → `Int (dirección)`
+
+- `x`, `y`: la esquina en el escritorio del Workbench, bajo la barra de la pantalla. Negativas cuentan desde el
+  borde derecho o el de abajo.
+- `width`, `height`: el tamaño.
+
+Una zona del fondo del escritorio, detrás de los iconos y sin clics, donde el programa dibuja (un reloj, un
+monitor). Devuelve la zona, o 0. Se dibuja desde `desktop_canvas_on_draw`.
+
+Ver también: [`desktop_canvas_on_draw`](#desktop_canvas_on_draw), [`desktop_canvas_update`](#desktop_canvas_update), [`desktop_canvas_free`](#desktop_canvas_free).
+
+<a id="desktop_canvas_on_draw"></a>
+
+### `desktop_canvas_on_draw(canvas, func)`
+
+- `canvas`: la zona de `desktop_canvas`.
+- `func`: una función `f(x, y, ancho, alto)` que dibuja con los `gfx_*` desde 0, 0.
+
+Se dibuja sobre el fondo de escritorio que hay debajo, así que lo que no se pinta deja verlo.
+
+Ver también: [`desktop_canvas_update`](#desktop_canvas_update).
+
+<a id="desktop_canvas_update"></a>
+
+### `desktop_canvas_update(canvas)`
+
+- `canvas`: la zona de `desktop_canvas`.
+
+La dibuja otra vez ya y enseña lo que cambió, sin tocar los iconos.
+
+Ver también: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
+
+<a id="desktop_canvas_update_area"></a>
+
+### `desktop_canvas_update_area(canvas, x, y, width, height)`
+
+- `canvas`: la zona de `desktop_canvas`.
+- `x`, `y`, `width`, `height`: la parte.
+
+Como `desktop_canvas_update`, solo en esa parte (y donde el escritorio se repintó entretanto).
+
+Ver también: [`desktop_canvas_drawing`](#desktop_canvas_drawing).
+
+<a id="desktop_canvas_veil"></a>
+
+### `desktop_canvas_veil(canvas, rgb, alpha)`
+
+- `canvas`: la zona de `desktop_canvas`.
+- `rgb`: el color, `0xRRGGBB`.
+- `alpha`: cuánto tapa, de 0 (nada) a 255.
+
+Un velo de ese color sobre el fondo, debajo del dibujo, para que el texto se lea sobre cualquier imagen de fondo.
+
+Ver también: [`desktop_canvas_veil_rect`](#desktop_canvas_veil_rect).
+
+<a id="desktop_canvas_veil_rect"></a>
+
+### `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` → `Bool`
+
+- `canvas`: la zona de `desktop_canvas`.
+- `x`, `y`, `width`, `height`: el rectángulo.
+- `rgb`, `alpha`: como en `desktop_canvas_veil`.
+
+Un velo más, solo ahí, sobre el de `desktop_canvas_veil` (que los quita: va antes). Hasta 16; `false` si no caben.
+
+Ver también: [`desktop_canvas_veil`](#desktop_canvas_veil).
+
+<a id="desktop_canvas_drawing"></a>
+
+### `desktop_canvas_drawing(x, y, width, height)` → `Bool`
+
+- `x`, `y`, `width`, `height`: un rectángulo.
+
+Dentro de la función de dibujo, devuelve `true` si llega a la parte que se está dibujando: para saltarse lo que no se ve.
+
+Ver también: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
+
+<a id="desktop_canvas_free"></a>
+
+### `desktop_canvas_free(canvas)`
+
+- `canvas`: la zona de `desktop_canvas`.
+
+Vuelve a poner el fondo de escritorio en la zona. Al acabar el programa se hace solo.
+
+Ver también: [`desktop_canvas`](#desktop_canvas).
+
+<a id="break_check"></a>
+
+### `break_check()` → `Bool`
+
+Devuelve `true` si llegó un Ctrl-C (`Break` en el Shell, u otra copia del programa con `single_instance`), y lo borra. Para un bucle largo que se pueda parar.
+
+Ver también: [`single_instance`](#single_instance).
+
+<a id="single_instance"></a>
+
+### `single_instance(name)` → `Bool`
+
+- `name`: un nombre único para el programa.
+
+Para que solo corra una copia: si ya hay otra, le manda un Ctrl-C y devuelve `false` (la nueva debe acabar; la
+vieja lo ve con `break_check`). Si no, devuelve `true`.
+
+Ver también: [`break_check`](#break_check).
+
+<a id="tooltype"></a>
+
+### `tooltype(name, default)` → `String`
+
+- `name`: el nombre: `"DELAY"`.
+- `default`: lo que devuelve si no está.
+
+Desde el Shell, el argumento `NOMBRE=valor`; desde el Workbench, el tooltype del icono del programa.
+
+Ver también: [`arg`](#arg).
+
+<a id="cx_broker"></a>
+
+### `cx_broker(name, title, description, priority)` → `Bool`
+
+- `name`: el nombre en Exchange, hasta 23 letras.
+- `title`, `description`: lo que enseña Exchange, hasta 39 letras cada uno.
+- `priority`: la de la commodity; 0 normalmente.
+
+Pone el programa en Exchange como commodity, con Mostrar y Ocultar, y activada. Devuelve `false` sin
+`commodities.library` o si ya hay una con ese nombre.
+
+Ver también: [`cx_hotkey`](#cx_hotkey), [`cx_wait`](#cx_wait), [`cx_command`](#cx_command).
+
+<a id="cx_hotkey"></a>
+
+### `cx_hotkey(description)` → `Bool`
+
+- `description`: la tecla, como la escribe Exchange: `"ctrl alt t"`; `""` la quita.
+
+La tecla rápida de la commodity: al pulsarla, `cx_command` da 6. Devuelve `false` si la descripción no vale.
+
+Ver también: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
+
+<a id="cx_key_add"></a>
+
+### `cx_key_add(description, n)` → `Bool`
+
+- `description`: la tecla, o un botón del ratón (`"rawmouse lalt mouse_leftpress"`); `""` la quita.
+- `n`: su número, de 1 a 32.
+
+Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no sigue a los demás programas.
+
+Ver también: [`cx_hotkey`](#cx_hotkey).
+
+<a id="cx_command"></a>
+
+### `cx_command()` → `Int`
+
+Devuelve la siguiente orden de Exchange o de una tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 la tecla rápida, 100 + n las de `cx_key_add`.
+
+Ver también: [`cx_wait`](#cx_wait).
+
+<a id="cx_wait"></a>
+
+### `cx_wait(ms)` → `Int`
+
+- `ms`: cuánto esperar como mucho.
+
+Espera sin gastar CPU hasta que llegue una orden (la devuelve, como `cx_command`), un Ctrl-C (-1) o pase el tiempo
+(0). Un fichero vigilado que cambia da 7.
+
+Ver también: [`cx_command`](#cx_command), [`file_notify`](#file_notify).
+
+<a id="disks_read"></a>
+
+### `disks_read(ms)` → `Int`
+
+- `ms`: cuánto esperar como mucho las respuestas.
+
+Lee los volúmenes montados con disco dentro, su tamaño y su espacio libre, preguntando a todos a la vez. Devuelve
+cuántos hay. No pide ningún disco.
+
+Ver también: [`disk_name`](#disk_name), [`disk_free_kb`](#disk_free_kb).
+
+<a id="disk_name"></a>
+
+### `disk_name(i)` → `String`
+
+- `i`: el volumen, desde 0, del último `disks_read`.
+
+Devuelve su nombre, sin los dos puntos.
+
+Ver también: [`disks_read`](#disks_read).
+
+<a id="disk_kb"></a>
+
+### `disk_kb(i)` → `Int`
+
+- `i`: el volumen, desde 0, del último `disks_read`.
+
+Devuelve su tamaño en KB, como `Info`; -1 si no contestó a tiempo.
+
+Ver también: [`disk_free_kb`](#disk_free_kb).
+
+<a id="disk_free_kb"></a>
+
+### `disk_free_kb(i)` → `Int`
+
+- `i`: el volumen, desde 0, del último `disks_read`.
+
+Devuelve su espacio libre en KB; -1 si no contestó a tiempo.
+
+Ver también: [`disk_kb`](#disk_kb).
+
+<a id="net_ifs_read"></a>
+
+### `net_ifs_read()` → `Int`
+
+Lee las interfaces de red de Roadshow (también `lo0`), su estado y sus bytes, y devuelve cuántas hay; -1 sin pila TCP/IP o con una que no lo dice (AmiTCP, Miami).
+
+Ver también: [`net_if_name`](#net_if_name), [`net_drivers_read`](#net_drivers_read).
+
+<a id="net_if_name"></a>
+
+### `net_if_name(i)` → `String`
+
+- `i`: la interfaz, desde 0, del último `net_ifs_read`.
+
+Devuelve su nombre.
+
+Ver también: [`net_ifs_read`](#net_ifs_read).
+
+<a id="net_if_up"></a>
+
+### `net_if_up(i)` → `Bool`
+
+- `i`: la interfaz, desde 0, del último `net_ifs_read`.
+
+Devuelve `true` si está levantada.
+
+Ver también: [`net_ifs_read`](#net_ifs_read).
+
+<a id="net_if_bytes_in"></a>
+
+### `net_if_bytes_in(i)` → `Int`
+
+- `i`: la interfaz, desde 0, del último `net_ifs_read`.
+
+Devuelve los bytes recibidos (los 32 bits bajos: la resta entre dos lecturas da lo de entretanto).
+
+Ver también: [`net_if_bytes_out`](#net_if_bytes_out).
+
+<a id="net_if_bytes_out"></a>
+
+### `net_if_bytes_out(i)` → `Int`
+
+- `i`: la interfaz, desde 0, del último `net_ifs_read`.
+
+Devuelve los bytes enviados, como `net_if_bytes_in`.
+
+Ver también: [`net_if_bytes_in`](#net_if_bytes_in).
+
+<a id="pistorm_temperature"></a>
+
+### `pistorm_temperature()` → `Int`
+
+Devuelve la temperatura de la Raspberry Pi de una PiStorm con Emu68, en décimas de grado (523 son 52,3); -1 sin Emu68.
+
+<a id="wifi_read"></a>
+
+### `wifi_read(interface, ms)` → `Int`
+
+- `interface`: la interfaz de Roadshow.
+- `ms`: cuánto esperar como mucho.
+
+Pide al driver su señal WiFi. Devuelve 0 si la leyó (`wifi_signal`, `wifi_noise`), 1 si no contestó a tiempo, 2 si el driver no lo dice y 3 si no
+hay esa interfaz o ese driver.
+
+Ver también: [`wifi_signal`](#wifi_signal), [`wifi_read_device`](#wifi_read_device).
+
+<a id="wifi_read_device"></a>
+
+### `wifi_read_device(driver, unit, ms)` → `Int`
+
+- `driver`: el driver SANA-II: `"wifipi.device"`.
+- `unit`: su unidad.
+- `ms`: cuánto esperar.
+
+Como `wifi_read`, preguntando al driver directamente, con cualquier pila TCP/IP. Devuelve 0 si la leyó (`wifi_signal`, `wifi_noise`), 1 si no contestó a tiempo, 2 si el driver no lo dice y 3 si no
+hay esa interfaz o ese driver.
+
+Ver también: [`wifi_read`](#wifi_read).
+
+<a id="net_drivers_read"></a>
+
+### `net_drivers_read()` → `Int`
+
+Lee los drivers de red SANA-II en uso (los de `DEVS:Networks` que algo tiene abiertos), con cualquier pila, y devuelve cuántos.
+
+Ver también: [`net_driver_name`](#net_driver_name), [`net_driver_read`](#net_driver_read).
+
+<a id="net_driver_name"></a>
+
+### `net_driver_name(i)` → `String`
+
+- `i`: el driver, desde 0.
+
+Devuelve su nombre: `"wifipi.device"`.
+
+Ver también: [`net_drivers_read`](#net_drivers_read).
+
+<a id="net_driver_read"></a>
+
+### `net_driver_read(driver, unit, ms)` → `Int`
+
+- `driver`, `unit`, `ms`: como en `wifi_read_device`.
+
+Pide sus contadores de paquetes. Devuelve los mismos códigos que `wifi_read_device` (0 leídos).
+
+Ver también: [`net_driver_packets_in`](#net_driver_packets_in), [`net_driver_has_bytes`](#net_driver_has_bytes).
+
+<a id="net_driver_has_bytes"></a>
+
+### `net_driver_has_bytes()` → `Bool`
+
+Devuelve `true` si el driver del último `net_driver_read` cuenta también bytes.
+
+Ver también: [`net_driver_bytes_in`](#net_driver_bytes_in).
+
+<a id="net_driver_bytes_in"></a>
+
+### `net_driver_bytes_in()` → `Int`
+
+Devuelve los bytes recibidos por el driver del último `net_driver_read` (32 bits bajos).
+
+Ver también: [`net_driver_bytes_out`](#net_driver_bytes_out).
+
+<a id="net_driver_bytes_out"></a>
+
+### `net_driver_bytes_out()` → `Int`
+
+Devuelve los bytes enviados por el driver del último `net_driver_read`.
+
+Ver también: [`net_driver_bytes_in`](#net_driver_bytes_in).
+
+<a id="net_driver_packets_in"></a>
+
+### `net_driver_packets_in()` → `Int`
+
+Devuelve los paquetes recibidos por el driver del último `net_driver_read`.
+
+Ver también: [`net_driver_packets_out`](#net_driver_packets_out).
+
+<a id="net_driver_packets_out"></a>
+
+### `net_driver_packets_out()` → `Int`
+
+Devuelve los paquetes enviados por el driver del último `net_driver_read`.
+
+Ver también: [`net_driver_packets_in`](#net_driver_packets_in).
+
+<a id="wifi_signal"></a>
+
+### `wifi_signal()` → `Int`
+
+Devuelve la señal del último `wifi_read` que dio 0, en dBm: -30 muy buena, -90 muy mala.
+
+Ver también: [`wifi_noise`](#wifi_noise).
+
+<a id="wifi_noise"></a>
+
+### `wifi_noise()` → `Int`
+
+Devuelve el ruido del último `wifi_read` que dio 0, en dBm.
+
+Ver también: [`wifi_signal`](#wifi_signal).
+
+<a id="usb_hid_read"></a>
+
+### `usb_hid_read()` → `Int`
+
+Lee los dispositivos USB que lleva la `hid.class` de Poseidon y devuelve cuántos; -1 sin `poseidon.library` 4.
+
+Ver también: [`usb_hid_name`](#usb_hid_name), [`usb_hid_kind`](#usb_hid_kind).
+
+<a id="usb_hid_name"></a>
+
+### `usb_hid_name(i)` → `String`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve el nombre del producto.
+
+Ver también: [`usb_hid_maker`](#usb_hid_maker).
+
+<a id="usb_hid_maker"></a>
+
+### `usb_hid_maker(i)` → `String`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve el fabricante.
+
+Ver también: [`usb_hid_name`](#usb_hid_name).
+
+<a id="usb_hid_vendor"></a>
+
+### `usb_hid_vendor(i)` → `Int`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve su VendorID.
+
+Ver también: [`usb_hid_product`](#usb_hid_product).
+
+<a id="usb_hid_product"></a>
+
+### `usb_hid_product(i)` → `Int`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve su ProductID.
+
+Ver también: [`usb_hid_vendor`](#usb_hid_vendor).
+
+<a id="usb_hid_kind"></a>
+
+### `usb_hid_kind(i)` → `Int`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve qué es: 1 ratón, 2 teclado, 0 otra cosa (muchos trackpads salen así).
+
+Ver también: [`usb_hid_emitter`](#usb_hid_emitter).
+
+<a id="usb_hid_emitter"></a>
+
+### `usb_hid_emitter(i)` → `Int`
+
+- `i`: el dispositivo, desde 0, del último `usb_hid_read`.
+
+Devuelve su emisor, para `mouse_curve`.
+
+Ver también: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_curve"></a>
+
+### `mouse_curve(emitter, factors)` → `Bool`
+
+- `emitter`: 0 el ratón del Amiga (y todo movimiento que no venga de un ratón USB); si no, uno de `usb_hid_emitter`.
+- `factors`: una lista de centésimas por velocidad (100 = tal cual, 200 = el doble).
+
+Pone una curva de aceleración a ese ratón. Devuelve `false` si no pudo. Se quita al acabar el programa.
+
+Ver también: [`mouse_curves_off`](#mouse_curves_off), [`usb_hid_emitter`](#usb_hid_emitter).
+
+<a id="mouse_curve_events"></a>
+
+### `mouse_curve_events(emitter)` → `Int`
+
+- `emitter`: el emisor.
+
+Devuelve cuántos movimientos ha escalado su curva.
+
+Ver también: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_curves_off"></a>
+
+### `mouse_curves_off()`
+
+Quita ya las curvas (al acabar el programa también); otro `mouse_curve` las vuelve a poner.
+
+Ver también: [`mouse_curve`](#mouse_curve).
+
+<a id="mouse_patch_left"></a>
+
+### `mouse_patch_left()` → `Int`
+
+Devuelve cuántos puentes quedaron en `input.device` bajo el parche de otro programa: dejan pasar todo, para siempre.
+
+Ver también: [`mouse_curves_off`](#mouse_curves_off).
+
+<a id="mouse_prefs_ticks"></a>
+
+### `mouse_prefs_ticks()` → `Int`
+
+Devuelve la velocidad del ratón de las preferencias de Input: 1 la más rápida, 2, 4 la más lenta.
+
+Ver también: [`mouse_prefs_set`](#mouse_prefs_set).
+
+<a id="mouse_prefs_accel"></a>
+
+### `mouse_prefs_accel()` → `Bool`
+
+Devuelve `true` si está puesta la aceleración del ratón de las preferencias de Input.
+
+Ver también: [`mouse_prefs_set`](#mouse_prefs_set).
+
+<a id="mouse_prefs_set"></a>
+
+### `mouse_prefs_set(ticks, accel)`
+
+- `ticks`: 1, 2 o 4, como `mouse_prefs_ticks`.
+- `accel`: la aceleración.
+
+Las pone; vuelven a como estaban al acabar el programa.
+
+Ver también: [`mouse_prefs_ticks`](#mouse_prefs_ticks).
+
+<a id="tr"></a>
+
+### `tr(id, text)` → `String`
+
+- `id`: el número del texto en el catálogo.
+- `text`: el texto en el idioma del programa.
+
+Devuelve la traducción del catálogo del programa al idioma del usuario, o `text` si no hay catálogo, no tiene ese
+número o falta `locale.library`.
+
+Ver también: [`catalog_open`](#catalog_open), [`catalog_language`](#catalog_language).
+
+<a id="catalog_open"></a>
+
+### `catalog_open(name, version)` → `Bool`
+
+- `name`: el catálogo: `"X.catalog"`.
+- `version`: la versión; 0 cualquiera.
+
+Usa ese catálogo en vez del del programa. Devuelve `false` si no hay.
+
+Ver también: [`tr`](#tr).
+
+<a id="catalog_language"></a>
+
+### `catalog_language()` → `String`
+
+Devuelve el idioma del catálogo en uso (`"english"`), o `""` si no hay.
+
+Ver también: [`tr`](#tr).
+
+<a id="clock_read"></a>
+
+### `clock_read()`
+
+Toma la fecha y la hora del reloj del sistema; `clock_year`, `clock_month` y las demás dan sus partes.
+
+Ver también: [`clock_year`](#clock_year), [`date_text`](#date_text).
+
+<a id="clock_year"></a>
+
+### `clock_year()` → `Int`
+
+Devuelve el año del último `clock_read`.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_month"></a>
+
+### `clock_month()` → `Int`
+
+Devuelve el mes del último `clock_read`, de 1 a 12.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_day"></a>
+
+### `clock_day()` → `Int`
+
+Devuelve el día del mes del último `clock_read`, de 1 a 31.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_weekday"></a>
+
+### `clock_weekday()` → `Int`
+
+Devuelve el día de la semana del último `clock_read`: 0 domingo, 1 lunes... 6 sábado.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_hour"></a>
+
+### `clock_hour()` → `Int`
+
+Devuelve la hora del último `clock_read`, de 0 a 23.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_minute"></a>
+
+### `clock_minute()` → `Int`
+
+Devuelve el minuto del último `clock_read`.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="clock_second"></a>
+
+### `clock_second()` → `Int`
+
+Devuelve el segundo del último `clock_read`.
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="date_text"></a>
+
+### `date_text(format)` → `String`
+
+- `format`: el formato de `FormatDate`: `%A` el día de la semana, `%d-%m-%Y`, `%b` el mes abreviado, `%H:%M:%S`...
+
+Devuelve la fecha y la hora de ahora así, en el idioma y el país del usuario (en inglés sin `locale.library`).
+
+Ver también: [`clock_read`](#clock_read).
+
+<a id="locale_gmt_offset"></a>
+
+### `locale_gmt_offset()` → `Int`
+
+Devuelve cuántos minutos va el reloj del Amiga por delante de GMT, según Locale (60 en España en invierno); 0 sin `locale.library`.
+
+Ver también: [`time_unix`](#time_unix).
+
+<a id="locale_decimal_point"></a>
+
+### `locale_decimal_point()` → `String`
+
+Devuelve lo que va antes de los decimales en el país del usuario: `","` en España, `"."` en inglés.
+
+Ver también: [`locale_group_separator`](#locale_group_separator).
+
+<a id="locale_group_separator"></a>
+
+### `locale_group_separator()` → `String`
+
+Devuelve lo que separa los miles en el país del usuario: `"."` en España, `","` en inglés; puede ser `""`.
+
+Ver también: [`locale_decimal_point`](#locale_decimal_point).
+
+<a id="locale_date_order"></a>
+
+### `locale_date_order()` → `String`
+
+Devuelve el orden de la fecha corta del usuario: `"DMY"`, `"MDY"` o `"YMD"`.
+
+Ver también: [`date_text`](#date_text).
+
+<a id="program_version"></a>
+
+### `program_version()` → `String`
+
+Devuelve el nombre y la versión de `@version` (`"Trasfondo 0.7"`), o `""` si el programa no la tiene.
+
+<a id="file_notify"></a>
+
+### `file_notify(path)` → `Int`
+
+- `path`: el fichero; puede no existir aún.
+
+Lo vigila: cada vez que cambia, `cx_wait` da 7 y `file_changed` lo dice. Devuelve su número (1 a 8), o 0 si no se
+puede vigilar.
+
+Ver también: [`file_changed`](#file_changed), [`file_notify_end`](#file_notify_end), [`file_notify_signal`](#file_notify_signal).
+
+<a id="file_changed"></a>
+
+### `file_changed(n)` → `Bool`
+
+- `n`: el número de `file_notify`.
+
+Devuelve `true` si cambió desde el último `file_changed`.
+
+Ver también: [`file_notify`](#file_notify).
+
+<a id="file_notify_end"></a>
+
+### `file_notify_end(n)`
+
+- `n`: el número de `file_notify`.
+
+Deja de vigilarlo. Al acabar el programa se dejan todos.
+
+Ver también: [`file_notify`](#file_notify).
+
+<a id="file_notify_signal"></a>
+
+### `file_notify_signal()` → `Int`
+
+Devuelve la señal de los ficheros vigilados, para `mui_wait_event_signals`; 0 antes de un `file_notify`.
+
+Ver también: [`file_notify`](#file_notify).
+
+<a id="run_program"></a>
+
+### `run_program(command)` → `Bool`
+
+- `command`: la orden: `"SYS:Prefs/Font"`, `"\"Work:Mi Prog\" arg"`.
+
+La empieza en otro proceso sin esperar, con su entrada y su salida en `NIL:`. Devuelve `false` si no pudo empezar.
+Para lanzar programas desde un menú o un dock.
+
+Ver también: [`run_command`](#run_command), [`wb_open`](#wb_open).
+
+<a id="program_relaunch"></a>
+
+### `program_relaunch()`
+
+Al acabar, el programa vuelve a empezar como empezó, desde el Workbench o desde el Shell con sus argumentos, después
+de toda su limpieza. Para aplicar una actualización.
+
+Ver también: [`program_exit`](#program_exit).
+
+<a id="dos_requesters"></a>
+
+### `dos_requesters(on)`
+
+- `on`: `false` quita los requesters de "Inserta el volumen" y de errores de disco para este programa (la llamada
+  falla en su lugar); `true` los vuelve a poner.
+
+Al acabar el programa vuelven como estaban.
+
+Ver también: [`file_exists`](#file_exists).
+
+<a id="base64_to_file"></a>
+
+### `base64_to_file(text, file)` → `Int`
+
+- `text`: el texto en base64; los espacios y saltos de línea no cuentan.
+- `file`: el fichero que se escribe.
+
+Devuelve los bytes escritos, o -1 si el texto no es base64 (y entonces no se crea el fichero) o no se puede escribir.
+
+<a id="cpu_start"></a>
+
+### `cpu_start()` → `Bool`
+
+Empieza a medir la CPU que gasta cada tarea. Devuelve `false` antes de AmigaOS 2.04 o sin el reloj fino del sistema.
+
+Ver también: [`cpu_sample`](#cpu_sample), [`cpu_stop`](#cpu_stop).
+
+<a id="cpu_sample"></a>
+
+### `cpu_sample()` → `Int`
+
+Toma una muestra y devuelve cuántas tareas hay, ordenadas de la que más gastó desde la muestra anterior a la que menos.
+
+Ver también: [`cpu_task_name`](#cpu_task_name), [`cpu_task_load`](#cpu_task_load).
+
+<a id="cpu_task_name"></a>
+
+### `cpu_task_name(i)` → `String`
+
+- `i`: la tarea, desde 0, de la última muestra.
+
+Devuelve su nombre (de un proceso de Shell, su orden).
+
+Ver también: [`cpu_sample`](#cpu_sample).
+
+<a id="cpu_task_load"></a>
+
+### `cpu_task_load(i)` → `Int`
+
+- `i`: la tarea, desde 0, de la última muestra.
+
+Devuelve la CPU que gastó, en tanto por mil.
+
+Ver también: [`cpu_total`](#cpu_total).
+
+<a id="cpu_total"></a>
+
+### `cpu_total()` → `Int`
+
+Devuelve la CPU de todas las tareas en la última muestra, en tanto por mil; lo demás es reposo.
+
+Ver también: [`cpu_sample`](#cpu_sample).
+
+<a id="cpu_stop"></a>
+
+### `cpu_stop()`
+
+Deja de medir. Al acabar el programa se hace solo.
+
+Ver también: [`cpu_start`](#cpu_start).
+
+<a id="task_signal"></a>
+
+### `task_signal()` → `Int`
+
+Devuelve la señal que cada tarea envía al programa al acabar, para `mui_wait_event_signals`: así la ventana sigue
+respondiendo y el programa se entera en cuanto acaba. 0 si no queda ninguna señal libre.
+
+Ver también: [`task_done`](#task_done), [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+<a id="task_result"></a>
+
+### `task_result(task)` → `Int`
+
+- `task`: el número de `task_start`.
+
+Devuelve lo que devolvió la función; si no ha acabado, espera.
+
+Ver también: [`task_done`](#task_done).
+
+<a id="task_free"></a>
+
+### `task_free(task)`
+
+- `task`: el número de `task_start`.
+
+La olvida y deja libre su número; si sigue en marcha, espera a que acabe.
+
+Ver también: [`task_start`](#task_start).
 
 ## Imágenes (datatypes)
 
@@ -7108,7 +8014,7 @@ Ver también: [`net_bg_send`](#net_bg_send).
 
 Copia lo que haya llegado, sin esperar. Devuelve cuántos bytes, 0 si aún nada, -1 si está cerrada y no queda nada.
 
-Ver también: [`net_bg_pending`](#net_bg_pending), `task_signal`.
+Ver también: [`net_bg_pending`](#net_bg_pending), [`task_signal`](#task_signal).
 
 <a id="net_bg_pending"></a>
 
