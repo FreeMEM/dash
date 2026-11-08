@@ -1,0 +1,41 @@
+# Gráficos básicos: una pantalla propia con su paleta, una ventana y unas figuras.
+# expect-out: dentro del circulo: 3
+# expect-out: triangulo: 2
+
+Main
+    screen_open_custom(320, 200, 3, "Dibujo")      # profundidad 3: 8 colores, del 0 al 7
+    v = window_create("Figuras", 0, 12, 300, 150, 8)
+    if v == 0
+        Print "no se pudo abrir la ventana"
+        screen_close()
+        return
+    end
+    gfx_rgb(2, 15, 0, 0)           # el color 2, rojo
+    gfx_rgb(3, 0, 0, 15)           # el 3, azul
+    gfx_clear()
+
+    gfx_pen(2)
+    gfx_rect(10, 10, 60, 40)       # un rectángulo relleno
+    gfx_pen(1)
+    gfx_box(10, 10, 60, 40)        # y su borde
+
+    gfx_circle(120, 40, 25)
+    gfx_pen(3)
+    gfx_flood(120, 40, 1)          # rellena el interior del círculo
+    Print "dentro del circulo: #{gfx_pixel_read(120, 40)}"
+
+    gfx_pen(2)
+    gfx_poly_begin(200, 15)        # un triángulo
+    gfx_poly_add(240, 65)
+    gfx_poly_add(160, 65)
+    gfx_poly_end()
+    Print "triangulo: #{gfx_pixel_read(200, 50)}"
+
+    gfx_pen(1)
+    t = "Hola"
+    gfx_text_at((300 - gfx_text_len(t)) / 2, 100, t)    # centrado
+
+    time_delay(100)                # dos segundos para verlo; en un programa, key_wait() o un EventLoop
+    window_close(v)
+    screen_close()
+end

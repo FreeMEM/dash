@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 675 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 961 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -1260,6 +1260,8 @@ end
 
 ## 11. Screens
 
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Input and screens](BUILTINS.en.md#input_functions).
+
 Screens on the Amiga are independent drawing surfaces that can have their own resolution, color depth and palette. Dash provides functions to create screens that clone the Workbench or custom screens.
 
 ### Cloning the Workbench
@@ -1360,6 +1362,8 @@ end
 ---
 
 ## 12. Windows and Events
+
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Intuition](BUILTINS.en.md#intuition_expanded).
 
 ### Window Definition
 
@@ -1506,6 +1510,8 @@ end
 ---
 
 ## 13. Graphics
+
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Basic graphics](BUILTINS.en.md#graphics_basic). Sprites, BOBs, maps, copper and bitmaps: [Advanced graphics](BUILTINS.en.md#graphics_advanced).
 
 ### Color Setup
 
@@ -1849,6 +1855,8 @@ end
 
 ## 14. Input (Keyboard, Mouse, Joystick)
 
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Input and screens](BUILTINS.en.md#input_functions).
+
 ### Keyboard
 
 ```
@@ -1885,7 +1893,7 @@ Other input and screen functions:
 | Function | What it does |
 |---|---|
 | `wait_key()` | Waits for a key in the window and gives its raw code (without a window, waits one second and gives 0) |
-| `wait_click()` | Waits for a mouse button to be pressed and released (polls the hardware non-stop: uses CPU) |
+| `wait_click()` | Waits for a mouse button to be pressed and released (looks at the hardware 50 times a second) |
 | `check_lmb()`, `check_rmb()`, `check_mouse()` | Whether the left, the right or any button is pressed (reads the hardware) |
 | `check_esc()` | Whether Esc is pressed (reads the keyboard in the hardware) |
 | `screen_width()`, `screen_height()` | Size of your own screen or of the window's screen |
@@ -1957,28 +1965,28 @@ end
 ### Joystick
 
 ```
-# Ports: 0 or 1
-dx = joy_x(0)       # -1, 0, or 1
-dy = joy_y(0)       # -1, 0, or 1
+# Port 1: the joystick port (0 is the mouse port, only with a second joystick)
+dx = joy_x(1)       # -1, 0, or 1
+dy = joy_y(1)       # -1, 0, or 1
 
-if joy_button(0)
+if joy_button(1)
     Print "Disparo!"
 end
 
 # Direction functions (return Bool)
-if joy_up(0)
+if joy_up(1)
     y = y - 1
 end
-if joy_down(0)
+if joy_down(1)
     y = y + 1
 end
-if joy_left(0)
+if joy_left(1)
     x = x - 1
 end
-if joy_right(0)
+if joy_right(1)
     x = x + 1
 end
-if joy_fire(0)
+if joy_fire(1)
     disparar()
 end
 ```
@@ -1986,6 +1994,8 @@ end
 ---
 
 ## 15. Audio and Music
+
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Audio](BUILTINS.en.md#audio_functions).
 
 ### Loading and Playing Sounds
 
@@ -2063,6 +2073,8 @@ tone_play(1, 523, 48, 250)  # C
 ---
 
 ## 16. File System
+
+Each function explained, with its parameters and an example run by the tests: [BUILTINS.en.md, Files](BUILTINS.en.md#dos_functions).
 
 ### Opening and Closing Files
 
@@ -2937,6 +2949,8 @@ end
 
 ### GadTools Functions
 
+Each one explained, with its parameters and an example run by the tests: [BUILTINS.en.md, GadTools and menus](BUILTINS.en.md#gadtools_functions).
+
 | Function | Description |
 |---------|-------------|
 | `gt_init()` | Initialize GadTools |
@@ -3260,6 +3274,8 @@ end
 
 ### ReAction Functions
 
+Each one explained, with its parameters and an example run by the tests: [BUILTINS.en.md, ReAction](BUILTINS.en.md#reaction_functions).
+
 #### Window
 | Function | Description |
 |---------|-------------|
@@ -3435,6 +3451,8 @@ when one is dropped on that object (on a window: anywhere on it). Then `app_drop
 one by one, until `""`, and `app_drop_x()`/`app_drop_y()` where it fell. Only on the Workbench screen.
 
 ### Functions
+
+Each one explained, with its parameters and two examples run by the tests: [BUILTINS.en.md, MUI](BUILTINS.en.md#mui_functions).
 
 | Function | What it does |
 |---|---|
@@ -4286,8 +4304,8 @@ struct Player
     size: Int = 10
 
     func update()
-        dx = joy_x(0)
-        dy = joy_y(0)
+        dx = joy_x(1)
+        dy = joy_y(1)
         self.x = self.x + dx * 2
         self.y = self.y + dy * 2
 
@@ -4485,53 +4503,10 @@ end
 
 ### Functions by Category
 
-Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them are implemented.
-
-| Category | Count | Examples |
-|-----------|----------|----------|
-| Basic graphics | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle`, `gfx_flood` |
-| Advanced graphics | 43 | `sprite_*`, `soft_sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
-| Input and screens | 30 | `key_*`, `mouse_*`, `joy_*`, `screen_open`, `check_lmb`, `event_window` |
-| GadTools | 19 | `gt_button`, `gt_slider`, `gt_string`, `gt_event` |
-| Menus | 10 | `menu_title`, `menu_item`, `menu_sub`, `menu_id` |
-| ASL requesters | 5 | `file_open_dialog`, `file_save_dialog`, `file_fullpath` |
-| ReAction | 79 | `ra_window_*`, `ra_add_*`, `ra_get_*`, `ra_canvas_*` |
-| System and memory | 28 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
-| Files (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
-| Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
-| Text | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
-| Network (TCP and UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
-| Network in a task of its own | 12 | `net_bg_open`, `net_bg_open_tls`, `net_bg_state`, `net_bg_send`, `net_bg_recv`, `net_bg_close`, `net_bg_stop` |
-| TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fonts and colors | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
-| Transparency and gradients | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
-| RGB images from a buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
-| Tasks, CPU and desktop | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
-| Commodity (Exchange) | 6 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`, `cx_send` |
-| Watched files and programs | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
-| System and program | 14 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest`, `build_date`, `build_time` |
-| Date, time and version | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
-| Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
-| A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
-| Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simulated keyboard and mouse | 10 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title`, `input_qualifiers`, `input_menu`, `input_move_screen` |
-| Other programs' windows (tests) | 8 | `window_find`, `window_found_activate`, `window_found_box`, `gadget_index`, `gadget_x`, `gadget_y`, `gadget_selected`, `screen_pixel` |
-| Sorting texts by language | 1 | `str_compare_locale` |
-| Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
-| Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
-| Pictures decoded by the program | 7 | `image_decode`, `image_decoded_width`, `image_decoded_height`, `image_decoded_alpha`, `image_decoded_pixels`, `image_from_decoded`, `image_decoded_free` |
-| Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compression (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
-| UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
-| Comparing and searching in a buffer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
-| Double and text | 2 | `str_from_double`, `str_to_double` |
-| Regular expressions and wildcards | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
-| Double math | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
-| Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 53 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
-| RTG | 21 | `rtg_*` |
-| MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **738** | |
+There are 961, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
+starts with an introduction (what it is for, what is needed first, the usual flow) and an example run by the tests,
+goes on with the table of its functions and ends with each function explained (parameters, what it returns, what
+happens on failure and the related ones).
 
 ### Standard Amiga Colors
 

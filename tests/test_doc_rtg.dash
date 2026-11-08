@@ -1,0 +1,20 @@
+# RTG: colores RGB que valen con tarjeta gráfica y sin ella. Sin tarjeta (como en el emulador de las pruebas),
+# rtg_fill_rect y rtg_write_pixel usan el color más parecido de la paleta.
+# expect-out: rojo de 0xff8000: 255
+# expect-out: con color verdadero: false
+# expect-out: rojo: color 5, naranja: color 6
+# expect-out: fin
+
+Main
+    c = rtg_rgb(255, 128, 0)
+    Print "rojo de 0x#{str_from_int(c, 16)}: #{rtg_rgb_r(c)}"
+    screen_open_custom(320, 200, 3, "RTG")         # una pantalla de paleta
+    Print "con color verdadero: #{rtg_is_active()}"
+    gfx_rgb8(5, 255, 0, 0)
+    gfx_rgb8(6, 255, 128, 0)
+    rtg_fill_rect(10, 20, 30, 30, rtg_rgb(250, 10, 0))
+    rtg_write_pixel(100, 50, c)
+    Print "rojo: color #{gfx_pixel_read(20, 30)}, naranja: color #{gfx_pixel_read(100, 50)}"
+    screen_close()
+    Print "fin"
+end

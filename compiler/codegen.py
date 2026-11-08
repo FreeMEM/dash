@@ -2086,6 +2086,15 @@ static LONG _dash_color_pen(LONG r, LONG g, LONG b) {
     cm = scr->ViewPort.ColorMap;
     for (i = 0; i < _dash_pens; i++)
         if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) { _dash_pen_refs[i]++; return _dash_pen_num[i]; }
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    /* the program's own screen: every colour is the program's (no SA_SharePens), and ObtainBestPen only looks at the
+       system's shared pens (it gave pen 1, black, for red). The closest colour of its palette; nothing to free */
+    if (scr == _dash_screen && _dash_own_screen && !_dash_screen_public) {
+        LONG depth = scr->RastPort.BitMap->Depth;
+        return FindColor(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
+                         (ULONG)(b & 255) * 0x01010101UL, depth >= 8 ? 255 : (1L << depth) - 1);
+    }
+#endif
     pen = ObtainBestPen(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
                         (ULONG)(b & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
     if (pen < 0) return 1;
@@ -13666,8 +13675,6 @@ static void _dash_bob_flips_free(_DashBob *o) {
         if (o->flipmask[i]) FreeBitMap(o->flipmask[i]);
         o->flip[i] = o->flipmask[i] = NULL;
     }
-    if (o->il) FreeBitMap(o->il);
-    o->il = NULL;
 }
 
 static void _dash_bob_reset(LONG id) {
@@ -13676,6 +13683,7 @@ static void _dash_bob_reset(LONG id) {
     if (o->mask) FreeBitMap(o->mask);
     if (o->back) FreeBitMap(o->back);
     _dash_bob_flips_free(o);
+    if (o->il) FreeBitMap(o->il);   /* (not in _dash_bob_flips_free: tilemap_draw makes the flips while using il) */
     memset(o, 0, sizeof(*o));
 }
 
@@ -16653,28 +16661,30 @@ static BOOL _dash_check_esc(void) {
     return (keycode == 0x45);
 }
 
+/* Wait for a mouse click (press and release), looking 50 times a second: it used to spin, taking all the CPU */
 static LONG _dash_wait_click(void) {
-    /* Wait for mouse click (press and release) */
-    while (!_dash_check_any_mouse()) { }  /* Wait for press */
-    while (_dash_check_any_mouse()) { }   /* Wait for release */
+    while (!_dash_check_any_mouse()) Delay(1);
+    while (_dash_check_any_mouse()) Delay(1);
     return 1;
 }
 
+/* Wait for a key press in the current window. Other messages are let go: it used to return 0 on the first one
+   that was not a key (a click, the window becoming active) */
 static LONG _dash_wait_key(void) {
-    /* Wait for any key using IDCMP if window available */
     if (_dash_win) {
         struct IntuiMessage *msg;
-        ULONG code = 0;
-        WaitPort(_dash_win->UserPort);
-        while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-            if (msg->Class == IDCMP_RAWKEY) {
-                code = msg->Code;
-                _dash_key_record(msg);
+        while (1) {
+            WaitPort(_dash_win->UserPort);
+            while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
+                ULONG code = 0x80;
+                if (msg->Class == IDCMP_RAWKEY) {
+                    code = msg->Code;
+                    _dash_key_record(msg);
+                }
+                ReplyMsg((struct Message *)msg);
+                if (!(code & 0x80)) return code;
             }
-            ReplyMsg((struct Message *)msg);
-            if (code && !(code & 0x80)) return code;
         }
-        return code;
     }
     /* No window - just delay */
     Delay(50);
@@ -16787,6 +16797,14 @@ static void _dash_poly_add(LONG x, LONG y) {
 
 static void _dash_poly_end(void) {
     if (_DASH_AREA_OK()) AreaEnd(_dash_rp);
+    _dash_area_off();
+}
+
+/* gfx_flood: Flood needs a TmpRas the size of the raster; without one it fills nothing. A window of Dash's has one
+   when the program fills; any other RastPort (a MUI area, the screen) borrows ours while the fill lasts */
+static void _dash_flood(LONG x, LONG y, LONG mode) {
+    _dash_area_on();
+    if (_dash_rp && _dash_rp->TmpRas) Flood(_dash_rp, mode, x, y);
     _dash_area_off();
 }
 
@@ -17560,28 +17578,39 @@ static BOOL _dash_mouse_button(LONG btn) {
     return FALSE;
 }
 
+/* Joystick: JOY0DAT (port 0, the mouse's) and JOY1DAT (port 1) are words. Right is bit 1, left bit 9, down bit 1
+   xor bit 0, up bit 9 xor bit 8 (a byte read gives only the top half: up and down never showed, and left came
+   with up). The fire buttons are bits 6 (port 0) and 7 (port 1) of CIA-A's PRA, active low; POTGOR has the
+   second buttons. The decoding on its own, for tests/test_joystick.dash */
+static LONG _dash_joy_dir_x(UWORD d) {
+    if (d & 0x0002) return 1;
+    if (d & 0x0200) return -1;
+    return 0;
+}
+
+static LONG _dash_joy_dir_y(UWORD d) {
+    UWORD e = (UWORD)(d ^ (d >> 1));
+    if (e & 0x0001) return 1;
+    if (e & 0x0100) return -1;
+    return 0;
+}
+
+static UWORD _dash_joy_dat(LONG port) {
+    return *(volatile UWORD *)(port == 0 ? 0xDFF00A : 0xDFF00C);
+}
+
 static LONG _dash_joy_x(LONG port) {
-    volatile UBYTE *joy = (port == 0) ? (UBYTE *)0xDFF00A : (UBYTE *)0xDFF00C;
-    UBYTE val = *joy;
-    LONG x = 0;
-    if (val & 2) x = (val & 1) ? 0 : 1;
-    else if (val & 1) x = -1;
-    return x;
+    return (port == 0 || port == 1) ? _dash_joy_dir_x(_dash_joy_dat(port)) : 0;
 }
 
 static LONG _dash_joy_y(LONG port) {
-    volatile UBYTE *joy = (port == 0) ? (UBYTE *)0xDFF00A : (UBYTE *)0xDFF00C;
-    UBYTE val = *joy;
-    LONG y = 0;
-    if (val & 0x200) y = (val & 0x100) ? 0 : 1;
-    else if (val & 0x100) y = -1;
-    return y;
+    return (port == 0 || port == 1) ? _dash_joy_dir_y(_dash_joy_dat(port)) : 0;
 }
 
 static BOOL _dash_joy_button(LONG port) {
-    UWORD potgor = *((volatile UWORD *)0xDFF016);
-    if (port == 0) return !(potgor & (1 << 6));   /* Fire button port 1 */
-    if (port == 1) return !(potgor & (1 << 14));  /* Fire button port 2 */
+    UBYTE pra = *(volatile UBYTE *)0xBFE001;
+    if (port == 0) return !(pra & 0x40);
+    if (port == 1) return !(pra & 0x80);
     return FALSE;
 }
 
@@ -22449,6 +22478,16 @@ static void _dash_rtg_free_bitmap(struct BitMap *bm) {
     }
 }
 
+/* On a palette screen: the closest colour of its palette (FindColor). It used the top bits of r, g, b as the pen
+   number, clamped to 15: nearly every colour came out as pen 15 */
+static LONG _dash_rtg_pen(LONG rgb) {
+    struct ViewPort *vp = _dash_screen ? &_dash_screen->ViewPort : (_dash_win ? &_dash_win->WScreen->ViewPort : NULL);
+    LONG depth = _dash_rp && _dash_rp->BitMap ? GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH) : 8;
+    if (!vp) return 1;
+    return FindColor(vp->ColorMap, (ULONG)((rgb >> 16) & 255) * 0x01010101UL, (ULONG)((rgb >> 8) & 255) * 0x01010101UL,
+                     (ULONG)(rgb & 255) * 0x01010101UL, depth >= 8 ? 255 : (1L << depth) - 1);
+}
+
 static void _dash_rtg_write_pixel(LONG x, LONG y, LONG rgb) {
     if (!_dash_rp) return;
 
@@ -22456,14 +22495,7 @@ static void _dash_rtg_write_pixel(LONG x, LONG y, LONG rgb) {
         /* Use CyberGraphX for truecolor */
         WriteRGBPixel(_dash_rp, x, y, rgb);
     } else {
-        /* Fallback: find nearest color in palette */
-        LONG r = (rgb >> 16) & 0xFF;
-        LONG g = (rgb >> 8) & 0xFF;
-        LONG b = rgb & 0xFF;
-        /* Simple: use high bits as pen for 4-bit palette */
-        LONG pen = ((r >> 5) << 5) | ((g >> 5) << 2) | (b >> 6);
-        if (pen > 15) pen = 15;
-        SetAPen(_dash_rp, pen);
+        SetAPen(_dash_rp, _dash_rtg_pen(rgb));
         WritePixel(_dash_rp, x, y);
     }
 }
@@ -22487,13 +22519,7 @@ static void _dash_rtg_fill_rect(LONG x, LONG y, LONG w, LONG h, LONG rgb) {
     if (_dash_rtg_available() && _dash_rtg_is_active()) {
         FillPixelArray(_dash_rp, x, y, w, h, rgb);
     } else {
-        /* Fallback: use RectFill with palette color */
-        LONG r = (rgb >> 16) & 0xFF;
-        LONG g = (rgb >> 8) & 0xFF;
-        LONG b = rgb & 0xFF;
-        LONG pen = ((r >> 5) << 5) | ((g >> 5) << 2) | (b >> 6);
-        if (pen > 15) pen = 15;
-        SetAPen(_dash_rp, pen);
+        SetAPen(_dash_rp, _dash_rtg_pen(rgb));
         RectFill(_dash_rp, x, y, x + w - 1, y + h - 1);
     }
 }

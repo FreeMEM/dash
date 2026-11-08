@@ -1,0 +1,36 @@
+# Manejar una ventana como un usuario: buscarla por su título, hacer clic en un campo y escribir en él, y verla en
+# la lista de ventanas del Workbench.
+# expect-out: encontrada: true
+# expect-out: escrito: hola Amiga
+# expect-out: en la lista del Workbench: true
+# expect-out: fin
+
+Main
+    v = window_create("Prueba de entrada", 40, 40, 260, 60, 8)
+    campo = textfield_create(v, 10, 10, 200, 0, 40)
+    time_delay(25)
+
+    w = window_find("Prueba de")                   # vale el principio del título
+    Print "encontrada: #{w != 0}"
+    window_found_activate(w)                       # los input_* van a la ventana activa
+    bl = window_found_box(w, 4)                    # sus bordes: input_click cuenta desde fuera
+    bt = window_found_box(w, 5)
+    input_click(bl + 20, bt + 15, 0)               # en el campo
+    input_text("hola Amiga")
+    input_key(0x44, 0)                             # Return
+    time_delay(10)
+    Print "escrito: " + textfield_get(campo)
+
+    esta = false
+    n = wm_read()
+    i = 0
+    while i < n
+        if wm_title(i) == "Prueba de entrada"
+            esta = true
+        end
+        i = i + 1
+    end
+    Print "en la lista del Workbench: #{esta}"
+    window_close(v)
+    Print "fin"
+end

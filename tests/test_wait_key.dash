@@ -1,0 +1,14 @@
+# wait_key espera una tecla: otro mensaje que llega antes (aquí el botón de cerrar) no la hace volver con 0.
+# El clic y la tecla, simulados (input.device).
+# expect-out: tecla 32
+# expect-out: fin
+
+Main
+    v = window_create("Teclas", 40, 40, 200, 80, 0)
+    time_delay(25)
+    input_click(6, 5, 0)            # el botón de cerrar: un mensaje que no es una tecla
+    input_key(0x20, 0)              # la A
+    Print "tecla #{wait_key()}"
+    window_close(v)
+    Print "fin"
+end

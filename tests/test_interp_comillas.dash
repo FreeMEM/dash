@@ -1,0 +1,18 @@
+# Un texto entre comillas dentro de una interpolación: "#{f("x")}". ./dash lo admitía y ./dash --gcc daba un error
+# de sintaxis (el literal acababa en la comilla de dentro). Un # o un #{ sueltos siguen siendo texto.
+# expect-out: a xyxy b 2 c
+# expect-out: llaves {1: 2} y "comillas"
+# expect-out: 33 # y #
+# expect-out: fin
+
+func doble(s: String) -> String
+    return s + s
+end
+
+Main
+    n = 3
+    Print "a #{doble("xy")} b #{str_find("hola", "l")} c"
+    Print "llaves {1: 2} y \"comillas\""
+    Print "#{n}#{n} # y #"
+    Print "fin"
+end

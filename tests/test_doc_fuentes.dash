@@ -1,0 +1,49 @@
+# Fuentes y colores: escribir con una fuente del sistema, colores por su valor RGB, una sombra translúcida y una
+# imagen RGB hecha en un búfer.
+# expect-out: topaz de 8: Hola mide 32
+# expect-out: rojo puro: 0xff0000
+# expect-out: el centro de la imagen es verde: true
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 4, "Fuentes")
+    gfx_rgb8(5, 255, 0, 0)
+
+    f = font_open("topaz.font", 8)
+    if f == 0
+        Print "no hay topaz"
+        return
+    end
+    font_use(f)
+    t = "Hola"
+    Print "topaz de #{font_size(f)}: #{t} mide #{font_text_width(t)}"
+    gfx_pen(1)
+    gfx_text_at(20, 30 + font_baseline(), t)       # con la parte de arriba en y = 30
+    font_style(2)                                  # negrita
+    gfx_text_at(20, 45 + font_baseline(), t)
+    font_style(0)
+
+    rojo = color_pen(255, 0, 0)                    # el color de la pantalla más parecido
+    gfx_pen(rojo)
+    gfx_rect(100, 20, 140, 60)
+    rgb = gfx_pixel_rgb(120, 40)
+    Print "rojo puro: 0x#{str_from_int(rgb, 16)}"
+    color_pen_free(rojo)
+    gfx_blend_rect(110, 30, 160, 70, 0x000000, 128)   # una sombra a medias
+
+    b = buffer_alloc(16 * 16 * 3)                  # 16 x 16 píxeles RGB, todos verdes
+    i = 0
+    while i < 16 * 16
+        buffer_set_byte(b, i * 3 + 1, 255)
+        i = i + 1
+    end
+    gfx_rgb_draw(b, 16, 16, 200, 30)
+    buffer_free(b)
+    verde = gfx_pixel_rgb(208, 38)
+    Print "el centro de la imagen es verde: #{(verde >> 8) & 255 > 128}"
+
+    time_delay(50)
+    font_close(f)
+    screen_close()
+    Print "fin"
+end

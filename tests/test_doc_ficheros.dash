@@ -1,0 +1,58 @@
+# Ficheros: escribir unas líneas, leerlas una a una, mirar un cajón, renombrar y borrar.
+# expect-out: 3 lineas, la segunda: dos
+# expect-out: notas.txt pesa 13 bytes
+# expect-out: Prueba: 2 entradas
+# expect-out: - copia.txt 13
+# expect-out: - notas.txt 13
+# expect-out: en el principio otra vez: u
+# expect-out: borrados: true true true
+# expect-out: fin
+
+Main
+    cajon = "RAM:Prueba"
+    dir_create(cajon)
+    ruta = cajon + "/notas.txt"
+
+    f = file_open(ruta, 1006)                  # nuevo
+    if f == 0
+        Print "no se pudo crear " + ruta
+        return
+    end
+    file_write_line(f, "uno")
+    file_write_line(f, "dos")
+    file_write_line(f, "tres")
+    file_close(f)
+
+    f = file_open(ruta, 1005)                  # leer
+    linea = buffer_alloc(80)
+    n = 0
+    segunda = ""
+    l = file_read_line(f, linea, 80)
+    while l != nil
+        n = n + 1
+        if n == 2
+            segunda = str_trim(l)              # la línea trae su salto al final
+        end
+        l = file_read_line(f, linea, 80)
+    end
+    file_seek(f, 0, -1)                        # al principio
+    primera = file_read_byte(f)
+    file_close(f)
+    buffer_free(linea)
+    Print "#{n} lineas, la segunda: #{segunda}"
+    Print "notas.txt pesa #{file_size(ruta)} bytes"
+
+    copia = cajon + "/copia.txt"
+    file_copy(ruta, copia)
+    total = dir_read(cajon)
+    Print "Prueba: #{total} entradas"
+    i = 0
+    while i < total
+        Print "- #{dir_entry_name(i)} #{dir_entry_size(i)}"
+        i = i + 1
+    end
+    Print "en el principio otra vez: #{str_char(primera)}"
+
+    Print "borrados: #{file_delete(ruta)} #{file_delete(copia)} #{file_delete(cajon)}"
+    Print "fin"
+end

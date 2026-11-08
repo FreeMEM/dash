@@ -1,0 +1,46 @@
+# MUI: una zona de dibujo que MUI repinta cuando hace falta, con los gfx_, y que responde a los clics.
+# emu-needs: muimaster.library
+# expect-out: dibujada, el centro es del color 2
+# expect-out: clic: botón 0
+# expect-out: fin
+
+const ID_CLIC = 1
+const ID_FIN = 2
+
+var centro: Int = -1
+
+# MUI la llama al abrir, al cambiar de tamaño y con mui_canvas_redraw; x, y es la esquina de la zona
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(0)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(2)
+    gfx_circle_fill(x + ancho / 2, y + alto / 2, alto / 3)
+    centro = gfx_pixel_read(x + ancho / 2, y + alto / 2)
+end
+
+Main
+    if mui_app_begin("Lienzo", "LIENZO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Lienzo", 0)
+        lienzo = mui_canvas(160, 100)
+    mui_window_end()
+    mui_canvas_on_draw(lienzo, pinta)
+    mui_canvas_on_input(lienzo, ID_CLIC)       # antes de abrir la ventana
+    mui_window_open(win)
+    Print "dibujada, el centro es del color #{centro}"
+
+    mui_timer(1500, ID_FIN)                    # para la prueba: acaba sola
+    ev = mui_wait_event()
+    while ev != -1 and ev != ID_FIN
+        if ev == ID_CLIC and mui_canvas_key(lienzo) == -1
+            Print "clic en #{mui_canvas_mouse_x(lienzo)}, #{mui_canvas_mouse_y(lienzo)}"
+            mui_canvas_redraw(lienzo)
+        end
+        ev = mui_wait_event()
+    end
+    Print "clic: botón #{mui_canvas_button(lienzo)}"
+    mui_app_end()
+    Print "fin"
+end

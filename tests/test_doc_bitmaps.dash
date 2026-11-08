@@ -1,0 +1,41 @@
+# Bitmaps y copper: un fondo preparado fuera de pantalla y copiado de golpe, guardado en un IFF y vuelto a cargar,
+# y un degradado de fondo con el copper.
+# expect-out: copiado: 5
+# expect-out: guardado y cargado: 5
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 3, "Bitmaps")
+
+    bitmap_create(0, 64, 32, 3)
+    bitmap_draw_to(0)                          # se prepara sin que se vea
+    gfx_clear_color(5)
+    gfx_pen(1)
+    gfx_box(0, 0, 63, 31)
+    bitmap_draw_screen()
+    bitmap_blit(0, 0, 0, 64, 32, 100, 80)      # y se copia de una vez
+    Print "copiado: #{gfx_pixel_read(130, 95)}"
+
+    bitmap_save(0, "RAM:fondo.iff")
+    bitmap_load(1, "RAM:fondo.iff")
+    bitmap_blit(1, 0, 0, 64, 32, 200, 80)
+    Print "guardado y cargado: #{gfx_pixel_read(230, 95)}"
+
+    copper_create(40)                          # un degradado de azul en el color 0
+    y = 0
+    while y < 16
+        copper_wait(y * 12, 0)
+        copper_color(0, y)                     # 0x000 a 0x00F
+        y = y + 1
+    end
+    copper_end()
+    copper_install()
+    time_delay(50)
+
+    copper_free()
+    bitmap_free(0)
+    bitmap_free(1)
+    screen_close()
+    file_delete("RAM:fondo.iff")
+    Print "fin"
+end

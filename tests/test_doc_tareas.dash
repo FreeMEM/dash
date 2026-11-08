@@ -1,0 +1,46 @@
+# Tareas y escritorio: un cálculo en otro proceso mientras el programa sigue, una sola copia del programa, el reloj,
+# un texto traducible y los discos montados.
+# expect-out: la tarea sumó 500500
+# expect-out: única copia: true
+# expect-out: año válido: true
+# expect-out: sin catálogo: Hola
+# expect-out: RAM montado: true
+# expect-out: fin
+
+# Corre en otro proceso: solo números y builtins que no den textos ni listas
+func sumar(hasta: Int) -> Int
+    total = 0
+    i = 1
+    while i <= hasta
+        total = total + i
+        i = i + 1
+    end
+    return total
+end
+
+Main
+    t = task_start(sumar, 1000)
+    while not task_done(t)
+        time_delay(1)                              # aquí el programa haría otras cosas
+    end
+    Print "la tarea sumó #{task_result(t)}"
+    task_free(t)
+
+    Print "única copia: #{single_instance("DOCTAREAS")}"
+
+    clock_read()
+    Print "año válido: #{clock_year() >= 1978 and clock_month() >= 1 and clock_month() <= 12}"
+    Print "sin catálogo: " + tr(1, "Hola")
+
+    hay_ram = false
+    n = disks_read(2000)
+    i = 0
+    while i < n
+        if str_upper(disk_name(i)) == "RAM DISK"     # "Ram Disk" en OS 3.1, "RAM Disk" en 3.2
+            hay_ram = true
+        end
+        i = i + 1
+    end
+    Print "RAM montado: #{hay_ram}"
+    Print "fin"
+end

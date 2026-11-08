@@ -188,8 +188,9 @@ GRAPHICS_BASIC = {
         name="gfx_flood",
         params=["x", "y", "mode"],
         return_type="void",
-        c_template="Flood(_dash_rp, ${mode}, ${x}, ${y})",
+        c_template="_dash_flood(${x}, ${y}, ${mode})",
         needs_gfx=True,
+        needs_area=True,
         description="Flood fill"
     ),
 
@@ -2409,7 +2410,8 @@ SYSTEM_FUNCTIONS = {
         name="random_range",
         params=["min", "max"],
         return_type="LONG",
-        c_template="((${min}) + (_dash_random() % ((${max}) - (${min}) + 1)))",
+        # max <= min gives min: a range of 0 numbers was a division by zero (a CPU trap)
+        c_template="((${max}) <= (${min}) ? (${min}) : (${min}) + (_dash_random() % ((${max}) - (${min}) + 1)))",
         description="Random in range [min, max]"
     ),
     "random_seed": BuiltinFunc(

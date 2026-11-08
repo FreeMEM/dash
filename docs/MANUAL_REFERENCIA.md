@@ -47,7 +47,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 675 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 961 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -1260,6 +1260,8 @@ end
 
 ## 11. Screens (Pantallas)
 
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Entrada y pantallas](BUILTINS.md#input_functions).
+
 Las screens en Amiga son superficies de dibujo independientes que pueden tener su propia resolucion, profundidad de color y paleta. Dash proporciona funciones para crear screens que clonan el Workbench o screens personalizadas.
 
 ### Clonar Workbench
@@ -1360,6 +1362,8 @@ end
 ---
 
 ## 12. Ventanas y Eventos
+
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Intuition](BUILTINS.md#intuition_expanded).
 
 ### Definicion de Ventana
 
@@ -1505,6 +1509,8 @@ end
 ---
 
 ## 13. Graficos
+
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Gráficos básicos](BUILTINS.md#graphics_basic). Sprites, BOBs, mapas, copper y bitmaps: [Gráficos avanzados](BUILTINS.md#graphics_advanced).
 
 ### Configuracion de Color
 
@@ -1848,6 +1854,8 @@ end
 
 ## 14. Entrada (Teclado, Raton, Joystick)
 
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Entrada y pantallas](BUILTINS.md#input_functions).
+
 ### Teclado
 
 ```
@@ -1884,7 +1892,7 @@ Otras funciones de entrada y de pantalla:
 | Funcion | Que hace |
 |---|---|
 | `wait_key()` | Espera una tecla en la ventana y da su codigo raw (sin ventana, espera un segundo y da 0) |
-| `wait_click()` | Espera a que se pulse y se suelte un boton del raton (mira el hardware sin parar: gasta CPU) |
+| `wait_click()` | Espera a que se pulse y se suelte un boton del raton (mira el hardware 50 veces por segundo) |
 | `check_lmb()`, `check_rmb()`, `check_mouse()` | Si esta pulsado el boton izquierdo, el derecho o cualquiera (lee el hardware) |
 | `check_esc()` | Si Esc esta pulsada (lee el teclado en el hardware) |
 | `screen_width()`, `screen_height()` | Tamano de la pantalla propia o de la de la ventana |
@@ -1956,28 +1964,28 @@ end
 ### Joystick
 
 ```
-# Puertos: 0 o 1
-dx = joy_x(0)       # -1, 0, o 1
-dy = joy_y(0)       # -1, 0, o 1
+# Puerto 1: el del joystick (el 0 es el del raton, solo con un segundo joystick)
+dx = joy_x(1)       # -1, 0, o 1
+dy = joy_y(1)       # -1, 0, o 1
 
-if joy_button(0)
+if joy_button(1)
     Print "Disparo!"
 end
 
 # Funciones de direccion (devuelven Bool)
-if joy_up(0)
+if joy_up(1)
     y = y - 1
 end
-if joy_down(0)
+if joy_down(1)
     y = y + 1
 end
-if joy_left(0)
+if joy_left(1)
     x = x - 1
 end
-if joy_right(0)
+if joy_right(1)
     x = x + 1
 end
-if joy_fire(0)
+if joy_fire(1)
     disparar()
 end
 ```
@@ -1985,6 +1993,8 @@ end
 ---
 
 ## 15. Audio y Musica
+
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Audio](BUILTINS.md#audio_functions).
 
 ### Cargar y Reproducir Sonidos
 
@@ -2062,6 +2072,8 @@ tone_play(1, 523, 48, 250)  # Do
 ---
 
 ## 16. Sistema de Archivos
+
+Cada función explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, Ficheros](BUILTINS.md#dos_functions).
 
 ### Abrir y Cerrar Archivos
 
@@ -2936,6 +2948,8 @@ end
 
 ### Funciones GadTools
 
+Cada una explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, GadTools y menús](BUILTINS.md#gadtools_functions).
+
 | Funcion | Descripcion |
 |---------|-------------|
 | `gt_init()` | Inicializar GadTools |
@@ -3259,6 +3273,8 @@ end
 
 ### Funciones ReAction
 
+Cada una explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md, ReAction](BUILTINS.md#reaction_functions).
+
 #### Ventana
 | Funcion | Descripcion |
 |---------|-------------|
@@ -3435,6 +3451,8 @@ devuelva `id` cuando se suelta uno sobre ese objeto (sobre una ventana: en cualq
 la pantalla del Workbench.
 
 ### Funciones
+
+Cada una explicada, con sus parámetros y dos ejemplos que se prueban: [BUILTINS.md, MUI](BUILTINS.md#mui_functions).
 
 | Función | Qué hace |
 |---|---|
@@ -4285,8 +4303,8 @@ struct Player
     size: Int = 10
 
     func update()
-        dx = joy_x(0)
-        dy = joy_y(0)
+        dx = joy_x(1)
+        dy = joy_y(1)
         self.x = self.x + dx * 2
         self.y = self.y + dy * 2
 
@@ -4484,53 +4502,10 @@ end
 
 ### Funciones por Categoria
 
-Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan implementadas.
-
-| Categoria | Cantidad | Ejemplos |
-|-----------|----------|----------|
-| Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle`, `gfx_flood` |
-| Graficos avanzados | 43 | `sprite_*`, `soft_sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
-| Entrada y pantallas | 30 | `key_*`, `mouse_*`, `joy_*`, `screen_open`, `check_lmb`, `event_window` |
-| GadTools | 19 | `gt_button`, `gt_slider`, `gt_string`, `gt_event` |
-| Menus | 10 | `menu_title`, `menu_item`, `menu_sub`, `menu_id` |
-| Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_fullpath` |
-| ReAction | 79 | `ra_window_*`, `ra_add_*`, `ra_get_*`, `ra_canvas_*` |
-| Sistema y memoria | 28 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
-| Ficheros (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
-| Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
-| Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
-| Red (TCP y UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
-| Red en una tarea aparte | 12 | `net_bg_open`, `net_bg_open_tls`, `net_bg_state`, `net_bg_send`, `net_bg_recv`, `net_bg_close`, `net_bg_stop` |
-| TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fuentes y colores | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
-| Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
-| Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
-| Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
-| Commodity (Exchange) | 6 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`, `cx_send` |
-| Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
-| Sistema y programa | 14 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest`, `build_date`, `build_time` |
-| Fecha, hora y versión | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
-| Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
-| Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
-| Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simular teclado y ratón | 10 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title`, `input_qualifiers`, `input_menu`, `input_move_screen` |
-| Ventanas de otros programas (pruebas) | 8 | `window_find`, `window_found_activate`, `window_found_box`, `gadget_index`, `gadget_x`, `gadget_y`, `gadget_selected`, `screen_pixel` |
-| Ordenar textos según el idioma | 1 | `str_compare_locale` |
-| Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
-| Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
-| Imágenes decodificadas por el programa | 7 | `image_decode`, `image_decoded_width`, `image_decoded_height`, `image_decoded_alpha`, `image_decoded_pixels`, `image_from_decoded`, `image_decoded_free` |
-| Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compresión (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
-| UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
-| Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
-| Double y texto | 2 | `str_from_double`, `str_to_double` |
-| Expresiones regulares y comodines | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
-| Matemáticas de Double | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
-| Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
-| RTG | 21 | `rtg_*` |
-| MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **738** | |
+Son 961, todas implementadas. La lista completa está en [docs/BUILTINS.md](BUILTINS.md), por grupos: cada grupo
+empieza con una introducción (para qué sirve, qué hace falta antes, el flujo de siempre) y un ejemplo que se prueba
+con los tests, sigue con la tabla de sus funciones y acaba con cada función explicada (parámetros, qué devuelve, qué
+pasa si falla y las relacionadas).
 
 ### Colores Estandar Amiga
 
