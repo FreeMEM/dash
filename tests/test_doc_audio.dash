@@ -1,0 +1,26 @@
+# Audio: un sonido hecho muestra a muestra, que suena mientras el programa sigue, y un tono.
+# expect-out: sonando: true
+# expect-out: acabado: false
+# expect-out: fin
+
+Main
+    if not sound_create(0, 800, 8000)          # una décima de segundo a 8000 muestras por segundo
+        Print "no hay memoria chip"
+        return
+    end
+    i = 0
+    while i < 800
+        sound_sample(0, i, (i % 18) * 14 - 120)     # una onda de sierra de unos 440 Hz
+        i = i + 1
+    end
+    sound_volume(0, 48)
+    sound_play(0, 0)                           # vuelve enseguida
+    Print "sonando: #{sound_playing(0)}"
+    time_delay(20)                             # el sonido dura 5 tics
+    Print "acabado: #{sound_playing(0)}"
+
+    tone_play(1, 880, 32, 200)                 # un pitido de 880 Hz, 0,2 segundos
+    time_delay(15)
+    sound_free(0)
+    Print "fin"
+end

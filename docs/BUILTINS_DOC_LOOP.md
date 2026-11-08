@@ -35,7 +35,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T7c. Copper y bitmaps, con `tests/test_doc_bitmaps.dash`.
 - [x] T8a. Texto, búferes y buscar en un búfer, con `tests/test_doc_texto.dash`.
 - [x] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`), con `tests/test_doc_sistema.dash`.
-- [ ] T8c. Audio (`AUDIO_FUNCTIONS`).
+- [x] T8c. Audio (`AUDIO_FUNCTIONS`), con `tests/test_doc_audio.dash`.
 - [ ] T9. El resto de grupos.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
   explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
@@ -89,3 +89,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     daba números fuera; ahora `max <= min` devuelve `min`. En `tests/test_doc_sistema.dash`.
   - Visto: `random` da solo 15 bits (0 a 32767), las arenas no se liberan solas y `arena_alloc` no pone a cero
     tras un `arena_reset`; documentado.
+- 2026-11-08: T8c. Audio. `music_play` empieza siempre desde el principio (`music_position` solo vale mientras
+  suena) y los `sound_*` durante la música se pisan con ella; documentado.

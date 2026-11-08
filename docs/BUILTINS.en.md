@@ -4119,29 +4119,286 @@ See also: [`buffer_find_byte`](#buffer_find_byte).
 
 ## Audio
 
+Sound with the Amiga's four channels (Paula), through the system's `audio.device`: effects (`sound_*`), ProTracker
+music (`music_*`) and tones (`tone_play`).
+
+**Channels.** There are 4, 0 to 3: 0 and 3 sound on the left, 1 and 2 on the right. Each channel plays one sound at
+a time; a new one on the same channel cuts the previous one. They are taken on the first sound and given back when
+the program ends.
+
+**Sounds.** They load from an uncompressed IFF 8SVX file (`sound_load`) or are built sample by sample
+(`sound_create` and `sound_sample`), with a number from 0 to 31. They live in chip memory. Everything is
+asynchronous: `sound_play` returns at once and the sound goes on while the program does other things.
+
+**Music.** `music_load` loads a 4-channel ProTracker module; while it plays, the channels are its own: a `sound_*`
+at the same time would clash with it. The most used effects are there (the list in the manual, section 15).
+
+**Example** (`tests/test_doc_audio.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Audio: un sonido hecho muestra a muestra, que suena mientras el programa sigue, y un tono.
+
+Main
+    if not sound_create(0, 800, 8000)          # una décima de segundo a 8000 muestras por segundo
+        Print "no hay memoria chip"
+        return
+    end
+    i = 0
+    while i < 800
+        sound_sample(0, i, (i % 18) * 14 - 120)     # una onda de sierra de unos 440 Hz
+        i = i + 1
+    end
+    sound_volume(0, 48)
+    sound_play(0, 0)                           # vuelve enseguida
+    Print "sonando: #{sound_playing(0)}"
+    time_delay(20)                             # el sonido dura 5 tics
+    Print "acabado: #{sound_playing(0)}"
+
+    tone_play(1, 880, 32, 200)                 # un pitido de 880 Hz, 0,2 segundos
+    time_delay(15)
+    sound_free(0)
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `sound_load(id, filename)` | Bool | Load an IFF 8SVX sound (uncompressed) |  |
-| `sound_sample(id, index, value)` | — | Set one sample (-128..127) of a sound made with sound_create |  |
-| `sound_create(id, length, rate)` | Bool | Create a silent sound in chip memory: length in samples, rate in samples per second |  |
-| `sound_free(id)` | — | Free sound memory |  |
-| `sound_play(id, channel)` | — | Play a sound once on a channel (0-3) |  |
-| `sound_stop(channel)` | — | Stop channel |  |
-| `sound_loop(id, channel)` | — | Play a sound looped on a channel (until sound_stop) |  |
-| `sound_playing(channel)` | Bool | Check if channel is playing |  |
-| `sound_volume(channel, vol)` | — | Set channel volume (0-64) |  |
-| `sound_period(channel, period)` | — | Set the channel period (pitch: lower = higher) |  |
-| `music_load(filename)` | Bool | Load MOD file |  |
-| `music_play()` | — | Start music playback |  |
-| `music_stop()` | — | Stop music |  |
-| `music_pause()` | — | Pause music |  |
-| `music_resume()` | — | Resume music |  |
-| `music_volume(vol)` | — | Set music volume (0-64) |  |
-| `music_position(pos)` | — | Set music position |  |
-| `music_pos()` | Int | Song position the music is playing (index in the order list) |  |
-| `music_row()` | Int | Pattern row the music is playing (0-63) |  |
-| `music_free()` | — | Free music data |  |
-| `tone_play(channel, freq, vol, duration)` | — | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
+| [`sound_load(id, filename)`](#sound_load) | Bool | Load an IFF 8SVX sound (uncompressed) |  |
+| [`sound_sample(id, index, value)`](#sound_sample) | — | Set one sample (-128..127) of a sound made with sound_create |  |
+| [`sound_create(id, length, rate)`](#sound_create) | Bool | Create a silent sound in chip memory: length in samples, rate in samples per second |  |
+| [`sound_free(id)`](#sound_free) | — | Free sound memory |  |
+| [`sound_play(id, channel)`](#sound_play) | — | Play a sound once on a channel (0-3) |  |
+| [`sound_stop(channel)`](#sound_stop) | — | Stop channel |  |
+| [`sound_loop(id, channel)`](#sound_loop) | — | Play a sound looped on a channel (until sound_stop) |  |
+| [`sound_playing(channel)`](#sound_playing) | Bool | Check if channel is playing |  |
+| [`sound_volume(channel, vol)`](#sound_volume) | — | Set channel volume (0-64) |  |
+| [`sound_period(channel, period)`](#sound_period) | — | Set the channel period (pitch: lower = higher) |  |
+| [`music_load(filename)`](#music_load) | Bool | Load MOD file |  |
+| [`music_play()`](#music_play) | — | Start music playback |  |
+| [`music_stop()`](#music_stop) | — | Stop music |  |
+| [`music_pause()`](#music_pause) | — | Pause music |  |
+| [`music_resume()`](#music_resume) | — | Resume music |  |
+| [`music_volume(vol)`](#music_volume) | — | Set music volume (0-64) |  |
+| [`music_position(pos)`](#music_position) | — | Set music position |  |
+| [`music_pos()`](#music_pos) | Int | Song position the music is playing (index in the order list) |  |
+| [`music_row()`](#music_row) | Int | Pattern row the music is playing (0-63) |  |
+| [`music_free()`](#music_free) | — | Free music data |  |
+| [`tone_play(channel, freq, vol, duration)`](#tone_play) | — | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
+
+<a id="sound_load"></a>
+
+### `sound_load(id, filename)` → `Bool`
+
+- `id`: the sound's number, 0 to 31.
+- `filename`: an uncompressed IFF 8SVX file.
+
+Loads it with its sample rate (8363 if it does not say). Returns `false` if it cannot be read, is compressed or
+chip memory is short.
+
+See also: [`sound_play`](#sound_play), [`sound_free`](#sound_free).
+
+<a id="sound_sample"></a>
+
+### `sound_sample(id, index, value)`
+
+- `id`: the sound's number, 0 to 31.
+- `index`: the sample, from 0.
+- `value`: its value, -128 to 127.
+
+Changes one sample of a `sound_create` sound. A wave going up and down 440 times a second sounds like an A.
+
+See also: [`sound_create`](#sound_create).
+
+<a id="sound_create"></a>
+
+### `sound_create(id, length, rate)` → `Bool`
+
+- `id`: the sound's number, 0 to 31.
+- `length`: how many samples, at least 2.
+- `rate`: how many samples a second: 8000 is fine for effects; the Amiga reaches about 28000.
+
+Creates a silent sound in chip memory, to fill with `sound_sample`. Returns `false` without memory.
+
+See also: [`sound_sample`](#sound_sample), [`sound_play`](#sound_play).
+
+<a id="sound_free"></a>
+
+### `sound_free(id)`
+
+- `id`: the sound's number, 0 to 31.
+
+Frees its memory. Not while it plays: `sound_stop` first.
+
+See also: [`sound_stop`](#sound_stop).
+
+<a id="sound_play"></a>
+
+### `sound_play(id, channel)`
+
+- `id`: the sound's number, 0 to 31.
+- `channel`: the channel, 0 to 3.
+Plays it once on that channel, at its rate, with the channel's volume. It returns at once. If the channel was
+playing, it cuts what was there.
+
+See also: [`sound_loop`](#sound_loop), [`sound_playing`](#sound_playing), [`sound_volume`](#sound_volume).
+
+<a id="sound_stop"></a>
+
+### `sound_stop(channel)`
+
+- `channel`: the channel, 0 to 3.
+
+Silences that channel.
+
+See also: [`sound_play`](#sound_play).
+
+<a id="sound_loop"></a>
+
+### `sound_loop(id, channel)`
+
+- `id`: the sound's number, 0 to 31.
+- `channel`: the channel, 0 to 3.
+
+Plays it over and over until `sound_stop`. For an engine, rain or a held note.
+
+See also: [`sound_stop`](#sound_stop), [`sound_play`](#sound_play).
+
+<a id="sound_playing"></a>
+
+### `sound_playing(channel)` → `Bool`
+
+- `channel`: the channel, 0 to 3.
+
+Returns `true` if the channel is still playing.
+
+See also: [`sound_play`](#sound_play).
+
+<a id="sound_volume"></a>
+
+### `sound_volume(channel, vol)`
+
+- `channel`: the channel, 0 to 3.
+- `vol`: 0 (silent) to 64 (full).
+
+That channel's volume, also for what is already playing.
+
+See also: [`sound_period`](#sound_period).
+
+<a id="sound_period"></a>
+
+### `sound_period(channel, period)`
+
+- `channel`: the channel, 0 to 3.
+- `period`: the period, 124 to 65535: the frequency is 3546895 divided by it on PAL. The lower, the higher the
+  pitch.
+
+Changes the pitch of what plays on the channel, without restarting it. For an engine speeding up or a siren.
+
+See also: [`sound_volume`](#sound_volume).
+
+<a id="music_load"></a>
+
+### `music_load(filename)` → `Bool`
+
+- `filename`: a 4-channel, 31-instrument ProTracker module (M.K., M!K!, FLT4, 4CHN).
+
+Loads it whole into chip memory; the previous music is freed. It does not start until `music_play`. Returns `false`
+if it cannot be read, is not that kind or does not fit.
+
+See also: [`music_play`](#music_play), [`music_free`](#music_free).
+
+<a id="music_play"></a>
+
+### `music_play()`
+
+Starts playing the music from the beginning. It silences any sounds: the channels become its own.
+
+See also: [`music_stop`](#music_stop), [`music_pause`](#music_pause).
+
+<a id="music_stop"></a>
+
+### `music_stop()`
+
+Stops the music and gives the channels back to the `sound_*` functions.
+
+See also: [`music_play`](#music_play).
+
+<a id="music_pause"></a>
+
+### `music_pause()`
+
+Silences it where it is; `music_resume` carries on from there.
+
+See also: [`music_resume`](#music_resume).
+
+<a id="music_resume"></a>
+
+### `music_resume()`
+
+Carries on playing after a `music_pause`.
+
+See also: [`music_pause`](#music_pause).
+
+<a id="music_volume"></a>
+
+### `music_volume(vol)`
+
+- `vol`: 0 to 64.
+
+The volume of the whole music, to lower it under the effects or fade it.
+
+See also: [`music_play`](#music_play).
+
+<a id="music_position"></a>
+
+### `music_position(pos)`
+
+- `pos`: the position in the song's order list, from 0; outside it, 0.
+
+While it plays, jumps there, to the start of the pattern: to switch sections in a game (the menu's, the level's).
+`music_play` always starts from the beginning.
+
+See also: [`music_pos`](#music_pos), [`music_row`](#music_row).
+
+<a id="music_pos"></a>
+
+### `music_pos()` → `Int`
+
+Returns the position in the order list playing now.
+
+See also: [`music_row`](#music_row), [`music_position`](#music_position).
+
+<a id="music_row"></a>
+
+### `music_row()` → `Int`
+
+Returns the pattern row playing, 0 to 63. To sync something with the music.
+
+See also: [`music_pos`](#music_pos).
+
+<a id="music_free"></a>
+
+### `music_free()`
+
+Stops the music if it was playing and frees its memory.
+
+See also: [`music_load`](#music_load).
+
+<a id="tone_play"></a>
+
+### `tone_play(channel, freq, vol, duration)`
+
+- `channel`: the channel, 0 to 3.
+- `freq`: the frequency in hertz: 440 is A.
+- `vol`: the volume, 0 to 64.
+- `duration`: how long it lasts, in milliseconds.
+
+Plays a pure tone (a sine wave) and returns at once, without waiting for it to end. For beeps and alerts without any
+file.
+
+See also: [`sound_play`](#sound_play).
 
 ## Intuition
 
