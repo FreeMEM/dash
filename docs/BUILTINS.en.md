@@ -5628,18 +5628,165 @@ See also: [`regex_match`](#regex_match).
 
 ## Simulated keyboard and mouse
 
+Fake keys and clicks, as if the user made them, through the system's `input.device`: they go to the active window,
+the program's or another's. They are for testing a program unattended (Forja's and Dash's tests use them) and for
+automating others. Coordinates count from the active window's outer corner, borders included.
+
+**Example** (`tests/test_doc_otros.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Manejar una ventana como un usuario: buscarla por su título, hacer clic en un campo y escribir en él, y verla en
+# la lista de ventanas del Workbench.
+
+Main
+    v = window_create("Prueba de entrada", 40, 40, 260, 60, 8)
+    campo = textfield_create(v, 10, 10, 200, 0, 40)
+    time_delay(25)
+
+    w = window_find("Prueba de")                   # vale el principio del título
+    Print "encontrada: #{w != 0}"
+    window_found_activate(w)                       # los input_* van a la ventana activa
+    bl = window_found_box(w, 4)                    # sus bordes: input_click cuenta desde fuera
+    bt = window_found_box(w, 5)
+    input_click(bl + 20, bt + 15, 0)               # en el campo
+    input_text("hola Amiga")
+    input_key(0x44, 0)                             # Return
+    time_delay(10)
+    Print "escrito: " + textfield_get(campo)
+
+    esta = false
+    n = wm_read()
+    i = 0
+    while i < n
+        if wm_title(i) == "Prueba de entrada"
+            esta = true
+        end
+        i = i + 1
+    end
+    Print "en la lista del Workbench: #{esta}"
+    window_close(v)
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `input_key(code, qualifiers)` | — | Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it |  |
-| `input_text(text)` | — | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
-| `input_move(x, y)` | — | Move the pointer to (x, y) from the corner of the active window |  |
-| `input_click(x, y, qualifiers)` | — | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
-| `input_button(button, down)` | — | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
-| `input_drag(x1, y1, x2, y2)` | — | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
-| `input_qualifiers()` | Int | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
-| `input_menu(menu, item, hold)` | Bool | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
-| `input_move_screen(x, y, buttons)` | — | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
-| `input_active_title()` | String | Title of the active window ("" if none): to wait for the window of the program to test |  |
+| [`input_key(code, qualifiers)`](#input_key) | — | Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it |  |
+| [`input_text(text)`](#input_text) | — | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
+| [`input_move(x, y)`](#input_move) | — | Move the pointer to (x, y) from the corner of the active window |  |
+| [`input_click(x, y, qualifiers)`](#input_click) | — | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
+| [`input_button(button, down)`](#input_button) | — | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
+| [`input_drag(x1, y1, x2, y2)`](#input_drag) | — | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
+| [`input_qualifiers()`](#input_qualifiers) | Int | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
+| [`input_menu(menu, item, hold)`](#input_menu) | Bool | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
+| [`input_move_screen(x, y, buttons)`](#input_move_screen) | — | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
+| [`input_active_title()`](#input_active_title) | String | Title of the active window ("" if none): to wait for the window of the program to test |  |
+
+<a id="input_key"></a>
+
+### `input_key(code, qualifiers)`
+
+- `code`: the key's raw code (0x44 Return, 0x45 Esc, 0x4C up...).
+- `qualifiers`: the keys held around it: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up; 0 none.
+
+Presses and releases the key in the active window.
+
+See also: [`input_text`](#input_text), [`key_text`](#key_text).
+
+<a id="input_text"></a>
+
+### `input_text(text)`
+
+- `text`: the text.
+
+Types it into the active window with the keymap; what the keymap cannot type is left out.
+
+See also: [`input_key`](#input_key).
+
+<a id="input_move"></a>
+
+### `input_move(x, y)`
+
+- `x`, `y`: the point, from the active window's corner.
+
+Moves the pointer there.
+
+See also: [`input_click`](#input_click).
+
+<a id="input_click"></a>
+
+### `input_click(x, y, qualifiers)`
+
+- `x`, `y`: the point, from the active window's outer corner (borders included).
+- `qualifiers`: the keys held during the click: 1 Shift, 2 Ctrl, 4 Alt.
+
+Makes a left-button click. To hit another program's gadget, `gadget_x` and `gadget_y` say where.
+
+See also: [`input_drag`](#input_drag), [`gadget_x`](#gadget_x).
+
+<a id="input_button"></a>
+
+### `input_button(button, down)`
+
+- `button`: 1 left, 2 right (menus), 3 middle.
+- `down`: `true` presses it, `false` releases it.
+
+Wherever the pointer is. To hold a menu open while the pointer moves.
+
+See also: [`input_menu`](#input_menu).
+
+<a id="input_drag"></a>
+
+### `input_drag(x1, y1, x2, y2)`
+
+- `x1`, `y1`: where it presses.
+- `x2`, `y2`: where it releases.
+
+Drags with the left button, from the active window's corner.
+
+See also: [`input_click`](#input_click).
+
+<a id="input_qualifiers"></a>
+
+### `input_qualifiers()` → `Int`
+
+Returns the keys held now, added up: 1 and 2 Shift, 8 Ctrl, 16 and 32 Alt, 64 and 128 Amiga (left and right); 0 if it cannot.
+
+See also: [`input_key`](#input_key).
+
+<a id="input_menu"></a>
+
+### `input_menu(menu, item, hold)` → `Bool`
+
+- `menu`: the menu, from 0.
+- `item`: the item, from 0, counting separators.
+- `hold`: how many ticks (1/50 s) it stays pressed before releasing.
+
+Chooses that item from the active window's menu with the mouse, like a user. Returns `false` if there is no such
+item.
+
+See also: [`input_button`](#input_button).
+
+<a id="input_move_screen"></a>
+
+### `input_move_screen(x, y, buttons)`
+
+- `x`, `y`: the point on the screen.
+- `buttons`: the buttons held along the way: 1 left, 2 right, 0 none.
+
+Moves the pointer pixel by pixel, so MUI's menus follow it.
+
+See also: [`input_move`](#input_move).
+
+<a id="input_active_title"></a>
+
+### `input_active_title()` → `String`
+
+Returns the active window's title, or `""`. To wait for the window of the program under test to open.
+
+See also: [`window_find`](#window_find).
 
 ## Clipboard
 
@@ -6661,53 +6808,451 @@ See also: [`net_bg_idle`](#net_bg_idle).
 
 ## Other programs' windows (tests)
 
+Finding another program's window by its title, bringing it to the front, finding out where its gadgets are and
+reading the screen's colours. With the `input_*` functions, to drive another program as the user would.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `window_find(title)` | Int | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
-| `window_found_activate(win)` | — | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
-| `window_found_box(win, what)` | Int | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
-| `gadget_index(win, text)` | Int | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
-| `gadget_x(win, n)` | Int | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
-| `gadget_y(win, n)` | Int | y of the centre of that gadget, as gadget_x |  |
-| `gadget_selected(win, n)` | Bool | True if the gadget at place n (a checkbox) is selected |  |
-| `screen_pixel(x, y)` | Int | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
-| `screen_pixel_rgb(x, y)` | Int | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
-| `screen_pen_rgb(n)` | Int | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
-| `cx_send(name, command)` | Int | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+| [`window_find(title)`](#window_find) | Int | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
+| [`window_found_activate(win)`](#window_found_activate) | — | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
+| [`window_found_box(win, what)`](#window_found_box) | Int | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
+| [`gadget_index(win, text)`](#gadget_index) | Int | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
+| [`gadget_x(win, n)`](#gadget_x) | Int | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
+| [`gadget_y(win, n)`](#gadget_y) | Int | y of the centre of that gadget, as gadget_x |  |
+| [`gadget_selected(win, n)`](#gadget_selected) | Bool | True if the gadget at place n (a checkbox) is selected |  |
+| [`screen_pixel(x, y)`](#screen_pixel) | Int | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
+| [`screen_pixel_rgb(x, y)`](#screen_pixel_rgb) | Int | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
+| [`screen_pen_rgb(n)`](#screen_pen_rgb) | Int | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
+| [`cx_send(name, command)`](#cx_send) | Int | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+
+<a id="window_find"></a>
+
+### `window_find(title)` → `Int`
+
+- `title`: the start of the title.
+
+Looks, on every screen, for the window whose title starts like that (the program's or another's). Returns a number
+for `window_found_*` and `gadget_*`, or 0. It stops being valid if that window closes.
+
+See also: [`window_found_activate`](#window_found_activate), [`gadget_index`](#gadget_index).
+
+<a id="window_found_activate"></a>
+
+### `window_found_activate(win)`
+
+- `win`: the window from `window_find`.
+
+Brings it to the front, with its screen, and makes it active: the `input_*` functions go to it.
+
+See also: [`window_find`](#window_find).
+
+<a id="window_found_box"></a>
+
+### `window_found_box(win, what)` → `Int`
+
+- `win`: the window from `window_find`.
+- `what`: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border.
+
+See also: [`window_find`](#window_find).
+
+<a id="gadget_index"></a>
+
+### `gadget_index(win, text)` → `Int`
+
+- `win`: the window from `window_find`.
+- `text`: the gadget's text.
+
+Returns its place in the window, from 0, or -1. GadTools buttons do not keep their text: find a neighbour that does
+and count from it.
+
+See also: [`gadget_x`](#gadget_x), [`gadget_selected`](#gadget_selected).
+
+<a id="gadget_x"></a>
+
+### `gadget_x(win, n)` → `Int`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns the x of its centre, from the window's corner, as `input_click` wants it; -1 if none.
+
+See also: [`gadget_y`](#gadget_y), [`input_click`](#input_click).
+
+<a id="gadget_y"></a>
+
+### `gadget_y(win, n)` → `Int`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns the y of its centre, like `gadget_x`.
+
+See also: [`gadget_x`](#gadget_x).
+
+<a id="gadget_selected"></a>
+
+### `gadget_selected(win, n)` → `Bool`
+
+- `win`: the window from `window_find`.
+- `n`: the gadget's place.
+
+Returns `true` if it is ticked (a checkbox).
+
+See also: [`gadget_index`](#gadget_index).
+
+<a id="screen_pixel"></a>
+
+### `screen_pixel(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns the colour number of that pixel of the front screen; -1 outside it.
+
+See also: [`screen_pixel_rgb`](#screen_pixel_rgb).
+
+<a id="screen_pixel_rgb"></a>
+
+### `screen_pixel_rgb(x, y)` → `Int`
+
+- `x`, `y`: the point.
+
+Returns that pixel's colour on the front screen as `0xRRGGBB`, whoever painted it; -1 outside it.
+
+See also: [`screen_pixel`](#screen_pixel).
+
+<a id="screen_pen_rgb"></a>
+
+### `screen_pen_rgb(n)` → `Int`
+
+- `n`: the Workbench pen: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text,
+  7 background, 8 highlighted text, 9 to 11 the bar's.
+
+Returns its colour as `0xRRGGBB`, or -1 if there is no such pen. So a program can look like the Workbench.
+
+See also: [`color_pen`](#color_pen).
+
+<a id="cx_send"></a>
+
+### `cx_send(name, command)` → `Int`
+
+- `name`: the commodity's name.
+- `command`: as Exchange does: 15 disable, 17 enable, 19 show, 21 hide, 23 quit.
+
+Returns 0 if done, -1 if there is no such commodity, -2 if it has no port, -99 without `commodities.library`.
 
 ## Window manager (every program's windows)
 
+What a window manager or a task bar (Trasfondo, for instance) needs: the list of windows on the Workbench screen
+with their program and size, moving them, bringing them to the front, and Workbench icons, to draw them or to get
+those dropped on a window.
+
+`wm_read` takes a snapshot of the windows, front to back; the other `wm_*` functions give each one by number, from
+0. To change them you use their id (`wm_id`), which stays valid even if the order changes.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `wm_read()` | Int | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
-| `wm_id(i)` | Int | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
-| `wm_title(i)` | String | The title of window i of the last wm_read ("" if it has none) |  |
-| `wm_task(i)` | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
-| `wm_path(i)` | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
-| `wm_box(i, what)` | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
-| `wm_flags(i)` | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
-| `wm_set_box(id, x, y, width, height)` | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
-| `wm_front(id)` | Bool | A window in front of the others; false if it is not open any more |  |
-| `wm_back(id)` | Bool | A window behind the others; false if it is not open any more |  |
-| `wm_activate(id)` | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
-| `wm_zip(id)` | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
-| `wm_active()` | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
-| `wm_at(x, y)` | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
-| `wm_pointer_x()` | Int | Where the pointer is on the Workbench screen: x |  |
-| `wm_pointer_y()` | Int | Where the pointer is on the Workbench screen: y |  |
-| `wm_bar_height()` | Int | The height of the Workbench screen's title bar (where windows usually start) |  |
-| `wm_bar_gadgets()` | Int | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
-| `file_real_path(path)` | String | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
-| `app_window(handle)` | Bool | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
-| `app_drop()` | String | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
-| `app_drop_x()` | Int | Where the last icon of app_drop fell: x from the window's corner |  |
-| `app_drop_y()` | Int | Where the last icon of app_drop fell: y from the window's corner |  |
-| `icon_load(path)` | Int | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
-| `icon_draw(icon, x, y)` | — | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
-| `icon_draw_size(icon, x, y, width, height)` | — | Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on a true colour screen; on others, at its size, centred in that box) |  |
-| `icon_width(icon)` | Int | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
-| `icon_height(icon)` | Int | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
-| `icon_free(icon)` | — | Frees an icon of icon_load (the ones left, at exit) |  |
+| [`wm_read()`](#wm_read) | Int | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
+| [`wm_id(i)`](#wm_id) | Int | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
+| [`wm_title(i)`](#wm_title) | String | The title of window i of the last wm_read ("" if it has none) |  |
+| [`wm_task(i)`](#wm_task) | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
+| [`wm_path(i)`](#wm_path) | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
+| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
+| [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
+| [`wm_front(id)`](#wm_front) | Bool | A window in front of the others; false if it is not open any more |  |
+| [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
+| [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
+| [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_active()`](#wm_active) | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
+| [`wm_at(x, y)`](#wm_at) | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
+| [`wm_pointer_x()`](#wm_pointer_x) | Int | Where the pointer is on the Workbench screen: x |  |
+| [`wm_pointer_y()`](#wm_pointer_y) | Int | Where the pointer is on the Workbench screen: y |  |
+| [`wm_bar_height()`](#wm_bar_height) | Int | The height of the Workbench screen's title bar (where windows usually start) |  |
+| [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
+| [`file_real_path(path)`](#file_real_path) | String | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
+| [`app_window(handle)`](#app_window) | Bool | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
+| [`app_drop()`](#app_drop) | String | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
+| [`app_drop_x()`](#app_drop_x) | Int | Where the last icon of app_drop fell: x from the window's corner |  |
+| [`app_drop_y()`](#app_drop_y) | Int | Where the last icon of app_drop fell: y from the window's corner |  |
+| [`icon_load(path)`](#icon_load) | Int | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
+| [`icon_draw(icon, x, y)`](#icon_draw) | — | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
+| [`icon_draw_size(icon, x, y, width, height)`](#icon_draw_size) | — | Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on a true colour screen; on others, at its size, centred in that box) |  |
+| [`icon_width(icon)`](#icon_width) | Int | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| [`icon_height(icon)`](#icon_height) | Int | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| [`icon_free(icon)`](#icon_free) | — | Frees an icon of icon_load (the ones left, at exit) |  |
+
+<a id="wm_read"></a>
+
+### `wm_read()` → `Int`
+
+Reads the Workbench screen's windows, front to back, up to 64, and returns how many.
+
+See also: [`wm_id`](#wm_id), [`wm_title`](#wm_title).
+
+<a id="wm_id"></a>
+
+### `wm_id(i)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its id, for `wm_set_box`, `wm_front` and the rest; 0 outside the list.
+
+See also: [`wm_read`](#wm_read).
+
+<a id="wm_title"></a>
+
+### `wm_title(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its title, or `""`.
+
+See also: [`wm_task`](#wm_task).
+
+<a id="wm_task"></a>
+
+### `wm_task(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns its program: a Shell process's command, without the path, or its task's name (`"Workbench"`).
+
+See also: [`wm_path`](#wm_path).
+
+<a id="wm_path"></a>
+
+### `wm_path(i)` → `String`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns the path of that window's program; `""` if it is not a process's or it has closed.
+
+See also: [`file_real_path`](#file_real_path).
+
+<a id="wm_box"></a>
+
+### `wm_box(i, what)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit).
+
+Returns that value, or -1 outside the list.
+
+See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_flags"></a>
+
+### `wm_flags(i)` → `Int`
+
+- `i`: the window, from 0, of the last `wm_read`.
+
+Returns, added up: 1 resizable, 2 backdrop, 4 borderless, 8 active, 16 with a drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_set_box"></a>
+
+### `wm_set_box(id, x, y, width, height)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+- `x`, `y`, `width`, `height`: the new box.
+
+Moves and resizes the window, within its limits and its screen. Returns `false` if it is gone.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_front"></a>
+
+### `wm_front(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Brings it to the front. Returns `false` if it is gone.
+
+See also: [`wm_back`](#wm_back).
+
+<a id="wm_back"></a>
+
+### `wm_back(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Sends it to the back. Returns `false` if it is gone.
+
+See also: [`wm_front`](#wm_front).
+
+<a id="wm_activate"></a>
+
+### `wm_activate(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Makes it active: keys go to it. Returns `false` if it is gone.
+
+See also: [`wm_active`](#wm_active).
+
+<a id="wm_zip"></a>
+
+### `wm_zip(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Switches it to its other size, like its zoom button. Returns `false` if it is gone.
+
+See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_active"></a>
+
+### `wm_active()` → `Int`
+
+Returns the active window's id if it is on the Workbench screen; 0 otherwise.
+
+See also: [`wm_activate`](#wm_activate).
+
+<a id="wm_at"></a>
+
+### `wm_at(x, y)` → `Int`
+
+- `x`, `y`: a point on the Workbench screen.
+
+Returns the id of the front window at that point; 0 if none.
+
+See also: [`wm_pointer_x`](#wm_pointer_x).
+
+<a id="wm_pointer_x"></a>
+
+### `wm_pointer_x()` → `Int`
+
+Returns the pointer's x on the Workbench screen.
+
+See also: [`wm_pointer_y`](#wm_pointer_y).
+
+<a id="wm_pointer_y"></a>
+
+### `wm_pointer_y()` → `Int`
+
+Returns the pointer's y on the Workbench screen.
+
+See also: [`wm_pointer_x`](#wm_pointer_x).
+
+<a id="wm_bar_height"></a>
+
+### `wm_bar_height()` → `Int`
+
+Returns the height of the Workbench screen's title bar, where windows usually start.
+
+<a id="wm_bar_gadgets"></a>
+
+### `wm_bar_gadgets()` → `Int`
+
+Returns how far from the right edge of the screen's bar its system buttons start; 0 if unknown.
+
+<a id="file_real_path"></a>
+
+### `file_real_path(path)` → `String`
+
+- `path`: a file or drawer.
+
+Returns its real path, with the volume's name (`"SYS:Utilities/Clock"` gives `"System:Utilities/Clock"`), to compare with `wm_path`; `""` if it does not exist.
+
+See also: [`wm_path`](#wm_path).
+
+<a id="app_window"></a>
+
+### `app_window(handle)` → `Bool`
+
+- `handle`: the window: 0 the current one, or a `window_create` number.
+
+Makes it accept icons dropped from the Workbench. Returns `true` if it does. The paths come with `app_drop`.
+
+See also: [`app_drop`](#app_drop), [`mui_on_drop`](#mui_on_drop).
+
+<a id="app_drop"></a>
+
+### `app_drop()` → `String`
+
+Returns the path of the next icon dropped on an `app_window`, or `""` if none; check it from an `On Timer`. Several icons come one by one.
+
+See also: [`app_drop_x`](#app_drop_x), [`app_window`](#app_window).
+
+<a id="app_drop_x"></a>
+
+### `app_drop_x()` → `Int`
+
+Returns the x where the last icon landed, from the window's corner.
+
+See also: [`app_drop_y`](#app_drop_y).
+
+<a id="app_drop_y"></a>
+
+### `app_drop_y()` → `Int`
+
+Returns the y where the last icon landed.
+
+See also: [`app_drop_x`](#app_drop_x).
+
+<a id="icon_load"></a>
+
+### `icon_load(path)` → `Int`
+
+- `path`: the program, drawer or file, without `.info`.
+
+Loads its icon with the colours of the window's screen (with AmigaOS 3.5 or later, colour and PNG icons too, and its
+type's icon if it has none). Returns a number for `icon_draw`, or 0.
+
+See also: [`icon_draw`](#icon_draw), [`icon_free`](#icon_free).
+
+<a id="icon_draw"></a>
+
+### `icon_draw(icon, x, y)`
+
+- `icon`: the icon from `icon_load`.
+- `x`, `y`: its corner.
+
+Draws it like the Workbench, without a name or frame.
+
+See also: [`icon_draw_size`](#icon_draw_size).
+
+<a id="icon_draw_size"></a>
+
+### `icon_draw_size(icon, x, y, width, height)`
+
+- `icon`: the icon from `icon_load`.
+- `x`, `y`, `width`, `height`: the box.
+
+Draws it at that size with smooth edges on a true-colour screen; on others, at its own size and centred.
+
+See also: [`icon_draw`](#icon_draw).
+
+<a id="icon_width"></a>
+
+### `icon_width(icon)` → `Int`
+
+- `icon`: the icon from `icon_load`.
+
+Returns its width as `icon_draw` draws it; 0 if missing.
+
+See also: [`icon_height`](#icon_height).
+
+<a id="icon_height"></a>
+
+### `icon_height(icon)` → `Int`
+
+- `icon`: the icon from `icon_load`.
+
+Returns its height as `icon_draw` draws it; 0 if missing.
+
+See also: [`icon_width`](#icon_width).
+
+<a id="icon_free"></a>
+
+### `icon_free(icon)`
+
+- `icon`: the icon from `icon_load`.
+
+Frees it. Those left, at the end.
+
+See also: [`icon_load`](#icon_load).
 
 ## Audio
 
@@ -8294,7 +8839,7 @@ See also: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_wait_
 
 `mui_wait_event` returns `id` when Workbench icons are dropped on the object. `app_drop` gives their paths.
 
-See also: `app_drop`.
+See also: [`app_drop`](#app_drop).
 
 <a id="mui_press"></a>
 
