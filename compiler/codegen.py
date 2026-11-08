@@ -13660,8 +13660,6 @@ static void _dash_bob_flips_free(_DashBob *o) {
         if (o->flipmask[i]) FreeBitMap(o->flipmask[i]);
         o->flip[i] = o->flipmask[i] = NULL;
     }
-    if (o->il) FreeBitMap(o->il);
-    o->il = NULL;
 }
 
 static void _dash_bob_reset(LONG id) {
@@ -13670,6 +13668,7 @@ static void _dash_bob_reset(LONG id) {
     if (o->mask) FreeBitMap(o->mask);
     if (o->back) FreeBitMap(o->back);
     _dash_bob_flips_free(o);
+    if (o->il) FreeBitMap(o->il);   /* (not in _dash_bob_flips_free: tilemap_draw makes the flips while using il) */
     memset(o, 0, sizeof(*o));
 }
 

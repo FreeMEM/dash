@@ -1,0 +1,52 @@
+# Mapas de tiles: un nivel hecho desde el programa, con un tileset de dos tiles, pintado en la pantalla, guardado y
+# vuelto a cargar, y su objeto "jugador".
+# expect-out: suelo en la celda 2, 9: tile 1
+# expect-out: pintado: 2
+# expect-out: cargado: 20 x 12 celdas de 16, 2 capas
+# expect-out: jugador en 32, 128
+# expect-out: fin
+
+const SUELO = 1
+const LADRILLO = 2
+
+Main
+    screen_open_custom(320, 200, 3, "Nivel")
+
+    bob_create(0, 32, 16, 3)                   # el tileset: dos fotogramas de 16 x 16
+    bitmap_draw_to(0)
+    gfx_pen(2)
+    gfx_rect(0, 0, 15, 15)                     # tile 1, el suelo
+    gfx_pen(4)
+    gfx_rect(16, 0, 31, 15)                    # tile 2, un ladrillo
+    gfx_pen(1)
+    gfx_box(16, 0, 31, 15)
+    bitmap_draw_screen()
+
+    tilemap_create(0, 20, 12, 16, 2)           # 20 x 12 celdas de 16 píxeles, 2 capas
+    x = 0
+    while x < 20
+        tilemap_set(0, 0, x, 9, SUELO)         # una fila de suelo
+        x = x + 1
+    end
+    tilemap_set(0, 0, 6, 7, LADRILLO)
+    tilemap_set(0, 0, 7, 7, LADRILLO + 16384)  # el mismo, en espejo
+    tilemap_object_add(0, 32, 128, "jugador")
+    Print "suelo en la celda 2, 9: tile #{tilemap_get(0, 0, 2, 9)}"
+
+    tilemap_draw(0, 0, 0, 0, 0, 20, 12, 0, 0)  # todo el mapa en la esquina de la pantalla
+    Print "pintado: #{gfx_pixel_read(40, 9 * 16 + 8)}"
+
+    tilemap_save(0, "RAM:nivel.fmap")
+    tilemap_free(0)
+    tilemap_load(1, "RAM:nivel.fmap")
+    Print "cargado: #{tilemap_width(1)} x #{tilemap_height(1)} celdas de #{tilemap_tile_size(1)}, #{tilemap_layers(1)} capas"
+    j = tilemap_object_find(1, "jugador", 0)
+    Print "jugador en #{tilemap_object_x(1, j)}, #{tilemap_object_y(1, j)}"
+
+    time_delay(50)
+    tilemap_free(1)
+    bob_free(0)
+    screen_close()
+    file_delete("RAM:nivel.fmap")
+    Print "fin"
+end

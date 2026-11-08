@@ -31,7 +31,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   `tests/test_doc_mui_lienzo.dash` (un grupo puede llevar varios ejemplos).
 - [x] T7a. Gráficos avanzados: introducción, sprites de hardware y de software, BOBs, con
   `tests/test_doc_sprites.dash`.
-- [ ] T7b. Mapas de tiles (`tilemap_*`).
+- [x] T7b. Mapas de tiles (`tilemap_*`), con `tests/test_doc_tiles.dash`.
 - [ ] T7c. Copper y bitmaps.
 - [ ] T8. Texto, buffers, sistema y memoria, audio.
 - [ ] T9. El resto de grupos.
@@ -68,3 +68,8 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - 2026-11-08: T6b. MUI, segunda tanda (29). MUI entero documentado. Sin fallos en lo probado.
 - 2026-11-08: T7a. Sprites y BOBs. Sin fallos en lo probado (fotogramas de un BOB creado, choque por píxeles,
   fondo devuelto, sprite hecho fila a fila). Visto: `sprite_create` no usa el ancho (siempre 16); documentado.
+- 2026-11-08: T7b. Mapas de tiles.
+  - Arreglo: `tilemap_draw` (sin máscara) dejaba vacías las celdas de después de la primera celda en espejo, la
+    primera vez que se pintaba el mapa tras crear o cambiar el BOB: al preparar los espejos se liberaba la copia
+    entrelazada del BOB que se estaba usando, y el blitter leía de una dirección nula. Afectaba al primer pintado
+    de un nivel con tiles en espejo (en un juego y en el editor de mapas de Forja). `tests/test_tilemap_espejo.dash`.

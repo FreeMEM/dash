@@ -65,7 +65,7 @@ go.
 
 Pictures come from IFF ILBM files, the ones Deluxe Paint, PPaint and Forja's sprite editor save.
 """,
-        "example": "tests/test_doc_sprites.dash",
+        "example": ["tests/test_doc_sprites.dash", "tests/test_doc_tiles.dash"],
     },
 }
 

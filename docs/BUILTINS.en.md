@@ -540,6 +540,58 @@ Main
 end
 ```
 
+**Example** (`tests/test_doc_tiles.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Mapas de tiles: un nivel hecho desde el programa, con un tileset de dos tiles, pintado en la pantalla, guardado y
+# vuelto a cargar, y su objeto "jugador".
+
+const SUELO = 1
+const LADRILLO = 2
+
+Main
+    screen_open_custom(320, 200, 3, "Nivel")
+
+    bob_create(0, 32, 16, 3)                   # el tileset: dos fotogramas de 16 x 16
+    bitmap_draw_to(0)
+    gfx_pen(2)
+    gfx_rect(0, 0, 15, 15)                     # tile 1, el suelo
+    gfx_pen(4)
+    gfx_rect(16, 0, 31, 15)                    # tile 2, un ladrillo
+    gfx_pen(1)
+    gfx_box(16, 0, 31, 15)
+    bitmap_draw_screen()
+
+    tilemap_create(0, 20, 12, 16, 2)           # 20 x 12 celdas de 16 píxeles, 2 capas
+    x = 0
+    while x < 20
+        tilemap_set(0, 0, x, 9, SUELO)         # una fila de suelo
+        x = x + 1
+    end
+    tilemap_set(0, 0, 6, 7, LADRILLO)
+    tilemap_set(0, 0, 7, 7, LADRILLO + 16384)  # el mismo, en espejo
+    tilemap_object_add(0, 32, 128, "jugador")
+    Print "suelo en la celda 2, 9: tile #{tilemap_get(0, 0, 2, 9)}"
+
+    tilemap_draw(0, 0, 0, 0, 0, 20, 12, 0, 0)  # todo el mapa en la esquina de la pantalla
+    Print "pintado: #{gfx_pixel_read(40, 9 * 16 + 8)}"
+
+    tilemap_save(0, "RAM:nivel.fmap")
+    tilemap_free(0)
+    tilemap_load(1, "RAM:nivel.fmap")
+    Print "cargado: #{tilemap_width(1)} x #{tilemap_height(1)} celdas de #{tilemap_tile_size(1)}, #{tilemap_layers(1)} capas"
+    j = tilemap_object_find(1, "jugador", 0)
+    Print "jugador en #{tilemap_object_x(1, j)}, #{tilemap_object_y(1, j)}"
+
+    time_delay(50)
+    tilemap_free(1)
+    bob_free(0)
+    screen_close()
+    file_delete("RAM:nivel.fmap")
+    Print "fin"
+end
+```
+
 **Index.** The ones with a link are explained further down.
 
 | Function | Returns | Description | Status |
@@ -580,39 +632,39 @@ end
 | [`bob_frames(id)`](#bob_frames) | Int | How many frames a BOB has |  |
 | [`bob_paste(id, frame, x, y)`](#bob_paste) | — | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
 | [`bob_free(id)`](#bob_free) | — | Free BOB memory |  |
-| `tilemap_create(id, width, height, tile, layers)` | Bool | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
-| `tilemap_load(id, filename)` | Bool | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
-| `tilemap_save(id, filename)` | Bool | Save a tile map as IFF FORM FMAP; false if it cannot |  |
-| `tilemap_free(id)` | — | Free a tile map |  |
-| `tilemap_width(id)` | Int | Width of a tile map in cells (0 if there is none) |  |
-| `tilemap_height(id)` | Int | Height of a tile map in cells |  |
-| `tilemap_tile_size(id)` | Int | The side of a tile map's tiles in pixels (8, 16 or 32) |  |
-| `tilemap_layers(id)` | Int | How many layers a tile map has |  |
-| `tilemap_get(id, layer, x, y)` | Int | A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map |  |
-| `tilemap_set(id, layer, x, y, value)` | — | Set a cell of a layer (like tilemap_get gives it); nothing outside the map |  |
-| `tilemap_tileset(id)` | String | The file name of the map's tileset, as saved in it ("" if none) |  |
-| `tilemap_set_tileset(id, filename)` | — | The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile) |  |
-| `tilemap_layer_name(id, layer)` | String | The name of a layer |  |
-| `tilemap_layer_type(id, layer)` | Int | The type of a layer (0 tiles; the editor uses others for collisions and objects) |  |
-| `tilemap_layer_visible(id, layer)` | Bool | Whether a layer is shown (for the editor) |  |
-| `tilemap_layer_set(id, layer, name, type, visible)` | — | Name (up to 31 characters), type and visibility of a layer |  |
-| `tilemap_layer_add(id)` | Int | A new empty layer at the end: its number, or -1 (there are 8 at most) |  |
-| `tilemap_layer_remove(id, layer)` | Bool | Remove a layer (the ones after it move down one); false if it is the only one |  |
-| `tilemap_layer_move(id, from, to)` | Bool | Move a layer to another place (the ones in between move one) |  |
-| `tilemap_resize(id, width, height)` | Bool | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
-| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | — | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
-| `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | — | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
-| `tilemap_objects(id)` | Int | How many objects the map has |  |
-| `tilemap_object_add(id, x, y, kind)` | Int | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
-| `tilemap_object_remove(id, object)` | Bool | Remove an object (the ones after it move down one) |  |
-| `tilemap_object_x(id, object)` | Int | Where an object is: x in pixels of the map |  |
-| `tilemap_object_y(id, object)` | Int | Where an object is: y in pixels of the map |  |
-| `tilemap_object_move(id, object, x, y)` | — | Move an object to x, y |  |
-| `tilemap_object_kind(id, object)` | String | The kind of an object |  |
-| `tilemap_object_name(id, object)` | String | The name of an object |  |
-| `tilemap_object_sprite(id, object)` | String | The sprite file of an object ("" if none) |  |
-| `tilemap_object_set(id, object, kind, name, sprite)` | — | Kind, name (up to 31 characters each) and sprite file of an object |  |
-| `tilemap_object_find(id, kind, from)` | Int | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
+| [`tilemap_create(id, width, height, tile, layers)`](#tilemap_create) | Bool | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
+| [`tilemap_load(id, filename)`](#tilemap_load) | Bool | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
+| [`tilemap_save(id, filename)`](#tilemap_save) | Bool | Save a tile map as IFF FORM FMAP; false if it cannot |  |
+| [`tilemap_free(id)`](#tilemap_free) | — | Free a tile map |  |
+| [`tilemap_width(id)`](#tilemap_width) | Int | Width of a tile map in cells (0 if there is none) |  |
+| [`tilemap_height(id)`](#tilemap_height) | Int | Height of a tile map in cells |  |
+| [`tilemap_tile_size(id)`](#tilemap_tile_size) | Int | The side of a tile map's tiles in pixels (8, 16 or 32) |  |
+| [`tilemap_layers(id)`](#tilemap_layers) | Int | How many layers a tile map has |  |
+| [`tilemap_get(id, layer, x, y)`](#tilemap_get) | Int | A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map |  |
+| [`tilemap_set(id, layer, x, y, value)`](#tilemap_set) | — | Set a cell of a layer (like tilemap_get gives it); nothing outside the map |  |
+| [`tilemap_tileset(id)`](#tilemap_tileset) | String | The file name of the map's tileset, as saved in it ("" if none) |  |
+| [`tilemap_set_tileset(id, filename)`](#tilemap_set_tileset) | — | The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile) |  |
+| [`tilemap_layer_name(id, layer)`](#tilemap_layer_name) | String | The name of a layer |  |
+| [`tilemap_layer_type(id, layer)`](#tilemap_layer_type) | Int | The type of a layer (0 tiles; the editor uses others for collisions and objects) |  |
+| [`tilemap_layer_visible(id, layer)`](#tilemap_layer_visible) | Bool | Whether a layer is shown (for the editor) |  |
+| [`tilemap_layer_set(id, layer, name, type, visible)`](#tilemap_layer_set) | — | Name (up to 31 characters), type and visibility of a layer |  |
+| [`tilemap_layer_add(id)`](#tilemap_layer_add) | Int | A new empty layer at the end: its number, or -1 (there are 8 at most) |  |
+| [`tilemap_layer_remove(id, layer)`](#tilemap_layer_remove) | Bool | Remove a layer (the ones after it move down one); false if it is the only one |  |
+| [`tilemap_layer_move(id, from, to)`](#tilemap_layer_move) | Bool | Move a layer to another place (the ones in between move one) |  |
+| [`tilemap_resize(id, width, height)`](#tilemap_resize) | Bool | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
+| [`tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`](#tilemap_draw) | — | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
+| [`tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`](#tilemap_draw_masked) | — | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
+| [`tilemap_objects(id)`](#tilemap_objects) | Int | How many objects the map has |  |
+| [`tilemap_object_add(id, x, y, kind)`](#tilemap_object_add) | Int | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
+| [`tilemap_object_remove(id, object)`](#tilemap_object_remove) | Bool | Remove an object (the ones after it move down one) |  |
+| [`tilemap_object_x(id, object)`](#tilemap_object_x) | Int | Where an object is: x in pixels of the map |  |
+| [`tilemap_object_y(id, object)`](#tilemap_object_y) | Int | Where an object is: y in pixels of the map |  |
+| [`tilemap_object_move(id, object, x, y)`](#tilemap_object_move) | — | Move an object to x, y |  |
+| [`tilemap_object_kind(id, object)`](#tilemap_object_kind) | String | The kind of an object |  |
+| [`tilemap_object_name(id, object)`](#tilemap_object_name) | String | The name of an object |  |
+| [`tilemap_object_sprite(id, object)`](#tilemap_object_sprite) | String | The sprite file of an object ("" if none) |  |
+| [`tilemap_object_set(id, object, kind, name, sprite)`](#tilemap_object_set) | — | Kind, name (up to 31 characters each) and sprite file of an object |  |
+| [`tilemap_object_find(id, kind, from)`](#tilemap_object_find) | Int | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
 | [`bob_collision(id1, id2)`](#bob_collision) | Bool | Check BOB collision |  |
 | `copper_create(size)` | Bool | Create copper list |  |
 | `copper_wait(y, x)` | — | Add copper WAIT instruction |  |
@@ -1035,6 +1087,374 @@ See also: [`bob_draw`](#bob_draw), [`screen_double_buffer`](#screen_double_buffe
 Removes it from the screen if it was painted and frees its memory.
 
 See also: [`bob_erase`](#bob_erase).
+
+<a id="tilemap_create"></a>
+
+### `tilemap_create(id, width, height, tile, layers)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `width`, `height`: how many cells wide and high, 1 to 1024.
+- `tile`: each tile's side in pixels: 8, 16 or 32.
+- `layers`: how many layers, 1 to 8.
+
+Creates an empty map at that number; any map already there is freed. Returns `false` with sizes out of range or
+without memory.
+
+See also: [`tilemap_set`](#tilemap_set), [`tilemap_draw`](#tilemap_draw), [`tilemap_load`](#tilemap_load).
+
+<a id="tilemap_load"></a>
+
+### `tilemap_load(id, filename)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: an IFF FORM FMAP file, the one the map editor in Forja or the VS Code extension saves.
+
+Loads it with its layers, its objects and its tileset's name. Returns `false` if it is not a map.
+
+See also: [`tilemap_save`](#tilemap_save), [`tilemap_tileset`](#tilemap_tileset).
+
+<a id="tilemap_save"></a>
+
+### `tilemap_save(id, filename)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: the file.
+
+Saves the map as IFF FORM FMAP. Returns `false` if it cannot be written.
+
+See also: [`tilemap_load`](#tilemap_load).
+
+<a id="tilemap_free"></a>
+
+### `tilemap_free(id)`
+
+- `id`: the map's number, 0 to 7.
+
+Frees the map. They are freed on their own when the program ends.
+
+<a id="tilemap_width"></a>
+
+### `tilemap_width(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its width in cells; 0 if there is no map.
+
+See also: [`tilemap_height`](#tilemap_height).
+
+<a id="tilemap_height"></a>
+
+### `tilemap_height(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its height in cells; 0 if there is no map.
+
+See also: [`tilemap_width`](#tilemap_width).
+
+<a id="tilemap_tile_size"></a>
+
+### `tilemap_tile_size(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns its tiles' side in pixels: 8, 16 or 32.
+
+<a id="tilemap_layers"></a>
+
+### `tilemap_layers(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns how many layers it has.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_get"></a>
+
+### `tilemap_get(id, layer, x, y)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `x`, `y`: the cell, from 0.
+
+Returns what is in the cell: 0 empty; otherwise the tile's number (1 is the tileset's first frame), plus 16384 if it
+is mirrored left to right and 32768 if top to bottom. The tile alone is `v & 16383`. Outside the map, 0. In
+collision layers, anything other than 0 is solid.
+
+See also: [`tilemap_set`](#tilemap_set), [`tilemap_tile_size`](#tilemap_tile_size).
+
+<a id="tilemap_set"></a>
+
+### `tilemap_set(id, layer, x, y, value)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `x`, `y`: the cell.
+- `value`: what to put, as `tilemap_get` gives it; 0 empties it.
+
+Outside the map it does nothing.
+
+See also: [`tilemap_get`](#tilemap_get).
+
+<a id="tilemap_tileset"></a>
+
+### `tilemap_tileset(id)` → `String`
+
+- `id`: the map's number, 0 to 7.
+
+Returns the tileset file's name as stored in the map; `""` if it has none.
+
+See also: [`tilemap_set_tileset`](#tilemap_set_tileset), [`bob_load`](#bob_load).
+
+<a id="tilemap_set_tileset"></a>
+
+### `tilemap_set_tileset(id, filename)`
+
+- `id`: the map's number, 0 to 7.
+- `filename`: the tileset file: an IFF picture with one frame per tile, like the one from Forja's sprite editor.
+
+Stores the tileset's name in the map. It does not load it: load it with `bob_load` and pass it to `tilemap_draw`.
+
+See also: [`tilemap_tileset`](#tilemap_tileset).
+
+<a id="tilemap_layer_name"></a>
+
+### `tilemap_layer_name(id, layer)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Returns the layer's name.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_type"></a>
+
+### `tilemap_layer_type(id, layer)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+Returns its type: 0 tiles. The editor uses other numbers for collision and object layers.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_visible"></a>
+
+### `tilemap_layer_visible(id, layer)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Returns whether the layer shows in the editor. `tilemap_draw` does not look at it.
+
+See also: [`tilemap_layer_set`](#tilemap_layer_set).
+
+<a id="tilemap_layer_set"></a>
+
+### `tilemap_layer_set(id, layer, name, type, visible)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `name`: its name, up to 31 letters.
+- `type`: its type (0 tiles).
+- `visible`: whether it shows in the editor.
+
+See also: [`tilemap_layer_name`](#tilemap_layer_name).
+
+<a id="tilemap_layer_add"></a>
+
+### `tilemap_layer_add(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Adds an empty layer at the end. Returns its number, or -1 if there are already 8.
+
+See also: [`tilemap_layer_remove`](#tilemap_layer_remove).
+
+<a id="tilemap_layer_remove"></a>
+
+### `tilemap_layer_remove(id, layer)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+
+Removes the layer; the ones behind move down one place. Returns `false` if it is the only one.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_layer_move"></a>
+
+### `tilemap_layer_move(id, from, to)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `from`: the layer to move.
+- `to`: its new place; the ones in between shift by one.
+
+See also: [`tilemap_layer_add`](#tilemap_layer_add).
+
+<a id="tilemap_resize"></a>
+
+### `tilemap_resize(id, width, height)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `width`, `height`: the new size in cells.
+
+What fits stays, counting from the top left corner; the new cells are empty. Returns `false` without memory or with
+sizes out of range.
+
+See also: [`tilemap_create`](#tilemap_create).
+
+<a id="tilemap_draw"></a>
+
+### `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- `bob`: the tileset BOB; tile n is its frame n - 1, and each cell is as big as a frame.
+- `tx`, `ty`: the first cell painted.
+- `tw`, `th`: how many cells wide and high.
+- `x`, `y`: where it goes on the `gfx_*` target.
+
+Paints that piece of the layer in one go. Empty cells let what was underneath show. To scroll the level, change
+`tx`, `ty` (cell by cell) or `x`, `y`.
+
+See also: [`tilemap_draw_masked`](#tilemap_draw_masked), [`bob_load`](#bob_load).
+
+<a id="tilemap_draw_masked"></a>
+
+### `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `layer`: the layer, from 0.
+- The rest, as in `tilemap_draw`.
+
+Like `tilemap_draw`, but each tile's colour 0 is also transparent: for front layers, which let the background show
+between their drawings.
+
+See also: [`tilemap_draw`](#tilemap_draw).
+
+<a id="tilemap_objects"></a>
+
+### `tilemap_objects(id)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+
+Returns how many objects the map has.
+
+See also: [`tilemap_object_find`](#tilemap_object_find).
+
+<a id="tilemap_object_add"></a>
+
+### `tilemap_object_add(id, x, y, kind)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `x`, `y`: where, in map pixels.
+- `kind`: its kind, a text: `"player"`, `"coin"`.
+
+Adds an object. Returns its number, or -1 if there are already 256.
+
+See also: [`tilemap_object_find`](#tilemap_object_find), [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_remove"></a>
+
+### `tilemap_object_remove(id, object)` → `Bool`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Removes the object; the ones behind move down one place.
+
+See also: [`tilemap_object_add`](#tilemap_object_add).
+
+<a id="tilemap_object_x"></a>
+
+### `tilemap_object_x(id, object)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its X in map pixels.
+
+See also: [`tilemap_object_y`](#tilemap_object_y).
+
+<a id="tilemap_object_y"></a>
+
+### `tilemap_object_y(id, object)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its Y in map pixels.
+
+See also: [`tilemap_object_x`](#tilemap_object_x).
+
+<a id="tilemap_object_move"></a>
+
+### `tilemap_object_move(id, object, x, y)`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+- `x`, `y`: the new place, in map pixels.
+
+See also: [`tilemap_object_x`](#tilemap_object_x).
+
+<a id="tilemap_object_kind"></a>
+
+### `tilemap_object_kind(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its kind.
+
+See also: [`tilemap_object_find`](#tilemap_object_find).
+
+<a id="tilemap_object_name"></a>
+
+### `tilemap_object_name(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its name.
+
+See also: [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_sprite"></a>
+
+### `tilemap_object_sprite(id, object)` → `String`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+
+Returns its sprite's file; `""` if it has none.
+
+See also: [`tilemap_object_set`](#tilemap_object_set).
+
+<a id="tilemap_object_set"></a>
+
+### `tilemap_object_set(id, object, kind, name, sprite)`
+
+- `id`: the map's number, 0 to 7.
+- `object`: the object's number, from 0.
+- `kind`, `name`: its kind and its name, up to 31 letters each.
+- `sprite`: its sprite's file; `""` none.
+
+See also: [`tilemap_object_add`](#tilemap_object_add).
+
+<a id="tilemap_object_find"></a>
+
+### `tilemap_object_find(id, kind, from)` → `Int`
+
+- `id`: the map's number, 0 to 7.
+- `kind`: the kind to look for.
+- `from`: the object number to start at.
+
+Returns the first object of that kind from `from` on, or -1 if there is none. To find the player:
+`tilemap_object_find(0, "player", 0)`. To go through every enemy, search again from the one found plus one.
+
+See also: [`tilemap_object_add`](#tilemap_object_add), [`tilemap_objects`](#tilemap_objects).
 
 <a id="bob_collision"></a>
 
