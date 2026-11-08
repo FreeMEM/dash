@@ -32,6 +32,20 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.6.2 (2026-11-08)
+
+One compiler fix and two tool changes. What compiled before still does the same.
+
+- **Fix (`./dash`):** an interpolation with more than 16 numbers (`"#{a} #{b} ..."`) got some of them wrong: the
+  last ones overwrote the first. Found in Forja's map editor. `./dash --gcc` already got it right.
+- **Tools:** `tools/emu_run.py --cd FOLDER` mounts that folder as `Proyecto:` and runs the programs in it, so they
+  find their files with a relative path.
+- **VS Code extension:** the `dash.outputFolder` setting picks where the executables go (an idea of Ferrán
+  García), and "Ejecutar en emulador" starts the program in the folder of its `.dash`. It comes with the next
+  version of the extension.
+- The Amiga package brings Forja 0.5: "Ejecutables en:" in the preferences (an idea of Ferrán García).
+- Tested on emulated A1200 (3.1) and A500, both ways.
+
 ### 2.6.1 (2026-11-07)
 
 Two fixes. What compiled before still does the same.

@@ -13,7 +13,7 @@ const net = require('net');
 const { spawn, execFile, execFileSync } = require('child_process');
 const { makeProxy } = require('./debugProxy');
 const { DashDebugAdapter } = require('./dashDebug');
-const { savedFile } = require('./tasks');
+const { savedFile, outputFile, outputFolder } = require('./tasks');
 const { missing } = require('./missing');
 
 /** A TCP port free on this machine (the emulator's bsdsocket listens on the PC's sockets) */
@@ -138,7 +138,7 @@ function setupDebugger(vscode, context, helpers) {
     });
 
     /** The executable for the debugger of a .dash (what F5 and "Preparar para un Amiga real" build) */
-    const debugExe = (file) => path.join(path.dirname(file), 'bin', path.basename(file, '.dash') + '.debug');
+    const debugExe = (file) => outputFile(file, outputFolder(vscode), '.debug');
 
     /* attach: a bgdbserver already running (an Amiga of yours: bgdbserver :2345 prog.debug). gdb goes
        through tools/gdb_relay.py, so it finds the globals (relay: false, straight to target) */

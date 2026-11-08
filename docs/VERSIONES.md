@@ -33,6 +33,20 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.6.2 (2026-11-08)
+
+Un arreglo del compilador y dos cosas de las herramientas. Lo que ya compilaba sigue igual.
+
+- **Arreglo (`./dash`):** una interpolación con más de 16 números (`"#{a} #{b} ..."`) daba algunos mal: los
+  últimos pisaban a los primeros. Salió en el editor de mapas de Forja. Con `./dash --gcc` ya iba bien.
+- **Herramientas:** `tools/emu_run.py --cd CARPETA` monta esa carpeta como `Proyecto:` y ejecuta los programas en
+  ella, así que encuentran sus ficheros con una ruta relativa.
+- **Extensión de VS Code:** ajuste `dash.outputFolder` para elegir dónde van los ejecutables (idea de Ferrán
+  García), y "Ejecutar en emulador" arranca el programa en la carpeta de su `.dash`. Llega con la próxima versión
+  de la extensión.
+- El paquete del Amiga trae Forja 0.5: "Ejecutables en:" en Preferencias (idea de Ferrán García).
+- Probado en A1200 (3.1) y A500 emulados, por los dos caminos.
+
 ### 2.6.1 (2026-11-07)
 
 Dos arreglos. Lo que ya compilaba sigue igual.
