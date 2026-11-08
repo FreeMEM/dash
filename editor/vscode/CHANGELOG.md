@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-11-08)
+
+For Dash 2.6.2 or later: **Ejecutar en emulador** uses `tools/emu_run.py --cd`, new in 2.6.2.
 
 - `dash.outputFolder`: where the executables go when compiling (empty: `bin/` next to the `.dash`, as before);
   also the debugger's build. Like Forja's new "Ejecutables en:" preference (an idea of Ferrán García).
