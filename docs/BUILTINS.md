@@ -453,44 +453,133 @@ Ver también: [`gfx_scroll`](#gfx_scroll), `bitmap_draw_to`.
 
 ## Gráficos avanzados
 
+Lo que usan los juegos: sprites, BOBs, mapas de tiles, el copper y bitmaps fuera de pantalla. Todo se maneja por
+número (`id`), que elige el programa.
+
+**Sprites de hardware** (`sprite_*`): los dibuja el chip de vídeo encima de todo, sin tocar la pantalla, así que
+moverlos no cuesta nada. Necesitan una pantalla propia (`screen_open_custom`), y no van en tarjetas gráficas. Hay 8
+números, del 0 al 7, pero el chip tiene 8 sprites y el puntero del ratón usa uno: caben 7 a la vez, o menos si van
+acoplados. Cada uno mide 16 píxeles de ancho y tiene 3 colores más el transparente. Dos sprites seguidos (0 y 1,
+2 y 3...) comparten sus colores: los del 0 y el 1 son los colores 17 a 19 de la pantalla. `sprite_load_attached` une
+dos para tener 15 colores.
+
+**Sprites por software** (`soft_sprite_*`): imágenes que Dash dibuja en la ventana o la pantalla y quita
+restaurando lo que había detrás. Van en cualquier pantalla, también en tarjetas gráficas. Hasta 16.
+
+**BOBs** (`bob_*`): imágenes de cualquier tamaño y colores, con el color 0 transparente, que se pegan en el
+destino de los `gfx_*` con el blitter. Un BOB puede tener varios fotogramas, uno al lado de otro en la imagen.
+`bob_draw` guarda lo que tapa y `bob_erase` lo devuelve; `bob_paste` solo pinta, para juegos que repintan todo en
+cada fotograma con `screen_double_buffer`. Los BOBs y los bitmaps comparten números, del 0 al 31: un BOB es un
+bitmap con su máscara, y se puede dibujar en él con `bitmap_draw_to`.
+
+**Mapas de tiles** (`tilemap_*`): un nivel hecho de celdas, con capas y objetos, como el que guarda el editor de
+mapas de Forja o de la extensión. Se pinta con los fotogramas de un BOB.
+
+**El copper** (`copper_*`): una lista de instrucciones que cambian registros del chip de vídeo en una línea concreta
+de la pantalla, para degradados de fondo y otros efectos.
+
+**Bitmaps** (`bitmap_*`): imágenes fuera de pantalla, para cargar una imagen IFF, preparar algo sin que se vea y
+copiarlo de golpe.
+
+Las imágenes salen de ficheros IFF ILBM, los que guardan Deluxe Paint, PPaint y el editor de sprites de Forja.
+
+**Ejemplo** (`tests/test_doc_sprites.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Gráficos avanzados: un BOB de dos fotogramas dibujado desde el programa, que se mueve sobre un fondo y choca con
+# otro, y un sprite de hardware hecho fila a fila.
+
+Main
+    screen_open_custom(320, 200, 3, "Sprites")
+    gfx_clear_color(3)                             # el fondo
+
+    bob_create(0, 32, 16, 3)                       # 32 x 16: dos fotogramas cuadrados
+    bitmap_draw_to(0)                              # los gfx_ dibujan en el BOB
+    gfx_pen(1)
+    gfx_circle_fill(7, 7, 6)                       # el fotograma 0
+    gfx_pen(2)
+    gfx_rect(18, 2, 29, 13)                        # el fotograma 1
+    bitmap_draw_screen()                           # y otra vez en la pantalla
+    Print "nave: #{bob_frames(0)} fotogramas de #{bob_width(0)} x #{bob_height(0)}"
+
+    bob_create(1, 16, 16, 3)
+    bitmap_draw_to(1)
+    gfx_pen(4)
+    gfx_circle_fill(7, 7, 6)
+    bitmap_draw_screen()
+
+    bob_pos(1, 100, 100)
+    bob_draw(1)
+    bob_pos(0, 126, 100)                           # 10 píxeles a la derecha del otro
+    bob_draw(0)
+    Print "choque a 10 pixeles: #{bob_collision(0, 1)}"
+    bob_pos(0, 104, 100)
+    bob_draw(0)                                    # quita el de antes y lo pinta en el sitio nuevo
+    Print "choque encima: #{bob_collision(0, 1)}"
+    bob_erase(0)                                   # en orden inverso al que se pintaron
+    bob_erase(1)
+    Print "fondo devuelto: #{gfx_pixel_read(107, 107)}"
+
+    ok = sprite_create(0, 16, 8)
+    fila = 0
+    while fila < 8
+        sprite_set_row(0, fila, 0x3C3C, 0x0FF0)    # colores 1, 2 y 3 del sprite
+        fila = fila + 1
+    end
+    sprite_color(0, 0, 15, 15, 0)
+    sprite_pos(0, 160, 50)
+    sprite_show(0)
+    Print "sprite: #{ok}"
+    time_delay(50)
+
+    sprite_free(0)
+    bob_free(0)
+    bob_free(1)
+    screen_close()
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `sprite_load(id, filename)` | Bool | Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 los suyos (el 0, transparente); FALSE si no se puede |  |
-| `sprite_load_attached(id, filename)` | Bool | Un sprite de 15 colores de una imagen: una pareja de sprites acoplados; los colores 1-15 de la imagen (0 transparente) son los 17-31 de la pantalla. Falso si no puede |  |
-| `sprite_create(id, width, height)` | Bool | Crea un sprite vacío |  |
-| `sprite_pos(id, x, y)` | — | Pone la posición de un sprite |  |
-| `sprite_show(id)` | — | Hace visible un sprite |  |
-| `sprite_hide(id)` | — | Oculta un sprite |  |
-| `sprite_color(id, index, r, g, b)` | — | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada; componentes de 0 a 15) |  |
-| `sprite_load_colors(id, filename)` | Bool | Los colores 1-3 (1-15 en una pareja acoplada) de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
-| `bob_load_colors(filename, first)` | Int | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
-| `sprite_rgb8(id, index, r, g, b)` | — | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada), con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
-| `sprite_frame(id, frame)` | — | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load o sprite_load_attached |  |
-| `sprite_free(id)` | — | Libera la memoria de un sprite |  |
-| `sprite_collision(id1, id2)` | Bool | Mira si chocan dos sprites |  |
-| `sprite_set_row(id, row, plane0, plane1)` | — | Pone una fila de los datos de un sprite (2 planos de bits) |  |
-| `soft_sprite_create(id, width, height, depth)` | Bool | Crea un sprite por software (vale en RTG) |  |
-| `soft_sprite_free(id)` | — | Libera un sprite por software |  |
-| `soft_sprite_pixel(id, x, y, color)` | — | Pone un píxel de un sprite por software |  |
-| `soft_sprite_clear(id, color)` | — | Borra un sprite por software con un color |  |
-| `soft_sprite_row(id, row, plane0, plane1)` | — | Pone una fila del sprite (en el formato de los sprites de hardware) |  |
-| `soft_sprite_show(id)` | — | Enseña un sprite por software |  |
-| `soft_sprite_hide(id)` | — | Oculta un sprite por software |  |
-| `soft_sprite_pos(id, x, y)` | — | Pone la posición de un sprite por software |  |
-| `soft_sprite_x(id)` | Int | La posición X de un sprite por software |  |
-| `soft_sprite_y(id)` | Int | La posición Y de un sprite por software |  |
-| `bob_load(id, filename)` | Bool | Carga un BOB de un fichero |  |
-| `bob_create(id, width, height, depth)` | Bool | Crea un BOB vacío |  |
-| `bob_pos(id, x, y)` | — | Pone la posición de un BOB |  |
-| `bob_draw(id)` | — | Dibuja un BOB |  |
-| `bob_erase(id)` | — | Borra un BOB (deja el fondo como estaba) |  |
-| `bob_frame(id, frame)` | — | Pone el fotograma de la animación de un BOB |  |
-| `bob_frame_width(id, width)` | — | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
-| `bob_width(id)` | Int | El ancho de un fotograma de un BOB (0 si no hay ese BOB) |  |
-| `bob_height(id)` | Int | El alto de un BOB |  |
-| `bob_frames(id)` | Int | Cuántos fotogramas tiene un BOB |  |
-| `bob_paste(id, frame, x, y)` | — | Pinta un fotograma de un BOB en x, y con su máscara (el color 0, transparente), sin guardar lo que hay debajo: para juegos que pintan el fotograma entero cada vez (doble búfer) |  |
-| `bob_free(id)` | — | Libera la memoria de un BOB |  |
+| [`sprite_load(id, filename)`](#sprite_load) | Bool | Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 los suyos (el 0, transparente); FALSE si no se puede |  |
+| [`sprite_load_attached(id, filename)`](#sprite_load_attached) | Bool | Un sprite de 15 colores de una imagen: una pareja de sprites acoplados; los colores 1-15 de la imagen (0 transparente) son los 17-31 de la pantalla. Falso si no puede |  |
+| [`sprite_create(id, width, height)`](#sprite_create) | Bool | Crea un sprite vacío |  |
+| [`sprite_pos(id, x, y)`](#sprite_pos) | — | Pone la posición de un sprite |  |
+| [`sprite_show(id)`](#sprite_show) | — | Hace visible un sprite |  |
+| [`sprite_hide(id)`](#sprite_hide) | — | Oculta un sprite |  |
+| [`sprite_color(id, index, r, g, b)`](#sprite_color) | — | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada; componentes de 0 a 15) |  |
+| [`sprite_load_colors(id, filename)`](#sprite_load_colors) | Bool | Los colores 1-3 (1-15 en una pareja acoplada) de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
+| [`bob_load_colors(filename, first)`](#bob_load_colors) | Int | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
+| [`sprite_rgb8(id, index, r, g, b)`](#sprite_rgb8) | — | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada), con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
+| [`sprite_frame(id, frame)`](#sprite_frame) | — | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load o sprite_load_attached |  |
+| [`sprite_free(id)`](#sprite_free) | — | Libera la memoria de un sprite |  |
+| [`sprite_collision(id1, id2)`](#sprite_collision) | Bool | Mira si chocan dos sprites |  |
+| [`sprite_set_row(id, row, plane0, plane1)`](#sprite_set_row) | — | Pone una fila de los datos de un sprite (2 planos de bits) |  |
+| [`soft_sprite_create(id, width, height, depth)`](#soft_sprite_create) | Bool | Crea un sprite por software (vale en RTG) |  |
+| [`soft_sprite_free(id)`](#soft_sprite_free) | — | Libera un sprite por software |  |
+| [`soft_sprite_pixel(id, x, y, color)`](#soft_sprite_pixel) | — | Pone un píxel de un sprite por software |  |
+| [`soft_sprite_clear(id, color)`](#soft_sprite_clear) | — | Borra un sprite por software con un color |  |
+| [`soft_sprite_row(id, row, plane0, plane1)`](#soft_sprite_row) | — | Pone una fila del sprite (en el formato de los sprites de hardware) |  |
+| [`soft_sprite_show(id)`](#soft_sprite_show) | — | Enseña un sprite por software |  |
+| [`soft_sprite_hide(id)`](#soft_sprite_hide) | — | Oculta un sprite por software |  |
+| [`soft_sprite_pos(id, x, y)`](#soft_sprite_pos) | — | Pone la posición de un sprite por software |  |
+| [`soft_sprite_x(id)`](#soft_sprite_x) | Int | La posición X de un sprite por software |  |
+| [`soft_sprite_y(id)`](#soft_sprite_y) | Int | La posición Y de un sprite por software |  |
+| [`bob_load(id, filename)`](#bob_load) | Bool | Carga un BOB de un fichero |  |
+| [`bob_create(id, width, height, depth)`](#bob_create) | Bool | Crea un BOB vacío |  |
+| [`bob_pos(id, x, y)`](#bob_pos) | — | Pone la posición de un BOB |  |
+| [`bob_draw(id)`](#bob_draw) | — | Dibuja un BOB |  |
+| [`bob_erase(id)`](#bob_erase) | — | Borra un BOB (deja el fondo como estaba) |  |
+| [`bob_frame(id, frame)`](#bob_frame) | — | Pone el fotograma de la animación de un BOB |  |
+| [`bob_frame_width(id, width)`](#bob_frame_width) | — | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
+| [`bob_width(id)`](#bob_width) | Int | El ancho de un fotograma de un BOB (0 si no hay ese BOB) |  |
+| [`bob_height(id)`](#bob_height) | Int | El alto de un BOB |  |
+| [`bob_frames(id)`](#bob_frames) | Int | Cuántos fotogramas tiene un BOB |  |
+| [`bob_paste(id, frame, x, y)`](#bob_paste) | — | Pinta un fotograma de un BOB en x, y con su máscara (el color 0, transparente), sin guardar lo que hay debajo: para juegos que pintan el fotograma entero cada vez (doble búfer) |  |
+| [`bob_free(id)`](#bob_free) | — | Libera la memoria de un BOB |  |
 | `tilemap_create(id, width, height, tile, layers)` | Bool | Un mapa de tiles nuevo en id (el que hubiera se va): ancho x alto celdas (de 1 a 1024 cada lado), tiles cuadrados de 8, 16 o 32 píxeles y de 1 a 8 capas de celdas vacías |  |
 | `tilemap_load(id, filename)` | Bool | Carga en id un mapa de tiles (IFF FORM FMAP, el que guarda el editor de mapas de Forja); falso si no lo es |  |
 | `tilemap_save(id, filename)` | Bool | Guarda un mapa de tiles en IFF FORM FMAP; falso si no se puede |  |
@@ -524,7 +613,7 @@ Ver también: [`gfx_scroll`](#gfx_scroll), `bitmap_draw_to`.
 | `tilemap_object_sprite(id, object)` | String | El fichero del sprite de un objeto ("" si no tiene) |  |
 | `tilemap_object_set(id, object, kind, name, sprite)` | — | Clase, nombre (hasta 31 caracteres cada uno) y fichero del sprite de un objeto |  |
 | `tilemap_object_find(id, kind, from)` | Int | El primer objeto de esa clase desde el número from; -1 si no hay (para encontrar al jugador, o recorrer los enemigos) |  |
-| `bob_collision(id1, id2)` | Bool | Mira si chocan dos BOB |  |
+| [`bob_collision(id1, id2)`](#bob_collision) | Bool | Mira si chocan dos BOB |  |
 | `copper_create(size)` | Bool | Crea una lista del copper |  |
 | `copper_wait(y, x)` | — | Añade una instrucción WAIT del copper |  |
 | `copper_move(reg, value)` | — | Añade una instrucción MOVE del copper |  |
@@ -540,6 +629,423 @@ Ver también: [`gfx_scroll`](#gfx_scroll), `bitmap_draw_to`.
 | `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | — | Copia de un bitmap con máscara |  |
 | `bitmap_draw_to(id)` | — | Dibuja en un bitmap desde ahora |  |
 | `bitmap_draw_screen()` | — | Dibuja en la pantalla desde ahora |  |
+
+<a id="sprite_load"></a>
+
+### `sprite_load(id, filename)` → `Bool`
+
+- `id`: el número del sprite, de 0 a 7.
+- `filename`: una imagen IFF ILBM con los fotogramas de 16 píxeles de ancho uno al lado del otro; el alto de la
+  imagen es el del sprite.
+
+Crea el sprite con la imagen y enseña el primer fotograma (`sprite_frame` cambia de fotograma). Sus colores son los
+1 a 3 de la imagen; el 0 es transparente. No pone los colores: `sprite_load_colors` los toma de la imagen. Devuelve
+`false` si no se puede leer el fichero, no hay pantalla propia o no queda un sprite libre.
+
+Ver también: [`sprite_load_colors`](#sprite_load_colors), [`sprite_frame`](#sprite_frame), [`sprite_pos`](#sprite_pos), [`sprite_load_attached`](#sprite_load_attached).
+
+<a id="sprite_load_attached"></a>
+
+### `sprite_load_attached(id, filename)` → `Bool`
+
+- `id`: el número del sprite, de 0 a 7.
+- `filename`: una imagen IFF ILBM de hasta 16 colores, con los fotogramas de 16 píxeles de ancho.
+
+Como `sprite_load`, pero une dos sprites de hardware para tener 15 colores más el transparente: los colores 1 a 15
+de la imagen se ven con los colores 17 a 31 de la pantalla. Gasta dos sprites. Devuelve `false` si no queda una
+pareja libre.
+
+Ver también: [`sprite_load`](#sprite_load), [`sprite_load_colors`](#sprite_load_colors).
+
+<a id="sprite_create"></a>
+
+### `sprite_create(id, width, height)` → `Bool`
+
+- `id`: el número del sprite, de 0 a 7.
+- `width`: no cuenta: los sprites de hardware miden siempre 16 píxeles de ancho.
+- `height`: el alto en píxeles.
+
+Crea un sprite vacío, transparente. Su dibujo se pone fila a fila con `sprite_set_row`. Devuelve `false` sin
+pantalla propia o si no queda un sprite libre.
+
+Ver también: [`sprite_set_row`](#sprite_set_row), [`sprite_load`](#sprite_load).
+
+<a id="sprite_pos"></a>
+
+### `sprite_pos(id, x, y)`
+
+- `id`: el número del sprite, de 0 a 7.
+- `x`, `y`: la posición de su esquina de arriba a la izquierda en la pantalla.
+
+Mueve el sprite. No hay que borrar ni repintar nada.
+
+Ver también: [`sprite_show`](#sprite_show), [`sprite_collision`](#sprite_collision).
+
+<a id="sprite_show"></a>
+
+### `sprite_show(id)`
+
+- `id`: el número del sprite, de 0 a 7.
+
+Lo enseña en su posición, después de un `sprite_hide`.
+
+Ver también: [`sprite_hide`](#sprite_hide).
+
+<a id="sprite_hide"></a>
+
+### `sprite_hide(id)`
+
+- `id`: el número del sprite, de 0 a 7.
+
+Lo oculta: lo lleva fuera de la pantalla. Sigue siendo suyo.
+
+Ver también: [`sprite_show`](#sprite_show), [`sprite_free`](#sprite_free).
+
+<a id="sprite_color"></a>
+
+### `sprite_color(id, index, r, g, b)`
+
+- `id`: el número del sprite, de 0 a 7.
+- `index`: el color del sprite, de 0 a 2 (sus colores 1 a 3); de 0 a 14 en una pareja acoplada.
+- `r`, `g`, `b`: rojo, verde y azul, de 0 a 15.
+
+Cambia un color del sprite. Lo comparte con el sprite de su pareja (el 0 con el 1, el 2 con el 3...).
+
+Ver también: [`sprite_rgb8`](#sprite_rgb8), [`sprite_load_colors`](#sprite_load_colors).
+
+<a id="sprite_load_colors"></a>
+
+### `sprite_load_colors(id, filename)` → `Bool`
+
+- `id`: el número del sprite, de 0 a 7.
+- `filename`: una imagen IFF con paleta: la del sprite, normalmente.
+
+Pone como colores del sprite los colores 1 a 3 de la paleta de la imagen (1 a 15 en una pareja acoplada).
+Devuelve `false` si el fichero no tiene paleta o el sprite no existe.
+
+Ver también: [`sprite_load`](#sprite_load), [`bob_load_colors`](#bob_load_colors).
+
+<a id="bob_load_colors"></a>
+
+### `bob_load_colors(filename, first)` → `Int`
+
+- `filename`: una imagen IFF con paleta.
+- `first`: desde qué color de la pantalla se ponen.
+
+Copia la paleta de la imagen en la de la pantalla (la propia o la de la ventana), desde el color `first`. Devuelve
+cuántos colores puso, 0 si el fichero no tiene paleta.
+
+Ver también: [`bob_load`](#bob_load), [`gfx_rgb8`](#gfx_rgb8).
+
+<a id="sprite_rgb8"></a>
+
+### `sprite_rgb8(id, index, r, g, b)`
+
+- `id`: el número del sprite, de 0 a 7.
+- `index`: como en `sprite_color`.
+- `r`, `g`, `b`: rojo, verde y azul, de 0 a 255; en OCS y ECS solo cuentan los 4 bits de arriba.
+
+Como `sprite_color`, con 8 bits por componente.
+
+Ver también: [`sprite_color`](#sprite_color).
+
+<a id="sprite_frame"></a>
+
+### `sprite_frame(id, frame)`
+
+- `id`: el número del sprite, de 0 a 7.
+- `frame`: el fotograma, desde 0.
+
+Enseña ese fotograma de un sprite de `sprite_load` o `sprite_load_attached`. Para animarlo, se cambia cada pocos
+fotogramas de pantalla. Un fotograma que no existe no hace nada.
+
+Ver también: [`sprite_load`](#sprite_load).
+
+<a id="sprite_free"></a>
+
+### `sprite_free(id)`
+
+- `id`: el número del sprite, de 0 a 7.
+
+Lo quita y deja libre su sprite de hardware. Al acabar el programa se liberan solos.
+
+Ver también: [`sprite_hide`](#sprite_hide).
+
+<a id="sprite_collision"></a>
+
+### `sprite_collision(id1, id2)` → `Bool`
+
+- `id1`, `id2`: dos sprites.
+
+Devuelve `true` si sus rectángulos (16 píxeles por su alto) se tocan. No mira los píxeles transparentes: para eso,
+los BOBs y `bob_collision`.
+
+Ver también: [`bob_collision`](#bob_collision).
+
+<a id="sprite_set_row"></a>
+
+### `sprite_set_row(id, row, plane0, plane1)`
+
+- `id`: el número del sprite, de 0 a 7.
+- `row`: la fila, desde 0.
+- `plane0`, `plane1`: 16 bits cada uno; el bit de más a la izquierda es el píxel 0. El color de cada píxel es su bit
+  de `plane0` más el doble del de `plane1`: 0 transparente, 1 a 3 los colores del sprite.
+
+Cambia una fila del dibujo del sprite: `sprite_set_row(0, 0, 0xFFFF, 0)` pinta la primera fila con el color 1.
+
+Ver también: [`sprite_create`](#sprite_create).
+
+<a id="soft_sprite_create"></a>
+
+### `soft_sprite_create(id, width, height, depth)` → `Bool`
+
+- `id`: el número del sprite por software, de 0 a 15.
+- `width`, `height`: el tamaño en píxeles.
+- `depth`: la profundidad de su imagen (los colores, como en una pantalla).
+
+Crea un sprite por software vacío, transparente, para el destino actual de los `gfx_*`. Se dibuja con
+`soft_sprite_pixel` o `soft_sprite_row`. Devuelve `false` sin destino o sin memoria.
+
+Ver también: [`soft_sprite_pixel`](#soft_sprite_pixel), [`soft_sprite_show`](#soft_sprite_show), [`soft_sprite_pos`](#soft_sprite_pos).
+
+<a id="soft_sprite_free"></a>
+
+### `soft_sprite_free(id)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+
+Lo quita (devolviendo lo que tapaba) y libera su memoria.
+
+Ver también: [`soft_sprite_hide`](#soft_sprite_hide).
+
+<a id="soft_sprite_pixel"></a>
+
+### `soft_sprite_pixel(id, x, y, color)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+- `x`, `y`: el píxel dentro del sprite.
+- `color`: el color; 0 = transparente.
+
+Ver también: [`soft_sprite_clear`](#soft_sprite_clear).
+
+<a id="soft_sprite_clear"></a>
+
+### `soft_sprite_clear(id, color)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+- `color`: el color; 0 lo deja todo transparente.
+
+Pinta todo el sprite de un color.
+
+Ver también: [`soft_sprite_pixel`](#soft_sprite_pixel).
+
+<a id="soft_sprite_row"></a>
+
+### `soft_sprite_row(id, row, plane0, plane1)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+- `row`: la fila.
+- `plane0`, `plane1`: como en `sprite_set_row`.
+
+Pone los 16 primeros píxeles de una fila con el formato de los sprites de hardware, para usar el mismo dibujo.
+
+Ver también: [`sprite_set_row`](#sprite_set_row).
+
+<a id="soft_sprite_show"></a>
+
+### `soft_sprite_show(id)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+
+Lo dibuja en su posición, guardando lo que tapa.
+
+Ver también: [`soft_sprite_hide`](#soft_sprite_hide).
+
+<a id="soft_sprite_hide"></a>
+
+### `soft_sprite_hide(id)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+
+Lo quita devolviendo lo que tapaba.
+
+Ver también: [`soft_sprite_show`](#soft_sprite_show).
+
+<a id="soft_sprite_pos"></a>
+
+### `soft_sprite_pos(id, x, y)`
+
+- `id`: el número del sprite por software, de 0 a 15.
+- `x`, `y`: la posición nueva.
+
+Lo mueve: si se ve, devuelve el fondo de donde estaba y lo dibuja en el sitio nuevo. Si se dibuja algo debajo
+mientras se ve, quítalo antes con `soft_sprite_hide`: si no, al moverlo vuelve el fondo viejo.
+
+Ver también: [`soft_sprite_x`](#soft_sprite_x), [`soft_sprite_show`](#soft_sprite_show).
+
+<a id="soft_sprite_x"></a>
+
+### `soft_sprite_x(id)` → `Int`
+
+- `id`: el número del sprite por software, de 0 a 15.
+
+Devuelve su posición X.
+
+Ver también: [`soft_sprite_y`](#soft_sprite_y).
+
+<a id="soft_sprite_y"></a>
+
+### `soft_sprite_y(id)` → `Int`
+
+- `id`: el número del sprite por software, de 0 a 15.
+
+Devuelve su posición Y.
+
+Ver también: [`soft_sprite_x`](#soft_sprite_x).
+
+<a id="bob_load"></a>
+
+### `bob_load(id, filename)` → `Bool`
+
+- `id`: el número del BOB, de 0 a 31.
+- `filename`: una imagen IFF ILBM. Si es más ancha que alta y su ancho es múltiplo del alto, son fotogramas
+  cuadrados uno al lado de otro; los del editor de sprites de Forja dicen su ancho de fotograma.
+
+Carga el BOB. Su color 0 es transparente. No pone la paleta: `bob_load_colors`. Devuelve `false` si no se puede
+leer.
+
+Ver también: [`bob_load_colors`](#bob_load_colors), [`bob_draw`](#bob_draw), [`bob_frame_width`](#bob_frame_width).
+
+<a id="bob_create"></a>
+
+### `bob_create(id, width, height, depth)` → `Bool`
+
+- `id`: el número del BOB, de 0 a 31.
+- `width`, `height`: el tamaño de la imagen; si el ancho es múltiplo del alto, salen fotogramas cuadrados.
+- `depth`: la profundidad, de 1 a 8; la de la pantalla, normalmente.
+
+Crea un BOB vacío (todo color 0, transparente). Se dibuja en él con `bitmap_draw_to(id)` y los `gfx_*`, y
+`bitmap_draw_screen()` vuelve a la pantalla.
+
+Ver también: `bitmap_draw_to`, [`bob_draw`](#bob_draw).
+
+<a id="bob_pos"></a>
+
+### `bob_pos(id, x, y)`
+
+- `id`: el número del BOB, de 0 a 31.
+- `x`, `y`: la posición de su esquina en el destino.
+
+Cambia dónde irá; se ve en el siguiente `bob_draw`.
+
+Ver también: [`bob_draw`](#bob_draw).
+
+<a id="bob_draw"></a>
+
+### `bob_draw(id)`
+
+- `id`: el número del BOB, de 0 a 31.
+Lo pinta en su posición y fotograma, guardando antes lo que tapa. Si ya estaba pintado, primero lo quita del sitio
+de antes: para moverlo basta `bob_pos` y `bob_draw`. Con varios BOBs que se tocan, se quitan en orden inverso al
+que se pintaron.
+
+Ver también: [`bob_erase`](#bob_erase), [`bob_paste`](#bob_paste), [`bob_pos`](#bob_pos).
+
+<a id="bob_erase"></a>
+
+### `bob_erase(id)`
+
+- `id`: el número del BOB, de 0 a 31.
+
+Lo quita devolviendo lo que tapaba.
+
+Ver también: [`bob_draw`](#bob_draw).
+
+<a id="bob_frame"></a>
+
+### `bob_frame(id, frame)`
+
+- `id`: el número del BOB, de 0 a 31.
+- `frame`: el fotograma, desde 0; da la vuelta (con 4 fotogramas, el 5 es el 1).
+
+Elige el fotograma del siguiente `bob_draw`.
+
+Ver también: [`bob_frames`](#bob_frames), [`bob_frame_width`](#bob_frame_width).
+
+<a id="bob_frame_width"></a>
+
+### `bob_frame_width(id, width)`
+
+- `id`: el número del BOB, de 0 a 31.
+- `width`: el ancho de cada fotograma en píxeles.
+
+Dice que la imagen es una tira de fotogramas de ese ancho, cuando no son cuadrados.
+
+Ver también: [`bob_frame`](#bob_frame), [`bob_frames`](#bob_frames).
+
+<a id="bob_width"></a>
+
+### `bob_width(id)` → `Int`
+
+- `id`: el número del BOB, de 0 a 31.
+
+Devuelve el ancho de un fotograma; 0 si no hay ese BOB.
+
+Ver también: [`bob_height`](#bob_height).
+
+<a id="bob_height"></a>
+
+### `bob_height(id)` → `Int`
+
+- `id`: el número del BOB, de 0 a 31.
+
+Devuelve el alto; 0 si no hay ese BOB.
+
+Ver también: [`bob_width`](#bob_width).
+
+<a id="bob_frames"></a>
+
+### `bob_frames(id)` → `Int`
+
+- `id`: el número del BOB, de 0 a 31.
+
+Devuelve cuántos fotogramas tiene; 0 si no hay ese BOB.
+
+Ver también: [`bob_frame`](#bob_frame).
+
+<a id="bob_paste"></a>
+
+### `bob_paste(id, frame, x, y)`
+
+- `id`: el número del BOB, de 0 a 31.
+- `frame`: el fotograma.
+- `x`, `y`: dónde.
+
+Pinta ese fotograma en `x`, `y` con su color 0 transparente, sin guardar lo que tapa ni moverlo de donde esté.
+Para juegos que repintan la pantalla entera en cada fotograma, y para dibujar el mismo BOB en muchos sitios.
+
+Ver también: [`bob_draw`](#bob_draw), [`screen_double_buffer`](#screen_double_buffer).
+
+<a id="bob_free"></a>
+
+### `bob_free(id)`
+
+- `id`: el número del BOB, de 0 a 31.
+
+Lo quita de la pantalla si estaba pintado y libera su memoria.
+
+Ver también: [`bob_erase`](#bob_erase).
+
+<a id="bob_collision"></a>
+
+### `bob_collision(id1, id2)` → `Bool`
+
+- `id1`, `id2`: dos BOBs distintos.
+
+Devuelve `true` si se tocan sus píxeles no transparentes, con sus posiciones y fotogramas de ahora. Mira primero
+los rectángulos y luego los píxeles de la parte común.
+
+Ver también: [`sprite_collision`](#sprite_collision).
 
 ## Entrada (teclado, ratón, joystick)
 

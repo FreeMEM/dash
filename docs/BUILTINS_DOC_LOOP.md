@@ -29,7 +29,10 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   `tests/test_doc_mui.dash`.
 - [x] T6b. MUI: la zona de dibujo (`mui_canvas*`), imágenes, combo, barra de desplazamiento, con
   `tests/test_doc_mui_lienzo.dash` (un grupo puede llevar varios ejemplos).
-- [ ] T7. Gráficos avanzados (`GRAPHICS_ADVANCED`, 85): sprites, bobs, bitmaps, copper.
+- [x] T7a. Gráficos avanzados: introducción, sprites de hardware y de software, BOBs, con
+  `tests/test_doc_sprites.dash`.
+- [ ] T7b. Mapas de tiles (`tilemap_*`).
+- [ ] T7c. Copper y bitmaps.
 - [ ] T8. Texto, buffers, sistema y memoria, audio.
 - [ ] T9. El resto de grupos.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
@@ -63,3 +66,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     con `./dash` y no con `./dash --gcc` (error de sintaxis). Los dos caminos deberían hacer lo mismo; sin tocar.
 - 2026-11-08: T6a. MUI, primera tanda (75 funciones). Sin fallos en lo probado.
 - 2026-11-08: T6b. MUI, segunda tanda (29). MUI entero documentado. Sin fallos en lo probado.
+- 2026-11-08: T7a. Sprites y BOBs. Sin fallos en lo probado (fotogramas de un BOB creado, choque por píxeles,
+  fondo devuelto, sprite hecho fila a fila). Visto: `sprite_create` no usa el ancho (siempre 16); documentado.
