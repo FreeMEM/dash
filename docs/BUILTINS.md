@@ -449,7 +449,7 @@ Ver también: [`gfx_pixel`](#gfx_pixel), `buffer_alloc`, `gfx_rgb_draw`.
 Copia un rectángulo del destino a otro sitio del mismo destino. La zona de origen no se borra. Para copiar desde
 un bitmap fuera de pantalla están los `bitmap_*`.
 
-Ver también: [`gfx_scroll`](#gfx_scroll), `bitmap_draw_to`.
+Ver también: [`gfx_scroll`](#gfx_scroll), [`bitmap_draw_to`](#bitmap_draw_to).
 
 ## Gráficos avanzados
 
@@ -592,6 +592,49 @@ Main
 end
 ```
 
+**Ejemplo** (`tests/test_doc_bitmaps.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Bitmaps y copper: un fondo preparado fuera de pantalla y copiado de golpe, guardado en un IFF y vuelto a cargar,
+# y un degradado de fondo con el copper.
+
+Main
+    screen_open_custom(320, 200, 3, "Bitmaps")
+
+    bitmap_create(0, 64, 32, 3)
+    bitmap_draw_to(0)                          # se prepara sin que se vea
+    gfx_clear_color(5)
+    gfx_pen(1)
+    gfx_box(0, 0, 63, 31)
+    bitmap_draw_screen()
+    bitmap_blit(0, 0, 0, 64, 32, 100, 80)      # y se copia de una vez
+    Print "copiado: #{gfx_pixel_read(130, 95)}"
+
+    bitmap_save(0, "RAM:fondo.iff")
+    bitmap_load(1, "RAM:fondo.iff")
+    bitmap_blit(1, 0, 0, 64, 32, 200, 80)
+    Print "guardado y cargado: #{gfx_pixel_read(230, 95)}"
+
+    copper_create(40)                          # un degradado de azul en el color 0
+    y = 0
+    while y < 16
+        copper_wait(y * 12, 0)
+        copper_color(0, y)                     # 0x000 a 0x00F
+        y = y + 1
+    end
+    copper_end()
+    copper_install()
+    time_delay(50)
+
+    copper_free()
+    bitmap_free(0)
+    bitmap_free(1)
+    screen_close()
+    file_delete("RAM:fondo.iff")
+    Print "fin"
+end
+```
+
 **Índice.** Las que tienen enlace están explicadas más abajo.
 
 | Función | Devuelve | Descripción | Estado |
@@ -666,21 +709,21 @@ end
 | [`tilemap_object_set(id, object, kind, name, sprite)`](#tilemap_object_set) | — | Clase, nombre (hasta 31 caracteres cada uno) y fichero del sprite de un objeto |  |
 | [`tilemap_object_find(id, kind, from)`](#tilemap_object_find) | Int | El primer objeto de esa clase desde el número from; -1 si no hay (para encontrar al jugador, o recorrer los enemigos) |  |
 | [`bob_collision(id1, id2)`](#bob_collision) | Bool | Mira si chocan dos BOB |  |
-| `copper_create(size)` | Bool | Crea una lista del copper |  |
-| `copper_wait(y, x)` | — | Añade una instrucción WAIT del copper |  |
-| `copper_move(reg, value)` | — | Añade una instrucción MOVE del copper |  |
-| `copper_color(index, rgb)` | — | Añade un cambio de color del copper |  |
-| `copper_end()` | — | Termina la lista del copper |  |
-| `copper_install()` | — | Pone en marcha la lista del copper |  |
-| `copper_free()` | — | Libera la lista del copper |  |
-| `bitmap_create(id, width, height, depth)` | Bool | Crea un bitmap |  |
-| `bitmap_load(id, filename)` | Bool | Carga un bitmap IFF |  |
-| `bitmap_save(id, filename)` | Bool | Guarda un bitmap IFF |  |
-| `bitmap_free(id)` | — | Libera un bitmap |  |
-| `bitmap_blit(src_id, sx, sy, w, h, dx, dy)` | — | Copia de un bitmap a la pantalla |  |
-| `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | — | Copia de un bitmap con máscara |  |
-| `bitmap_draw_to(id)` | — | Dibuja en un bitmap desde ahora |  |
-| `bitmap_draw_screen()` | — | Dibuja en la pantalla desde ahora |  |
+| [`copper_create(size)`](#copper_create) | Bool | Crea una lista del copper |  |
+| [`copper_wait(y, x)`](#copper_wait) | — | Añade una instrucción WAIT del copper |  |
+| [`copper_move(reg, value)`](#copper_move) | — | Añade una instrucción MOVE del copper |  |
+| [`copper_color(index, rgb)`](#copper_color) | — | Añade un cambio de color del copper |  |
+| [`copper_end()`](#copper_end) | — | Termina la lista del copper |  |
+| [`copper_install()`](#copper_install) | — | Pone en marcha la lista del copper |  |
+| [`copper_free()`](#copper_free) | — | Libera la lista del copper |  |
+| [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Crea un bitmap |  |
+| [`bitmap_load(id, filename)`](#bitmap_load) | Bool | Carga un bitmap IFF |  |
+| [`bitmap_save(id, filename)`](#bitmap_save) | Bool | Guarda un bitmap IFF |  |
+| [`bitmap_free(id)`](#bitmap_free) | — | Libera un bitmap |  |
+| [`bitmap_blit(src_id, sx, sy, w, h, dx, dy)`](#bitmap_blit) | — | Copia de un bitmap a la pantalla |  |
+| [`bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`](#bitmap_blit_mask) | — | Copia de un bitmap con máscara |  |
+| [`bitmap_draw_to(id)`](#bitmap_draw_to) | — | Dibuja en un bitmap desde ahora |  |
+| [`bitmap_draw_screen()`](#bitmap_draw_screen) | — | Dibuja en la pantalla desde ahora |  |
 
 <a id="sprite_load"></a>
 
@@ -963,8 +1006,8 @@ Ver también: [`soft_sprite_x`](#soft_sprite_x).
 - `filename`: una imagen IFF ILBM. Si es más ancha que alta y su ancho es múltiplo del alto, son fotogramas
   cuadrados uno al lado de otro; los del editor de sprites de Forja dicen su ancho de fotograma.
 
-Carga el BOB. Su color 0 es transparente. No pone la paleta: `bob_load_colors`. Devuelve `false` si no se puede
-leer.
+Carga el BOB. Su color 0 es transparente. En una pantalla propia, la paleta pasa a ser la de la imagen; para
+ponerla en otro sitio de la paleta, `bob_load_colors`. Devuelve `false` si no se puede leer.
 
 Ver también: [`bob_load_colors`](#bob_load_colors), [`bob_draw`](#bob_draw), [`bob_frame_width`](#bob_frame_width).
 
@@ -979,7 +1022,7 @@ Ver también: [`bob_load_colors`](#bob_load_colors), [`bob_draw`](#bob_draw), [`
 Crea un BOB vacío (todo color 0, transparente). Se dibuja en él con `bitmap_draw_to(id)` y los `gfx_*`, y
 `bitmap_draw_screen()` vuelve a la pantalla.
 
-Ver también: `bitmap_draw_to`, [`bob_draw`](#bob_draw).
+Ver también: [`bitmap_draw_to`](#bitmap_draw_to), [`bob_draw`](#bob_draw).
 
 <a id="bob_pos"></a>
 
@@ -1468,6 +1511,171 @@ Devuelve `true` si se tocan sus píxeles no transparentes, con sus posiciones y 
 los rectángulos y luego los píxeles de la parte común.
 
 Ver también: [`sprite_collision`](#sprite_collision).
+
+<a id="copper_create"></a>
+
+### `copper_create(size)` → `Bool`
+
+- `size`: cuántas instrucciones caben; 0 = 64. Cada `copper_wait`, `copper_move` o `copper_color` es una.
+
+Empieza una lista del copper vacía; la que hubiera se quita. Después van las instrucciones, `copper_end` y
+`copper_install`. Hay una sola lista. Devuelve `false` sin memoria.
+
+Ver también: [`copper_wait`](#copper_wait), [`copper_color`](#copper_color), [`copper_install`](#copper_install).
+
+<a id="copper_wait"></a>
+
+### `copper_wait(y, x)`
+
+- `y`: la línea de la pantalla, contando desde arriba de la pantalla del programa.
+- `x`: la posición en la línea; 0 = el principio.
+
+El copper espera a que el haz llegue ahí antes de seguir con la lista. Las líneas van en orden: una espera a una
+línea ya pasada no se cumple hasta el siguiente fotograma.
+
+Ver también: [`copper_color`](#copper_color), [`copper_move`](#copper_move).
+
+<a id="copper_move"></a>
+
+### `copper_move(reg, value)`
+
+- `reg`: el registro del chip de vídeo, como desplazamiento desde 0xDFF000: 0x180 es COLOR00.
+- `value`: el valor de 16 bits.
+
+Escribe ese valor en el registro cuando el copper llega a esta instrucción. Para efectos que no son de color; un
+registro equivocado puede estropear la imagen hasta que se quite la lista.
+
+Ver también: [`copper_color`](#copper_color).
+
+<a id="copper_color"></a>
+
+### `copper_color(index, rgb)`
+
+- `index`: el color, de 0 a 31.
+- `rgb`: el color en 12 bits, `0xRGB`: `0xF00` rojo, `0x00F` azul.
+
+Cambia ese color desde la línea de la espera anterior. Varias esperas con un color cada una hacen un degradado de
+fondo.
+
+Ver también: [`copper_wait`](#copper_wait), [`copper_move`](#copper_move).
+
+<a id="copper_end"></a>
+
+### `copper_end()`
+
+Cierra la lista. Va después de la última instrucción y antes de `copper_install`.
+
+Ver también: [`copper_install`](#copper_install).
+
+<a id="copper_install"></a>
+
+### `copper_install()`
+
+Pone la lista en marcha en la pantalla del programa (o en la de la ventana, que puede ser el Workbench: mejor una
+pantalla propia). Funciona por el sistema, sin quitarle el control. Una lista instalada no se cambia: para otra,
+`copper_free` y empezar de nuevo.
+
+Ver también: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
+
+<a id="copper_free"></a>
+
+### `copper_free()`
+
+Quita la lista de la pantalla y libera su memoria. Al acabar el programa se quita sola.
+
+Ver también: [`copper_install`](#copper_install).
+
+<a id="bitmap_create"></a>
+
+### `bitmap_create(id, width, height, depth)` → `Bool`
+
+- `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
+- `width`, `height`: el tamaño en píxeles.
+- `depth`: la profundidad, de 1 a 8.
+
+Crea un bitmap vacío (todo color 0) fuera de pantalla; el que hubiera en ese número se libera. Devuelve `false` con
+medidas fuera de rango o sin memoria.
+
+Ver también: [`bitmap_draw_to`](#bitmap_draw_to), [`bitmap_blit`](#bitmap_blit).
+
+<a id="bitmap_load"></a>
+
+### `bitmap_load(id, filename)` → `Bool`
+
+- `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
+- `filename`: una imagen IFF ILBM, comprimida o no.
+
+La carga en el bitmap. En una pantalla propia, la paleta pasa a ser la de la imagen; el Workbench se queda con la
+suya. Devuelve `false` si no se puede leer o no es un ILBM.
+
+Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_colors), `image_load`.
+
+<a id="bitmap_save"></a>
+
+### `bitmap_save(id, filename)` → `Bool`
+
+- `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
+- `filename`: el fichero.
+
+Lo guarda como IFF ILBM sin comprimir, con la paleta de la pantalla del programa o de la ventana. Devuelve `false`
+si no se puede escribir.
+
+Ver también: [`bitmap_load`](#bitmap_load).
+
+<a id="bitmap_free"></a>
+
+### `bitmap_free(id)`
+
+- `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
+
+Libera el bitmap. Si se estaba dibujando en él, se vuelve a dibujar en la pantalla.
+
+Ver también: [`bitmap_create`](#bitmap_create).
+
+<a id="bitmap_blit"></a>
+
+### `bitmap_blit(src_id, sx, sy, w, h, dx, dy)`
+
+- `src_id`: el bitmap de origen.
+- `sx`, `sy`: la esquina de la parte que se copia, dentro del bitmap.
+- `w`, `h`: su tamaño.
+- `dx`, `dy`: dónde va en el destino de los `gfx_*`.
+
+Copia esa parte del bitmap tal cual, color 0 incluido. Es la forma rápida de poner un fondo o una pantalla
+preparada.
+
+Ver también: [`bitmap_blit_mask`](#bitmap_blit_mask), [`bob_paste`](#bob_paste).
+
+<a id="bitmap_blit_mask"></a>
+
+### `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`
+
+- `src_id`: el bitmap de origen.
+- `mask_id`: un bitmap del mismo ancho que dice dónde se copia: los píxeles con el primer plano a 1 (color impar).
+- `sx`, `sy`, `w`, `h`, `dx`, `dy`: como en `bitmap_blit`.
+
+Copia solo donde la máscara lo dice; lo demás deja ver lo que había. Si los anchos no coinciden, no hace nada. Un
+BOB hace su máscara solo: para imágenes con color 0 transparente es más cómodo `bob_paste`.
+
+Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_paste`](#bob_paste).
+
+<a id="bitmap_draw_to"></a>
+
+### `bitmap_draw_to(id)`
+
+- `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
+Desde ahora los `gfx_*` dibujan en ese bitmap (o BOB) en vez de en la pantalla, hasta `bitmap_draw_screen`. Las
+coordenadas cuentan desde su esquina.
+
+Ver también: [`bitmap_draw_screen`](#bitmap_draw_screen), [`bob_create`](#bob_create).
+
+<a id="bitmap_draw_screen"></a>
+
+### `bitmap_draw_screen()`
+
+Los `gfx_*` vuelven a dibujar donde dibujaban antes del `bitmap_draw_to`: la ventana o la pantalla.
+
+Ver también: [`bitmap_draw_to`](#bitmap_draw_to).
 
 ## Entrada (teclado, ratón, joystick)
 

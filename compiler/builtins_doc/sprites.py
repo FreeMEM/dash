@@ -65,7 +65,7 @@ go.
 
 Pictures come from IFF ILBM files, the ones Deluxe Paint, PPaint and Forja's sprite editor save.
 """,
-        "example": ["tests/test_doc_sprites.dash", "tests/test_doc_tiles.dash"],
+        "example": ["tests/test_doc_sprites.dash", "tests/test_doc_tiles.dash", "tests/test_doc_bitmaps.dash"],
     },
 }
 
@@ -284,14 +284,14 @@ back.
 - `filename`: una imagen IFF ILBM. Si es más ancha que alta y su ancho es múltiplo del alto, son fotogramas
   cuadrados uno al lado de otro; los del editor de sprites de Forja dicen su ancho de fotograma.
 
-Carga el BOB. Su color 0 es transparente. No pone la paleta: `bob_load_colors`. Devuelve `false` si no se puede
-leer.
+Carga el BOB. Su color 0 es transparente. En una pantalla propia, la paleta pasa a ser la de la imagen; para
+ponerla en otro sitio de la paleta, `bob_load_colors`. Devuelve `false` si no se puede leer.
 """, _BOB_EN + """\
 - `filename`: an IFF ILBM picture. If it is wider than tall and its width is a multiple of its height, it holds
   square frames side by side; those from Forja's sprite editor state their frame width.
 
-Loads the BOB. Its colour 0 is transparent. It does not set the palette: `bob_load_colors`. Returns `false` if it
-cannot be read.
+Loads the BOB. Its colour 0 is transparent. On a screen of your own, the palette becomes the picture's; to put it
+elsewhere in the palette, `bob_load_colors`. Returns `false` if it cannot be read.
 """, ["bob_load_colors", "bob_draw", "bob_frame_width"]),
     "bob_create": _f(_BOB_ES + """\
 - `width`, `height`: el tamaño de la imagen; si el ancho es múltiplo del alto, salen fotogramas cuadrados.

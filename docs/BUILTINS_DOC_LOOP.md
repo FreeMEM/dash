@@ -32,7 +32,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T7a. Gráficos avanzados: introducción, sprites de hardware y de software, BOBs, con
   `tests/test_doc_sprites.dash`.
 - [x] T7b. Mapas de tiles (`tilemap_*`), con `tests/test_doc_tiles.dash`.
-- [ ] T7c. Copper y bitmaps.
+- [x] T7c. Copper y bitmaps, con `tests/test_doc_bitmaps.dash`.
 - [ ] T8. Texto, buffers, sistema y memoria, audio.
 - [ ] T9. El resto de grupos.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
@@ -73,3 +73,6 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     primera vez que se pintaba el mapa tras crear o cambiar el BOB: al preparar los espejos se liberaba la copia
     entrelazada del BOB que se estaba usando, y el blitter leía de una dirección nula. Afectaba al primer pintado
     de un nivel con tiles en espejo (en un juego y en el editor de mapas de Forja). `tests/test_tilemap_espejo.dash`.
+- 2026-11-08: T7c. Copper y bitmaps. `bitmap_load` y `bob_load` ponen la paleta de la imagen en una pantalla
+  propia (la descripción corta no lo decía); documentado. El degradado del copper no se ha podido ver: la captura
+  (`tools/amiga/shot.c`) lee la imagen y su paleta, no lo que sale por pantalla.
