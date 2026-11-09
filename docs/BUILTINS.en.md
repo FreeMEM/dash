@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 962 functions, 962 implemented, 0 not implemented.
+Total: 963 functions, 963 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -7723,6 +7723,7 @@ end
 | [`rexx_rc()`](#rexx_rc) | Int | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
 | [`rexx_port(name)`](#rexx_port) | Bool | Opens the program's own ARexx port with that name ("ADDRESS NAME" from ARexx): false if there is one already, or without rexxsyslib.library. Its commands, with rexx_get |  |
 | [`rexx_get()`](#rexx_get) | String | The next command that came to the rexx_port ("" if none): it waits for rexx_reply (the next rexx_get answers it with RC 0) |  |
+| [`rexx_signal()`](#rexx_signal) | Int | Signal mask of the rexx_port port (0 without one): mui_wait_event_signals(rexx_signal()) wakes up when an ARexx command arrives (Tachyon D84) |  |
 | [`rexx_reply(rc, result)`](#rexx_reply) | — | Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT ("": none) |  |
 | [`notify(title, text)`](#notify) | Bool | A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx (port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it starts. False if it got to neither |  |
 | [`ports_read()`](#ports_read) | Int | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
@@ -8005,7 +8006,18 @@ See also: [`rexx_get`](#rexx_get), [`rexx_reply`](#rexx_reply).
 Returns the next command that reached the `rexx_port` port, or `""` if none. It does not wait. Whoever sent it waits
 for the reply: `rexx_reply` (otherwise the next `rexx_get` answers it with RC 0).
 
-See also: [`rexx_reply`](#rexx_reply).
+See also: [`rexx_reply`](#rexx_reply), [`rexx_signal`](#rexx_signal).
+
+<a id="rexx_signal"></a>
+
+### `rexx_signal()` → `Int`
+
+Returns the mask of the signal the program gets when a command reaches the `rexx_port` port, or 0 if it has not been
+opened. It is for waiting for commands without using CPU: `mui_wait_event_signals(rexx_signal())` returns 0 when one
+arrives, and then they are read with `rexx_get`. It combines with other masks with `|`, as in
+`task_signal() | rexx_signal()`. Tachyon asked for it for its ARexx port.
+
+See also: [`rexx_port`](#rexx_port), [`rexx_get`](#rexx_get), [`mui_wait_event_signals`](#mui_wait_event_signals).
 
 <a id="rexx_reply"></a>
 

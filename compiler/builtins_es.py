@@ -545,6 +545,8 @@ DESC_ES = {
                  "hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get",
     "rexx_get": "La siguiente orden que llegó al puerto de rexx_port (\"\" si ninguna): espera su rexx_reply (el siguiente "
                 "rexx_get la contesta con RC 0)",
+    "rexx_signal": "La máscara de señal del puerto de rexx_port (0 sin él): mui_wait_event_signals(rexx_signal()) "
+                   "despierta cuando llega una orden ARexx (Tachyon D84)",
     "rexx_reply": "Contesta la orden de rexx_get: rc (0 bien, 5, 10, 20) y, con 0, result como RESULT (\"\": ninguno)",
     "notify": "Un aviso para el escritorio, con el nombre del programa: a la barra de Trasfondo por ARexx (puerto "
               "TRASFONDO) o, sin ella, a su lista (ENV:Trasfondo.avisos), que enseña al arrancar. False si no llegó a "

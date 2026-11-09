@@ -1052,6 +1052,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] `mui_canvas_take_keys` (2026-11-09): un lienzo MUI recibe las teclas aunque el puntero no esté encima, si
       ningún otro gadget tiene el teclado. Para el editor de Forja: F5 y F10 llegaban solo con el puntero sobre el
       código (lo contó David Martínez). `tests/test_mui_canvas_take_keys.dash`
+- [x] `rexx_signal` (2026-11-09, Tachyon D84): la máscara de la señal del puerto de `rexx_port`, para esperar órdenes
+      ARexx con `mui_wait_event_signals(task_signal() | rexx_signal())` sin que haga falta otro evento.
+      `tests/test_rexx_signal.dash`
 
 ## Notas y Decisiones
 

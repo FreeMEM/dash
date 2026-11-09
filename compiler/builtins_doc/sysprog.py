@@ -207,7 +207,18 @@ la respuesta: `rexx_reply` (si no, el siguiente `rexx_get` la contesta con RC 0)
 """, """\
 Returns the next command that reached the `rexx_port` port, or `""` if none. It does not wait. Whoever sent it waits
 for the reply: `rexx_reply` (otherwise the next `rexx_get` answers it with RC 0).
-""", ["rexx_reply"]),
+""", ["rexx_reply", "rexx_signal"]),
+    "rexx_signal": _f("""\
+Devuelve la máscara de la señal que recibe el programa cuando llega una orden al puerto de `rexx_port`, o 0 si no lo
+ha abierto. Sirve para esperar órdenes sin gastar CPU: `mui_wait_event_signals(rexx_signal())` vuelve con 0 al
+llegar una, y entonces se leen con `rexx_get`. Se suma a otras máscaras con `|`, como
+`task_signal() | rexx_signal()`. Lo pidió Tachyon para su puerto ARexx.
+""", """\
+Returns the mask of the signal the program gets when a command reaches the `rexx_port` port, or 0 if it has not been
+opened. It is for waiting for commands without using CPU: `mui_wait_event_signals(rexx_signal())` returns 0 when one
+arrives, and then they are read with `rexx_get`. It combines with other masks with `|`, as in
+`task_signal() | rexx_signal()`. Tachyon asked for it for its ARexx port.
+""", ["rexx_port", "rexx_get", "mui_wait_event_signals"]),
     "rexx_reply": _f("""\
 - `rc`: 0 bien, 5 aviso, 10 error, 20 fallo.
 - `result`: con `rc` 0, el RESULT que recibe quien la mandó; `""` ninguno.

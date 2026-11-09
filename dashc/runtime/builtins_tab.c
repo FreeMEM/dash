@@ -1435,6 +1435,8 @@ const BuiltinInfo builtin_info[] = {
     {"rexx_reply", 2, 0, 0, 0, 0, 2u},
     {"rexx_send", 2, 3, 0, 0, 0, 3u},
     {"rexx_send", 2, 3, 0, 0, 0, 3u},
+    {"rexx_signal", 0, 1, 1, 0, 0, 0u},
+    {"rexx_signal", 0, 1, 1, 0, 0, 0u},
     {"round", 1, 5, 0, 1, 0, 0u},
     {"round", 1, 5, 0, 1, 0, 0u},
     {"rtg_alloc_bitmap", 3, 1, 1, 0, 0, 0u},
@@ -1926,7 +1928,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1924;
+const int builtin_count = 1926;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

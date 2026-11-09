@@ -6876,6 +6876,11 @@ static BOOL _dash_rexx_port(STRPTR name) {
     return TRUE;
 }
 
+/* The signal mask of the port (0 without one): to wait for its commands with mui_wait_event_signals or Wait */
+static LONG _dash_rexx_signal(void) {
+    return _dash_rexx_host ? (LONG)(1UL << _dash_rexx_host->mp_SigBit) : 0;
+}
+
 /* Answer the command rexx_get gave: rc (0 fine, 5, 10, 20) and, with 0 and if it was asked for, RESULT */
 static void _dash_rexx_reply(LONG rc, STRPTR result) {
     struct RexxMsg *m = _dash_rexx_cur;
