@@ -47,6 +47,8 @@ One new function and two additions to existing ones. What compiled before still 
 - The Amiga package comes with Forja 0.5.2: Help or F1 show the help for the name under the cursor (idea by Javier
   R. Santurde "Tolkien"), and F5, F10 and the other editor keys arrive with the pointer anywhere in the window
   (reported by David Martínez).
+- **Tool:** `tools/paquete_hangar.py` makes, from a drawer and its `paquete.txt`, a program's `.lha` and `.readme`,
+  ready for Aminet and for Hangar.
 - Tested on emulated A1200 (3.1) and A1200 with OS 3.2.
 
 ### 2.6.4 (2026-11-08)

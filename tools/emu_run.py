@@ -477,8 +477,11 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             base = base.replace("volume = 0\n", "").replace("floppy_drive_volume = 0\n", "floppy_drive_volume = 0\n")
         config.write_text(base + extra_config)
 
+        # DASH_EMU_SDL_VIDEO: otro controlador de vídeo de SDL sin ventana; "x11" bajo xvfb-run con el FS-UAE 3.1 de
+        # Ubuntu, que necesita OpenGL y no arranca con "offscreen" (el servidor de Hangar)
         env = dict(os.environ) if window else \
-            dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
+            dict(os.environ, SDL_VIDEODRIVER=os.environ.get("DASH_EMU_SDL_VIDEO", "offscreen"), SDL_AUDIODRIVER="dummy",
+                 ALSOFT_DRIVERS="null")
         transcript = []
         if threading.current_thread() is threading.main_thread():   # (tools/emu_preview.py runs it in a thread)
             for sig in (signal.SIGTERM, signal.SIGHUP):

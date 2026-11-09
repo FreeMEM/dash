@@ -48,6 +48,8 @@ Una función nueva y dos novedades de funciones que ya estaban. Lo que ya compil
 - El paquete del Amiga trae Forja 0.5.2: Help o F1 sacan la ayuda del nombre que hay en el cursor (idea de Javier
   R. Santurde "Tolkien"), y F5, F10 y las demás teclas del editor llegan con el puntero en cualquier sitio de la
   ventana (lo contó David Martínez).
+- **Herramienta:** `tools/paquete_hangar.py` hace, de un cajón y su `paquete.txt`, el `.lha` y el `.readme` de un
+  programa, listos para Aminet y para Hangar.
 - Probado en A1200 (3.1) y A1200 con OS 3.2 emulados.
 
 ### 2.6.4 (2026-11-08)
