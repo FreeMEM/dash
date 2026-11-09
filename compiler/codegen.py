@@ -6687,6 +6687,20 @@ static LONG _dash_fpu_model(void) {
     return 0;
 }
 
+#include <graphics/gfxbase.h>
+/* "AGA" con chips de AGA, "ECS" con Agnus o Denise de ECS, "OCS" si no (GfxBase->ChipRevBits0; un A1200 de
+   FS-UAE da solo GFXF_AA_MLISA, sin Alice ni Lisa) */
+static STRPTR _dash_chipset_model(void) {
+    struct GfxBase *g = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 0);
+    const char *c = "OCS";
+    if (g) {
+        if (g->ChipRevBits0 & (GFXF_AA_ALICE | GFXF_AA_LISA | GFXF_AA_MLISA)) c = "AGA";
+        else if (g->ChipRevBits0 & (GFXF_HR_AGNUS | GFXF_HR_DENISE)) c = "ECS";
+        CloseLibrary((struct Library *)g);
+    }
+    return _dash_str_dup((STRPTR)c, TRUE);
+}
+
 static LONG _dash_library_version(STRPTR name) {
     struct Library *l;
     LONG v;
@@ -25000,6 +25014,8 @@ static {ret_type} {method_name}({params_str}) {{
                 node.value.num_kind = self._num_list(VarRef(name=node.name))   # l = [1, 2] in a [Double]
             elem = self._literal_elem_type(node.value)
             self.var_types[node.name] = f"array:{elem}" if elem else "array"
+            if self._declared_type_of(node.value):
+                self.decl_types[node.name] = self._declared_type_of(node.value)   # [["a", "1"]]: a [[String]]
             self._mark_num_list(node.name, self._num_list(node.value))
             value = self._generate_array_literal(node.value)
             self._assign_object(node.name, "DashArrayLong *", value)
@@ -26637,6 +26653,8 @@ static {ret_type} {method_name}({params_str}) {{
 
         if builtin.list_of:
             self.uses_arrays = True    # it makes a list
+        if builtin.return_type == "STRPTR":
+            self.uses_strings = True   # its text comes from _dash_str_dup (Print locale_language() alone did not link)
         # Include every runtime that defines a name the template uses
         import re
         for name in re.findall(r"\b_dash_\w+", builtin.c_template):
@@ -28013,7 +28031,29 @@ static {ret_type} {method_name}({params_str}) {{
             return value if value is not None else list_elem_type(outer)
         if isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
             return self._declared_list_type(node) or self._declared_dict_type(node)
+        if isinstance(node, ArrayLiteral):
+            # [["a", "40"], ["b", "47"]]: a list of lists, from what it is written with
+            t = self._literal_list_decl(node)
+            return t if list_elem_type(list_elem_type(t)) is not None else None
         return None
+
+    def _literal_list_decl(self, node: ASTNode) -> Optional[str]:
+        """The "[T]" of a list literal whose elements are all Strings, all Ints or all lists of the same type."""
+        if not isinstance(node, ArrayLiteral) or not node.elements:
+            return None
+        kinds = set()
+        for e in node.elements:
+            if isinstance(e, ArrayLiteral):
+                kinds.add(self._literal_list_decl(e))
+            elif isinstance(e, StringLiteral):
+                kinds.add("String")
+            elif isinstance(e, NumberLiteral) and isinstance(e.value, int):
+                kinds.add("Int")
+            else:
+                return None
+        if len(kinds) != 1 or None in kinds:
+            return None
+        return f"[{kinds.pop()}]"
 
     def _list_var_type(self, type_name: Optional[str]) -> Optional[str]:
         """var_types entry for a list type: "[String]" -> "array:string", "[Nodo]" ->

@@ -1,0 +1,126 @@
+# Test: lib/requisitos.dash (la propuesta del usuario, por Tachyon: que los instaladores del universo Dash resuelvan
+# dependencias con Hangar). La línea Requires: del .readme, leída como la lee el servicio de Hangar (sus casos de
+# src/requisitos.rs), Provides:, los campos del .readme y la comprobación en este Amiga. chipset_model, nuevo.
+# expect-c: _dash_chipset_model(
+# expect-out: [cpu 68020] [lib ixemul.library 45.1]
+# expect-out: [os 39]
+# expect-out: [chipset AGA]
+# expect-out: [cpu 68020] [mmu]
+# expect-out: [lib muimaster.library]
+# expect-out: [lib muimaster.library 19] [lib reqtools.library 38]
+# expect-out: [paquete misc/imdb/imdb3_5_bin.lha] [paquete misc/imdb/imdb3_5a_upd.lha]
+# expect-out: [sistema AmigaOS 4]
+# expect-out: [sistema AmigaOS 4]
+# expect-out: [chipset ECS] [chip 1024]
+# expect-out: [memoria 16384] [cpu 68030]
+# expect-out: [red]
+# expect-out: [os 37] [rtg]
+# expect-out: [paquete comm/misc/cddb-lib.lha]
+# expect-out: [paquete comm/net/Charon.lha]
+# expect-out: [red]
+# expect-out: [lib muimaster.library 21] [cpu 68030] [os 40]
+# expect-out: [memoria 1536] [os 47] [lib nlist.mcc]
+# expect-out: MUI 3.8 / un 68020 / AmigaOS 3.1 / 2 MB de chip
+# expect-out: provee: [lib reqtools.library 38] [lib nlist.mcc]
+# expect-out: readme: Tachyon 0.5 | MUI 5, AmiSSL 5.1
+# expect-out: cumple OS 3.0: 1
+# expect-out: cumple V50: 0
+# expect-out: cumple nadaquehay.library: 0
+# expect-out: cumple exec.library: 1
+# expect-out: cumple 64KB: 1
+# expect-out: cumple MMU: -1
+# expect-out: faltan: AmigaOS (exec 50) / nadaquehay.library 3
+# expect-out: chipset conocido: true
+# expect-out: fin
+
+import "lib/requisitos.dash"
+
+func ver(texto: String)
+    t = ""
+    for r in requisitos_leer(texto)
+        x = r.tipo
+        if r.valor != ""
+            x = x + " " + r.valor
+        end
+        if r.version != ""
+            x = x + " " + r.version
+        end
+        if t != ""
+            t = t + " "
+        end
+        t = t + "[" + x + "]"
+    end
+    Print t
+end
+
+func uno(texto: String) -> Requisito
+    return requisitos_leer(texto)[0]
+end
+
+Main
+    # los de src/requisitos.rs de Hangar
+    ver("68020+, ixemul.library 45.1, X11R6 server")
+    ver("OS 3.0 (V39)")
+    ver("Amiga with AGA chipset")
+    ver("a 68020/68851, 68030, 68040 or 68060 with a working MMU")
+    ver("MUI")
+    ver("MUI 3.8, reqtools.library V38")
+    ver("misc/imdb/imdb3_5_bin.lha, misc/imdb/imdb3_5a_upd.lha")
+    ver("AmigaOS 4")
+    ver("OS4 PRE 3 or better")
+    ver("ECS/1MB chip or fast memory")
+    ver("A1200, 16mb fastram. 030/50 or better")
+    ver("bsdsocket.library, asl.library, locale.library")
+    ver("Kickstart 2.04+, Picasso96")
+    ver("http://aminet.net/comm/misc/cddb-lib.lha")
+    ver("comm/net/Charon")
+    ver("AmiTCP/Genesis/Miami/MOSNet")
+    ver("MUI 5, 68030, OS 3.1")
+    # pegados y con decimales
+    ver("1.5 MB, ks3.2+, NList.mcc")
+
+    t = ""
+    for r in requisitos_leer("MUI 3.8, 68020, OS 3.1, 2MB chip")
+        if t != ""
+            t = t + " / "
+        end
+        t = t + requisito_texto(r)
+    end
+    Print t
+
+    t = "provee:"
+    for r in provee_leer("ReqTools.library 38, nlist.mcc, nada")
+        t = t + " [" + r.tipo + " " + r.valor
+        if r.version != ""
+            t = t + " " + r.version
+        end
+        t = t + "]"
+    end
+    Print t
+
+    readme = "Short:        Navegador web\r\nAuthor:       FreeMEM\r\nVersion:      0.5\r\nRequires:     MUI 5, AmiSSL 5.1\r\n"
+    Print "readme: Tachyon " + readme_campo(readme, "version") + " | " + readme_campo(readme, "Requires")
+
+    # en este Amiga (lo mismo en A500, A1200 y 3.2)
+    Print "cumple OS 3.0: " + str_from_int(requisito_cumplido(uno("OS 3.0")), 10)
+    Print "cumple V50: " + str_from_int(requisito_cumplido(uno("V50")), 10)
+    Print "cumple nadaquehay.library: " + str_from_int(requisito_cumplido(uno("nadaquehay.library 3")), 10)
+    Print "cumple exec.library: " + str_from_int(requisito_cumplido(Requisito("lib", "exec.library", "33")), 10)
+    Print "cumple 64KB: " + str_from_int(requisito_cumplido(uno("64KB")), 10)
+    Print "cumple MMU: " + str_from_int(requisito_cumplido(uno("MMU")), 10)
+    t = "faltan:"
+    for r in requisitos_faltan(requisitos_leer("V50, OS 3.0, nadaquehay.library 3, MMU"))
+        if t != "faltan:"
+            t = t + " /"
+        end
+        t = t + " " + requisito_texto(r)
+    end
+    Print t
+    c = chipset_model()
+    if c == "AGA" or c == "ECS" or c == "OCS"
+        Print "chipset conocido: true"
+    else
+        Print "chipset: " + c
+    end
+    Print "fin"
+end

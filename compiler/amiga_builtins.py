@@ -5353,6 +5353,9 @@ TASK_FUNCTIONS = {
     "fpu_model": BuiltinFunc(
         name="fpu_model", params=[], return_type="LONG", c_template="_dash_fpu_model()",
         description="The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one"),
+    "chipset_model": BuiltinFunc(
+        name="chipset_model", params=[], return_type="STRPTR", c_template="_dash_chipset_model()",
+        description="The chipset: \"AGA\", \"ECS\" or \"OCS\""),
     "library_version": BuiltinFunc(
         name="library_version", params=["name"], return_type="LONG", c_template="_dash_library_version(${name})",
         reads_only=True,
@@ -5942,7 +5945,7 @@ def _move(src, names):
 
 SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
-    "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
+    "cpu_model", "fpu_model", "chipset_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
     "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
     "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",

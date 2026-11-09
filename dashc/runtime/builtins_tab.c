@@ -179,6 +179,8 @@ const BuiltinInfo builtin_info[] = {
     {"checkbox_get", 1, 2, 1, 0, 0, 0u},
     {"checkbox_set", 2, 0, 1, 0, 0, 0u},
     {"checkbox_set", 2, 0, 1, 0, 0, 0u},
+    {"chipset_model", 0, 3, 1, 0, 0, 0u},
+    {"chipset_model", 0, 3, 1, 0, 0, 0u},
     {"click_x", 0, 1, 0, 0, 0, 0u},
     {"click_x", 0, 1, 0, 0, 0, 0u},
     {"click_y", 0, 1, 0, 0, 0, 0u},
@@ -1928,7 +1930,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1926;
+const int builtin_count = 1928;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

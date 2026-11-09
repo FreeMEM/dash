@@ -1502,6 +1502,10 @@ class SemanticAnalyzer(ASTVisitor):
         if isinstance(expr, ArrayAccess):   # an element of a list of lists
             inner = list_elem_type(self._declared_list_type(expr.array))
             return inner if list_elem_type(inner) is not None else None
+        if isinstance(expr, ArrayLiteral):
+            # [["a", "40"], ["b", "47"]]: a list of lists of Strings (or of Ints), from what it is written with
+            type_name = self._literal_list_type(expr)
+            return type_name if list_elem_type(list_elem_type(type_name)) is not None else None
         if isinstance(expr, (FunctionCall, MethodCall)):
             type_name = self._call_type(expr)
         elif isinstance(expr, (PropertyAccess, MemberAccess)):
@@ -1513,6 +1517,24 @@ class SemanticAnalyzer(ASTVisitor):
             field = struct.get_field(member) if struct else None
             type_name = field.field_type if field else None
         return type_name if list_elem_type(type_name) is not None else None
+
+    def _literal_list_type(self, expr: ASTNode) -> Optional[str]:
+        """The "[T]" of a list literal whose elements are all Strings, all Ints or all lists of the same type."""
+        if not isinstance(expr, ArrayLiteral) or not expr.elements:
+            return None
+        kinds = set()
+        for e in expr.elements:
+            if isinstance(e, ArrayLiteral):
+                kinds.add(self._literal_list_type(e))
+            elif isinstance(e, StringLiteral):
+                kinds.add("String")
+            elif isinstance(e, NumberLiteral) and isinstance(e.value, int):
+                kinds.add("Int")
+            else:
+                return None
+        if len(kinds) != 1 or None in kinds:
+            return None
+        return f"[{kinds.pop()}]"
 
     @staticmethod
     def _list_decl(type_name: Optional[str]) -> Optional[str]:

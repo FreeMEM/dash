@@ -1,0 +1,17 @@
+Short:        Lenguaje Dash: compilador, IDE, ejemplos
+Author:       FreeMEM
+Type:         dev/lang
+Version:      @VERSION@
+Architecture: m68k-amigaos >= 2.0
+Requires:     OS 2.0
+License:      MIT
+URL:          https://dash.freemem.space
+
+Dash es un lenguaje de alto nivel para AmigaOS 3.x. La orden dash compila un
+programa .dash a un ejecutable del Amiga, en el propio Amiga (68000, AmigaOS
+2.0 o superior). Los programas que hace necesitan Kickstart 3.0.
+
+Trae los ejemplos, la carpeta lib/ de los import (red, JSON, requisitos de
+un paquete), dashgit, y Forja, el entorno de Dash, que pide un 68020 y MUI
+3.8 o 5, e Inferencia. El instalador pone la asignación DASH: y la orden en
+el camino de búsqueda.
