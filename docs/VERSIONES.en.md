@@ -32,6 +32,23 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.7.0 (2026-11-09)
+
+One new function and two additions to existing ones. What compiled before still does the same.
+
+- **New:** `mui_canvas_take_keys(canvas, true)`: a MUI drawing area gets the window's keys even with the pointer away
+  from it, if no other object has the keyboard. It came from Forja's editor, where F5 and F10 only arrived with the
+  pointer over the code (reported by David Martínez).
+- **New:** `bitmap_create` with depth 0 creates a bitmap like the screen being drawn on, a graphics card's too. It
+  is for preparing a drawing out of sight and copying it in one go, without flicker (reported by JaviTecH, for
+  Trasfondo's dock).
+- **Fix:** `font_use` and `font_style` no longer change the font of the program's public screen
+  (`screen_clone_wb`). Window titles showed up in the chosen font.
+- The Amiga package comes with Forja 0.5.2: Help or F1 show the help for the name under the cursor (idea by Javier
+  R. Santurde "Tolkien"), and F5, F10 and the other editor keys arrive with the pointer anywhere in the window
+  (reported by David Martínez).
+- Tested on emulated A1200 (3.1) and A1200 with OS 3.2.
+
 ### 2.6.4 (2026-11-08)
 
 The builtins documentation, expanded, and the fixes that came up while writing it. What compiled before still does
