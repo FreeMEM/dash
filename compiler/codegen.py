@@ -8733,6 +8733,128 @@ static LONG _dash_inflate_used(void) { return dash_zlib_inflate_used(); }
 
 """
 
+    # screen_save_png (JaviTecH, for Trasfondo): the screen in front as a PNG; it reads RTG pixels with
+    # BLEND_RUNTIME and compresses with ZLIB_RUNTIME, which go before it
+    SHOT_RUNTIME = """\
+/* Dash Screenshot Runtime */
+static void _dash_png_be(UBYTE *p, ULONG v) {
+    p[0] = (UBYTE)(v >> 24); p[1] = (UBYTE)(v >> 16); p[2] = (UBYTE)(v >> 8); p[3] = (UBYTE)v;
+}
+
+/* One chunk of the PNG: its length, type, data and CRC */
+static BOOL _dash_png_chunk(BPTR f, CONST_STRPTR type, UBYTE *data, LONG n) {
+    UBYTE head[8], tail[4];
+    ULONG crc;
+    _dash_png_be(head, (ULONG)n);
+    CopyMem((APTR)type, head + 4, 4);
+    crc = dash_zlib_crc32(head + 4, 4, 0);
+    if (n) crc = dash_zlib_crc32(data, n, crc);
+    _dash_png_be(tail, crc);
+    return Write(f, head, 8) == 8 && (!n || Write(f, data, n) == n) && Write(f, tail, 4) == 4;
+}
+
+/* The screen's pixels as the PNG's rows: a 0 (no filter) and w RGB24 pixels each. High/true colour in one read
+   (Picasso96 or CyberGraphX); a standard (planar) bitmap plane by plane, each row copied to Fast RAM first
+   (reading Chip RAM byte by byte is slow), with its palette; an RTG one of 8 bits or less, pixel by pixel. */
+static BOOL _dash_shot_read(struct Screen *sc, UBYTE *raw, LONG w, LONG h) {
+    struct BitMap *bm = sc->RastPort.BitMap;
+    LONG row = 1 + w * 3, x, y, p, depth = GetBitMapAttr(bm, BMA_DEPTH), n;
+    ULONG pal[256 * 3];
+    UBYTE *line, *d;
+    if (_dash_blend_truecolor(&sc->RastPort)) {
+        _dash_rgb_block_rp(&sc->RastPort, FALSE, raw + 1, row, 0, 0, w, h);
+        for (y = 0; y < h; y++) raw[y * row] = 0;
+        return TRUE;
+    }
+    if (depth > 8) return FALSE;
+    n = 1L << depth;
+    GetRGB32(sc->ViewPort.ColorMap, 0, n, pal);
+    if (!(GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD)) {
+        for (y = 0; y < h; y++) {
+            d = raw + y * row;
+            *d++ = 0;
+            for (x = 0; x < w; x++, d += 3) {
+                LONG pen = ReadPixel(&sc->RastPort, x, y) & (n - 1);
+                d[0] = (UBYTE)(pal[pen * 3] >> 24); d[1] = (UBYTE)(pal[pen * 3 + 1] >> 24); d[2] = (UBYTE)(pal[pen * 3 + 2] >> 24);
+            }
+        }
+        return TRUE;
+    }
+    {
+        LONG bpr = (w + 7) >> 3;
+        UBYTE idx[8];
+        if (!(line = (UBYTE *)AllocVec(bpr * depth, MEMF_ANY))) return FALSE;
+        for (y = 0; y < h; y++) {
+            for (p = 0; p < depth; p++) CopyMem(bm->Planes[p] + y * bm->BytesPerRow, line + p * bpr, bpr);
+            d = raw + y * row;
+            *d++ = 0;
+            for (x = 0; x < w; x += 8) {
+                LONG k, pen, m = w - x < 8 ? w - x : 8;
+                for (k = 0; k < 8; k++) idx[k] = 0;
+                for (p = 0; p < depth; p++) {
+                    UBYTE b = line[p * bpr + (x >> 3)];
+                    for (k = 0; k < 8; k++) idx[k] |= ((b >> (7 - k)) & 1) << p;
+                }
+                for (k = 0; k < m; k++, d += 3) {
+                    pen = idx[k];
+                    d[0] = (UBYTE)(pal[pen * 3] >> 24); d[1] = (UBYTE)(pal[pen * 3 + 1] >> 24); d[2] = (UBYTE)(pal[pen * 3 + 2] >> 24);
+                }
+            }
+        }
+        FreeVec(line);
+    }
+    return TRUE;
+}
+
+/* The screen in front as a PNG (8 bits per colour, RGB). Intuition stays locked only while the pixels are read.
+   FALSE without a screen, memory or the file */
+static BOOL _dash_screen_save_png(STRPTR name) {
+    static const UBYTE sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    struct Screen *sc;
+    ULONG lock;
+    LONG w = 0, h = 0, row, n, max, z;
+    UBYTE *raw, *zbuf, ihdr[13];
+    BPTR f;
+    BOOL ok = FALSE;
+    if (!name || !*name) return FALSE;
+    lock = LockIBase(0);
+    if ((sc = IntuitionBase->FirstScreen)) { w = sc->Width; h = sc->Height; }
+    UnlockIBase(lock);
+    if (w <= 0 || h <= 0) return FALSE;
+    row = 1 + w * 3;
+    n = row * h;
+    if (!(raw = (UBYTE *)AllocVec(n, MEMF_ANY))) return FALSE;
+    lock = LockIBase(0);
+    if (IntuitionBase->FirstScreen == sc && sc->Width == w && sc->Height == h) ok = _dash_shot_read(sc, raw, w, h);
+    UnlockIBase(lock);
+    if (ok) {
+        ok = FALSE;
+        max = n + n / 8 + 1024;
+        if ((zbuf = (UBYTE *)AllocVec(max + 6, MEMF_ANY))) {
+            /* zlib's stream: its 2-byte header, the raw deflate, the Adler-32 of the rows */
+            if ((z = dash_zlib_deflate(raw, n, zbuf + 2, max, 6)) > 0) {
+                zbuf[0] = 0x78; zbuf[1] = 0x9C;
+                _dash_png_be(zbuf + 2 + z, dash_zlib_adler32(raw, n, 1));
+                _dash_png_be(ihdr, (ULONG)w);
+                _dash_png_be(ihdr + 4, (ULONG)h);
+                ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = ihdr[11] = ihdr[12] = 0;
+                if ((f = Open((CONST_STRPTR)name, MODE_NEWFILE))) {
+                    ok = Write(f, (APTR)sig, 8) == 8 && _dash_png_chunk(f, (CONST_STRPTR)"IHDR", ihdr, 13) &&
+                         _dash_png_chunk(f, (CONST_STRPTR)"IDAT", zbuf, z + 6) &&
+                         _dash_png_chunk(f, (CONST_STRPTR)"IEND", NULL, 0);
+                    Close(f);
+                    if (!ok) DeleteFile((CONST_STRPTR)name);
+                }
+            }
+            FreeVec(zbuf);
+        }
+    }
+    FreeVec(raw);
+    return ok;
+}
+
+"""
+
     # Dash 2.0: connections that go on in a task of their own (what Tachyon's lib/red.dash did with @native)
     NETBG_RUNTIME = """\
 /* Dash background network runtime: net_bg_open asks for a connection and a task of its own (task_start's)
@@ -22899,6 +23021,7 @@ _RUNTIME_FLAGS = [
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("SHOT_RUNTIME", "uses_shot"),          # screen_save_png (JaviTecH)
     ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
     ("FONTWEB_RUNTIME", "uses_fontweb"),    # Dash 2.0: font_from_ttf
     ("NETBG_RUNTIME", "uses_netbg"),        # Dash 2.0: net_bg_*
@@ -23242,6 +23365,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
+        self.uses_shot: bool = False     # screen_save_png (SHOT_RUNTIME)
         self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
         self.uses_fontweb: bool = False  # font_from_ttf (FONTWEB_RUNTIME, Dash 2.0)
         self.uses_netbg: bool = False    # net_bg_* (NETBG_RUNTIME, Dash 2.0): with NET and TASK
@@ -23612,6 +23736,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BASE64_RUNTIME)
         if self.uses_zlib:
             parts.append(CTemplates.ZLIB_RUNTIME)
+        if self.uses_shot:
+            parts.append(CTemplates.SHOT_RUNTIME)
         if self.uses_imgdec:
             parts.append(CTemplates.IMGDEC_RUNTIME)
         if self.uses_fontweb:
@@ -26671,6 +26797,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME
         if self.uses_runcap:
             self.uses_strings = True   # run_capture, in the same runtime as run_start, makes texts (_dash_str_dup)
+        if self.uses_shot:
+            self.uses_blend = True     # SHOT_RUNTIME reads RTG pixels with BLEND_RUNTIME's _dash_rgb_block_rp
+            self.uses_zlib = True      # and compresses with ZLIB_RUNTIME
+            self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
         if self.uses_icons:

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 964 functions, 964 implemented, 0 not implemented.
+Total: 965 functions, 965 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -8971,6 +8971,7 @@ reading the screen's colours. With the `input_*` functions, to drive another pro
 | [`screen_pixel(x, y)`](#screen_pixel) | Int | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
 | [`screen_pixel_rgb(x, y)`](#screen_pixel_rgb) | Int | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
 | [`screen_pen_rgb(n)`](#screen_pen_rgb) | Int | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
+| [`screen_save_png(filename)`](#screen_save_png) | Bool | Save the screen in front, as it is seen, to a PNG file (a graphics card's too): false without memory or if the file cannot be written |  |
 | [`cx_send(name, command)`](#cx_send) | Int | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
 
 <a id="window_find"></a>
@@ -9078,6 +9079,19 @@ See also: [`screen_pixel`](#screen_pixel).
 Returns its colour as `0xRRGGBB`, or -1 if there is no such pen. So a program can look like the Workbench.
 
 See also: [`color_pen`](#color_pen).
+
+<a id="screen_save_png"></a>
+
+### `screen_save_png(filename)` → `Bool`
+
+- `filename`: the file, for example `"RAM:shot.png"`.
+
+Saves the front screen as it is seen, windows included, to a true colour PNG picture. It works for a screen with a
+palette and for a graphics card's. Intuition waits while the pixels are read; then the picture is compressed and
+written. It needs memory for the whole picture twice: about 5 MB for 1024x768. Returns `false` without memory or if
+the file cannot be written. A HAM screen does not come out with its colours.
+
+See also: [`screen_pixel_rgb`](#screen_pixel_rgb), [`bitmap_save`](#bitmap_save).
 
 <a id="cx_send"></a>
 

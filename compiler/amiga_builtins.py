@@ -5770,6 +5770,11 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_screen_pixel_rgb(${x}, ${y})", needs_gfx=True, reads_only=True,
         description="The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside "
                     "it. What is behind a window before it opens"),
+    "screen_save_png": BuiltinFunc(
+        name="screen_save_png", params=["filename"], return_type="BOOL",
+        c_template="_dash_screen_save_png(${filename})", needs_gfx=True, reads_only=True,
+        description="Save the screen in front, as it is seen, to a PNG file (a graphics card's too): false without "
+                    "memory or if the file cannot be written"),
     "cx_send": BuiltinFunc(
         name="cx_send", params=["name", "command"], return_type="LONG", c_template="_dash_cx_send(${name}, ${command})",
         reads_only=True,
@@ -5962,7 +5967,7 @@ TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_t
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
     "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
-    "gadget_selected", "screen_pixel", "screen_pixel_rgb", "screen_pen_rgb", "cx_send"])
+    "gadget_selected", "screen_pixel", "screen_pixel_rgb", "screen_pen_rgb", "screen_save_png", "cx_send"])
 
 # =============================================================================
 # DashOS (docs/AARCH64_LOOP.md, A7): channels, handles, timers, memory objects, processes and groups of the

@@ -1064,6 +1064,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       texto, solo en un programa (`Print locale_language()`), no enlazaba. `tests/test_requisitos.dash`,
       `tests/test_lista_listas_literal.dash`, `tests/test_chipset_model.dash`
 
+- [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
+      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`
 ## Notas y Decisiones
 
 ### Decisiones tomadas:

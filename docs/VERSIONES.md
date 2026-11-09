@@ -33,6 +33,22 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.8.0 (2026-11-09)
+
+Dos funciones nuevas y dos arreglos. Lo que ya compilaba sigue igual.
+
+- **Nuevo:** `screen_save_png(fichero)` guarda la pantalla de delante, tal como se ve, en un PNG de color verdadero.
+  Vale para pantallas con paleta y para las de una tarjeta gráfica. Da `false` si falta memoria o no se puede
+  escribir. Las pantallas HAM no salen con sus colores. Salió para las capturas de Trasfondo (lo pidió JaviTecH).
+- **Nuevo:** `rexx_signal()` da la señal del puerto ARexx de `rexx_port`, para esperar sus órdenes con
+  `mui_wait_event_signals(task_signal() | rexx_signal())` sin que haga falta otro evento (para Tachyon).
+- **Arreglo:** `./dash` hacía ejecutables que el Amiga no cargaba ("file is not executable") cuando un programa muy
+  grande tenía más de 65535 referencias hacia un mismo trozo de sí mismo. Lo vio Tachyon.
+- `./dash --help` explica `--cpu` y `--fpu`: los valores, que por defecto es para 68000 y que un programa hecho para
+  otra CPU o con FPU no arranca en un Amiga inferior.
+- **Herramienta:** `tools/emu_run.py` elige el vídeo sin ventana con `DASH_EMU_SDL_VIDEO`, para el FS-UAE de Ubuntu.
+- Probado en A500, A1200 (3.1), A1200 con OS 3.2 y en el Amiga como CoffinOS con tarjeta gráfica, emulados.
+
 ### 2.7.0 (2026-11-09)
 
 Una función nueva y dos novedades de funciones que ya estaban. Lo que ya compilaba sigue igual.
