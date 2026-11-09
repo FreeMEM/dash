@@ -1,0 +1,23 @@
+# Test: una lista de listas escrita a mano ([["a", "40"], ["b", "47"]]) es una [[String]]: sus elementos son textos
+# al unirlos y en Int(). Por C daba la dirección del texto (salió en lib/requisitos.dash; el directo ya lo hacía bien).
+# expect-out: a 40
+# expect-out: b 47
+# expect-out: b igual
+# expect-out: 7 x
+# expect-out: suma 9
+
+Main
+    for par in [["a", "40"], ["b", "47"]]
+        Print par[0] + " " + str_from_int(Int(par[1]), 10)
+        if par[0] == "b"
+            Print "b igual"
+        end
+    end
+    t = [["x", "7"]]
+    Print str_from_int(Int(t[0][1]), 10) + " " + t[0][0]
+    n = 0
+    for fila in [[1, 2], [3, 3]]
+        n = n + fila[0] + fila[1]
+    end
+    Print "suma " + str_from_int(n, 10)
+end

@@ -1055,6 +1055,14 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] `rexx_signal` (2026-11-09, Tachyon D84): la máscara de la señal del puerto de `rexx_port`, para esperar órdenes
       ARexx con `mui_wait_event_signals(task_signal() | rexx_signal())` sin que haga falta otro evento.
       `tests/test_rexx_signal.dash`
+- [x] `lib/requisitos.dash` (2026-11-09, propuesta del usuario, por Tachyon): lo que necesita un programa, de la
+      línea `Requires:` de su `.readme` (el manifiesto de Hangar), leída como la lee el servicio de Hangar, y
+      comprobada en el Amiga (`requisitos_faltan`); `Provides:` con `provee_leer`. Para que los instaladores y
+      actualizadores del universo Dash pidan a Hangar lo que falta. Builtin nuevo `chipset_model` ("AGA", "ECS",
+      "OCS"). El paquete de Dash lleva su `Dash.readme` (`paquete/paquete.txt`). Arreglos que salieron: por C, una
+      lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de textos; y un builtin que devuelve un
+      texto, solo en un programa (`Print locale_language()`), no enlazaba. `tests/test_requisitos.dash`,
+      `tests/test_lista_listas_literal.dash`, `tests/test_chipset_model.dash`
 
 - [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
       gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`

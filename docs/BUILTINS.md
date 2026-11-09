@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 964 funciones, 964 implementadas, 0 sin implementar.
+Total: 965 funciones, 965 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -7702,6 +7702,7 @@ end
 | [`locale_language()`](#locale_language) | String | El primer idioma preferido del usuario en las preferencias de Locale ("español"); "" si no hay |  |
 | [`cpu_model()`](#cpu_model) | Int | El procesador: 68000, 68010, 68020, 68030, 68040 o 68060 |  |
 | [`fpu_model()`](#fpu_model) | Int | La FPU: 68881, 68882, 68040 o 68060 (la del procesador); 0 si no hay |  |
+| [`chipset_model()`](#chipset_model) | String | El chipset: "AGA", "ECS" u "OCS" |  |
 | [`library_version(name)`](#library_version) | Int | La versión de una librería ("muimaster.library"), cargándola si no está en memoria; -1 si no está |  |
 | [`library_revision(name)`](#library_revision) | Int | La revisión de una librería (el 3 de 47.3), como library_version; -1 si no está |  |
 | [`resident_version(name)`](#resident_version) | Int | La versión de un módulo residente del sistema (FindResident: "MorphOS" dice que el programa corre en MorphOS); -1 si no hay |  |
@@ -7818,6 +7819,16 @@ Ver también: [`fpu_model`](#fpu_model).
 Devuelve el coprocesador matemático: 68881, 68882, 68040 o 68060 (el del procesador); 0 si no hay.
 
 Ver también: [`cpu_model`](#cpu_model).
+
+<a id="chipset_model"></a>
+
+### `chipset_model()` → `String`
+
+Devuelve el chipset del Amiga: `"AGA"` (A1200, A4000, CD32), `"ECS"` (A500+, A600, A3000) u `"OCS"` (los primeros
+A500 y A2000). Un A500 con Agnus de ECS y Denise antigua da `"ECS"`. Para avisar antes de abrir una pantalla de 256
+colores en un Amiga que no puede.
+
+Ver también: [`cpu_model`](#cpu_model), [`fpu_model`](#fpu_model).
 
 <a id="library_version"></a>
 

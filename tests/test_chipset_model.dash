@@ -1,0 +1,7 @@
+# Test: chipset_model (para lib/requisitos.dash): "AGA" en el A1200, "OCS" en el A500 emulado. Solo, sin otro texto
+# en el programa: un builtin que devuelve un texto mete el runtime de textos (Print locale_language() no enlazaba).
+# expect-c: _dash_chipset_model(
+
+Main
+    Print chipset_model()
+end

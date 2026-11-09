@@ -591,6 +591,7 @@ DESC_ES = {
     "locale_language": "El primer idioma preferido del usuario en las preferencias de Locale (\"español\"); \"\" si no "
                        "hay",
     "cpu_model": "El procesador: 68000, 68010, 68020, 68030, 68040 o 68060",
+    "chipset_model": "El chipset: \"AGA\", \"ECS\" u \"OCS\"",
     "fpu_model": "La FPU: 68881, 68882, 68040 o 68060 (la del procesador); 0 si no hay",
     "library_version": "La versión de una librería (\"muimaster.library\"), cargándola si no está en memoria; -1 si no "
                        "está",

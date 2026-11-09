@@ -1,0 +1,552 @@
+# ========================================
+# Lo que necesita un programa, comprobado en este Amiga
+# ========================================
+#
+#   import "lib/requisitos.dash"
+#   reqs = readme_requisitos("PROGDIR:Tachyon.readme")   # la línea Requires: del .readme
+#   for r in requisitos_faltan(reqs)
+#       Print "Falta: " + requisito_texto(r)             # "MUI 3.8", "un 68020", "AmigaOS 3.1"
+#   end
+#
+# El formato es el manifiesto de Hangar: el .readme de Aminet con sus campos (Requires:, y Provides: para lo que
+# trae un paquete). requisitos_leer entiende la línea Requires: igual que el servicio de Hangar (src/requisitos.rs):
+# texto libre como "68020+, MUI 3.8, reqtools.library 38, OS 3.1, 2MB chip". Los tipos son los de su API ("nec"):
+#
+#   cpu (68020...)   fpu   mmu   chipset (AGA, ECS)   rtg   os (versión de exec: 39 = 3.0, 40 = 3.1, 47 = 3.2)
+#   memoria, chip (en KB)   lib (nombre y versión: también device, datatype y clases MUI)   red (pila TCP/IP)
+#   paquete (otro de Aminet, por su ruta)   sistema (es de otro: AmigaOS 4, MorphOS, AROS)
+
+struct Requisito
+    tipo: String
+    valor: String
+    version: String
+end
+
+const _REQ_DEL_SISTEMA = " exec dos intuition graphics layers utility icon workbench diskfont gadtools asl commodities datatypes iffparse keymap locale lowlevel mathffp mathtrans mathieeedoubbas mathieeedoubtrans mathieeesingbas mathieeesingtrans nonvolatile realtime rexxsyslib rexxsupport amigaguide bullet expansion console input keyboard timer trackdisk audio gameport serial parallel printer scsi ramdrive picture sound text ascii animation translator narrator camd "
+const _REQ_CAJONES = " biz comm demo dev disk docs driver game gfx hard misc mods mus pix text util "
+
+# ¿Está la palabra en la lista (separada por espacios)?
+func _req_en(lista: String, w: String) -> Bool
+    return w != "" and str_find(w, " ") < 0 and str_contains(lista, " " + w + " ")
+end
+
+func _req_digito(c: Int) -> Bool
+    return c >= 48 and c <= 57
+end
+
+# Letras (también las de Latin-1), cifras y . _ - / +
+func _req_de_palabra(c: Int) -> Bool
+    if _req_digito(c) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c >= 192
+        return true
+    end
+    return c == 46 or c == 95 or c == 45 or c == 47 or c == 43
+end
+
+func _req_quitar_detras(w: String, quitar: String) -> String
+    while w != "" and str_contains(quitar, w[w.length - 1:])
+        w = w[:w.length - 1]
+    end
+    return w
+end
+
+func _req_quitar_delante(w: String, quitar: String) -> String
+    while w != "" and str_contains(quitar, w[:1])
+        w = w[1:]
+    end
+    return w
+end
+
+# "util/libs/x.lha": tres partes y la primera, un cajón de Aminet
+func _req_ruta_aminet(l: String) -> Bool
+    p = str_split(l, "/")
+    return p.length == 3 and _req_en(_REQ_CAJONES, p[0]) and p[1] != "" and p[2].length > 1
+end
+
+# Las palabras del texto: "68020/68851" son dos; una ruta de Aminet va entera
+func _req_palabras(t: String) -> [String]
+    t = str_replace(t, "https://aminet.net/", " ")
+    t = str_replace(t, "http://aminet.net/", " ")
+    t = str_replace(t, "aminet.net/", " ")
+    var r: [String] = []
+    i = 0
+    n = t.length
+    while i <= n
+        desde = i
+        while i < n and _req_de_palabra(str_code(t, i))
+            i = i + 1
+        end
+        if i > desde
+            w = _req_quitar_detras(t[desde:i], ".-")
+            if w != ""
+                if _req_ruta_aminet(str_lower(w))
+                    r.push(w)
+                else
+                    for x in str_split(w, "/")
+                        if x != ""
+                            r.push(x)
+                        end
+                    end
+                end
+            end
+        end
+        i = i + 1
+    end
+    return r
+end
+
+# Solo cifras (y al menos una)
+func _req_numero(w: String) -> Bool
+    if w == ""
+        return false
+    end
+    for i in (0..w.length - 1)
+        if not _req_digito(str_code(w, i))
+            return false
+        end
+    end
+    return true
+end
+
+# "45.1", "v38": una versión
+func _req_es_version(w: String) -> Bool
+    w = _req_quitar_delante(w, "vV")
+    if w == "" or not _req_digito(str_code(w, 0))
+        return false
+    end
+    for i in (0..w.length - 1)
+        c = str_code(w, i)
+        if not _req_digito(c) and c != 46
+            return false
+        end
+    end
+    return true
+end
+
+# "3.1" -> 40, "2.04" -> 37: la versión de exec de una del sistema; 0 si no lo es
+func _req_exec_de(v: String) -> Int
+    if v == "1.2"
+        return 33
+    elif v == "1.3"
+        return 34
+    elif v == "2.0" or v == "2" or v == "2.x"
+        return 36
+    elif v == "2.04" or v == "2.05" or v == "2.1"
+        return 37
+    elif v == "3.0" or v == "3" or v == "3.x"
+        return 39
+    elif v == "3.1"
+        return 40
+    elif v == "3.5"
+        return 44
+    elif v == "3.9"
+        return 45
+    elif v == "3.1.4"
+        return 46
+    elif v == "3.2" or v == "3.2.1" or v == "3.2.2" or v == "3.2.3"
+        return 47
+    end
+    return 0
+end
+
+# "68020", "020+", "mc68030": el procesador; 0 si no lo es
+func _req_cpu(w: String) -> Int
+    w = _req_quitar_detras(w, "+")
+    if str_starts(w, "mc")
+        w = w[2:]
+    end
+    if w == "68020" or w == "020" or w == "68ec020"
+        return 68020
+    elif w == "68030" or w == "030" or w == "68ec030"
+        return 68030
+    elif w == "68040" or w == "040" or w == "68lc040"
+        return 68040
+    elif w == "68060" or w == "060" or w == "68lc060"
+        return 68060
+    end
+    return 0
+end
+
+# "2mb", "512k", "1.5 MB" (con la siguiente palabra): los KB, entre 64 KB y 2 GB; 0 si no es memoria
+func _req_memoria(w: String, sig: String) -> Int
+    p = 0
+    while p < w.length and (_req_digito(str_code(w, p)) or str_code(w, p) == 46)
+        p = p + 1
+    end
+    if p == 0
+        return 0
+    end
+    num = w[:p]
+    unidad = sig
+    if p < w.length
+        unidad = w[p:]
+    end
+    # el número: entero y, si lleva, decimales
+    partes = str_split(num, ".")
+    if partes.length > 2 or partes[0] == ""
+        return 0
+    end
+    entero = Int(partes[0])
+    dec = 0
+    div = 1
+    if partes.length == 2 and partes[1] != ""
+        d = partes[1]
+        if d.length > 3
+            d = d[:3]
+        end
+        dec = Int(d)
+        for k in (1..d.length)
+            div = div * 10
+        end
+    end
+    kb = 0
+    if unidad == "mb" or unidad == "meg" or unidad == "megs" or unidad == "mbyte" or unidad == "mbytes" or unidad == "m"
+        if entero > 2048
+            return 0
+        end
+        kb = entero * 1024 + dec * 1024 / div
+    elif unidad == "kb" or unidad == "k" or unidad == "kbyte" or unidad == "kbytes"
+        kb = entero
+    else
+        return 0
+    end
+    if kb < 64 or kb > 2097152
+        return 0
+    end
+    return kb
+end
+
+func _req_meter(v: [Requisito], tipo: String, valor: String, version: String)
+    for r in v
+        if r.tipo == tipo and r.valor == valor and r.version == version
+            return
+        end
+    end
+    v.push(Requisito(tipo, valor, version))
+end
+
+# MUI 3.8 es muimaster 19, MUI 4 la 20, MUI 5 la 21
+func _req_mui(m: String) -> String
+    if m == "3.8" or m == "3" or m == "3.x"
+        return "19"
+    elif m == "4" or m == "4.0"
+        return "20"
+    elif m == "5" or m == "5.0"
+        return "21"
+    end
+    return m
+end
+
+# Lo que pide la línea Requires: de un .readme (texto libre), en el orden en que lo dice
+func requisitos_leer(texto: String) -> [Requisito]
+    var v: [Requisito] = []
+    ws = _req_palabras(texto)
+    var bajo: [String] = []
+    for w in ws
+        bajo.push(str_lower(w))
+    end
+    i = 0
+    while i < ws.length
+        w = bajo[i]
+        sig = ""
+        if i + 1 < ws.length
+            sig = bajo[i + 1]
+        end
+        punto = -1
+        k = w.length - 1
+        while k >= 0 and punto < 0
+            if str_code(w, k) == 46
+                punto = k
+            end
+            k = k - 1
+        end
+        nombre = ""
+        tipo = ""
+        if punto > 0
+            nombre = w[:punto]
+            tipo = w[punto + 1:]
+        end
+        sigv = _req_quitar_delante(sig, "vV")
+        if not _req_es_version(sig)
+            sigv = ""
+        end
+        if _req_ruta_aminet(w)
+            ruta = _req_quitar_detras(ws[i], "*")
+            rl = str_lower(ruta)
+            if not str_ends(rl, ".lha") and not str_ends(rl, ".lzh") and not str_ends(rl, ".lzx")
+                ruta = ruta + ".lha"
+            end
+            _req_meter(v, "paquete", ruta, "")
+        elif _req_en(" miami miamidx amitcp genesis roadshow tcp/ip tcpip bsdsocket ", w)
+            _req_meter(v, "red", "", "")
+        elif tipo == "library" or tipo == "device" or tipo == "datatype" or tipo == "mcc" or tipo == "mcp"
+            # la versión de detrás es suya, no la del sistema
+            if sigv != ""
+                i = i + 1
+            end
+            if nombre == "bsdsocket"
+                _req_meter(v, "red", "", "")
+            elif nombre == "muimaster"
+                _req_meter(v, "lib", "muimaster.library", sigv)
+            elif not _req_en(_REQ_DEL_SISTEMA, nombre)
+                _req_meter(v, "lib", w, sigv)
+            end
+        elif w == "mui" or (str_starts(w, "mui") and w.length > 3 and _req_es_version(w[3:]) and _req_digito(str_code(w, 3)))
+            ver = ""
+            if w.length > 3
+                ver = _req_mui(w[3:])
+            elif _req_es_version(sig)
+                ver = _req_mui(sig)
+                i = i + 1
+            end
+            _req_meter(v, "lib", "muimaster.library", ver)
+        elif _req_cpu(w) > 0
+            _req_meter(v, "cpu", str_from_int(_req_cpu(w), 10), "")
+        elif w == "fpu" or w == "68881" or w == "68882"
+            _req_meter(v, "fpu", "", "")
+        elif w == "mmu" or w == "68851"
+            _req_meter(v, "mmu", "", "")
+        elif w == "aga"
+            _req_meter(v, "chipset", "AGA", "")
+        elif w == "ecs"
+            _req_meter(v, "chipset", "ECS", "")
+        elif _req_en(" rtg picasso96 p96 cybergraphx cgx cybergfx ", w)
+            _req_meter(v, "rtg", "", "")
+        elif w == "os4" or w == "aos4" or ((w == "amigaos" or w == "os") and sig == "4") or str_starts(w, "os4.")
+            _req_meter(v, "sistema", "AmigaOS 4", "")
+        elif w == "morphos" or w == "mos"
+            _req_meter(v, "sistema", "MorphOS", "")
+        elif w == "aros"
+            _req_meter(v, "sistema", "AROS", "")
+        elif _req_en(" os amigaos kickstart ks wb workbench ", w) and _req_exec_de(_req_quitar_detras(sig, "+")) > 0
+            _req_meter(v, "os", str_from_int(_req_exec_de(_req_quitar_detras(sig, "+")), 10), "")
+            i = i + 1
+        elif _req_os_pegado(w) > 0
+            _req_meter(v, "os", str_from_int(_req_os_pegado(w), 10), "")
+        elif str_starts(w, "v") and _req_numero(w[1:]) and w.length < 6 and Int(w[1:]) >= 33 and Int(w[1:]) <= 50
+            _req_meter(v, "os", w[1:], "")
+        elif _req_memoria(w, sig) > 0
+            chip = false
+            for k2 in (i..i + 2)
+                if k2 < bajo.length and _req_en(" chip chipmem chipram ", bajo[k2])
+                    chip = true
+                end
+            end
+            t = "memoria"
+            if chip
+                t = "chip"
+            end
+            _req_meter(v, t, str_from_int(_req_memoria(w, sig), 10), "")
+        end
+        i = i + 1
+    end
+    # varios procesadores ("68020, 68030 o 68060") son alternativas: vale el menor
+    menor = 0
+    for r in v
+        if r.tipo == "cpu" and (menor == 0 or Int(r.valor) < menor)
+            menor = Int(r.valor)
+        end
+    end
+    otro = false
+    for r in v
+        if r.tipo == "sistema"
+            otro = true
+        end
+    end
+    var f: [Requisito] = []
+    puesto = false
+    for r in v
+        if r.tipo == "cpu"
+            if Int(r.valor) == menor and not puesto
+                puesto = true
+                f.push(r)
+            end
+        else
+            f.push(r)
+        end
+    end
+    # si pide otro sistema, lo demás da igual para un Amiga clásico
+    if otro and not str_contains(str_lower(texto), "3.")
+        var s: [Requisito] = []
+        for r in f
+            if r.tipo == "sistema"
+                s.push(r)
+            end
+        end
+        return s
+    end
+    return f
+end
+
+# "os3.1", "ks2.04+", "amigaos3.9": el sistema pegado a su nombre; 0 si no
+func _req_os_pegado(w: String) -> Int
+    for p in ["os", "amigaos", "kickstart", "ks", "wb"]
+        if str_starts(w, p)
+            return _req_exec_de(_req_quitar_detras(w[p.length:], "+"))
+        end
+    end
+    return 0
+end
+
+# Lo que trae un paquete (la línea Provides:): "reqtools.library 38, nlist.mcc" -> lib reqtools.library 38, lib nlist.mcc
+func provee_leer(texto: String) -> [Requisito]
+    var v: [Requisito] = []
+    for trozo in str_split(texto, ",")
+        ps = str_split(str_trim(str_replace(trozo, "\t", " ")), " ")
+        n = str_lower(ps[0])
+        if str_contains(n, ".")
+            ver = ""
+            k = 1
+            while k < ps.length and ver == ""
+                ver = _req_quitar_delante(ps[k], "vV")
+                k = k + 1
+            end
+            v.push(Requisito("lib", n, ver))
+        end
+    end
+    return v
+end
+
+# El valor de un campo del .readme ("Requires", "Provides", "Version"...), sin espacios a los lados; "" si no está
+func readme_campo(texto: String, campo: String) -> String
+    c = str_lower(campo) + ":"
+    for linea in str_split(str_replace(texto, "\r", ""), "\n")
+        if str_starts(str_lower(linea), c)
+            return str_trim(linea[c.length:])
+        end
+    end
+    return ""
+end
+
+# Lo que pide el .readme de ese fichero (vacío si no se puede leer o no tiene Requires:)
+func readme_requisitos(ruta: String) -> [Requisito]
+    t = file_read_text(ruta)
+    if t == nil
+        var nada: [Requisito] = []
+        return nada
+    end
+    return requisitos_leer(readme_campo(t, "Requires"))
+end
+
+func _req_si(b: Bool) -> Int
+    if b
+        return 1
+    end
+    return 0
+end
+
+# El número de delante del punto: "45.1" -> 45
+func _req_mayor(v: String) -> Int
+    i = str_find(v, ".")
+    if i >= 0
+        v = v[:i]
+    end
+    if v == ""
+        return 0
+    end
+    return Int(v)
+end
+
+# 1 si este Amiga lo cumple, 0 si no, -1 si no se puede saber desde aquí (MMU, un paquete de Aminet)
+func requisito_cumplido(r: Requisito) -> Int
+    if r.tipo == "cpu"
+        return _req_si(cpu_model() >= Int(r.valor))
+    elif r.tipo == "fpu"
+        return _req_si(fpu_model() != 0)
+    elif r.tipo == "chipset"
+        if r.valor == "AGA"
+            return _req_si(chipset_model() == "AGA")
+        end
+        return _req_si(chipset_model() != "OCS")
+    elif r.tipo == "rtg"
+        return _req_si(rtg_available())
+    elif r.tipo == "os"
+        return _req_si(library_version("exec.library") >= Int(r.valor))
+    elif r.tipo == "memoria"
+        return _req_si(mem_chip_total() / 1024 + mem_fast_total() / 1024 >= Int(r.valor))
+    elif r.tipo == "chip"
+        return _req_si(mem_chip_total() / 1024 >= Int(r.valor))
+    elif r.tipo == "lib"
+        v = library_version(r.valor)
+        # una clase MUI vive en LIBS:mui/
+        if v < 0 and (str_ends(r.valor, ".mcc") or str_ends(r.valor, ".mcp"))
+            v = library_version("mui/" + r.valor)
+        end
+        if v < 0
+            return 0
+        end
+        return _req_si(v >= _req_mayor(r.version))
+    elif r.tipo == "red"
+        return _req_si(library_version("bsdsocket.library") >= 0)
+    elif r.tipo == "sistema"
+        return 0
+    end
+    return -1
+end
+
+# Los que este Amiga no cumple (los que no se pueden saber no están)
+func requisitos_faltan(reqs: [Requisito]) -> [Requisito]
+    var f: [Requisito] = []
+    for r in reqs
+        if requisito_cumplido(r) == 0
+            f.push(r)
+        end
+    end
+    return f
+end
+
+# En palabras: "MUI 3.8", "un 68020", "AmigaOS 3.1", "2 MB de chip"
+func requisito_texto(r: Requisito) -> String
+    if r.tipo == "cpu"
+        return "un " + r.valor
+    elif r.tipo == "fpu"
+        return "FPU"
+    elif r.tipo == "mmu"
+        return "MMU"
+    elif r.tipo == "chipset"
+        return "chipset " + r.valor
+    elif r.tipo == "rtg"
+        return "tarjeta gráfica"
+    elif r.tipo == "os"
+        nombres = str_split("33=1.2 34=1.3 36=2.0 37=2.04 39=3.0 40=3.1 44=3.5 45=3.9 46=3.1.4 47=3.2", " ")
+        for par in nombres
+            if str_starts(par, r.valor + "=")
+                return "AmigaOS " + par[r.valor.length + 1:]
+            end
+        end
+        return "AmigaOS (exec " + r.valor + ")"
+    elif r.tipo == "memoria" or r.tipo == "chip"
+        m = Int(r.valor)
+        t = str_from_int(m, 10) + " KB"
+        if m >= 1024
+            t = str_from_int(m / 1024, 10) + " MB"
+        end
+        if r.tipo == "chip"
+            return t + " de chip"
+        end
+        return t + " de memoria"
+    elif r.tipo == "lib"
+        if r.valor == "muimaster.library"
+            if r.version == "19"
+                return "MUI 3.8"
+            elif r.version == "20"
+                return "MUI 4"
+            elif r.version == "21"
+                return "MUI 5"
+            elif r.version != ""
+                return "MUI (muimaster " + r.version + ")"
+            end
+            return "MUI"
+        end
+        if r.version != ""
+            return r.valor + " " + r.version
+        end
+        return r.valor
+    elif r.tipo == "red"
+        return "una pila TCP/IP"
+    elif r.tipo == "paquete"
+        return r.valor + " (de Aminet)"
+    elif r.tipo == "sistema"
+        return "es para " + r.valor
+    end
+    return r.valor
+end

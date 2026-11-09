@@ -93,6 +93,15 @@ Opens it like a double click on its icon: a document opens with its program. It 
                     "Returns the processor: 68000, 68010, 68020, 68030, 68040 or 68060.\n", ["fpu_model"]),
     "fpu_model": _f("Devuelve el coprocesador matemático: 68881, 68882, 68040 o 68060 (el del procesador); 0 si no hay.\n",
                     "Returns the maths coprocessor: 68881, 68882, 68040 or 68060 (the processor's own); 0 if none.\n", ["cpu_model"]),
+    "chipset_model": _f("""\
+Devuelve el chipset del Amiga: `"AGA"` (A1200, A4000, CD32), `"ECS"` (A500+, A600, A3000) u `"OCS"` (los primeros
+A500 y A2000). Un A500 con Agnus de ECS y Denise antigua da `"ECS"`. Para avisar antes de abrir una pantalla de 256
+colores en un Amiga que no puede.
+""", """\
+Returns the Amiga's chipset: `"AGA"` (A1200, A4000, CD32), `"ECS"` (A500+, A600, A3000) or `"OCS"` (the first A500
+and A2000). An A500 with an ECS Agnus and an old Denise gives `"ECS"`. To warn before opening a 256-colour screen on
+an Amiga that cannot.
+""", ["cpu_model", "fpu_model"]),
     "library_version": _f("""\
 - `name`: el nombre de la librería: `"muimaster.library"`.
 
