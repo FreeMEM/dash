@@ -861,16 +861,25 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             fwrite(zero, 1, outsize[k] - done, f);
         }
         if (outrel[k].n) {
-            /* agrupadas por el hunk al que apuntan */
+            /* agrupadas por el hunk al que apuntan, en grupos de RELOC_GRUPO como mucho: LoadSeg (3.1 y 3.2) da
+               "file is not executable" con un grupo de más de 65535 (Tachyon, 66235 hacia su código) */
+            enum { RELOC_GRUPO = 32767 };
             wl(f, HUNK_RELOC32);
             for (j = 0; j < nout; j++) {
-                int count = 0, m;
+                int count = 0, m = 0;
                 for (m = 0; m < outrel[k].n; m++) count += outrel[k].v[m].target == j;
-                if (!count) continue;
-                wl(f, (uint32_t)count);
-                wl(f, (uint32_t)j);
-                for (m = 0; m < outrel[k].n; m++)
-                    if (outrel[k].v[m].target == j) wl(f, outrel[k].v[m].off);
+                m = 0;
+                while (count > 0) {
+                    int g = count < RELOC_GRUPO ? count : RELOC_GRUPO, puestos = 0;
+                    wl(f, (uint32_t)g);
+                    wl(f, (uint32_t)j);
+                    for (; puestos < g; m++)
+                        if (outrel[k].v[m].target == j) {
+                            wl(f, outrel[k].v[m].off);
+                            puestos++;
+                        }
+                    count -= g;
+                }
             }
             wl(f, 0);
         }
