@@ -198,6 +198,23 @@ La forma del puntero cuando está sobre la zona. Cambia al momento si ya está e
 The pointer's shape while it is over the area. It changes at once if it is already there and goes back to normal
 on leaving.
 """, ["mui_canvas_pointer_inside"]),
+    "mui_canvas_take_keys": _f("""\
+- `canvas`: la zona de dibujo.
+- `on`: `true` lo enciende.
+
+La zona recibe las teclas de la ventana aunque el puntero no esté encima, como un editor que escribe mientras su
+ventana está activa. Una tecla con el puntero sobre otra zona que las recibe es de esa otra. Tampoco llegan mientras
+otro objeto de la ventana está activo, como un campo de texto donde se escribe. Necesita `mui_canvas_on_input`.
+Salió del editor de Forja, donde F5 y F10 solo llegaban con el puntero sobre el código (lo contó David Martínez).
+""", """\
+- `canvas`: the drawing area.
+- `on`: `true` turns it on.
+
+The area gets the window's keys even with the pointer away from it, like an editor that types while its window is
+active. A key with the pointer over another area that gets keys belongs to that one. Nor do they arrive while another
+object of the window is active, such as a text field being typed in. It needs `mui_canvas_on_input`.
+It came from Forja's editor, where F5 and F10 only arrived with the pointer over the code (reported by David Martínez).
+""", ["mui_canvas_key", "mui_canvas_take_tab"]),
     "mui_canvas_take_tab": _f("""\
 - `canvas`: la zona de dibujo.
 - `on`: `true` lo enciende.

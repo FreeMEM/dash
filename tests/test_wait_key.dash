@@ -6,6 +6,8 @@
 Main
     v = window_create("Teclas", 40, 40, 200, 80, 0)
     time_delay(25)
+    window_activate(v)              # en 3.2, el Workbench recién cargado puede quitarle el foco al abrir lo suyo
+    time_delay(10)
     input_click(6, 5, 0)            # el botón de cerrar: un mensaje que no es una tecla
     input_key(0x20, 0)              # la A
     Print "tecla #{wait_key()}"

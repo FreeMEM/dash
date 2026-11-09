@@ -4223,6 +4223,15 @@ MUI_FUNCTIONS = {
                     "mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous "
                     "gadget; away from it they move between gadgets as always (Lorraine D48)"
     ),
+    "mui_canvas_take_keys": BuiltinFunc(
+        name="mui_canvas_take_keys",
+        params=["canvas", "on"],
+        return_type="void",
+        c_template="_dash_mui_canvas_take_keys(${canvas}, ${on})",
+        description="The area gets the window's keys also with the pointer away from it (needs mui_canvas_on_input): "
+                    "those that no other area under the pointer takes, while no other gadget is active (Forja, told by "
+                    "David Martínez)"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],

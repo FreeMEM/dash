@@ -1172,6 +1172,8 @@ DESC_ES = {
     "mui_canvas_set_pointer": "La forma del puntero sobre la zona: 0 normal, 1 texto (I), 2 cambiar de tamaño a los "
                               "lados, 3 arriba y abajo, 4 ocupado; cambia ya si el puntero está sobre la zona (o "
                               "arrastrándola) y vuelve a la normal fuera de ella (Lorraine D16)",
+    "mui_canvas_take_keys": "La zona recibe las teclas de la ventana aunque el puntero no esté encima (necesita "
+                            "mui_canvas_on_input): las que no coge otra zona bajo el puntero, si no hay otro objeto activo",
     "mui_canvas_take_tab": "Con el puntero sobre la zona, Tab y Mayúsculas+Tab son teclas para ella (mui_canvas_key 66, "
                            "Mayúsculas en mui_canvas_qualifiers; necesita mui_canvas_on_input) y no el gadget siguiente "
                            "y anterior de la ventana; fuera de ella pasan de gadget en gadget como siempre (Lorraine D48)",
