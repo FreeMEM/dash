@@ -1056,6 +1056,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       ARexx con `mui_wait_event_signals(task_signal() | rexx_signal())` sin que haga falta otro evento.
       `tests/test_rexx_signal.dash`
 
+- [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
+      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`
 ## Notas y Decisiones
 
 ### Decisiones tomadas:
