@@ -11,6 +11,13 @@ Con --gcc, el programa pasa a C y lo compila el gcc de Amiga de bebbo, como en l
 propio no hace (C en el programa: @native, @c, @header; -O, --small, --multifile...) va solo por C con gcc,
 y lo dice en una línea.
 
+CPU y FPU (con o sin --gcc):
+  --cpu X   68000 (por defecto: arranca en cualquier Amiga), 68020, 68030, 68040 o 68060. Desde 68020
+            multiplica y divide en una instrucción: va más rápido en un Amiga acelerado, pero el programa
+            no arranca en una CPU inferior. Con --gcc, además, el código se afina para la CPU elegida.
+  --fpu     Float y Double con la FPU (68881/68882, o la del 68040/68060). Pide un 68020 o más y el
+            programa no arranca sin FPU. Se combina con --cpu.
+
 Con --dashos, el programa es para DashOS (AArch64 little-endian, ELF), también directo y enlazado con ld.lld; con
 --dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). Con --pie, el ejecutable funciona cargado en cualquier
 dirección (si no, va fijo en 0x400000). Con --be, big-endian: las bibliotecas de la caja Amiga.
