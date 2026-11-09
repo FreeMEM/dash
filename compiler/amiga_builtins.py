@@ -5285,6 +5285,10 @@ TASK_FUNCTIONS = {
         name="rexx_get", params=[], return_type="STRPTR", c_template="_dash_rexx_get()",
         description="The next command that came to the rexx_port (\"\" if none): it waits for rexx_reply (the "
                     "next rexx_get answers it with RC 0)"),
+    "rexx_signal": BuiltinFunc(
+        name="rexx_signal", params=[], return_type="LONG", c_template="_dash_rexx_signal()",
+        description="Signal mask of the rexx_port port (0 without one): mui_wait_event_signals(rexx_signal()) wakes "
+                    "up when an ARexx command arrives (Tachyon D84)"),
     "rexx_reply": BuiltinFunc(
         name="rexx_reply", params=["rc", "result"], return_type="void", c_template="_dash_rexx_reply(${rc}, ${result})",
         reads_only=True, description="Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT (\"\": "
@@ -5940,7 +5944,7 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
-    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "rexx_port", "rexx_get", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
     "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
     "assigns_read", "assign_name", "assign_path"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [

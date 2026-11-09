@@ -1,0 +1,80 @@
+# Test: rexx_signal (Tachyon D84): la máscara de la señal del puerto de rexx_port, para esperar órdenes ARexx con
+# mui_wait_event_signals o Wait en vez de preguntar a rexx_get. Sin puerto, 0. El programa se manda una orden a su
+# propio puerto (sin esperar la respuesta); su señal llega, y rexx_get la tiene.
+# expect-c: _dash_rexx_signal(
+# expect-out: sin puerto: 0
+# expect-out: con puerto: true
+# expect-out: antes, sin señal: true
+# expect-out: llegó la señal: true
+# expect-out: orden HOLA
+# expect-out: respuesta: 0 vale
+# expect-out: fin
+
+@c
+"""
+static struct MsgPort *_t_reply = NULL;
+static struct RexxMsg *_t_msg = NULL;
+"""
+end
+
+@native func mandar(orden: String) -> Bool
+"""
+    struct MsgPort *to;
+    if (!_t_reply && !(_t_reply = CreateMsgPort())) return FALSE;
+    if (!(_t_msg = CreateRexxMsg(_t_reply, NULL, NULL))) return FALSE;
+    _t_msg->rm_Args[0] = (STRPTR)CreateArgstring(orden, strlen((char *)orden));
+    _t_msg->rm_Action = RXCOMM | RXFF_RESULT;
+    Forbid();
+    if ((to = FindPort((CONST_STRPTR)"DASHSENAL"))) PutMsg(to, &_t_msg->rm_Node);
+    Permit();
+    return to != NULL;
+"""
+end
+
+# The answer of the message from mandar: "rc result"
+@native func respuesta() -> String
+"""
+    char t[40];
+    struct RexxMsg *m = _t_msg;
+    WaitPort(_t_reply);
+    GetMsg(_t_reply);
+    sprintf(t, "%ld %s", (long)m->rm_Result1, m->rm_Result2 ? (char *)m->rm_Result2 : "");
+    if (m->rm_Result2) DeleteArgstring((UBYTE *)m->rm_Result2);
+    DeleteArgstring((UBYTE *)m->rm_Args[0]);
+    DeleteRexxMsg(m);
+    DeleteMsgPort(_t_reply);
+    return _dash_str_dup((STRPTR)t, TRUE);
+"""
+end
+
+@native func hay_senal(mask: Int) -> Bool
+"""
+    return (SetSignal(0, 0) & (ULONG)mask) != 0;
+"""
+end
+
+# Waits for the signals of mask (at most 5 s): true if they came
+@native func esperar_senal(mask: Int) -> Bool
+"""
+    LONG t;
+    for (t = 0; t < 250; t++) {
+        if (SetSignal(0, (ULONG)mask) & (ULONG)mask) return TRUE;
+        Delay(1);
+    }
+    return FALSE;
+"""
+end
+
+Main
+    Print "sin puerto: #{rexx_signal()}"
+    rexx_port("DASHSENAL")
+    m = rexx_signal()
+    Print "con puerto: #{m != 0}"
+    Print "antes, sin señal: #{not hay_senal(m)}"
+    mandar("HOLA")
+    Print "llegó la señal: #{esperar_senal(m)}"
+    Print "orden " + rexx_get()
+    rexx_reply(0, "vale")
+    Print "respuesta: " + respuesta()
+    Print "fin"
+end
