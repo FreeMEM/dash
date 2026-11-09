@@ -177,6 +177,21 @@ and count from it.
     "screen_pixel_rgb": _f("- `x`, `y`: el punto.\n\nDevuelve el color de ese píxel de la pantalla de delante como `0xRRGGBB`, lo pinte quien lo pinte; -1 fuera de ella.\n",
                            "- `x`, `y`: the point.\n\nReturns that pixel's colour on the front screen as `0xRRGGBB`, whoever painted it; -1 outside it.\n",
                            ["screen_pixel"]),
+    "screen_save_png": _f("""\
+- `filename`: el fichero, por ejemplo `"RAM:captura.png"`.
+
+Guarda la pantalla de delante tal como se ve, ventanas incluidas, en una imagen PNG en color real. Vale para una
+pantalla con paleta y para la de una tarjeta gráfica. Mientras lee los píxeles, Intuition espera; después comprime
+la imagen y la escribe. Necesita memoria para la imagen entera dos veces: unos 5 MB para 1024x768. Devuelve `false`
+sin memoria o si no se puede escribir el fichero. Una pantalla HAM no sale con sus colores.
+""", """\
+- `filename`: the file, for example `"RAM:shot.png"`.
+
+Saves the front screen as it is seen, windows included, to a true colour PNG picture. It works for a screen with a
+palette and for a graphics card's. Intuition waits while the pixels are read; then the picture is compressed and
+written. It needs memory for the whole picture twice: about 5 MB for 1024x768. Returns `false` without memory or if
+the file cannot be written. A HAM screen does not come out with its colours.
+""", ["screen_pixel_rgb", "bitmap_save"]),
     "screen_pen_rgb": _f("""\
 - `n`: el lápiz del Workbench: 0 detalle, 1 bloque, 2 texto, 3 brillo, 4 sombra, 5 relleno (la barra de título
   activa), 6 texto del relleno, 7 fondo, 8 texto resaltado, 9 a 11 los de la barra.

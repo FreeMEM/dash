@@ -664,6 +664,8 @@ DESC_ES = {
                       "resaltado, 9 detalle de la barra, 10 bloque de la barra, 11 borde de la barra; -1 si no lo tiene",
     "screen_pixel_rgb": "El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; "
                         "-1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla",
+    "screen_save_png": "Guarda la pantalla de delante, tal como se ve, en un fichero PNG (también la de una tarjeta "
+                       "gráfica): false sin memoria o si no se puede escribir el fichero",
     "cx_send": "Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 "
                "ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay "
                "commodities.library",

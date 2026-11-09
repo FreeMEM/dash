@@ -1,0 +1,44 @@
+# Test: screen_save_png saves the screen in front as a PNG (JaviTecH, for Trasfondo): another decoder (stb_image, by
+# image_decode) reads it, and its pixels are the screen's, the rectangle drawn in the window too. A name that cannot be
+# written gives false.
+# expect-out: guardada: true
+# expect-out: se lee: true
+# expect-out: rectángulo: true
+# expect-out: fondo: true
+# expect-out: sin sitio: false
+# expect-out: fin
+
+Window Prueba
+    title "Captura"
+    width 220
+    height 100
+    left 40
+    top 40
+end
+
+func pixel_png(d: Int, x: Int, y: Int) -> Int
+    p = image_decoded_pixels(d)
+    i = (y * image_decoded_width(d) + x) * 3
+    return buffer_get_byte(p, i) * 65536 + buffer_get_byte(p, i + 1) * 256 + buffer_get_byte(p, i + 2)
+end
+
+Main
+    Prueba.open
+    gfx_pen(color_pen(200, 40, 90))
+    gfx_rect(10, 10, 120, 70)
+    color = gfx_pixel_rgb(60, 40)
+    ok = screen_save_png("RAM:captura.png")
+    Print "guardada: #{ok}"
+    d = image_decode("RAM:captura.png", 0, 0)
+    Print "se lee: #{d != 0}"
+    if d != 0
+        Print "rectángulo: #{pixel_png(d, 100, 80) == color and screen_pixel_rgb(100, 80) == color}"
+        Print "fondo: #{pixel_png(d, 300, 200) == screen_pixel_rgb(300, 200)}"   # (not the corner: the pointer, on a graphics card)
+        image_decoded_free(d)
+    end
+    mal = screen_save_png("RAM:no-hay/x.png")
+    Print "sin sitio: #{mal}"
+    file_delete("RAM:captura.png")
+    Prueba.close
+    Print "fin"
+end

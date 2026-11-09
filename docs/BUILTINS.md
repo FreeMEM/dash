@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 963 funciones, 963 implementadas, 0 sin implementar.
+Total: 964 funciones, 964 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -8959,6 +8959,7 @@ colores de la pantalla. Con los `input_*`, para manejar otro programa como lo ha
 | [`screen_pixel(x, y)`](#screen_pixel) | Int | El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella |  |
 | [`screen_pixel_rgb(x, y)`](#screen_pixel_rgb) | Int | El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; -1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla |  |
 | [`screen_pen_rgb(n)`](#screen_pen_rgb) | Int | El color del lápiz n de la pantalla del Workbench como 0xRRGGBB: 0 detalle, 1 bloque, 2 texto, 3 brillo, 4 sombra, 5 relleno (la barra de título activa), 6 texto del relleno, 7 fondo, 8 texto resaltado, 9 detalle de la barra, 10 bloque de la barra, 11 borde de la barra; -1 si no lo tiene |  |
+| [`screen_save_png(filename)`](#screen_save_png) | Bool | Guarda la pantalla de delante, tal como se ve, en un fichero PNG (también la de una tarjeta gráfica): false sin memoria o si no se puede escribir el fichero |  |
 | [`cx_send(name, command)`](#cx_send) | Int | Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay commodities.library |  |
 
 <a id="window_find"></a>
@@ -9066,6 +9067,19 @@ Ver también: [`screen_pixel`](#screen_pixel).
 Devuelve su color como `0xRRGGBB`, o -1 si no hay ese lápiz. Para que un programa se vea como el Workbench.
 
 Ver también: [`color_pen`](#color_pen).
+
+<a id="screen_save_png"></a>
+
+### `screen_save_png(filename)` → `Bool`
+
+- `filename`: el fichero, por ejemplo `"RAM:captura.png"`.
+
+Guarda la pantalla de delante tal como se ve, ventanas incluidas, en una imagen PNG en color real. Vale para una
+pantalla con paleta y para la de una tarjeta gráfica. Mientras lee los píxeles, Intuition espera; después comprime
+la imagen y la escribe. Necesita memoria para la imagen entera dos veces: unos 5 MB para 1024x768. Devuelve `false`
+sin memoria o si no se puede escribir el fichero. Una pantalla HAM no sale con sus colores.
+
+Ver también: [`screen_pixel_rgb`](#screen_pixel_rgb), [`bitmap_save`](#bitmap_save).
 
 <a id="cx_send"></a>
 

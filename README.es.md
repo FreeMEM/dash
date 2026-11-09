@@ -93,7 +93,7 @@ de ejecución").
 
 ### Amiga API
 
-963 funciones built-in, todas hechas, cada una explicada con sus parámetros y un ejemplo por grupo en [docs/BUILTINS.md](docs/BUILTINS.md) (generado desde el código).
+964 funciones built-in, todas hechas, cada una explicada con sus parámetros y un ejemplo por grupo en [docs/BUILTINS.md](docs/BUILTINS.md) (generado desde el código).
 
 - **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`;
   `window_create` con el tamaño interior (flag 8) y los bordes de la ventana (`window_border_top`...) y la
