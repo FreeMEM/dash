@@ -21795,6 +21795,7 @@ struct _DashCanvas {
     LONG shown;                     /* the shape the window has now (0: its own) */
     BOOL take_tab;                  /* mui_canvas_take_tab: Tab is a key over the area, not the next gadget (D48) */
     BOOL tab_off;                   /* ... and the window's Tab and Shift+Tab are off now */
+    BOOL take_keys;                 /* mui_canvas_take_keys: keys also with the pointer away from the area */
 };
 
 /* Tab and Shift+Tab of the window (MUI's cycle chain) off while the pointer is over a canvas that takes them
@@ -21889,6 +21890,8 @@ static struct RastPort *_dash_canvas_buffer(struct _DashCanvas *data, struct Ras
 }
 static void _dash_canvas_cleanup(void);
 static BOOL _dash_canvas_updating = FALSE;   /* the draw function runs for mui_canvas_update */
+
+static BOOL _dash_canvas_keys_free(Object *obj);
 
 static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __asm("a2"),
                                    Msg msg __asm("a1")) {
@@ -22022,7 +22025,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                 (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0) |
                 (data->pointer ? IDCMP_MOUSEMOVE : 0) |
                 (data->take_tab ? IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
-            data->handler.ehn_Priority = 0;
+            /* after the other areas: a key over one of them is its own */
+            data->handler.ehn_Priority = data->take_keys ? -1 : 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
             data->handler_added = TRUE;
@@ -22121,7 +22125,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->mouse_x = x; data->mouse_y = y;
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
             data->qual = im->Qualifier;
-        } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
+        } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) &&
+                   (inside || (data->take_keys && _dash_canvas_keys_free(obj)))) {
             if (im->Code >= 0x60 && im->Code <= 0x67) return 0;   /* Shift, Ctrl, Alt, Amiga alone: they come
                                                                      with the next key (mui_canvas_qualifiers) */
             data->button = 0; data->wheel = 0; data->key = im->Code;
@@ -22237,6 +22242,26 @@ static void _dash_mui_canvas_set_pointer(APTR obj, LONG shape) {
     if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
     if (data->pointer) _dash_canvas_moves_on(obj, data, IDCMP_MOUSEMOVE);
     _dash_canvas_show_pointer(obj, data, data->dragging || _dash_mui_canvas_pointer(obj, 2) ? data->pointer : 0);
+}
+
+/* Keys for the area also with the pointer away from it (mui_canvas_take_keys): those that no other area under the
+   pointer takes, while no other gadget of the window (a text field) is active */
+static BOOL _dash_canvas_keys_free(Object *obj) {
+    IPTR active = 0;
+    GetAttr(MUIA_Window_ActiveObject, _DASH_MRI(obj)->mri_WindowObject, &active);
+    return !active || (Object *)active == obj;
+}
+
+static void _dash_mui_canvas_take_keys(APTR obj, LONG on) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return;
+    data->take_keys = on != 0;
+    if (data->handler_added) {                       /* the window is open: the handler goes after the others */
+        struct MUI_RenderInfo *mri = _DASH_MRI(obj);
+        _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
+        data->handler.ehn_Priority = data->take_keys ? -1 : 0;
+        _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
+    }
 }
 
 /* Tab and Shift+Tab over the area are keys (mui_canvas_on_input: 66, with Shift's qualifier), not the window's

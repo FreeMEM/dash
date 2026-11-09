@@ -1,0 +1,86 @@
+# mui_canvas_take_keys (lo contó David Martínez, en Forja): la zona recibe las teclas con el puntero fuera de ella;
+# con el puntero sobre otra zona que recibe teclas, son de esa otra; con un campo de texto activo, del campo.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_canvas_take_keys(
+# expect-out: editor 32
+# expect-out: otra 33
+# expect-out: campo: d
+# expect-out: fin
+
+const PASO = 99
+const T_EDITOR = 5
+const T_OTRA = 6
+
+@native func izq(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_LeftEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+@native func arr(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_TopEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+end
+
+Main
+    if mui_app_begin("Teclas", "DASHTECLAS") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Teclas", 0)
+        mui_vgroup_begin()
+        mui_hgroup_begin()
+        editor = mui_canvas(120, 60)
+        otra = mui_canvas(120, 60)
+        mui_group_end()
+        b = mui_button("Botón")
+        campo = mui_string("", 20)
+        mui_group_end()
+        mui_window_end()
+        mui_canvas_on_draw(editor, dibuja)
+        mui_canvas_on_draw(otra, dibuja)
+        mui_canvas_on_input(editor, T_EDITOR)
+        mui_canvas_on_input(otra, T_OTRA)
+        mui_canvas_take_keys(editor, true)
+        mui_window_open(win)
+        paso = 0
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1 and paso < 8
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                if paso == 1
+                    input_move(izq(b) + 5, arr(b) + 5)     # el puntero en el botón, fuera de las zonas
+                elif paso == 2
+                    input_key(0x20, 0)                     # a: para el editor
+                elif paso == 3
+                    input_move(izq(otra) + 20, arr(otra) + 20)
+                elif paso == 4
+                    input_key(0x21, 0)                     # s: para la otra zona, que está bajo el puntero
+                elif paso == 5
+                    mui_set_active(win, campo)
+                    input_move(izq(b) + 5, arr(b) + 5)
+                elif paso == 6
+                    input_key(0x22, 0)                     # d: para el campo activo
+                elif paso == 7
+                    Print "campo: #{mui_get_text(campo)}"
+                end
+                mui_timer(500, PASO)
+            elif ev == T_EDITOR
+                Print "editor #{mui_canvas_key(editor)}"
+            elif ev == T_OTRA
+                Print "otra #{mui_canvas_key(otra)}"
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

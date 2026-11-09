@@ -33,6 +33,25 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.7.0 (2026-11-09)
+
+Una función nueva y dos novedades de funciones que ya estaban. Lo que ya compilaba sigue igual.
+
+- **Nuevo:** `mui_canvas_take_keys(canvas, true)`: una zona de dibujo de MUI recibe las teclas de la ventana aunque
+  el puntero no esté encima, si ningún otro objeto tiene el teclado. Salió del editor de Forja, donde F5 y F10 solo
+  llegaban con el puntero sobre el código (lo contó David Martínez).
+- **Nuevo:** `bitmap_create` con profundidad 0 crea un bitmap como la pantalla donde se dibuja, también la de una
+  tarjeta gráfica. Sirve para preparar un dibujo sin que se vea y copiarlo de una vez, sin parpadeo (lo contó
+  JaviTecH, por el dock de Trasfondo).
+- **Arreglo:** `font_use` y `font_style` ya no cambian la letra de la pantalla pública del programa
+  (`screen_clone_wb`). Los títulos de las ventanas salían con la letra elegida.
+- El paquete del Amiga trae Forja 0.5.2: Help o F1 sacan la ayuda del nombre que hay en el cursor (idea de Javier
+  R. Santurde "Tolkien"), y F5, F10 y las demás teclas del editor llegan con el puntero en cualquier sitio de la
+  ventana (lo contó David Martínez).
+- **Herramienta:** `tools/paquete_hangar.py` hace, de un cajón y su `paquete.txt`, el `.lha` y el `.readme` de un
+  programa, listos para Aminet y para Hangar.
+- Probado en A1200 (3.1) y A1200 con OS 3.2 emulados.
+
 ### 2.6.4 (2026-11-08)
 
 La documentación de los builtins, ampliada, y los arreglos que salieron al escribirla. Lo que ya compilaba sigue

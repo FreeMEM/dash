@@ -899,6 +899,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_canvas_redraw", 1, 0, 1, 0, 0, 0u},
     {"mui_canvas_set_pointer", 2, 0, 1, 0, 0, 0u},
     {"mui_canvas_set_pointer", 2, 0, 1, 0, 0, 0u},
+    {"mui_canvas_take_keys", 2, 0, 1, 0, 0, 0u},
+    {"mui_canvas_take_keys", 2, 0, 1, 0, 0, 0u},
     {"mui_canvas_take_tab", 2, 0, 1, 0, 0, 0u},
     {"mui_canvas_take_tab", 2, 0, 1, 0, 0, 0u},
     {"mui_canvas_update", 1, 0, 1, 0, 0, 0u},
@@ -1924,7 +1926,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1922;
+const int builtin_count = 1924;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

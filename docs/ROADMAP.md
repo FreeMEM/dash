@@ -1049,6 +1049,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       arreglaron: `gfx_flood`, el joystick, `wait_key`/`wait_click`, `tilemap_draw` con espejos, comillas en una
       interpolación por `--gcc`, `random_range`, `color_pen` en una pantalla propia y `rtg_write_pixel`/`rtg_fill_rect`
       sin RTG
+- [x] `mui_canvas_take_keys` (2026-11-09): un lienzo MUI recibe las teclas aunque el puntero no esté encima, si
+      ningún otro gadget tiene el teclado. Para el editor de Forja: F5 y F10 llegaban solo con el puntero sobre el
+      código (lo contó David Martínez). `tests/test_mui_canvas_take_keys.dash`
 
 ## Notas y Decisiones
 

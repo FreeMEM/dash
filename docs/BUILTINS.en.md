@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 961 functions, 961 implemented, 0 not implemented.
+Total: 962 functions, 962 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -10926,6 +10926,7 @@ end
 | [`mui_canvas_pointer_inside(canvas)`](#mui_canvas_pointer_inside) | Bool | True if the pointer is over the area now |  |
 | [`mui_canvas_set_pointer(canvas, shape)`](#mui_canvas_set_pointer) | — | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, 4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to normal outside it (Lorraine D16) |  |
 | [`mui_canvas_take_tab(canvas, on)`](#mui_canvas_take_tab) | — | With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous gadget; away from it they move between gadgets as always (Lorraine D48) |  |
+| [`mui_canvas_take_keys(canvas, on)`](#mui_canvas_take_keys) | — | The area gets the window's keys also with the pointer away from it (needs mui_canvas_on_input): those that no other area under the pointer takes, while no other gadget is active (Forja, told by David Martínez) |  |
 | [`mui_canvas_mouse_x(canvas)`](#mui_canvas_mouse_x) | Int | X of the last click or wheel, from the area's left edge |  |
 | [`mui_canvas_mouse_y(canvas)`](#mui_canvas_mouse_y) | Int | Y of the last click or wheel, from the area's top edge |  |
 | [`mui_canvas_button(canvas)`](#mui_canvas_button) | Int | 1 if the last input was a left click, else 0 |  |
@@ -11793,6 +11794,20 @@ With the pointer over the area, Tab and Shift+Tab reach the area as keys (code 6
 next object. It needs `mui_canvas_on_input`.
 
 See also: [`mui_canvas_key`](#mui_canvas_key).
+
+<a id="mui_canvas_take_keys"></a>
+
+### `mui_canvas_take_keys(canvas, on)`
+
+- `canvas`: the drawing area.
+- `on`: `true` turns it on.
+
+The area gets the window's keys even with the pointer away from it, like an editor that types while its window is
+active. A key with the pointer over another area that gets keys belongs to that one. Nor do they arrive while another
+object of the window is active, such as a text field being typed in. It needs `mui_canvas_on_input`.
+It came from Forja's editor, where F5 and F10 only arrived with the pointer over the code (reported by David Martínez).
+
+See also: [`mui_canvas_key`](#mui_canvas_key), [`mui_canvas_take_tab`](#mui_canvas_take_tab).
 
 <a id="mui_canvas_mouse_x"></a>
 
