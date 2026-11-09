@@ -931,7 +931,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_bitmap_create(${id}, ${width}, ${height}, ${depth})",
         needs_gfx=True,
-        description="Create bitmap"
+        description="Create bitmap (depth 0: like the screen being drawn on, a graphics card's too)"
     ),
     "bitmap_load": BuiltinFunc(
         name="bitmap_load",

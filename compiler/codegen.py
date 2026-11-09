@@ -1971,7 +1971,13 @@ static struct TextFont *_dash_fonts[_DASH_FONTS_MAX];
 static struct RastPort _dash_font_mrp;
 static BOOL _dash_font_mrp_ok = FALSE;
 static struct RastPort *_dash_font_rp(void) {
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    /* not the RastPort of a public screen of ours (screen_clone_wb): Intuition draws the titles of the windows on it
+       with its font and style (Tachyon: the title came out in the page's font) */
+    if (_dash_rp && !(_dash_screen && _dash_screen_public && _dash_rp == &_dash_screen->RastPort)) return _dash_rp;
+#else
     if (_dash_rp) return _dash_rp;
+#endif
     if (!_dash_font_mrp_ok) {
         InitRastPort(&_dash_font_mrp);
         if (GfxBase) SetFont(&_dash_font_mrp, GfxBase->DefaultFont);
@@ -13456,10 +13462,25 @@ static void _dash_bitmap_free(LONG id) {
 static BOOL _dash_bitmap_create(LONG id, LONG width, LONG height, LONG depth) {
     if (id >= 0 && id < _DASH_MAX_BITMAPS) _dash_bitmap_fw[id] = 0;
     _DashBitmap *b;
-    if (id < 0 || id >= _DASH_MAX_BITMAPS || width < 1 || height < 1 || depth < 1 || depth > 8) return FALSE;
+    struct BitMap *friend = NULL;
+    struct Screen *pub = NULL;
+    if (id < 0 || id >= _DASH_MAX_BITMAPS || width < 1 || height < 1 || depth < 0 || depth > 8) return FALSE;
+    if (depth == 0) {
+        /* like the screen being drawn on (the window's, the program's own, else the default public one): its
+           depth and format, also a graphics card's (a friend bitmap), to draw out of sight and copy at once */
+        struct RastPort *rp = _dash_screen_rp ? _dash_screen_rp : _dash_rp;
+        struct Screen *scr = NULL;
+        if (rp && rp->Layer && rp->Layer->Window) scr = ((struct Window *)rp->Layer->Window)->WScreen;
+        else if (_dash_screen) scr = _dash_screen;
+        else scr = pub = LockPubScreen(NULL);
+        if (!scr) return FALSE;
+        friend = scr->RastPort.BitMap;
+        depth = GetBitMapAttr(friend, BMA_DEPTH);
+    }
     _dash_bitmap_free(id);
     b = &_dash_bitmaps[id];
-    b->bm = AllocBitMap(width, height, depth, BMF_CLEAR, NULL);
+    b->bm = AllocBitMap(width, height, depth, BMF_CLEAR | (friend ? BMF_MINPLANES : 0), friend);
+    if (pub) UnlockPubScreen(NULL, pub);
     if (!b->bm) return FALSE;
     InitRastPort(&b->rp);
     b->rp.BitMap = b->bm;
@@ -13600,7 +13621,7 @@ static BOOL _dash_bitmap_save(LONG id, STRPTR filename) {
     UBYTE bmhd[20];
     BPTR fh;
     BOOL ok;
-    if (!b) return FALSE;
+    if (!b || b->depth > 8) return FALSE;      /* (one like a graphics card's screen: not an ILBM of planes) */
     row_bytes = ((b->w + 15) >> 4) << 1;
     ncolors = 1L << b->depth;
     body_len = row_bytes * b->h * b->depth;

@@ -1595,7 +1595,9 @@ Ver también: [`copper_install`](#copper_install).
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 - `width`, `height`: el tamaño en píxeles.
-- `depth`: la profundidad, de 1 a 8.
+- `depth`: la profundidad, de 1 a 8. Con 0, la de la pantalla donde se dibuja y en su formato, también el de una
+  tarjeta gráfica: para preparar algo sin que se vea (imágenes, iconos y colores RGB incluidos) y copiarlo a la
+  ventana de una vez, sin parpadeo.
 
 Crea un bitmap vacío (todo color 0) fuera de pantalla; el que hubiera en ese número se libera. Devuelve `false` con
 medidas fuera de rango o sin memoria.
@@ -1622,7 +1624,8 @@ Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_color
 - `filename`: el fichero.
 
 Lo guarda como IFF ILBM sin comprimir, con la paleta de la pantalla del programa o de la ventana. Devuelve `false`
-si no se puede escribir.
+si no se puede escribir, o si el bitmap es de más de 8 planos (uno de `bitmap_create` con profundidad 0 en una
+tarjeta gráfica).
 
 Ver también: [`bitmap_load`](#bitmap_load).
 

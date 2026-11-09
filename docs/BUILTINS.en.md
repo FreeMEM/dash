@@ -720,7 +720,7 @@ end
 | [`copper_end()`](#copper_end) | — | End copper list |  |
 | [`copper_install()`](#copper_install) | — | Install copper list |  |
 | [`copper_free()`](#copper_free) | — | Free copper list |  |
-| [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Create bitmap |  |
+| [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Create bitmap (depth 0: like the screen being drawn on, a graphics card's too) |  |
 | [`bitmap_load(id, filename)`](#bitmap_load) | Bool | Load IFF bitmap |  |
 | [`bitmap_save(id, filename)`](#bitmap_save) | Bool | Save IFF bitmap |  |
 | [`bitmap_free(id)`](#bitmap_free) | — | Free bitmap |  |
@@ -1593,7 +1593,9 @@ See also: [`copper_install`](#copper_install).
 
 - `id`: the bitmap's number, 0 to 31 (the same as the BOBs).
 - `width`, `height`: the size in pixels.
-- `depth`: the depth, 1 to 8.
+- `depth`: the depth, 1 to 8. With 0, that of the screen being drawn on and in its format, a graphics card's too:
+  to prepare something out of sight (pictures, icons and RGB colours included) and copy it to the window at once,
+  without flicker.
 
 Creates an empty bitmap (all colour 0) off screen; any bitmap at that number is freed. Returns `false` with sizes
 out of range or without memory.
@@ -1620,7 +1622,8 @@ See also: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_colors), 
 - `filename`: the file.
 
 Saves it as an uncompressed IFF ILBM, with the palette of the program's screen or the window's. Returns `false` if
-it cannot be written.
+it cannot be written, or if the bitmap has more than 8 planes (one from `bitmap_create` with depth 0 on a graphics
+card).
 
 See also: [`bitmap_load`](#bitmap_load).
 

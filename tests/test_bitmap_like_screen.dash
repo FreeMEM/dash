@@ -1,0 +1,38 @@
+# Test: bitmap_create with depth 0 makes a bitmap like the screen being drawn on (its depth and format, a graphics
+# card's too, with a friend bitmap), to prepare a drawing out of sight and copy it to the window at once (the dock of
+# Trasfondo, without flicker). What is drawn there with an RGB colour comes out in the window as drawn directly.
+# Depths out of range still give false.
+# expect-out: como la pantalla: true
+# expect-out: mismo color: true
+# expect-out: fuera de rango: false false
+# expect-out: fin
+
+Window Prueba
+    title "Bitmap como la pantalla"
+    width 220
+    height 100
+    left 40
+    top 40
+end
+
+Main
+    Prueba.open
+    p = color_pen(200, 40, 90)
+    gfx_pen(p)
+    gfx_rect(10, 10, 39, 39)                   # directo en la ventana
+    directo = gfx_pixel_rgb(20, 20)
+    ok = bitmap_create(0, 60, 40, 0)
+    Print "como la pantalla: #{ok}"
+    bitmap_draw_to(0)
+    gfx_pen(p)
+    gfx_rect(0, 0, 59, 39)
+    bitmap_draw_screen()
+    bitmap_blit(0, 0, 0, 60, 40, 100, 10)      # copiado de una vez
+    Print "mismo color: #{gfx_pixel_rgb(120, 20) == directo}"
+    a = bitmap_create(1, 10, 10, -1)
+    b = bitmap_create(1, 10, 10, 9)
+    Print "fuera de rango: #{a} #{b}"
+    bitmap_free(0)
+    Prueba.close
+    Print "fin"
+end
