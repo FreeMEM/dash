@@ -33,6 +33,27 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.9.0 (2026-11-10)
+
+Sintaxis nueva, un módulo y una función nuevos, y dos arreglos. Lo que ya compilaba sigue igual.
+
+- **Nuevo:** `x in ...` dice si x está en algo (lo pidió David Martínez). `x in (1..10)` y `x in (0..20 step 5)`
+  valen para los números que daría el `for`. `x in [1, 5, 9]` o `x in lista` buscan un elemento igual, y los textos
+  se comparan por su contenido. `x in texto` busca un trozo o un carácter (`s[0] in "aeiou"`). `x in diccionario`
+  busca una clave. `x not in ...` es lo contrario.
+- **Nuevo:** las comparaciones se encadenan como en Python: `1 <= a <= 10` es `1 <= a and a <= 10`. El valor del
+  medio no puede llamar a una función, porque se haría dos veces: eso da error.
+- **Nuevo:** `lib/requisitos.dash` lee lo que necesita un programa de la línea `Requires:` de su `.readme` (el
+  manifiesto de Hangar) y comprueba en el Amiga qué falta: CPU, FPU, chipset, tarjeta gráfica, versión del sistema,
+  memoria y librerías. Es para que los instaladores pidan a Hangar lo que falta.
+- **Nuevo:** `chipset_model()` da "AGA", "ECS" u "OCS".
+- El paquete del Amiga lleva su `Dash.readme`, con lo que necesita Dash para Hangar.
+- **Arreglo:** por `./dash --gcc`, una lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de
+  textos.
+- **Arreglo:** por `./dash --gcc`, un programa cuyo único texto venía de una función (`Print locale_language()`) no
+  enlazaba.
+- Probado en A500, A1200 (3.1) y A1200 con OS 3.2, emulados, y en DashOS.
+
 ### 2.8.0 (2026-11-09)
 
 Dos funciones nuevas y dos arreglos. Lo que ya compilaba sigue igual.

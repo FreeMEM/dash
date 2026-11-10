@@ -32,6 +32,26 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.9.0 (2026-11-10)
+
+New syntax, a new module and a new function, and two fixes. What compiled before still does the same.
+
+- **New:** `x in ...` tells whether x is in something (requested by David Martínez). `x in (1..10)` and
+  `x in (0..20 step 5)` hold the numbers the `for` would give. `x in [1, 5, 9]` or `x in list` look for an equal
+  element, and strings are compared by content. `x in text` looks for a piece or a character (`s[0] in "aeiou"`).
+  `x in dictionary` looks for a key. `x not in ...` is the opposite.
+- **New:** comparisons chain as in Python: `1 <= a <= 10` is `1 <= a and a <= 10`. The middle value cannot call a
+  function, because it would run twice: that is an error.
+- **New:** `lib/requisitos.dash` reads what a program needs from the `Requires:` line of its `.readme` (Hangar's
+  manifest) and checks on the Amiga what is missing: CPU, FPU, chipset, graphics card, system version, memory and
+  libraries. It lets installers ask Hangar for what is missing.
+- **New:** `chipset_model()` gives "AGA", "ECS" or "OCS".
+- The Amiga package carries its `Dash.readme`, with what Dash needs, for Hangar.
+- **Fix:** with `./dash --gcc`, a hand-written list of lists (`[["a", "40"]]`) gave numbers instead of strings.
+- **Fix:** with `./dash --gcc`, a program whose only string came from a function (`Print locale_language()`) did
+  not link.
+- Tested on emulated A500, A1200 (3.1) and A1200 with OS 3.2, and on DashOS.
+
 ### 2.8.0 (2026-11-09)
 
 Two new functions and two fixes. What compiled before still does the same.
