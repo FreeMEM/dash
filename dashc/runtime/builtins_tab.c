@@ -397,6 +397,10 @@ const BuiltinInfo builtin_info[] = {
     {"disks_read", 1, 1, 1, 0, 0, 0u},
     {"dos_requesters", 1, 0, 1, 0, 0, 0u},
     {"dos_requesters", 1, 0, 1, 0, 0, 0u},
+    {"ed25519_verify", 4, 2, 0, 0, 0, 3u},
+    {"ed25519_verify", 4, 2, 0, 0, 0, 3u},
+    {"ed25519_verify_text", 3, 2, 0, 0, 0, 7u},
+    {"ed25519_verify_text", 3, 2, 0, 0, 0, 7u},
     {"env_get", 1, 3, 0, 0, 0, 1u},
     {"env_get", 1, 3, 0, 0, 0, 1u},
     {"env_set", 3, 2, 0, 0, 0, 3u},
@@ -1561,6 +1565,20 @@ const BuiltinInfo builtin_info[] = {
     {"sha1_new", 0, 1, 0, 0, 0, 0u},
     {"sha1_text", 1, 3, 0, 0, 0, 1u},
     {"sha1_text", 1, 3, 0, 0, 0, 1u},
+    {"sha256", 2, 3, 0, 0, 0, 0u},
+    {"sha256", 2, 3, 0, 0, 0, 0u},
+    {"sha256_add", 3, 0, 0, 0, 0, 0u},
+    {"sha256_add", 3, 0, 0, 0, 0, 0u},
+    {"sha256_add_text", 2, 0, 0, 0, 0, 2u},
+    {"sha256_add_text", 2, 0, 0, 0, 0, 2u},
+    {"sha256_bytes", 2, 2, 0, 0, 0, 0u},
+    {"sha256_bytes", 2, 2, 0, 0, 0, 0u},
+    {"sha256_hex", 1, 3, 0, 0, 0, 0u},
+    {"sha256_hex", 1, 3, 0, 0, 0, 0u},
+    {"sha256_new", 0, 1, 0, 0, 0, 0u},
+    {"sha256_new", 0, 1, 0, 0, 0, 0u},
+    {"sha256_text", 1, 3, 0, 0, 0, 1u},
+    {"sha256_text", 1, 3, 0, 0, 0, 1u},
     {"sin", 1, 5, 0, 1, 0, 0u},
     {"sin", 1, 5, 0, 1, 0, 0u},
     {"single_instance", 1, 2, 1, 0, 0, 1u},
@@ -1932,7 +1950,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1930;
+const int builtin_count = 1948;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

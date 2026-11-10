@@ -1,0 +1,38 @@
+# Test: SHA-256 (de una vez, de un texto y por partes) y la verificación de firmas Ed25519 (RFC 8032, vector 1, y
+# una firma de un texto hecha con la biblioteca cryptography de Python), con una firma tocada y un texto cambiado.
+# expect-c: _dash_sha256_new
+# expect-out: abc ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+# expect-out: vacio e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+# expect-out: partes 248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1
+# expect-out: buffer ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+# expect-out: rfc true
+# expect-out: texto true
+# expect-out: tocada false
+# expect-out: cambiado false
+# expect-out: mala false
+
+Main
+    Print "abc " + sha256_text("abc")
+    Print "vacio " + sha256_text("")
+    s = sha256_new()
+    sha256_add_text(s, "abcdbcdecdefdefgefghfghighij")
+    sha256_add_text(s, "hijkijkljklmklmnlmnomnopnopq")
+    Print "partes " + sha256_hex(s)
+    b = buffer_alloc(3)
+    buffer_set_byte(b, 0, 97)
+    buffer_set_byte(b, 1, 98)
+    buffer_set_byte(b, 2, 99)
+    Print "buffer " + sha256(b, 3)
+    buffer_free(b)
+    rfc_clave = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    rfc_firma = "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
+    Print "rfc #{ed25519_verify_text(rfc_clave, rfc_firma, "")}"
+    clave = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
+    firma = "63b4c1bb777be018da1b53f9750384f6546f72ad22a0e65401d1196bc856a4b9065b4afb23f8165cbb02965394aae39ad378b28d43b09f2336af2fda364f4d0d"
+    Print "texto #{ed25519_verify_text(clave, firma, "Hangar 0.5")}"
+    # S fuera de rango (el último byte con los 3 bits altos puestos): se rechaza sin hacer las cuentas
+    tocada = firma[:126] + "ff"
+    Print "tocada #{ed25519_verify_text(clave, tocada, "Hangar 0.5")}"
+    Print "cambiado #{ed25519_verify_text(clave, firma, "Hangar 0.6")}"
+    Print "mala #{ed25519_verify_text("xyz", firma, "Hangar 0.5")}"
+end

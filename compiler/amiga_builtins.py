@@ -5571,6 +5571,28 @@ ZLIB_FUNCTIONS = {
     "sha1_bytes": _buf("sha1_bytes", ["sha", "out"], "BOOL", "_dash_sha1_bytes(${sha}, ${out})",
                        "Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the "
                        "index); false if that number is not in use"),
+    "sha256": _buf("sha256", ["buffer", "n"], "STRPTR", "_dash_sha256(${buffer}, ${n})",
+                   "SHA-256 of n bytes of a buffer, in 64 hex digits (to check a download)"),
+    "sha256_text": _buf("sha256_text", ["s"], "STRPTR", "_dash_sha256_text(${s})", "SHA-256 of a text, in 64 hex digits"),
+    "sha256_new": _buf("sha256_new", [], "LONG", "_dash_sha256_new()",
+                       "A SHA-256 made bit by bit with sha256_add and sha256_add_text (a big file, read in pieces): its "
+                       "number (1-8), 0 if all are in use. sha256_hex or sha256_bytes end it"),
+    "sha256_add": _buf("sha256_add", ["sha", "buffer", "n"], "void", "_dash_sha256_add(${sha}, ${buffer}, ${n})",
+                       "Adds n bytes of a buffer to a SHA-256 of sha256_new"),
+    "sha256_add_text": _buf("sha256_add_text", ["sha", "s"], "void", "_dash_sha256_add_text(${sha}, ${s})",
+                            "Adds a text to a SHA-256 of sha256_new"),
+    "sha256_hex": _buf("sha256_hex", ["sha"], "STRPTR", "_dash_sha256_hex(${sha})",
+                       "Ends a SHA-256 of sha256_new: its 64 hex digits (\"\" if that number is not in use)"),
+    "sha256_bytes": _buf("sha256_bytes", ["sha", "out"], "BOOL", "_dash_sha256_bytes(${sha}, ${out})",
+                         "Ends a SHA-256 of sha256_new: its 32 bytes to a buffer; false if that number is not in use"),
+    "ed25519_verify": _buf("ed25519_verify", ["key", "signature", "buffer", "n"], "BOOL",
+                           "_dash_ed25519_verify(${key}, ${signature}, ${buffer}, ${n})",
+                           "Whether signature (128 hex digits) is the Ed25519 signature of n bytes of a buffer made with "
+                           "the private key of key (the public key, 64 hex digits): to trust a file that came over "
+                           "plain HTTP or from a mirror"),
+    "ed25519_verify_text": _buf("ed25519_verify_text", ["key", "signature", "s"], "BOOL",
+                                "_dash_ed25519_verify_text(${key}, ${signature}, ${s})",
+                                "ed25519_verify for a text"),
 }
 
 # =============================================================================

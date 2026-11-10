@@ -99,6 +99,8 @@ _X_ES = "- `x`: el número, un `Double`.\n"
 _X_EN = "- `x`: the number, a `Double`.\n"
 _SHA_ES = "- `sha`: el número de `sha1_new`.\n"
 _SHA_EN = "- `sha`: the number from `sha1_new`.\n"
+_SHA256_ES = "- `sha`: el número de `sha256_new`.\n"
+_SHA256_EN = "- `sha`: the number from `sha256_new`.\n"
 _J_ES = "- `i`: el nodo, desde 0.\n"
 _J_EN = "- `i`: the node, from 0.\n"
 
@@ -220,6 +222,46 @@ it with `sha1_add*` and finish with `sha1_hex` or `sha1_bytes`.
     "sha1_bytes": _f(_SHA_ES + "- `out`: un búfer de 20 bytes.\n\nLo acaba y escribe sus 20 bytes en `out`. Devuelve `false` si ese número no está en uso.\n",
                      _SHA_EN + "- `out`: a 20-byte buffer.\n\nFinishes it and writes its 20 bytes to `out`. Returns `false` if that number is not in use.\n",
                      ["sha1_hex"]),
+    "sha256": _f("- `buffer`, `n`: los bytes.\n\nDevuelve su SHA-256 en 64 cifras hexadecimales.\n",
+                 "- `buffer`, `n`: the bytes.\n\nReturns their SHA-256 as 64 hex digits.\n", ["sha256_text", "sha256_new"]),
+    "sha256_text": _f("- `s`: el texto.\n\nDevuelve su SHA-256 en 64 cifras hexadecimales.\n",
+                      "- `s`: the text.\n\nReturns its SHA-256 as 64 hex digits.\n", ["sha256"]),
+    "sha256_new": _f("""\
+Empieza un SHA-256 por partes, para un fichero que se lee a trozos. Devuelve su número (1 a 8), o 0 si están todos
+en uso. Se le añade con `sha256_add` y `sha256_add_text` y se acaba con `sha256_hex` o `sha256_bytes`.
+""", """\
+Starts a SHA-256 in parts, for a file read in pieces. Returns its number (1 to 8), or 0 if all are in use. Add to it
+with `sha256_add` and `sha256_add_text` and finish with `sha256_hex` or `sha256_bytes`.
+""", ["sha256_add", "sha256_hex"]),
+    "sha256_add": _f(_SHA256_ES + "- `buffer`, `n`: los bytes que se añaden.\n", _SHA256_EN + "- `buffer`, `n`: the bytes to add.\n",
+                     ["sha256_new"]),
+    "sha256_add_text": _f(_SHA256_ES + "- `s`: el texto que se añade.\n", _SHA256_EN + "- `s`: the text to add.\n", ["sha256_new"]),
+    "sha256_hex": _f(_SHA256_ES + "\nLo acaba y devuelve las 64 cifras hexadecimales; `\"\"` si ese número no está en uso. El número queda libre.\n",
+                     _SHA256_EN + "\nFinishes it and returns the 64 hex digits; `\"\"` if that number is not in use. The number becomes free.\n",
+                     ["sha256_bytes"]),
+    "sha256_bytes": _f(_SHA256_ES + "- `out`: un búfer de 32 bytes.\n\nLo acaba y escribe sus 32 bytes en `out`. Devuelve `false` si ese número no está en uso.\n",
+                       _SHA256_EN + "- `out`: a 32-byte buffer.\n\nFinishes it and writes its 32 bytes to `out`. Returns `false` if that number is not in use.\n",
+                       ["sha256_hex"]),
+    "ed25519_verify": _f("""\
+- `key`: la clave pública, 32 bytes en 64 cifras hexadecimales.
+- `signature`: la firma, 64 bytes en 128 cifras hexadecimales.
+- `buffer`, `n`: los bytes firmados.
+
+Devuelve `true` si la firma es buena: esos bytes los firmó quien tiene la clave privada. Así uno se puede fiar de
+un fichero que llegó por HTTP sin cifrar o desde un espejo (un índice de paquetes, una descarga). Solo comprueba:
+firmar se hace en el servidor. Tarda unos segundos en un 68020.
+""", """\
+- `key`: the public key, 32 bytes as 64 hex digits.
+- `signature`: the signature, 64 bytes as 128 hex digits.
+- `buffer`, `n`: the signed bytes.
+
+Returns `true` if the signature is good: those bytes were signed by whoever has the private key. So a file that came
+over plain HTTP or from a mirror can be trusted (a package index, a download). It only checks: signing is done on the
+server. It takes some seconds on a 68020.
+""", ["ed25519_verify_text", "sha256"]),
+    "ed25519_verify_text": _f("- `key`, `signature`: como en `ed25519_verify`.\n- `s`: el texto firmado.\n\nDevuelve `true` si la firma es buena.\n",
+                              "- `key`, `signature`: as in `ed25519_verify`.\n- `s`: the signed text.\n\nReturns `true` if the signature is good.\n",
+                              ["ed25519_verify"]),
     # ------------------------------------------------------------ UTF-8
     "utf8_next": _f("- `s`: el texto UTF-8.\n- `i`: la posición de un carácter, en bytes.\n\nDevuelve dónde empieza el siguiente carácter; al final, el largo del texto.\n",
                     "- `s`: the UTF-8 text.\n- `i`: a character's position, in bytes.\n\nReturns where the next character starts; at the end, the text's length.\n",
