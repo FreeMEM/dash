@@ -1063,6 +1063,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de textos; y un builtin que devuelve un
       texto, solo en un programa (`Print locale_language()`), no enlazaba. `tests/test_requisitos.dash`,
       `tests/test_lista_listas_literal.dash`, `tests/test_chipset_model.dash`
+- [x] Actualizar Dash desde Forja (2026-11-10): el paquete trae `dash-X.Y.Z-amiga.tar` (`tar_actualizar` de
+      `tools/paquete_amiga.py`: ustar, cada fichero del cajón con gzip aparte, sin Instalar), y Forja 0.6.0 lo baja de
+      la última release, comprueba cada fichero (CRC de su gzip) y lo cambia en el cajón de Dash. Dash 2.9.1
 - [x] `in` y comparaciones encadenadas (2026-11-10, lo pidió David Martínez): `x in (1..10)`, `x in (0..20 step 5)`
       (los números que daría el `for`; sin step, `(10..1)` también vale), `x in lista` (textos por su contenido,
       structs por objeto), `x in texto` (un trozo, o un carácter), `x in diccionario` (una clave), `x not in ...`, y
