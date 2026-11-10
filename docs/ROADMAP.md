@@ -1078,7 +1078,7 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       `regex_group(n)` (0: todo lo que encajó), `regex_groups()` (un `[String]`, como `groups()` de Python),
       `regex_group_count`, `regex_group_start`, `regex_group_length` y `regex_group_parent`, que da el árbol de los
       anidados: una lista de Dash no mezcla textos y sublistas. El motor guarda el inicio y el fin de cada grupo y
-      los deshace al volver atrás. 980 funciones. `tests/test_regex_grupos.dash`, `dashc/tests/regex_grupos.dash`
+      los deshace al volver atrás. 980 funciones. Dash 2.10.0. `tests/test_regex_grupos.dash`, `dashc/tests/regex_grupos.dash`
 
 ## Notas y Decisiones
 

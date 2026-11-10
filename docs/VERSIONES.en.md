@@ -32,6 +32,19 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.10.0 (2026-11-10)
+
+New functions for regular expressions. What compiled before still does the same.
+
+- **New:** regular expression groups, what each `( )` catches (requested by David Martínez). `regex_group(n)`
+  gives the text of group `n` of the last match (0 is all of it). `regex_groups()` gives a `[String]` with all of
+  them, like Python's `groups()`. `regex_group_count()`, `regex_group_start(n)` and `regex_group_length(n)` give how
+  many there are, where each one starts and how long it is. `regex_group_parent(n)` tells which group holds
+  another, for nested ones. Groups are numbered by the order of their `(`; `(?: )` does not count.
+- **Tool:** the one that makes a program's `.lha` and `.readme` for Aminet is now called `tools/paquete_aminet.py`.
+- The Amiga package carries Forja 0.6.0, like 2.9.1's.
+- Tested on emulated A500, A1200 (3.1) and A1200 with OS 3.2, and on DashOS.
+
 ### 2.9.1 (2026-11-10)
 
 The language does not change. News in the Amiga package and in Forja, which comes inside it.
