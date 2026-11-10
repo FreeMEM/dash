@@ -27,12 +27,12 @@ Main
     rfc_clave = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
     rfc_firma = "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
     Print "rfc #{ed25519_verify_text(rfc_clave, rfc_firma, "")}"
-    clave = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8"
-    firma = "63b4c1bb777be018da1b53f9750384f6546f72ad22a0e65401d1196bc856a4b9065b4afb23f8165cbb02965394aae39ad378b28d43b09f2336af2fda364f4d0d"
-    Print "texto #{ed25519_verify_text(clave, firma, "Hangar 0.5")}"
+    clave = "561a961de84c7c40854352a7beb4eef327ce2a8c778c1bab9fbcccd0c546701e"
+    firma = "208a0138468bce62a389346970990e9609210c04a5c05a0c672d2b1a8df43c1db3eef43d951a0f69192c5b9ac9b9a5f3369f43f2d3c3c4894a8159b547dacc02"
+    Print "texto #{ed25519_verify_text(clave, firma, "Dash 0.5")}"
     # S fuera de rango (el último byte con los 3 bits altos puestos): se rechaza sin hacer las cuentas
     tocada = firma[:126] + "ff"
-    Print "tocada #{ed25519_verify_text(clave, tocada, "Hangar 0.5")}"
-    Print "cambiado #{ed25519_verify_text(clave, firma, "Hangar 0.6")}"
-    Print "mala #{ed25519_verify_text("xyz", firma, "Hangar 0.5")}"
+    Print "tocada #{ed25519_verify_text(clave, tocada, "Dash 0.5")}"
+    Print "cambiado #{ed25519_verify_text(clave, firma, "Dash 0.6")}"
+    Print "mala #{ed25519_verify_text("xyz", firma, "Dash 0.5")}"
 end

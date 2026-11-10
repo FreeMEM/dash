@@ -1056,9 +1056,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       ARexx con `mui_wait_event_signals(task_signal() | rexx_signal())` sin que haga falta otro evento.
       `tests/test_rexx_signal.dash`
 - [x] `lib/requisitos.dash` (2026-11-09, propuesta del usuario, por Tachyon): lo que necesita un programa, de la
-      línea `Requires:` de su `.readme` (el manifiesto de Hangar), leída como la lee el servicio de Hangar, y
+      línea `Requires:` de su `.readme` (la de Aminet), leída como la lee un gestor de paquetes, y
       comprobada en el Amiga (`requisitos_faltan`); `Provides:` con `provee_leer`. Para que los instaladores y
-      actualizadores del universo Dash pidan a Hangar lo que falta. Builtin nuevo `chipset_model` ("AGA", "ECS",
+      actualizadores del universo Dash sepan lo que falta. Builtin nuevo `chipset_model` ("AGA", "ECS",
       "OCS"). El paquete de Dash lleva su `Dash.readme` (`paquete/paquete.txt`). Arreglos que salieron: por C, una
       lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de textos; y un builtin que devuelve un
       texto, solo en un programa (`Print locale_language()`), no enlazaba. `tests/test_requisitos.dash`,

@@ -478,7 +478,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         config.write_text(base + extra_config)
 
         # DASH_EMU_SDL_VIDEO: otro controlador de vídeo de SDL sin ventana; "x11" bajo xvfb-run con el FS-UAE 3.1 de
-        # Ubuntu, que necesita OpenGL y no arranca con "offscreen" (el servidor de Hangar)
+        # Ubuntu, que necesita OpenGL y no arranca con "offscreen" (un servidor)
         env = dict(os.environ) if window else \
             dict(os.environ, SDL_VIDEODRIVER=os.environ.get("DASH_EMU_SDL_VIDEO", "offscreen"), SDL_AUDIODRIVER="dummy",
                  ALSOFT_DRIVERS="null")

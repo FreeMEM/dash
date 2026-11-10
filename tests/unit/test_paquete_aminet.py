@@ -1,4 +1,4 @@
-"""tools/paquete_hangar.py: de un cajón con su paquete.txt, el .lha y el .readme para Aminet y Hangar."""
+"""tools/paquete_aminet.py: de un cajón con su paquete.txt, el .lha y el .readme para Aminet."""
 import os
 import shutil
 import subprocess
@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
-import paquete_hangar as ph  # noqa: E402
+import paquete_aminet as ph  # noqa: E402
 
 PAQUETE = """Short:        Un programa de prueba
 Author:       Ana García
@@ -25,7 +25,7 @@ Y más cosas.
 """
 
 
-class PaqueteHangar(unittest.TestCase):
+class PaqueteAminet(unittest.TestCase):
     def test_readme_y_comprobaciones(self):
         campos, desc = ph.leer_paquete(PAQUETE)
         self.assertEqual(ph.comprobar(campos), [])
@@ -47,7 +47,7 @@ class PaqueteHangar(unittest.TestCase):
             (caj / "Prueba").write_bytes(b"\x00\x00\x03\xf3programa")
             (caj / "paquete.txt").write_text(PAQUETE, encoding="utf-8")
             out = Path(d) / "out"
-            r = subprocess.run([sys.executable, str(ROOT / "tools/paquete_hangar.py"), str(caj), "-o", str(out)],
+            r = subprocess.run([sys.executable, str(ROOT / "tools/paquete_aminet.py"), str(caj), "-o", str(out)],
                                capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertIn("Ana Garc\xeda".encode("latin-1"), (out / "Prueba.readme").read_bytes())

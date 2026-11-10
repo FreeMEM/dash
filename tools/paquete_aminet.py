@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Hace un paquete para AmigaOS 3.x: el .lha con el cajón del programa y su .readme, listos para Aminet y para
-Hangar (la tienda de hangar.freemem.space), que leen el mismo fichero.
+"""Hace un paquete para AmigaOS 3.x: el .lha con el cajón del programa y su .readme, listos para Aminet
+y para un gestor de paquetes, que leen el mismo fichero.
 
-    python3 tools/paquete_hangar.py CAJON [-o SALIDA]
+    python3 tools/paquete_aminet.py CAJON [-o SALIDA]
 
 CAJON es el cajón del programa tal como se instalará (por ejemplo build/Trasfondo, con el programa, sus iconos y
 lo que lleve). Dentro, un fichero paquete.txt con los campos del .readme de Aminet, uno por línea, y debajo, tras
@@ -23,7 +23,7 @@ una línea en blanco, la descripción:
 
     Lo que hace el programa, en varias líneas.
 
-Short, Author, Type y Version hacen falta. Requires, Provides, Install, Run y License los usa Hangar para saber
+Short, Author, Type y Version hacen falta. Requires, Provides, Install, Run y License los usa un gestor de paquetes para saber
 qué necesita, qué trae para otros programas, dónde se instala y qué ejecutar (Aminet los ignora). Sale
 SALIDA/Nombre.lha (con Nombre.readme también dentro) y SALIDA/Nombre.readme, en Latin-1. El .lha se hace con el
 lha de 68k (/opt/amiga/bin/lha, o $LHA), que guarda bien los atributos del Amiga.
@@ -95,7 +95,7 @@ def readme(campos, desc):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="El .lha y el .readme de un programa para Aminet y Hangar")
+    ap = argparse.ArgumentParser(description="El .lha y el .readme de un programa para Aminet")
     ap.add_argument("cajon", help="el cajón del programa, con su paquete.txt dentro")
     ap.add_argument("-o", "--salida", default=".", help="dónde dejar Nombre.lha y Nombre.readme")
     a = ap.parse_args()

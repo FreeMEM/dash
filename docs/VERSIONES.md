@@ -60,11 +60,11 @@ Sintaxis nueva, un módulo y una función nuevos, y dos arreglos. Lo que ya comp
   busca una clave. `x not in ...` es lo contrario.
 - **Nuevo:** las comparaciones se encadenan como en Python: `1 <= a <= 10` es `1 <= a and a <= 10`. El valor del
   medio no puede llamar a una función, porque se haría dos veces: eso da error.
-- **Nuevo:** `lib/requisitos.dash` lee lo que necesita un programa de la línea `Requires:` de su `.readme` (el
-  manifiesto de Hangar) y comprueba en el Amiga qué falta: CPU, FPU, chipset, tarjeta gráfica, versión del sistema,
-  memoria y librerías. Es para que los instaladores pidan a Hangar lo que falta.
+- **Nuevo:** `lib/requisitos.dash` lee lo que necesita un programa de la línea `Requires:` de su `.readme` (la
+  de Aminet) y comprueba en el Amiga qué falta: CPU, FPU, chipset, tarjeta gráfica, versión del sistema,
+  memoria y librerías. Es para que los instaladores sepan lo que falta.
 - **Nuevo:** `chipset_model()` da "AGA", "ECS" u "OCS".
-- El paquete del Amiga lleva su `Dash.readme`, con lo que necesita Dash para Hangar.
+- El paquete del Amiga lleva su `Dash.readme`, con lo que necesita Dash.
 - **Arreglo:** por `./dash --gcc`, una lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de
   textos.
 - **Arreglo:** por `./dash --gcc`, un programa cuyo único texto venía de una función (`Print locale_language()`) no
@@ -102,8 +102,8 @@ Una función nueva y dos novedades de funciones que ya estaban. Lo que ya compil
 - El paquete del Amiga trae Forja 0.5.2: Help o F1 sacan la ayuda del nombre que hay en el cursor (idea de Javier
   R. Santurde "Tolkien"), y F5, F10 y las demás teclas del editor llegan con el puntero en cualquier sitio de la
   ventana (lo contó David Martínez).
-- **Herramienta:** `tools/paquete_hangar.py` hace, de un cajón y su `paquete.txt`, el `.lha` y el `.readme` de un
-  programa, listos para Aminet y para Hangar.
+- **Herramienta:** `tools/paquete_aminet.py` (antes con otro nombre) hace, de un cajón y su `paquete.txt`, el `.lha` y el `.readme` de un
+  programa, listos para Aminet.
 - Probado en A1200 (3.1) y A1200 con OS 3.2 emulados.
 
 ### 2.6.4 (2026-11-08)
