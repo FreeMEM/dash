@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 974 funciones, 974 implementadas, 0 sin implementar.
+Total: 980 funciones, 980 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -7438,6 +7438,12 @@ dice por qué. La sintaxis entera, en el manual (sección 5).
 | [`regex_match(pattern, text, ignore_case)`](#regex_match) | Bool | True si el texto entero encaja con la expresión regular (la sintaxis común de ICU: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| grupos); false también si el patrón está mal (regex_error dice por qué) |  |
 | [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | La posición en bytes donde empieza lo primero que encaja desde el byte from; -1 si no hay (o el patrón está mal); regex_length da su largo |  |
 | [`regex_length()`](#regex_length) | Int | El largo en bytes de lo último que encajó con regex_find o regex_match (0 si nada) |  |
+| [`regex_group(n)`](#regex_group) | String | El texto del grupo n de lo último que encajó (0: todo lo que encajó); "" si no participó |  |
+| [`regex_groups()`](#regex_groups) | [Int] | Los textos de los grupos de lo último que encajó, del 1 a regex_group_count(), en un [String] nuevo |  |
+| [`regex_group_count()`](#regex_group_count) | Int | Cuántos grupos que capturan tiene el último patrón ((?: ) no cuenta) |  |
+| [`regex_group_start(n)`](#regex_group_start) | Int | El byte donde empieza el grupo n de lo último que encajó; -1 si no participó |  |
+| [`regex_group_length(n)`](#regex_group_length) | Int | El largo en bytes del grupo n de lo último que encajó (0 si no participó) |  |
+| [`regex_group_parent(n)`](#regex_group_parent) | Int | El grupo que contiene al grupo n (0 si ninguno, -1 si no hay grupo n): para grupos anidados |  |
 | [`regex_error()`](#regex_error) | String | Por qué está mal el último patrón; "" si está bien |  |
 | [`wildcard_match(pattern, text, ignore_case)`](#wildcard_match) | Bool | True si el texto entero encaja con los comodines de Excel: * cualquier cosa, ? un carácter, ~ delante de un carácter lo toma tal cual (~* ~? ~~) |  |
 
@@ -7471,6 +7477,67 @@ Ver también: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
 Devuelve el largo en bytes de lo último que encajó; 0 si nada.
 
 Ver también: [`regex_find`](#regex_find).
+
+<a id="regex_group"></a>
+
+### `regex_group(n)` → `String`
+
+- `n`: el número del grupo, del 1 en adelante por el orden de sus `(`; 0 es todo lo que encajó.
+
+Devuelve el texto que atrapó ese grupo en lo último que encajó (`regex_find` o `regex_match`). Si el grupo no
+participó (por ejemplo, una rama de `|` que no se usó), o no hay grupo `n`, devuelve `""`. En un grupo que se
+repite, queda la última vuelta. `(?: )` agrupa sin atrapar. Lo pidió David Martínez.
+
+Ver también: [`regex_groups`](#regex_groups), [`regex_group_start`](#regex_group_start), [`regex_find`](#regex_find).
+
+<a id="regex_groups"></a>
+
+### `regex_groups()` → `[Int]`
+
+Devuelve un `[String]` nuevo con el texto de los grupos 1 a `regex_group_count()` de lo último que encajó, como
+`groups()` de Python; vacía si nada encajó. Los anidados salen en su sitio por el orden de su `(`, y
+`regex_group_parent` dice dentro de cuál está cada uno.
+
+Ver también: [`regex_group`](#regex_group), [`regex_group_parent`](#regex_group_parent).
+
+<a id="regex_group_count"></a>
+
+### `regex_group_count()` → `Int`
+
+Devuelve cuántos grupos que atrapan tiene el último patrón; `(?: )` no cuenta.
+
+Ver también: [`regex_groups`](#regex_groups).
+
+<a id="regex_group_start"></a>
+
+### `regex_group_start(n)` → `Int`
+
+- `n`: el grupo, como en `regex_group`.
+
+Devuelve el byte del texto donde empieza el grupo, o -1 si no participó.
+
+Ver también: [`regex_group_length`](#regex_group_length), [`regex_group`](#regex_group).
+
+<a id="regex_group_length"></a>
+
+### `regex_group_length(n)` → `Int`
+
+- `n`: el grupo, como en `regex_group`.
+
+Devuelve cuántos bytes mide el grupo; 0 si no participó.
+
+Ver también: [`regex_group_start`](#regex_group_start).
+
+<a id="regex_group_parent"></a>
+
+### `regex_group_parent(n)` → `Int`
+
+- `n`: el grupo.
+
+Devuelve el grupo que lo contiene: en `"((a)(b))"`, el 2 y el 3 están dentro del 1, y el 1 en ninguno (0). -1 si
+no hay grupo `n`. Con esto se monta el árbol de los grupos anidados.
+
+Ver también: [`regex_groups`](#regex_groups).
 
 <a id="regex_error"></a>
 

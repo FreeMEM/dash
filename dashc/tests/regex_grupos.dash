@@ -1,0 +1,68 @@
+# Los grupos de las expresiones regulares (lo pidió David Martínez)
+
+Main
+    p = regex_find("(\\d+)-(\\d+)", "tel 91-555 x", 0, false)
+    Print "find #{p} [#{regex_group(0)}] [#{regex_group(1)}] [#{regex_group(2)}] #{regex_group_count()} #{regex_group_start(1)} #{regex_group_length(2)}"
+
+    if regex_match("((a+)(b+))c", "aabbbc", false)
+        Print "anidados [#{regex_group(1)}] [#{regex_group(2)}] [#{regex_group(3)}] #{regex_group_parent(1)} #{regex_group_parent(2)} #{regex_group_parent(3)} #{regex_group_parent(4)}"
+    end
+
+    # una rama de | que no se usa: su grupo no participa
+    p = regex_find("(x)|(y)", "y", 0, false)
+    Print "rama [#{regex_group(1)}] #{regex_group_start(1)} [#{regex_group(2)}]"
+
+    # el grupo 1 se guarda en la primera rama, que luego falla: al volver atrás se deshace
+    if regex_match("(a)b|(a)c", "ac", false)
+        Print "vuelta [#{regex_group(1)}] [#{regex_group(2)}] #{regex_group_start(1)} #{regex_group_length(1)}"
+    end
+
+    # en una repetición queda la última vuelta
+    if regex_match("(\\w)+", "abc", false)
+        Print "repite [#{regex_group(1)}] #{regex_group_start(1)}"
+    end
+
+    if regex_match("(?:ab)(c)", "abc", false)
+        Print "sin captura #{regex_group_count()} [#{regex_group(1)}]"
+    end
+
+    if regex_match("(a*)(a)", "aaa", false)
+        Print "codicioso [#{regex_group(1)}] [#{regex_group(2)}]"
+    end
+
+    if regex_match("(a|ab)(c|bcd)(d*)", "abcd", false)
+        Print "alternativas [#{regex_group(1)}] [#{regex_group(2)}] [#{regex_group(3)}]"
+    end
+
+    # regex_groups: una lista con los textos de los grupos
+    texto = "x=1;y=22;z="
+    desde = 0
+    var partes: [String] = []
+    while true
+        p = regex_find("(\\w)=(\\d*)", texto, desde, false)
+        if p < 0
+            break
+        end
+        g = regex_groups()
+        partes.push(g[0] + "=" + g[1])
+        desde = p + regex_length()
+    end
+    r = ""
+    for s in partes
+        if r != ""
+            r = r + ","
+        end
+        r = r + s
+    end
+    Print "lista #{partes.length} #{r}"
+
+    p = regex_find("(z)", "abc", 0, false)
+    Print "nada #{p} [#{regex_group(1)}] #{regex_groups().length} #{regex_group_start(0)}"
+
+    p = regex_find("(b+)c", "aabbc", 0, false)
+    Print "bytes [#{regex_group(1)}] #{regex_group_start(1)} #{regex_group_length(1)}"
+
+    if regex_match("(a)", "a", false)
+        Print "fuera [#{regex_group(5)}] #{regex_group_start(-1)} #{regex_group_length(9)}"
+    end
+end

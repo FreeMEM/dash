@@ -462,6 +462,13 @@ DESC_ES = {
                   "patrón está mal); regex_length da su largo",
     "regex_length": "El largo en bytes de lo último que encajó con regex_find o regex_match (0 si nada)",
     "regex_error": "Por qué está mal el último patrón; \"\" si está bien",
+    "regex_group": "El texto del grupo n de lo último que encajó (0: todo lo que encajó); \"\" si no participó",
+    "regex_groups": "Los textos de los grupos de lo último que encajó, del 1 a regex_group_count(), en un [String] "
+                    "nuevo",
+    "regex_group_count": "Cuántos grupos que capturan tiene el último patrón ((?: ) no cuenta)",
+    "regex_group_start": "El byte donde empieza el grupo n de lo último que encajó; -1 si no participó",
+    "regex_group_length": "El largo en bytes del grupo n de lo último que encajó (0 si no participó)",
+    "regex_group_parent": "El grupo que contiene al grupo n (0 si ninguno, -1 si no hay grupo n): para grupos anidados",
     "wildcard_match": "True si el texto entero encaja con los comodines de Excel: * cualquier cosa, ? un carácter, ~ "
                       "delante de un carácter lo toma tal cual (~* ~? ~~)",
     # Simular teclado y ratón

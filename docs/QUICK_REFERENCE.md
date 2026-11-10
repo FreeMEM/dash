@@ -76,7 +76,7 @@ s.length  s[i]  s[2:5]      # longitud, carácter, trozo
 Int(s[i])  str_code(s, i)   # código del carácter (0-255)
 str_char(65)                # "A"
 str_find(s, "x")            # posición o -1; str_find_from(s, "x", inicio)
-regex_match("D.", s, false)  # todo el texto, sintaxis ICU; regex_find(p, s, desde, icase) -1 / regex_length(); regex_error(); wildcard_match("*.ods", s, true)
+regex_match("D.", s, false)  # todo el texto, sintaxis ICU; regex_find(p, s, desde, icase) -1 / regex_length(); regex_group(1) regex_groups() (grupos); regex_error(); wildcard_match("*.ods", s, true)
 str_starts(s, "a")  str_ends(s, "z")
 str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)
