@@ -128,6 +128,9 @@ Conversions: `Int(x)`, `Float(n)`, `Fixed(n)`, `Int("42")`.
 ```ruby
 a + b   a - b   a * b   a / b   a % b      # arithmetic (integer / and % with Int)
 a == b  a != b  a < b   a > b   a <= b  a >= b
+1 <= a <= 10                                # chained, as in Python
+x in (1..10)   x in (0..20 step 5)          # in a range of integers (requested by David Martínez)
+x in list   x in "text"   x in dict         # element, piece or character, key; also x not in ...
 x and y   x or y   not x
 a & b   a | b   a ^ b   ~a   a << n   a >> n  # integer bitwise ops (Python precedence)
 "Hola " + nombre                            # string concatenation

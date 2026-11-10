@@ -634,6 +634,8 @@ static int simple(Node *n, Var *v)
 }
 
 static int gen_expr(Node *n);
+static void gen_in(Node *n);
+static Node *in_const(Node *n);
 static void gen_branch(Node *n, int label, int when_true);
 static void gen_block(NodeList *b);
 
@@ -712,7 +714,7 @@ static int expr_type(Node *n)
         return ta == TY_FLOAT || ta == TY_DOUBLE || ta == TY_FIXED ? ta : TY_INT;
     case E_INT: case E_BNOT:
         return TY_INT;
-    case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR:
+    case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR: case E_IN: case E_INRANGE:
         return TY_BOOL;
     case E_STR: case E_INTERP:
         return TY_STR;
@@ -3269,6 +3271,10 @@ static int gen_expr(Node *n)
     case E_CMP:
         set_cc(gen_compare(n));
         return TY_BOOL;
+    case E_INRANGE:
+    case E_IN:
+        gen_in(n);
+        return TY_BOOL;
     case E_NOT:
     case E_AND:
     case E_OR: {
@@ -3366,6 +3372,96 @@ static int gen_expr(Node *n)
     return TY_VOID;
 }
 
+/* x in (a..b): todo enteros; con a y b fijos y x una variable (n->c, del parser), a <= x and x <= b */
+static Node *in_const(Node *n)
+{
+    int i, t;
+    long a, b;
+    for (i = 0; i < 4; i++) {
+        t = expr_type(i < 3 ? n->args.v[i] : n->a);
+        if (t != TY_INT && t != TY_CHAR && t != TY_BOOL)
+            fatal_node(n, "x in (a..b) es para enteros (Int() pasa a entero un Float o un Fixed)");
+    }
+    if (!n->c || !fold(n->args.v[0], &a) || !fold(n->args.v[1], &b)) return NULL;
+    if (a > b && !n->c->val) {
+        /* (10..1): de 1 a 10 */
+        Node *lo = n->c->a->b;
+        n->c->a->b = n->c->b->b;
+        n->c->b->b = lo;
+    }
+    n->c->val = 1;   /* ya ordenado */
+    return n->c;
+}
+
+/* x in (a..b step s), x in lista, x in texto, x in diccionario (lo pidió David Martínez): 1 o 0 en d0 */
+static void gen_in(Node *n)
+{
+    int t, e;
+    if (n->kind == E_INRANGE) {
+        int i;
+        Node *c = in_const(n);
+        if (c) {
+            value(c);
+            return;
+        }
+        for (i = 2; i >= 0; i--) push_value(n->args.v[i]);
+        push_value(n->a);
+        rt_call("_dl_in_range", 4, 0);
+        forget_d0();
+        return;
+    }
+    t = expr_type(n->b);
+    if (t == TY_STR) {
+        Node *c;
+        if (expr_type(n->a) == TY_CHAR) {
+            push_value(n->a);
+            push_value(n->b);
+            rt_call("_dl_str_has_char", 2, 0);
+            forget_d0();
+            return;
+        }
+        c = xmalloc(sizeof *c);
+        *c = *n;
+        c->kind = E_CALL;
+        c->name = "str_contains";
+        c->a = c->b = NULL;
+        memset(&c->args, 0, sizeof c->args);
+        VEC_PUSH(c->args, n->b);
+        VEC_PUSH(c->args, n->a);
+        value(c);
+        return;
+    }
+    if (IS_DICT(t)) {
+        Node *c = xmalloc(sizeof *c);
+        *c = *n;
+        c->kind = E_MCALL;
+        c->name = "has";
+        c->a = n->b;
+        c->b = NULL;
+        memset(&c->args, 0, sizeof c->args);
+        VEC_PUSH(c->args, n->a);
+        value(c);
+        return;
+    }
+    if (!IS_ARR(t)) fatal_node(n, "\"in\" necesita una lista, un texto, un diccionario o un rango (a..b)");
+    e = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
+    if (e == TY_DOUBLE) {
+        dbl_value(n->a);
+        push_d0();
+    } else if (e == TY_FLOAT) {
+        float_value(n->a);
+        push_d0();
+    } else if (e == TY_FIXED) {
+        fix_value(n->a);
+        push_d0();
+    } else {
+        push_value(n->a);
+    }
+    push_value(n->b);
+    rt_call(e == TY_STR ? "_dl_list_has_str" : e == TY_DOUBLE ? "_dl_list_has_dbl" : "_dl_list_has", 2, 0);
+    forget_d0();
+}
+
 /* salta a label si n es verdadero (when_true) o falso */
 static void gen_branch(Node *n, int label, int when_true)
 {
@@ -3401,6 +3497,14 @@ static void gen_branch(Node *n, int label, int when_true)
         int cc = gen_compare(n);
         branch(when_true ? cc : cc ^ 1, label);        /* cc ^ 1: la condición contraria */
         return;
+    }
+    case E_INRANGE: {
+        Node *c = in_const(n);
+        if (c) {
+            gen_branch(c, label, when_true);
+            return;
+        }
+        break;
     }
     case E_CALL: {
         int idx;

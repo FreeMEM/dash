@@ -389,6 +389,26 @@ class FloatLiteral(ASTNode):
 
 
 @dataclass
+class InExpr(ASTNode):
+    """x in c: c a list (an element equal to x), a String (x a piece of it or a character) or a
+    dictionary (a key x). "not in" is a UnaryOp "not" over it. (Lo pidió David Martínez.)"""
+    value: ASTNode
+    container: ASTNode
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class InRangeExpr(ASTNode):
+    """x in (a..b) or x in (a..b step s): an Int among the ones a for over that range would give.
+    Without step the range counts either way: (10..1) holds 1 to 10."""
+    value: ASTNode
+    start: ASTNode
+    end: ASTNode
+    step: Optional[ASTNode] = None
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class UnaryOp(ASTNode):
     """Unary operation (future)."""
     operator: str

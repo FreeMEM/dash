@@ -92,6 +92,8 @@ enum {
     E_FUNCREF,  /* name: una función como valor (Func), su dirección */
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     E_ACAST,    /* Ptr name(a): la dirección a como puntero a una @amiga struct (o a un Byte, UByte...) */
+    E_IN,       /* a in b: b una lista, un texto o un diccionario (lo pidió David Martínez) */
+    E_INRANGE,  /* a in (args[0]..args[1] step args[2]); sin step, args[2] es 0 */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
     S_FOREACH,  /* for name in a */

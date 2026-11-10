@@ -1,0 +1,8 @@
+# Test: x in un número
+# expect: 'in' needs a list, a String, a dictionary or a range (a..b)
+Main
+    x = 5
+    if 1 in x
+        Print "si"
+    end
+end

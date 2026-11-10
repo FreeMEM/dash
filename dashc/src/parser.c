@@ -366,14 +366,129 @@ LEVEL(band_expr, shift_expr, P_AMP)
 LEVEL(bxor_expr, band_expr, P_CARET)
 LEVEL(bor_expr, bxor_expr, P_BAR)
 
+static int is_cmp(int k)
+{
+    return k == P_EQ || k == P_NE || k == P_LT || k == P_LE || k == P_GT || k == P_GE;
+}
+
+/* un valor que se puede escribir dos veces: una variable, un literal, un campo, un elemento */
+static int chain_safe(Node *n)
+{
+    switch (n->kind) {
+    case E_VAR: case E_INT: case E_STR: case E_BOOL: case E_NIL: case E_FLOAT:
+        return 1;
+    case E_FIELD: case E_NEG:
+        return chain_safe(n->a);
+    case E_INDEX:
+        return chain_safe(n->a) && chain_safe(n->b);
+    }
+    return 0;
+}
+
+/* tk en "(": ¿hay un ".." dentro, fuera de otros paréntesis? (x in (a..b)) */
+static int range_ahead(void)
+{
+    Token *t;
+    int depth = 0;
+    for (t = tk; t->kind != T_EOF; t++) {
+        if (t->kind == P_LP || t->kind == P_LB || t->kind == P_LBRACE) depth++;
+        else if (t->kind == P_RP || t->kind == P_RB || t->kind == P_RBRACE) {
+            if (--depth == 0) return 0;
+        } else if (t->kind == P_DOTDOT && depth == 1) return 1;
+    }
+    return 0;
+}
+
+static Node *cmp_node(Token *at, Node *a, int op, Node *b)
+{
+    Node *n = node(E_CMP, at);
+    n->op = op;
+    n->a = a;
+    n->b = b;
+    return n;
+}
+
+static Node *logic(int kind, Token *at, Node *a, Node *b)
+{
+    Node *n = node(kind, at);
+    n->a = a;
+    n->b = b;
+    return n;
+}
+
+/* x in (a..b step s), x in lista, x in texto, x in diccionario (lo pidió David Martínez) */
+static Node *in_expr(Node *x, Token *t)
+{
+    Node *n = node(E_IN, t);
+    n->a = x;
+    if (peek()->kind == P_LP && range_ahead()) {
+        next();
+        n->kind = E_INRANGE;
+        VEC_PUSH(n->args, expr());
+        expect(P_DOTDOT);
+        VEC_PUSH(n->args, expr());
+        if (accept(K_STEP)) {
+            VEC_PUSH(n->args, expr());
+        } else {
+            Node *z = node(E_INT, t);
+            z->val = 0;
+            VEC_PUSH(n->args, z);
+            /* (1..10) fijo y x una variable: 1 <= x and x <= 10 (gen68k.c, tras mirar los tipos) */
+            if (chain_safe(x))
+                n->c = logic(E_AND, t, cmp_node(t, x, P_GE, n->args.v[0]), cmp_node(t, x, P_LE, n->args.v[1]));
+        }
+        expect(P_RP);
+        return n;
+    }
+    n->b = bor_expr();
+    if (n->b->kind == E_LIST && chain_safe(x)) {
+        /* x in [1, 5, 9]: x == 1 or x == 5 or x == 9 */
+        Node *r = NULL;
+        int i;
+        if (!n->b->args.n) {
+            r = node(E_BOOL, t);
+            r->val = 0;
+            return r;
+        }
+        for (i = 0; i < n->b->args.n; i++) {
+            Node *eq = cmp_node(t, x, P_EQ, n->b->args.v[i]);
+            r = r ? logic(E_OR, t, r, eq) : eq;
+        }
+        return r;
+    }
+    return n;
+}
+
 static Node *compare_expr(void)
 {
-    Node *n = bor_expr();
+    Node *n = bor_expr(), *last;
     int k = peek()->kind;
-    if (k == P_EQ || k == P_NE || k == P_LT || k == P_LE || k == P_GT || k == P_GE) {
+    if (k == K_IN || (k == K_NOT && tk[1].kind == K_IN)) {
+        Token *t = next();
+        if (k == K_NOT) {
+            Node *m = node(E_NOT, t);
+            next();
+            m->a = in_expr(n, t);
+            return m;
+        }
+        return in_expr(n, t);
+    }
+    if (is_cmp(k)) {
         Token *op = next();
-        n = binary(n, op, bor_expr());
+        n = last = binary(n, op, bor_expr());
         n->kind = E_CMP;
+        /* a < b <= c: a < b and b <= c, con b escrito dos veces (como en Python) */
+        while (is_cmp(peek()->kind)) {
+            Node *c;
+            op = next();
+            if (!chain_safe(last->b))
+                fatal_at(op->line, op->col, "en una cadena de comparaciones (a < b < c) el valor del medio no puede "
+                         "llamar a una función: guárdalo antes en una variable, o escribe x in (a..b)");
+            c = binary(last->b, op, bor_expr());
+            c->kind = E_CMP;
+            n = logic(E_AND, op, n, c);
+            last = c;
+        }
     }
     return n;
 }

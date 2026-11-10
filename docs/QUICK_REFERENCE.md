@@ -60,7 +60,8 @@ var lista: Nodo = nil       # nil: ningún struct/lista/String (x == nil, x = ni
 ## Operadores
 ```
 +  -  *  /  %               # Aritméticos
-==  !=  <  >  <=  >=        # Comparación
+==  !=  <  >  <=  >=        # Comparación; encadenadas: 1 <= a <= 10
+x in (1..10)  x in lista    # rango (con step), lista, texto o diccionario; x not in ...
 and  or  not                # Lógicos
 &  |  ^  ~  <<  >>          # Bits en Int (^ xor, ~ complemento, >> aritmético); como en Python:
                             # desplazamientos, &, ^, | entre + - y las comparaciones (a & 4 == 4)
