@@ -598,6 +598,7 @@ static int pow2(long k)
 /* modo de prueba, como ./dash: DASH_TEST_AUTOCLOSE=<segundos> al compilar (el programa acaba solo; tools/emu_run.py)
    y DASH_PRINT_FLUSH=1 (cada Print sale enseguida) */
 static int autoclose, print_flush;
+static int auto_brk;        /* Ctrl-C en cada vuelta de los while que no cuentan (brk_check): los que pueden no acabar */
 
 #ifdef DASH_A64
 #include "ta64_ops.c"
@@ -5596,6 +5597,7 @@ static void gen_stmt(Node *n)
         else if (!true_at_entry(n->a)) gen_branch(n->a, done, 0);   /* si se sabe que se cumple, nada */
         def_label(top);
         mark_release(&ms);
+        if (auto_brk) brk_check();
         if (autoclose) rt_call("_dl_ac_loop", 0, 0);
         lp.brk = done;
         lp.cont = test;
@@ -6355,6 +6357,39 @@ static void debug_text(Program *p)
         dbg_printf("L %ld %d %d\n", labels.v[dbg_lines.v[i].label], dbg_lines.v[i].file, dbg_lines.v[i].line);
 }
 
+/* ¿llama el programa a algo que atiende Ctrl-C por su cuenta? (entonces sus bucles no lo miran) */
+static int handles_break(Node *n)
+{
+    int i;
+    static const char *own[] = { "break_check", "single_instance", "mui_wait_event", "mui_wait_event_signals", NULL };
+    if (!n) return 0;
+    if (n->kind == E_CALL && n->name) {
+        if (!strncmp(n->name, "cx_", 3)) return 1;
+        for (i = 0; own[i]; i++)
+            if (!strcmp(n->name, own[i])) return 1;
+    }
+    for (i = 0; i < n->args.n; i++)
+        if (handles_break(n->args.v[i])) return 1;
+    for (i = 0; i < n->body.n; i++)
+        if (handles_break(n->body.v[i])) return 1;
+    for (i = 0; i < n->els.n; i++)
+        if (handles_break(n->els.v[i])) return 1;
+    return handles_break(n->a) || handles_break(n->b) || handles_break(n->c);
+}
+
+static int prog_handles_break(Program *p)
+{
+    int i, j;
+    for (i = 0; i < p->main.n; i++)
+        if (handles_break(p->main.v[i])) return 1;
+    for (i = 0; i < p->funcs.n; i++)
+        for (j = 0; j < p->funcs.v[i].body.n; j++)
+            if (handles_break(p->funcs.v[i].body.v[j])) return 1;
+    for (i = 0; i < p->globals.n; i++)
+        if (handles_break(p->globals.v[i].init)) return 1;
+    return 0;
+}
+
 void gen_program(Program *p, Obj *o)
 {
     int i, main_label, again, files_label;
@@ -6366,6 +6401,10 @@ void gen_program(Program *p, Obj *o)
         if (autoclose < 0) autoclose = 0;
         e = getenv("DASH_PRINT_FLUSH");
         print_flush = e && *e && strcmp(e, "0");
+        /* Ctrl-C en los bucles, como ./dash --gcc (BREAK_RUNTIME): no si el programa lo atiende él (break_check,
+           single_instance, la espera de MUI, los commodities) ni con DASH_NO_BREAK=1 */
+        e = getenv("DASH_NO_BREAK");
+        auto_brk = !(e && *e && strcmp(e, "0")) && !prog_handles_break(p);
     }
 
     call_sites = xmalloc(sizeof(int) * (p->funcs.n + 1));

@@ -182,12 +182,15 @@ static void dash_split_args(const char *cmd, LONG len)
 const char *_dash_stdiowin = "CON://///AUTO/CLOSE/WAIT";
 static BPTR dash_wb_con, dash_wb_in, dash_wb_out;
 
+struct Task *dl_brk_task;   /* la del programa, para Ctrl-C en los bucles (dl_brk) */
+
 /* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
 LONG _dash_init(const char *cmd, LONG len)
 {
     struct Process *pr;
     SysBase = *(struct ExecBase **)4;
     pr = (struct Process *)FindTask(NULL);
+    dl_brk_task = (struct Task *)pr;
     if (!pr->pr_CLI) {
         /* desde el Workbench: su mensaje, y la carpeta del programa como actual (libnix) */
         WaitPort(&pr->pr_MsgPort);
@@ -441,6 +444,15 @@ LONG dl_event_code(void) { return dl_ev_code; }
 /* DASH_TEST_AUTOCLOSE al compilar: cada vuelta de un while (el reloj, cada 1024); DASH_PRINT_FLUSH: cada Print sale
    enseguida */
 void dl_ac_loop(void) { _dash_ac_loop(); }
+
+/* Ctrl-C en los bucles (brk_check de gen68k.c, como BREAK_RUNTIME de ./dash --gcc): la tarea del programa, y el
+   final cuando llega: "***Break" y código 5, con la limpieza de siempre */
+void dl_brk(void)
+{
+    SetSignal(0L, SIGBREAKF_CTRL_C);
+    if (Output()) PutStr((CONST_STRPTR)"***Break\n");   /* (con búfer, detrás de lo que dejó Print) */
+    _dash_exit(5);
+}
 void dl_print_flush(void) { Flush(Output()); }
 
 static void dl_close_windows(void)

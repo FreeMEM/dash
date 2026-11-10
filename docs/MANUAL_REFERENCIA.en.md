@@ -3817,6 +3817,21 @@ In the task's C you can use the network functions that do not use Dash strings: 
 create or read Dash strings. `_dash_net_signal()` in the task gives a signal belonging to the task, to sleep with
 `Wait` until a connection has something.
 
+### Ctrl-C stops a program that loops
+
+Since Dash 2.11, Ctrl-C stops any program that is in a loop: `Break` in the Shell, Forja's Stop button or the end of
+the debugger. Every iteration of a `while` that can go on for ever checks whether it arrived (a `for`, or a `while`
+that counts, like `while i < n` with `i = i + 1`, end by themselves and do not check). If it did, the program writes
+`***Break` and ends with return code 5, with the usual cleanup (windows, files, memory). So an endless loop can be
+stopped without rebooting the Amiga.
+
+A program that handles Ctrl-C itself does not get it in its loops: one that calls `break_check`,
+`single_instance`, `mui_wait_event` or `mui_wait_event_signals`, or any commodity `cx_`. That way it ends in its own
+way (for example, saving what it has first). With `DASH_NO_BREAK=1` when compiling, neither.
+
+The check costs one memory read and one test per iteration of the `while`. A program that waits for its window (without looping)
+does not see it until a message arrives: close its window to stop it.
+
 ### A windowless program that can be stopped: break_check and single_instance
 
 ```ruby

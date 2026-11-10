@@ -839,6 +839,19 @@ static void cmp_d0_k(long k, int small)
 }
 
 static void test_bit_d0(int bit) { w(0x0800); w(bit); }   /* btst #bit,d0: Z si está a 0 */
+
+/* Ctrl-C en cada vuelta de un while que no cuenta (sin break_check ni MUI en el programa): el bit 12 (SIGBREAKF_CTRL_C) de
+   tc_SigRecvd de la tarea, el bit 4 del byte 28; si está, _dl_brk acaba el programa ("***Break", código 5).
+   movea.l _dl_brk_task,a0; btst #4,28(a0); beq.s +6; jsr _dl_brk (a0 es de trabajo entre sentencias) */
+static void brk_check(void)
+{
+    w(0x2079);
+    add_reloc((uint32_t)obj->code.n, -1, "_dl_brk_task");
+    l(0);
+    w(0x0828); w(4); w(28);
+    w(0x6706);
+    jsr_sym("_dl_brk");
+}
 static void debug_nop(void) { w(0x4E71); }             /* nop: donde --debug pone un TRAP */
 
 /* deja bytes de la pila antes de un salto (break, Stop, return): el código de después no lo ve (sin sp_depth) */

@@ -295,6 +295,24 @@ static void _dash_fail_at(const char *what, LONG w) {
 
     # CPU exceptions of the program's task (address error, illegal instruction, division by zero...):
     # instead of the Guru, a message and the normal cleanup (the system goes on). Every program has it.
+    # Ctrl-C in loops: "Break" in the Shell, Parar in Forja, the debugger's end. Every iteration of a while that
+    # can go on for ever (not a for, nor a while that counts: they end) looks at the task's signals (one read and a
+    # test); a program that handles Ctrl-C itself (break_check, MUI, single_instance, commodities) does not get it,
+    # nor DASH_NO_BREAK=1
+    BREAK_RUNTIME = """\
+/* Ctrl-C stops a program in a loop: "***Break" and return code 5, with the normal cleanup */
+static struct Task *_dash_brk_task;
+static void _dash_brk(void) __attribute__((noreturn, noinline));
+static void _dash_brk(void) {
+    SetSignal(0L, SIGBREAKF_CTRL_C);
+    if (Output()) PutStr((CONST_STRPTR)"***Break\\n");   /* (buffered, after what Print left) */
+    _dash_exit(5);
+    for (;;) ;
+}
+/* (volatile: in a loop without calls GCC would read it once, before the loop) */
+#define _DASH_BRK() do { if (((volatile struct Task *)_dash_brk_task)->tc_SigRecvd & SIGBREAKF_CTRL_C) _dash_brk(); } while (0)
+"""
+
     TRAP_RUNTIME = """\
 /* Dash Trap Runtime: the task's tc_TrapCode while the program runs. Exec jumps there in supervisor
    mode with the exception's number on the stack, then its frame. For the errors of a program (2 bus
@@ -24121,6 +24139,7 @@ class CodeGenerator(ASTVisitor):
         # ./dash --dashos (DASH_TARGET=dashos, docs/AARCH64_LOOP.md): C for DashOS (AArch64 big-endian), on
         # runtime/dashos instead of AmigaOS
         self.target = os.environ.get("DASH_TARGET") or "amiga"
+        self.auto_break = False      # Ctrl-C in loops (BREAK_RUNTIME): decided in generate()
         self.cur_where = 0       # file << 16 | line of the statement being generated (for _DASH_NN)
         self.src_files: List[str] = []   # the files of cur_where (_dash_srcfiles)
         self.globals: List[str] = []
@@ -24259,10 +24278,24 @@ class CodeGenerator(ASTVisitor):
         """Generate the complete C program."""
         # Pre-scan to detect Area fill usage before code generation
         self._prescan_for_area(self.analysis.program)
+        self.auto_break = self._wants_auto_break()
         self.visit(self.analysis.program)
         if self.links:
             self._link_api()
         return strip_unused_marks(self._assemble_program())
+
+    # The builtins of a program that handles Ctrl-C itself: it gets no check in its loops (BREAK_RUNTIME)
+    BREAK_OWN = {"break_check", "single_instance", "mui_wait_event", "mui_wait_event_signals"}
+
+    def _wants_auto_break(self) -> bool:
+        """Ctrl-C in every loop (BREAK_RUNTIME): not for DashOS, nor with DASH_NO_BREAK, nor in a program that
+        handles it (break_check, single_instance, MUI's event wait, commodities: cx_...)."""
+        if self.target == "dashos" or os.environ.get("DASH_NO_BREAK", "") not in ("", "0"):
+            return False
+        for n in self._walk_nodes([self.analysis.program]):
+            if isinstance(n, FunctionCall) and (n.name in self.BREAK_OWN or n.name.startswith("cx_")):
+                return False
+        return True
 
     def _prescan_for_area(self, node: ASTNode):
         """Pre-scan AST to detect if Area fill functions are used."""
@@ -24858,6 +24891,12 @@ static LONG _dash_event_window_handle(void) {{
                                   CTemplates.TRAP_RUNTIME + "\nint main(", 1)
         brace = program.index("{\n", program.index("\nint main(")) + 2
         program = program[:brace] + "    _dash_trap_on();\n" + program[brace:]   # the first thing main does
+        if self.auto_break:
+            # (before the functions: their loops use it)
+            anchor = "static void _dash_exit(int code);\n"
+            assert program.count(anchor) >= 1, "BREAK_RUNTIME: no _dash_exit prototype"
+            program = program.replace(anchor, anchor + CTemplates.BREAK_RUNTIME, 1)
+            program = program.replace("    _dash_trap_on();\n", "    _dash_trap_on();\n    _dash_brk_task = FindTask(NULL);\n", 1)
         if self.profile:
             names = ", ".join('"' + n.replace('"', "") + '"' for n in self.prof_names)
             runtime = CTemplates.PROFILE_RUNTIME.replace("$cuantas", str(len(self.prof_names))).replace("$names", names)
@@ -26301,6 +26340,9 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.indent_level += 1
         self.context.enter_scope("loop")
         body = f"{self.context.indent}    _dash_ac_loop();\n" if self.autoclose else ""
+        # Ctrl-C (BREAK_RUNTIME): in a while that can go on for ever; not in one that counts (it ends), like ./dash
+        if self.auto_break and not self._counted_while(node):
+            body += f"{self.context.indent}_DASH_BRK();\n"
         body += self._loop_body_head(mark)
         for s in node.body:
             body += self._generate_statement(s)
@@ -27271,6 +27313,19 @@ static {ret_type} {method_name}({params_str}) {{
     def _loop_body_head(self, mark: str) -> str:
         """First statement of every loop iteration: release the previous iteration's temporaries."""
         return f"{self.context.indent}_dash_tmp_release({mark});\n"
+
+    def _counted_while(self, node: WhileStmt) -> bool:
+        """while v < n (or <=, >, >=, !=) whose body steps v by a constant once, at its top level, and assigns it
+        nowhere else: it ends (no Ctrl-C check in it, BREAK_RUNTIME)."""
+        c = node.condition
+        if not (isinstance(c, BinaryOp) and c.operator in ("<", "<=", ">", ">=", "!=") and isinstance(c.left, VarRef)):
+            return False
+        v = c.left.name
+        steps = [st for st in node.body if isinstance(st, VarAssign) and st.name == v and isinstance(st.value, BinaryOp)
+                 and st.value.operator in ("+", "-") and isinstance(st.value.left, VarRef) and st.value.left.name == v
+                 and isinstance(st.value.right, NumberLiteral) and st.value.right.value != 0]
+        assigns = [n for n in self._walk_nodes(node.body) if isinstance(n, VarAssign) and n.name == v]
+        return len(steps) == 1 and len(assigns) == 1
 
     def _wrap_loop(self, indent: str, mark: str, loop_code: str) -> str:
         return (f"{indent}    {{ ULONG {mark} = _dash_tmp_mark();\n" + loop_code +

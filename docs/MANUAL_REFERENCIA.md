@@ -3818,6 +3818,21 @@ En el C de la tarea valen las funciones de red que no usan textos de Dash: `_das
 crean o leen textos de Dash. `_dash_net_signal()` en la tarea da una señal de la tarea, para dormir con
 `Wait` hasta que una conexión tenga algo.
 
+### Ctrl-C para un programa que da vueltas
+
+Desde Dash 2.11, Ctrl-C para cualquier programa que esté en un bucle: `Break` en la Shell, el botón Parar de Forja
+o el final del depurador. Cada vuelta de un `while` que puede no acabar mira si llegó (un `for`, o un `while` que
+cuenta, como `while i < n` con `i = i + 1`, acaban solos y no lo miran). Si llegó, el programa escribe
+`***Break` y acaba con código 5, con la limpieza de siempre (ventanas, ficheros, memoria). Así un bucle sin fin se
+puede parar sin reiniciar el Amiga.
+
+Un programa que atiende Ctrl-C él mismo no lo recibe en sus bucles: el que llama a `break_check`,
+`single_instance`, `mui_wait_event` o `mui_wait_event_signals`, o a algún `cx_` de las commodities. Así acaba a su
+manera (por ejemplo, guardando antes lo que tenga). Con `DASH_NO_BREAK=1` al compilar, tampoco.
+
+Mirarlo cuesta una lectura de memoria y una comprobación por vuelta del `while`. Un programa que espera a su ventana (sin dar
+vueltas) no lo ve hasta que le llega un mensaje: se para cerrando su ventana.
+
 ### Un programa sin ventana que se puede parar: break_check y single_instance
 
 ```ruby

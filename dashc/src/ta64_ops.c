@@ -670,6 +670,9 @@ static void loop_count(Var *vc, int top, int big)
 
 static void cmp_d0_k(long k, int small) { (void)small; mov_imm(XT, k); cmp_regs(0, XT); }
 static void test_bit_d0(int bit) { tst_bit(0, bit); }
+
+/* Ctrl-C en los bucles: en DashOS no (no hay señales de exec) */
+static void brk_check(void) { }
 static void debug_nop(void) { ins(0xD503201F); }
 static void skip_stack(int bytes) { add_imm(31, 31, bytes); }
 

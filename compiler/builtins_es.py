@@ -735,7 +735,7 @@ DESC_ES = {
                               "(toda la zona, o la de desktop_canvas_update_area con lo que repintó el escritorio), "
                               "para saltarse lo que no se vería. Fuera de ella, siempre true",
     "desktop_canvas_free": "Vuelve a poner el fondo de escritorio en la zona (al acabar el programa también)",
-    "break_check": "True si llegó un Ctrl-C (\"Break\" en el Shell, u otra copia: single_instance); se borra",
+    "break_check": "True si llegó un Ctrl-C (\"Break\" en el Shell, u otra copia: single_instance); se borra. Un programa que lo llama no recibe Ctrl-C en sus bucles: lo atiende él",
     "single_instance": "Una sola copia a la vez: false si corre otra copia del programa (un puerto público con ese "
                        "nombre), que recibe un Ctrl-C; si no, true (el puerto es del programa hasta que acaba)",
     "tooltype": "Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE=\"a b\"); si no "
