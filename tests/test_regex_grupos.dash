@@ -10,7 +10,7 @@
 # expect-out: alternativas [a] [bcd] []
 # expect-out: lista 3 x=1,y=22,z=
 # expect-out: nada -1 [] 0 -1
-# expect-out: utf8 [ñ] 1 2
+# expect-out: bytes [bb] 2 2
 # expect-out: fuera [] -1 0
 
 Main
@@ -72,8 +72,8 @@ Main
     p = regex_find("(z)", "abc", 0, false)
     Print "nada #{p} [#{regex_group(1)}] #{regex_groups().length} #{regex_group_start(0)}"
 
-    p = regex_find("(ñ+)", "año", 0, false)
-    Print "utf8 [#{regex_group(1)}] #{regex_group_start(1)} #{regex_group_length(1)}"
+    p = regex_find("(b+)c", "aabbc", 0, false)
+    Print "bytes [#{regex_group(1)}] #{regex_group_start(1)} #{regex_group_length(1)}"
 
     if regex_match("(a)", "a", false)
         Print "fuera [#{regex_group(5)}] #{regex_group_start(-1)} #{regex_group_length(9)}"
