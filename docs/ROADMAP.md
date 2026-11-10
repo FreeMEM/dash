@@ -1063,6 +1063,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       lista de listas escrita a mano (`[["a", "40"]]`) daba números en vez de textos; y un builtin que devuelve un
       texto, solo en un programa (`Print locale_language()`), no enlazaba. `tests/test_requisitos.dash`,
       `tests/test_lista_listas_literal.dash`, `tests/test_chipset_model.dash`
+- [x] `in` y comparaciones encadenadas (2026-11-10, lo pidió David Martínez): `x in (1..10)`, `x in (0..20 step 5)`
+      (los números que daría el `for`; sin step, `(10..1)` también vale), `x in lista` (textos por su contenido,
+      structs por objeto), `x in texto` (un trozo, o un carácter), `x in diccionario` (una clave), `x not in ...`, y
+      `1 <= a <= 10` como en Python (el valor del medio no puede llamar a nada: se haría dos veces). En los dos
+      caminos y en DashOS; con `x` una variable, una lista escrita ahí o un rango fijo no llaman al runtime.
+      `tests/test_in_rango.dash`, `dashc/tests/in_rango.dash` y tres de `tests/errors/`
 
 - [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
       gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`

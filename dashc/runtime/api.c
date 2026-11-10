@@ -778,6 +778,11 @@ void *dl_arr_pop_obj(DashArrayLong *a) { return DashArray_pop_obj(a); }
 STRPTR dl_arr_pop_str(DashArrayLong *a) { return DashArray_pop_str(a); }
 void dl_arr_remove(DashArrayLong *a, LONG i) { DashArray_remove(a, i); }
 void dl_arr_clear(DashArrayLong *a) { DashArray_clear(a); }
+/* x in (a..b step s), x in lista, c in texto (lo pidió David Martínez) */
+LONG dl_in_range(LONG x, LONG a, LONG b, LONG s) { return _dash_in_range(x, a, b, s) != 0; }
+LONG dl_list_has(DashArrayLong *a, _DashP x) { return _dash_list_has(a, x) != 0; }
+LONG dl_list_has_str(DashArrayLong *a, STRPTR x) { return _dash_list_has_str(a, x) != 0; }
+LONG dl_str_has_char(STRPTR s, LONG c) { return _dash_str_has_char(s, c) != 0; }
 DashArrayLong *dl_arr_from(LONG n, const _DashP *v) { return DashArray_from(n, v); }
 DashArrayLong *dl_arr_from_new(LONG n, const _DashP *v) { return DashArray_from_new(n, v); }
 DashArrayLong *dl_arr_own(DashArrayLong *a, LONG kind) { return DashArray_own(a, kind); }
@@ -857,6 +862,14 @@ LONG dl_d_cmp(STRPTR a, STRPTR b)
 {
     double x = dl_dget(a), y = dl_dget(b);
     return x < y ? -1 : x > y ? 1 : x == y ? 0 : 2;
+}
+
+/* x in lista de Double (cada elemento, una caja) */
+LONG dl_list_has_dbl(DashArrayLong *a, STRPTR x)
+{
+    LONG i;
+    if (a) for (i = 0; i < a->length; i++) if (!dl_d_cmp((STRPTR)a->data[i], x)) return 1;
+    return 0;
 }
 
 STRPTR dl_d_from_int(LONG k) { return dl_dbox((double)k); }

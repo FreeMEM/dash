@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
 
-from compiler.ast_nodes import (AmigaCast, AmigaStructDef,
+from compiler.ast_nodes import (AmigaCast, AmigaStructDef, InExpr, InRangeExpr,
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -12182,6 +12182,50 @@ static LONG _dash_clip_read_block(LONG unit, STRPTR type, APTR dest, LONG max) {
 
 """
 
+    # x in (a..b step s) (lo pidió David Martínez): s 0 is a range without step, which counts either way
+    IN_RANGE_RUNTIME = """\
+static BOOL _dash_in_range(LONG x, LONG a, LONG b, LONG s) {
+    if (!s) {
+        if (a > b) { LONG t = a; a = b; b = t; }
+        return x >= a && x <= b;
+    }
+    if (s > 0) return x >= a && x <= b && (s == 1 || (x - a) % s == 0);
+    return x <= a && x >= b && (s == -1 || (a - x) % -s == 0);
+}
+"""
+
+    # x in lista: an element equal to x (numbers, Float bits, objects: the same value; Strings: the same text)
+    LIST_HAS_RUNTIME = """\
+static BOOL _dash_list_has(DashArrayLong *arr, _DashP x) {
+    LONG i;
+    if (arr) for (i = 0; i < arr->length; i++) if (arr->data[i] == x) return TRUE;
+    return FALSE;
+}
+
+static BOOL _dash_list_has_str(DashArrayLong *arr, STRPTR x) {
+    LONG i;
+    if (arr) for (i = 0; i < arr->length; i++) if (!_dash_str_cmp((STRPTR)arr->data[i], x)) return TRUE;
+    return FALSE;
+}
+"""
+
+    LIST_HAS_DBL_RUNTIME = """\
+static BOOL _dash_list_has_dbl(DashArrayLong *arr, double x) {
+    LONG i;
+    if (arr && _DASH_ARR_KIND(arr) == _DASH_ARR_DBLS)
+        for (i = 0; i < arr->length; i++) if (((double *)arr->data)[i] == x) return TRUE;
+    return FALSE;
+}
+"""
+
+    # x in texto with x a character
+    STR_HAS_CHAR_RUNTIME = """\
+static BOOL _dash_str_has_char(STRPTR s, LONG c) {
+    if (s) for (; *s; s++) if ((UBYTE)*s == (UBYTE)c) return TRUE;
+    return FALSE;
+}
+"""
+
     # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
     # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
     DBL_LIST_RUNTIME = """\
@@ -23953,6 +23997,10 @@ class CodeGenerator(ASTVisitor):
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
+        self.uses_in_range: bool = False   # x in (a..b) (IN_RANGE_RUNTIME)
+        self.uses_list_has: bool = False   # x in lista (LIST_HAS_RUNTIME)
+        self.uses_list_has_dbl: bool = False
+        self.uses_str_has_char: bool = False   # c in texto, c a character
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
@@ -24197,6 +24245,14 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.EDITKEYS_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
+        if self.uses_in_range:
+            parts.append(CTemplates.IN_RANGE_RUNTIME)
+        if self.uses_list_has:
+            parts.append(CTemplates.LIST_HAS_RUNTIME)
+        if self.uses_list_has_dbl:
+            parts.append(CTemplates.LIST_HAS_DBL_RUNTIME)
+        if self.uses_str_has_char:
+            parts.append(CTemplates.STR_HAS_CHAR_RUNTIME)
         if self.uses_text_io or self.uses_net:
             parts.append(CTemplates.TEXT_IO_RUNTIME)
         if self.uses_net:
@@ -27059,6 +27115,10 @@ static {ret_type} {method_name}({params_str}) {{
             if self.target == "dashos" and self._names_function(node):
                 return self._func_value(node.name)
             return node.name
+        elif isinstance(node, InRangeExpr):
+            return self._generate_in_range(node)
+        elif isinstance(node, InExpr):
+            return self._generate_in(node)
         elif isinstance(node, BinaryOp) and (self._is_fixed_expr(node) or (
                 node.operator in ("==", "!=", "<", ">", "<=", ">=")
                 and (self._is_fixed_expr(node.left) or self._is_fixed_expr(node.right)))):
@@ -28297,6 +28357,71 @@ static {ret_type} {method_name}({params_str}) {{
             return "STRPTR"
         return "LONG" if value is not None else "void"
 
+    def _generate_in_range(self, node: InRangeExpr) -> str:
+        """x in (a..b step s) (lo pidió David Martínez): a..b with constant ends is a <= x <= b."""
+        program = self.analysis.program
+        a, b = constant_int(node.start, program), constant_int(node.end, program)
+        if node.step is None and a is not None and b is not None and self._chain_safe(node.value):
+            lo, hi = min(a, b), max(a, b)
+            x = self._generate_expression(node.value)
+            return f"((LONG)({x}) >= {lo} && (LONG)({x}) <= {hi})"
+        self.uses_in_range = True
+        step = "0" if node.step is None else self._generate_expression(node.step)
+        return (f"_dash_in_range({self._generate_expression(node.value)}, {self._generate_expression(node.start)}, "
+                f"{self._generate_expression(node.end)}, {step})")
+
+    @staticmethod
+    def _chain_safe(node) -> bool:
+        """A value that can be written twice in the C (a variable, a literal, a field, an element)."""
+        if isinstance(node, (VarRef, NumberLiteral, StringLiteral, FloatLiteral, BoolLiteral, NilLiteral, SelfRef,
+                             MemberAccess)):
+            return True
+        if isinstance(node, PropertyAccess):
+            return CodeGenerator._chain_safe(node.object)
+        if isinstance(node, ArrayAccess):
+            return (node.default is None and CodeGenerator._chain_safe(node.array)
+                    and CodeGenerator._chain_safe(node.index))
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return CodeGenerator._chain_safe(node.operand)
+        return False
+
+    def _generate_in(self, node: InExpr) -> str:
+        """x in c (lo pidió David Martínez): c a list (an element equal to x), a String (x a piece of it, or a
+        character) or a dictionary (a key x). A list written there, [1, 5, 9], is x == 1 or x == 5..."""
+        c, x = node.container, node.value
+        if isinstance(c, ArrayLiteral) and c.elements and self._chain_safe(x):
+            test = None
+            for e in c.elements:
+                eq = BinaryOp(left=x, operator="==", right=e, location=node.location)
+                test = eq if test is None else BinaryOp(left=test, operator="or", right=eq, location=node.location)
+            return f"({self._generate_expression(test)})"
+        if isinstance(c, ArrayLiteral) and not c.elements:
+            return f"((void)({self._generate_expression(x)}), FALSE)"
+        if self._is_string_expr(c):
+            if self._is_char_expr(x):
+                self.uses_str_has_char = True
+                return f"_dash_str_has_char({self._generate_expression(c)}, {self._generate_expression(x)})"
+            return self._generate_expression(FunctionCall(name="str_contains", arguments=[c, x], location=node.location))
+        if self._dict_value_kind(c) is not None:
+            return self._generate_method_call(MethodCall(object=c, method="has", arguments=[x], location=node.location))
+        if isinstance(c, ArrayLiteral) or self._infer_c_type(c) == "DashArrayLong *":
+            self.uses_arrays = self.uses_list_has = True
+            arr = self._array_ref(c)
+            num = self._num_list(c)
+            if num == "Double":
+                self.uses_dbl_list = self.uses_list_has_dbl = self.uses_double = True
+                return f"_dash_list_has_dbl({arr}, {self._double_value(x)})"
+            if num == "Fixed":
+                return f"_dash_list_has({arr}, (_DashP)({self._fixed_value(x)}))"
+            if num == "Float":
+                self.uses_float = True
+                return f"_dash_list_has({arr}, (_DashP)_dash_f2l((float)({self._generate_expression(x)})))"
+            if self._array_elem_type(c) == "string":
+                self.uses_strings = True
+                return f"_dash_list_has_str({arr}, {self._generate_expression(x)})"
+            return f"_dash_list_has({arr}, (_DashP)({self._generate_expression(x)}))"
+        raise ValueError("'in' needs a list, a String, a dictionary or a range (a..b)")
+
     def _array_ref(self, node: ASTNode) -> str:
         """C expression for an array operand; values not known to be arrays
         (e.g. untyped parameters, held in a LONG) are cast."""
@@ -28322,6 +28447,8 @@ static {ret_type} {method_name}({params_str}) {{
             return True
         if isinstance(node, BinaryOp):
             return node.operator in ("==", "!=", "<", ">", "<=", ">=", "and", "or")
+        if isinstance(node, (InExpr, InRangeExpr)):
+            return True
         if isinstance(node, UnaryOp):
             return node.operator == "not"
         if isinstance(node, VarRef):

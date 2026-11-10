@@ -535,6 +535,37 @@ end
 Con textos, `==` y `!=` comparan el contenido, y `<`, `>`, `<=`, `>=` el orden: byte a byte, como
 `strcmp` (`"abc" < "abd"`, `"" < "a"`, mayusculas antes que minusculas).
 
+Las comparaciones se encadenan como en Python: `1 <= a <= 10` es `1 <= a and a <= 10`. El valor
+del medio se escribe dos veces, así que no puede llamar a una función (es un error): se guarda antes
+en una variable, o se usa `in`.
+
+### Pertenencia: in
+
+`x in ...` es `true` si x está en lo que sigue; `x not in ...` es lo contrario (lo pidió David Martínez).
+
+| Forma | Es cierto si |
+|-------|--------------|
+| `x in (a..b)` | `x` está entre `a` y `b`, los dos incluidos (como el `for`); `(10..1)` también vale de 1 a 10 |
+| `x in (a..b step s)` | `x` es uno de los números que daría `for i in (a..b step s)` |
+| `x in lista` | algún elemento es igual a `x` (textos: el mismo texto; structs: el mismo objeto) |
+| `x in texto` | `x` es un trozo del texto (`str_contains`) o, si es un carácter, uno de sus caracteres |
+| `x in diccionario` | `x` es una de sus claves (`d.has(x)`) |
+
+```
+if a in (1..10)
+    Print "entre 1 y 10"
+end
+if dia not in ["sábado", "domingo"]
+    Print "laborable"
+end
+if s[0] in "aeiou"
+    Print "empieza por vocal"
+end
+```
+
+Con un rango, todo son enteros (`Int()` convierte un Float o un Fixed). Con `x` una variable, una lista
+escrita ahí, `x in [1, 5, 9]`, se queda en `x == 1 or x == 5 or x == 9`, sin crear la lista.
+
 ### Operadores Logicos
 
 | Operador | Significado |
@@ -648,7 +679,7 @@ De mas fuerte a mas debil:
 5. `&`
 6. `^`
 7. `|`
-8. `==`, `!=`, `<`, `>`, `<=`, `>=`
+8. `==`, `!=`, `<`, `>`, `<=`, `>=`, `in`, `not in`
 9. `not` (como en Python: `not a == b` es `not (a == b)`)
 10. `and`
 11. `or`

@@ -535,6 +535,36 @@ end
 With strings, `==` and `!=` compare the contents, and `<`, `>`, `<=`, `>=` the order: byte by byte, like
 `strcmp` (`"abc" < "abd"`, `"" < "a"`, uppercase before lowercase).
 
+Comparisons chain as in Python: `1 <= a <= 10` is `1 <= a and a <= 10`. The middle value is written
+twice, so it cannot call a function (that is an error): put it in a variable first, or use `in`.
+
+### Membership: in
+
+`x in ...` is `true` if x is in what follows; `x not in ...` is the opposite (requested by David Martínez).
+
+| Form | True if |
+|------|---------|
+| `x in (a..b)` | `x` is between `a` and `b`, both included (like `for`); `(10..1)` also holds 1 to 10 |
+| `x in (a..b step s)` | `x` is one of the numbers `for i in (a..b step s)` would give |
+| `x in list` | an element equals `x` (strings: the same text; structs: the same object) |
+| `x in text` | `x` is a piece of the text (`str_contains`) or, if it is a character, one of its characters |
+| `x in dictionary` | `x` is one of its keys (`d.has(x)`) |
+
+```
+if a in (1..10)
+    Print "between 1 and 10"
+end
+if day not in ["saturday", "sunday"]
+    Print "weekday"
+end
+if s[0] in "aeiou"
+    Print "starts with a vowel"
+end
+```
+
+With a range everything is an integer (`Int()` converts a Float or a Fixed). With `x` a variable, a list
+written there, `x in [1, 5, 9]`, becomes `x == 1 or x == 5 or x == 9`, without making the list.
+
 ### Logical Operators
 
 | Operator | Meaning |
@@ -648,7 +678,7 @@ From strongest to weakest:
 5. `&`
 6. `^`
 7. `|`
-8. `==`, `!=`, `<`, `>`, `<=`, `>=`
+8. `==`, `!=`, `<`, `>`, `<=`, `>=`, `in`, `not in`
 9. `not` (as in Python: `not a == b` is `not (a == b)`)
 10. `and`
 11. `or`

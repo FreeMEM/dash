@@ -196,7 +196,12 @@ dash_grammar_minimal = r"""
     ?not_test: "not" not_test -> not_expr
              | compare_expr
 
-    ?compare_expr: bor_expr (COMP_OP bor_expr)?
+    // a < b < c is a < b and b < c (b once); x in (a..b), x in lista, x not in ...
+    ?compare_expr: bor_expr (COMP_OP bor_expr)*
+                 | bor_expr "in" in_target -> in_expr
+                 | bor_expr "not" "in" in_target -> not_in_expr
+    ?in_target: "(" expression RANGE_OP expression (STEP expression)? ")" -> in_range
+              | bor_expr
     COMP_OP: "==" | "!=" | "<=" | ">=" | "<" | ">"
 
     // Bit operators, as in Python: | below ^ below & below the shifts, all between the

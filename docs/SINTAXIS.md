@@ -41,6 +41,9 @@ while cond
 end
 
 for i in (1..10)               # (3..1) cuenta hacia atrás; (0..10 step 5), (10..1 step -3)
+    if i in (3..5) or i in [7, 9]   # in: rango, lista, texto, diccionario; not in; 1 <= i <= 10
+        Print i
+    end
     if i == 5
         continue               # también break
     end

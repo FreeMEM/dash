@@ -60,7 +60,8 @@ var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)
 ## Operators
 ```
 +  -  *  /  %               # Arithmetic
-==  !=  <  >  <=  >=        # Comparison
+==  !=  <  >  <=  >=        # Comparison; chained: 1 <= a <= 10
+x in (1..10)  x in list     # range (with step), list, text or dictionary; x not in ...
 and  or  not                # Logical
 &  |  ^  ~  <<  >>          # Bits on Ints (^ xor, ~ complement, >> arithmetic); as in Python:
                             # shifts, &, ^, | between + - and the comparisons (a & 4 == 4)
