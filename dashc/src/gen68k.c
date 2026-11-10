@@ -5353,6 +5353,48 @@ static void gen_evloop(Node *n)
 
 static int forced_type = -1;   /* el tipo de una función de una línea puesta como expresión */
 
+/* el nombre de un tipo con su artículo, para los errores */
+static const char *type_word(int t)
+{
+    static char buf[80];
+    switch (t) {
+    case TY_INT: return "un Int";
+    case TY_BOOL: return "un Bool";
+    case TY_STR: return "un String";
+    case TY_FLOAT: return "un Float";
+    case TY_DOUBLE: return "un Double";
+    case TY_FIXED: return "un Fixed";
+    }
+    if (IS_STRUCT(t)) {
+        snprintf(buf, sizeof buf, "un %s", prog->structs.v[t - TY_STRUCT].name);
+        return buf;
+    }
+    return IS_DICT(t) ? "un diccionario" : "una lista";
+}
+
+/* v = expr con v ya guardando algo: los mismos tipos que admite ./dash --gcc (analyzer.py, visit_Assignment).
+   Un texto no pasa a ser otra cosa ni al revés, y un número no pierde decimales ni cambia de clase. */
+static void check_assign_type(Node *n, int tt, int et)
+{
+    const char *why = 0;
+    if (tt == TY_VOID || et == TY_VOID || tt == TY_NIL || et == TY_NIL || tt == TY_CHAR || et == TY_CHAR ||
+        IS_APTR(tt) || IS_APTR(et) || (tt >= TY_NAMED && tt < TY_ARR) || (et >= TY_NAMED && et < TY_ARR))
+        return;                                        /* lo que no se sabe bien, como hace ./dash --gcc */
+    if ((tt == TY_STR) != (et == TY_STR))
+        why = "";
+    else if (tt == TY_INT && (et == TY_FLOAT || et == TY_DOUBLE || et == TY_FIXED))
+        why = " (usa Int())";
+    else if (tt == TY_FLOAT && et == TY_DOUBLE)
+        why = " (usa Float())";
+    else if ((tt == TY_FIXED && (et == TY_FLOAT || et == TY_DOUBLE)) || (et == TY_FIXED && (tt == TY_FLOAT || tt == TY_DOUBLE)))
+        why = tt == TY_FIXED ? " (usa Fixed())" : tt == TY_FLOAT ? " (usa Float())" : " (usa Double())";
+    if (why) {
+        char et_name[80];
+        snprintf(et_name, sizeof et_name, "%s", type_word(et));
+        fatal_node(n, "no se puede guardar %s en %s, que guarda %s%s", et_name, n->name, type_word(tt), why);
+    }
+}
+
 static void gen_stmt(Node *n)
 {
     Var v;
@@ -5428,13 +5470,8 @@ static void gen_stmt(Node *n)
         {
             int tt = n->kind == S_VAR ? n->type : var_type(n->name);
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
-            else if (n->kind == S_ASSIGN && tt == TY_STR && n->a->kind != E_NIL) {
-                /* (como ./dash: un número en una variable que guarda un texto es un error, no un texto) */
-                int et = expr_type(n->a);
-                if (et == TY_INT || et == TY_BOOL || et == TY_FLOAT || et == TY_FIXED)
-                    fatal_node(n, "no se puede guardar un %s en %s, que guarda un String",
-                               et == TY_BOOL ? "Bool" : et == TY_FLOAT ? "Float" : et == TY_FIXED ? "Fixed" : "Int", n->name);
-            }
+            else if (n->kind == S_ASSIGN && n->a->kind != E_NIL)
+                check_assign_type(n, tt, expr_type(n->a));
             if (IS_STRLIKE(tt)) {
                 gen_str_assign(n, tt);
                 return;

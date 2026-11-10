@@ -1,0 +1,8 @@
+# Test: un Double en una variable que guarda un Float
+# expect: Cannot assign a Double to 'f', which holds a Float (use Float())
+# expect-dash: no se puede guardar un Double en f, que guarda un Float (usa Float())
+Main
+    f = 1.5
+    f = Double(2.5)
+    Print f
+end

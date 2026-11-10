@@ -1,0 +1,8 @@
+# Test: un Float en una variable que guarda un Int
+# expect: Cannot assign a float to 'n', which holds an int
+# expect-dash: no se puede guardar un Float en n, que guarda un Int (usa Int())
+Main
+    n = 5
+    n = 2.5
+    Print n
+end

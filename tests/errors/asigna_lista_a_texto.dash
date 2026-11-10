@@ -1,0 +1,8 @@
+# Test: una lista en una variable que guarda un texto (./dash lo aceptaba)
+# expect: Cannot assign a array_int to 's', which holds a string
+# expect-dash: no se puede guardar una lista en s, que guarda un String
+Main
+    s = "hola"
+    s = [1, 2]
+    Print s
+end

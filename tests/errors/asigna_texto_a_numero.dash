@@ -1,0 +1,12 @@
+# Test: un texto en una variable que guarda un Int, también desde una función
+# expect: Cannot assign a string to 'n', which holds a int
+# expect-dash: no se puede guardar un String en n, que guarda un Int
+func nombre() -> String
+    return "x"
+end
+
+Main
+    n = 5
+    n = nombre()
+    Print n
+end
