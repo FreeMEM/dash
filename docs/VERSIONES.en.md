@@ -59,11 +59,11 @@ New syntax, a new module and a new function, and two fixes. What compiled before
   `x in dictionary` looks for a key. `x not in ...` is the opposite.
 - **New:** comparisons chain as in Python: `1 <= a <= 10` is `1 <= a and a <= 10`. The middle value cannot call a
   function, because it would run twice: that is an error.
-- **New:** `lib/requisitos.dash` reads what a program needs from the `Requires:` line of its `.readme` (Hangar's
-  manifest) and checks on the Amiga what is missing: CPU, FPU, chipset, graphics card, system version, memory and
-  libraries. It lets installers ask Hangar for what is missing.
+- **New:** `lib/requisitos.dash` reads what a program needs from the `Requires:` line of its `.readme` (the
+  Aminet one) and checks on the Amiga what is missing: CPU, FPU, chipset, graphics card, system version, memory and
+  libraries. It lets installers know what is missing.
 - **New:** `chipset_model()` gives "AGA", "ECS" or "OCS".
-- The Amiga package carries its `Dash.readme`, with what Dash needs, for Hangar.
+- The Amiga package carries its `Dash.readme`, with what Dash needs.
 - **Fix:** with `./dash --gcc`, a hand-written list of lists (`[["a", "40"]]`) gave numbers instead of strings.
 - **Fix:** with `./dash --gcc`, a program whose only string came from a function (`Print locale_language()`) did
   not link.
@@ -100,8 +100,8 @@ One new function and two additions to existing ones. What compiled before still 
 - The Amiga package comes with Forja 0.5.2: Help or F1 show the help for the name under the cursor (idea by Javier
   R. Santurde "Tolkien"), and F5, F10 and the other editor keys arrive with the pointer anywhere in the window
   (reported by David Martínez).
-- **Tool:** `tools/paquete_hangar.py` makes, from a drawer and its `paquete.txt`, a program's `.lha` and `.readme`,
-  ready for Aminet and for Hangar.
+- **Tool:** `tools/paquete_aminet.py` (formerly under another name) makes, from a drawer and its `paquete.txt`, a program's `.lha` and `.readme`,
+  ready for Aminet.
 - Tested on emulated A1200 (3.1) and A1200 with OS 3.2.
 
 ### 2.6.4 (2026-11-08)

@@ -5,7 +5,7 @@ runtimes, la carpeta lib/ de los import, los ejemplos que compila y el instalado
     python3 tools/paquete_amiga.py        →  build/paquete_amiga/Dash/...  y  build/dash-<versión>-amiga.lha (.readme)
                                              y  build/dash-<versión>-amiga.tar (para el botón de actualizar de Forja)
 
-El .readme (el manifiesto de Aminet y Hangar) sale de paquete/paquete.txt.
+El .readme (el de Aminet) sale de paquete/paquete.txt.
 
 Construye dashc para el Amiga (make -C dashc amiga, con el gcc de bebbo) y prueba qué ejemplos compila dashc (los
 que llevan C no van). Necesita el lha de 68k (/opt/amiga/bin/lha) para que el archivo guarde bien los atributos.
@@ -25,7 +25,7 @@ raiz = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(raiz / "tools"))
 from iconos_wb import cajon, documento, instalador, info, WBDRAWER, WBPROJECT   # noqa: E402
 from leeme import texto80   # noqa: E402
-from paquete_hangar import leer_paquete, comprobar, readme   # noqa: E402
+from paquete_aminet import leer_paquete, comprobar, readme   # noqa: E402
 
 
 def situar(icono, x, y):
@@ -109,16 +109,16 @@ def main():
     (caj / "README").write_bytes(texto80((raiz / "README.md").read_text()).encode("latin-1", "replace"))
     (caj / "README.info").write_bytes(situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 170, 6))
     shutil.copy(raiz / "LICENSE", caj / "LICENSE")
-    # el manifiesto de Hangar y Aminet: el .readme en la raíz del .lha y al lado (tools/paquete_hangar.py)
+    # el .readme de Aminet en la raíz del .lha y al lado (tools/paquete_aminet.py)
     campos, desc = leer_paquete((raiz / "paquete/paquete.txt").read_text().replace("@VERSION@", version))
     faltas = comprobar(campos)
     if faltas:
         sys.exit("paquete/paquete.txt: " + "; ".join(faltas))
-    leeme_hangar = readme(campos, desc).encode("latin-1")
-    (dest / "Dash.readme").write_bytes(leeme_hangar)
+    leeme = readme(campos, desc).encode("latin-1")
+    (dest / "Dash.readme").write_bytes(leeme)
     lha = raiz / f"build/dash-{version}-amiga.lha"
     lha.unlink(missing_ok=True)
-    lha.with_suffix(".readme").write_bytes(leeme_hangar)
+    lha.with_suffix(".readme").write_bytes(leeme)
     ficheros = sorted(os.path.relpath(os.path.join(d, f), dest) for d, _, fs in os.walk(caj) for f in fs)
     subprocess.run(["/opt/amiga/bin/lha", "ao5q", str(lha), "Dash", "Dash.info", "Dash.readme"] + ficheros, cwd=dest,
                    check=True)

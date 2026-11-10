@@ -1,5 +1,5 @@
 # Un carácter (t[i]) donde va un String (str_find, str_replace...) va como texto de una letra, por los dos caminos.
-# Antes iba el código como si fuera un puntero: -1 o un número raro, sin aviso (lo vi haciendo el cliente de Hangar).
+# Antes iba el código como si fuera un puntero: -1 o un número raro, sin aviso (lo vi haciendo un gestor de paquetes).
 # expect-out: x -1
 # expect-out: 0: 0
 # expect-out: 1: -1

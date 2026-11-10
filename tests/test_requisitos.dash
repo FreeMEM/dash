@@ -1,6 +1,5 @@
 # Test: lib/requisitos.dash (la propuesta del usuario, por Tachyon: que los instaladores del universo Dash resuelvan
-# dependencias con Hangar). La línea Requires: del .readme, leída como la lee el servicio de Hangar (sus casos de
-# src/requisitos.rs), Provides:, los campos del .readme y la comprobación en este Amiga. chipset_model, nuevo.
+# dependencias). La línea Requires: del .readme, leída como la lee el gestor de paquetes (sus casos), Provides:, los campos del .readme y la comprobación en este Amiga. chipset_model, nuevo.
 # expect-c: _dash_chipset_model(
 # expect-out: [cpu 68020] [lib ixemul.library 45.1]
 # expect-out: [os 39]
@@ -58,7 +57,7 @@ func uno(texto: String) -> Requisito
 end
 
 Main
-    # los de src/requisitos.rs de Hangar
+    # los casos del gestor de paquetes
     ver("68020+, ixemul.library 45.1, X11R6 server")
     ver("OS 3.0 (V39)")
     ver("Amiga with AGA chipset")

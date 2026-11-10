@@ -8700,7 +8700,7 @@ static STRPTR _dash_sha1_text(STRPTR t) {
 }
 """
 
-    # SHA-256 and Ed25519 signature checks, for package managers (Hangar: what is downloaded and the signed index)
+    # SHA-256 and Ed25519 signature checks, for package managers (what is downloaded and a signed index)
     CRYPTO_RUNTIME = """\
 /* Dash SHA-256 (FIPS 180-4) y verificación de firmas Ed25519 (RFC 8032), para comprobar lo que se baja: sha256 y
    sha256_text de una vez, o por partes (sha256_new, sha256_add, sha256_add_text, y sha256_hex o sha256_bytes, que lo
@@ -23624,7 +23624,7 @@ _RUNTIME_FLAGS = [
     ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
     ("APPWIN_RUNTIME", "uses_appwin"),      # Trasfondo 2.0: icons dropped on a window (the dock)
     ("SHA1_RUNTIME", "uses_sha1"),          # dashgit: SHA-1
-    ("CRYPTO_RUNTIME", "uses_crypto"),      # Hangar: SHA-256 and Ed25519
+    ("CRYPTO_RUNTIME", "uses_crypto"),      # SHA-256 and Ed25519
     ("ICON_RUNTIME", "uses_icons"),         # Trasfondo 2.0: icons drawn by icon.library (the dock)
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
@@ -23967,7 +23967,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
         self.uses_mui_drop: bool = False # mui_on_drop (MUI_APPDROP_RUNTIME, dashweb D83)
         self.uses_sha1: bool = False     # sha1, sha1_new... (SHA1_RUNTIME, dashgit)
-        self.uses_crypto: bool = False   # sha256, ed25519_verify... (CRYPTO_RUNTIME, Hangar)
+        self.uses_crypto: bool = False   # sha256, ed25519_verify... (CRYPTO_RUNTIME)
         self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)

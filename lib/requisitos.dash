@@ -8,8 +8,8 @@
 #       Print "Falta: " + requisito_texto(r)             # "MUI 3.8", "un 68020", "AmigaOS 3.1"
 #   end
 #
-# El formato es el manifiesto de Hangar: el .readme de Aminet con sus campos (Requires:, y Provides: para lo que
-# trae un paquete). requisitos_leer entiende la línea Requires: igual que el servicio de Hangar (src/requisitos.rs):
+# El formato es el .readme de Aminet con sus campos (Requires:, y Provides: para lo que
+# trae un paquete). requisitos_leer entiende la línea Requires: igual que el gestor de paquetes que lo usa:
 # texto libre como "68020+, MUI 3.8, reqtools.library 38, OS 3.1, 2MB chip". Los tipos son los de su API ("nec"):
 #
 #   cpu (68020...)   fpu   mmu   chipset (AGA, ECS)   rtg   os (versión de exec: 39 = 3.0, 40 = 3.1, 47 = 3.2)
