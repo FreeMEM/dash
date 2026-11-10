@@ -1074,7 +1074,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       Dash 2.9.0. `tests/test_in_rango.dash`, `dashc/tests/in_rango.dash` y tres de `tests/errors/`
 
 - [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
-      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`
+      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`- [x] Grupos de las expresiones regulares (2026-11-10, lo pidió David Martínez): lo que atrapa cada `( )`.
+      `regex_group(n)` (0: todo lo que encajó), `regex_groups()` (un `[String]`, como `groups()` de Python),
+      `regex_group_count`, `regex_group_start`, `regex_group_length` y `regex_group_parent`, que da el árbol de los
+      anidados: una lista de Dash no mezcla textos y sublistas. El motor guarda el inicio y el fin de cada grupo y
+      los deshace al volver atrás. 980 funciones. `tests/test_regex_grupos.dash`, `dashc/tests/regex_grupos.dash`
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:

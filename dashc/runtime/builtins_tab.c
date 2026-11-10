@@ -1421,6 +1421,18 @@ const BuiltinInfo builtin_info[] = {
     {"regex_error", 0, 3, 0, 0, 0, 0u},
     {"regex_find", 4, 1, 0, 0, 0, 3u},
     {"regex_find", 4, 1, 0, 0, 0, 3u},
+    {"regex_group", 1, 3, 0, 0, 0, 0u},
+    {"regex_group", 1, 3, 0, 0, 0, 0u},
+    {"regex_group_count", 0, 1, 0, 0, 0, 0u},
+    {"regex_group_count", 0, 1, 0, 0, 0, 0u},
+    {"regex_group_length", 1, 1, 0, 0, 0, 0u},
+    {"regex_group_length", 1, 1, 0, 0, 0, 0u},
+    {"regex_group_parent", 1, 1, 0, 0, 0, 0u},
+    {"regex_group_parent", 1, 1, 0, 0, 0, 0u},
+    {"regex_group_start", 1, 1, 0, 0, 0, 0u},
+    {"regex_group_start", 1, 1, 0, 0, 0, 0u},
+    {"regex_groups", 0, 4, 0, 0, 0, 0u},
+    {"regex_groups", 0, 4, 0, 0, 0, 0u},
     {"regex_length", 0, 1, 0, 0, 0, 0u},
     {"regex_length", 0, 1, 0, 0, 0, 0u},
     {"regex_match", 3, 2, 0, 0, 0, 3u},
@@ -1950,7 +1962,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1948;
+const int builtin_count = 1960;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

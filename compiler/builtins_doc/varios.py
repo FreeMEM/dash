@@ -358,6 +358,58 @@ Devuelve dónde empieza lo primero que encaja, o -1. `regex_length` da cuánto m
 Returns where the first match starts, or -1. `regex_length` gives its length.
 """, ["regex_length", "regex_match"]),
     "regex_length": _f("Devuelve el largo en bytes de lo último que encajó; 0 si nada.\n", "Returns the length in bytes of the last match; 0 if none.\n", ["regex_find"]),
+    "regex_group": _f("""\
+- `n`: el número del grupo, del 1 en adelante por el orden de sus `(`; 0 es todo lo que encajó.
+
+Devuelve el texto que atrapó ese grupo en lo último que encajó (`regex_find` o `regex_match`). Si el grupo no
+participó (por ejemplo, una rama de `|` que no se usó), o no hay grupo `n`, devuelve `""`. En un grupo que se
+repite, queda la última vuelta. `(?: )` agrupa sin atrapar. Lo pidió David Martínez.
+""", """\
+- `n`: the group number, from 1 in the order of its `(`; 0 is the whole match.
+
+Returns the text that group caught in the last match (`regex_find` or `regex_match`). If the group did not take
+part (for instance, a `|` branch that was not used), or there is no group `n`, returns `""`. In a repeated group,
+the last round stays. `(?: )` groups without capturing. Requested by David Martínez.
+""", ["regex_groups", "regex_group_start", "regex_find"]),
+    "regex_groups": _f("""\
+Devuelve un `[String]` nuevo con el texto de los grupos 1 a `regex_group_count()` de lo último que encajó, como
+`groups()` de Python; vacía si nada encajó. Los anidados salen en su sitio por el orden de su `(`, y
+`regex_group_parent` dice dentro de cuál está cada uno.
+""", """\
+Returns a new `[String]` with the text of groups 1 to `regex_group_count()` of the last match, like Python's
+`groups()`; empty if nothing matched. Nested ones come in their place, by the order of their `(`, and
+`regex_group_parent` tells which one holds each.
+""", ["regex_group", "regex_group_parent"]),
+    "regex_group_count": _f("Devuelve cuántos grupos que atrapan tiene el último patrón; `(?: )` no cuenta.\n", "Returns how many capturing groups the last pattern has; `(?: )` does not count.\n", ["regex_groups"]),
+    "regex_group_start": _f("""\
+- `n`: el grupo, como en `regex_group`.
+
+Devuelve el byte del texto donde empieza el grupo, o -1 si no participó.
+""", """\
+- `n`: the group, as in `regex_group`.
+
+Returns the byte of the text where the group starts, or -1 if it did not take part.
+""", ["regex_group_length", "regex_group"]),
+    "regex_group_length": _f("""\
+- `n`: el grupo, como en `regex_group`.
+
+Devuelve cuántos bytes mide el grupo; 0 si no participó.
+""", """\
+- `n`: the group, as in `regex_group`.
+
+Returns how many bytes the group takes; 0 if it did not take part.
+""", ["regex_group_start"]),
+    "regex_group_parent": _f("""\
+- `n`: el grupo.
+
+Devuelve el grupo que lo contiene: en `"((a)(b))"`, el 2 y el 3 están dentro del 1, y el 1 en ninguno (0). -1 si
+no hay grupo `n`. Con esto se monta el árbol de los grupos anidados.
+""", """\
+- `n`: the group.
+
+Returns the group that holds it: in `"((a)(b))"`, 2 and 3 are inside 1, and 1 is inside none (0). -1 if there is
+no group `n`. With this the tree of nested groups can be built.
+""", ["regex_groups"]),
     "regex_error": _f("Devuelve por qué está mal el último patrón, o `\"\"` si está bien.\n", "Returns why the last pattern is wrong, or `\"\"` if it is fine.\n", ["regex_match"]),
     "wildcard_match": _f("""\
 - `pattern`: con comodines de hoja de cálculo: `*` cualquier cosa, `?` un carácter, `~` delante de uno lo toma tal

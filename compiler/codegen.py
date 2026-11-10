@@ -10184,6 +10184,7 @@ static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
 #define _DASH_RE_MAXNODES 600
 #define _DASH_RE_MAXRANGES 512
 #define _DASH_RE_INF 0x7FFFFFFF
+#define _DASH_RE_MAXGROUPS 30   /* ( ) that capture: regex_group (lo pidió David Martínez) */
 enum { _DASH_RE_CHAR, _DASH_RE_ANY, _DASH_RE_ANYALL, _DASH_RE_CLASS, _DASH_RE_NCLASS, _DASH_RE_SPLIT, _DASH_RE_JMP,
        _DASH_RE_SAVE, _DASH_RE_BOL, _DASH_RE_EOL, _DASH_RE_WORDB, _DASH_RE_NWORDB, _DASH_RE_MATCH };
 /* special "ranges" of a class: \\d \\w \\s and their opposites */
@@ -10197,7 +10198,7 @@ enum { _DASH_RE_CHAR, _DASH_RE_ANY, _DASH_RE_ANYALL, _DASH_RE_CLASS, _DASH_RE_NC
 typedef struct { UBYTE op; LONG x, y; } _DashReInst;
 /* node kinds of the parsed pattern */
 enum { _DASH_RN_CHAR, _DASH_RN_ANY, _DASH_RN_CLASS, _DASH_RN_NCLASS, _DASH_RN_BOL, _DASH_RN_EOL, _DASH_RN_WORDB,
-       _DASH_RN_NWORDB, _DASH_RN_CAT, _DASH_RN_ALT, _DASH_RN_REPEAT, _DASH_RN_EMPTY };
+       _DASH_RN_NWORDB, _DASH_RN_CAT, _DASH_RN_ALT, _DASH_RN_REPEAT, _DASH_RN_EMPTY, _DASH_RN_GROUP };
 typedef struct { UBYTE kind, greedy; LONG a, b, min, max; } _DashReNode;   /* a, b: children / char / ranges */
 
 static struct {
@@ -10214,6 +10215,12 @@ static struct {
     const UBYTE *p;             /* parser */
     LONG depth;
     LONG mstart, mend;          /* last match */
+    LONG ngroups, gcur;         /* groups of the compiled pattern; the one being parsed */
+    UBYTE gparent[_DASH_RE_MAXGROUPS + 1];
+    LONG cap[2 * (_DASH_RE_MAXGROUPS + 1)];   /* while running: start and end of each group (0: the match) */
+    LONG gs[_DASH_RE_MAXGROUPS + 1], ge[_DASH_RE_MAXGROUPS + 1];   /* of the last match, -1 if not */
+    UBYTE *mtext;               /* a copy of the last match (from byte mbase of its text) */
+    LONG mtext_size, mbase;
 } _dash_re;
 
 static void _dash_re_fail(const char *msg) {
@@ -10386,19 +10393,28 @@ static LONG _dash_re_atom(void) {
     UBYTE c = *_dash_re.p;
     LONG n, e;
     switch (c) {
-    case '(':
+    case '(': {
+        LONG g = 0, outer = _dash_re.gcur;
         _dash_re.p++;
         if (++_dash_re.depth > 40) { _dash_re_fail("too many nested groups"); return 0; }
         if (*_dash_re.p == '?') {
             if (_dash_re.p[1] == ':') _dash_re.p += 2;
             else { _dash_re_fail("(? not supported (only (?: and (?i) at the start)"); return 0; }
+        } else {
+            /* a group that captures: numbered by its "(", from 1 */
+            if (_dash_re.ngroups >= _DASH_RE_MAXGROUPS) { _dash_re_fail("too many groups"); return 0; }
+            g = ++_dash_re.ngroups;
+            _dash_re.gparent[g] = (UBYTE)outer;
+            _dash_re.gcur = g;
         }
         e = _dash_re_alt();
+        _dash_re.gcur = outer;
         if (!_dash_re.ok) return 0;
         if (*_dash_re.p != ')') { _dash_re_fail("( without )"); return 0; }
         _dash_re.p++;
         _dash_re.depth--;
-        return e;
+        return g ? _dash_re_node(_DASH_RN_GROUP, e, g) : e;
+    }
     case '[': _dash_re.p++; return _dash_re_class();
     case '.': _dash_re.p++; return _dash_re_node(_DASH_RN_ANY, 0, 0);
     case '^': _dash_re.p++; return _dash_re_node(_DASH_RN_BOL, 0, 0);
@@ -10497,6 +10513,13 @@ static void _dash_re_gen(LONG ni) {
     case _DASH_RN_NWORDB: _dash_re_emit(_DASH_RE_NWORDB, 0, 0); break;
     case _DASH_RN_EMPTY: break;
     case _DASH_RN_CAT: _dash_re_gen(nd->a); _dash_re_gen(nd->b); break;
+    case _DASH_RN_GROUP: {
+        LONG g = nd->b;
+        _dash_re_emit(_DASH_RE_SAVE, 2 * g, 0);
+        _dash_re_gen(nd->a);
+        _dash_re_emit(_DASH_RE_SAVE, 2 * g + 1, 0);
+        break;
+    }
     case _DASH_RN_ALT:
         s = _dash_re_emit(_DASH_RE_SPLIT, 0, 0);
         _dash_re.prog[s].x = _dash_re.n;
@@ -10550,6 +10573,7 @@ static BOOL _dash_re_compile(STRPTR pattern, LONG icase) {
     _dash_re.err[0] = 0;
     _dash_re.n = _dash_re.nr = _dash_re.nn = 0;
     _dash_re.depth = 0;
+    _dash_re.ngroups = _dash_re.gcur = 0;
     _dash_re.icase = icase != 0;
     _dash_re.p = (const UBYTE *)pattern;
     if (!strncmp((char *)pattern, "(?i)", 4)) { _dash_re.icase = TRUE; _dash_re.p += 4; }
@@ -10577,12 +10601,55 @@ static LONG _dash_re_prev_char(const UBYTE *s, LONG pos) {
     return _dash_utf8_decode(s + i, &n);
 }
 
-/* Runs the program from pc at pos: TRUE and the match in mstart, mend. whole: only a match that ends the text */
+/* Two LONGs on the backtracking stack, which grows; FALSE without memory */
+static BOOL _dash_re_push(LONG **stack, LONG *stack_size, LONG *sp, LONG a, LONG b) {
+    if (*sp + 2 > *stack_size * 2) {
+        LONG *bigger = (LONG *)_dash_re_alloc(*stack_size * 4 * sizeof(LONG));
+        if (!bigger) return FALSE;
+        memcpy(bigger, *stack, *sp * sizeof(LONG));
+        _dash_re_free(*stack, *stack_size * 2 * sizeof(LONG));
+        *stack = bigger;
+        *stack_size *= 2;
+    }
+    (*stack)[(*sp)++] = a;
+    (*stack)[(*sp)++] = b;
+    return TRUE;
+}
+
+/* The last match: its groups and a copy of its text (regex_group) */
+static void _dash_re_keep(const UBYTE *s) {
+    LONG g, size;
+    for (g = 0; g <= _dash_re.ngroups; g++) {
+        _dash_re.gs[g] = _dash_re.cap[2 * g];
+        _dash_re.ge[g] = _dash_re.cap[2 * g + 1];
+        if (_dash_re.gs[g] < 0 || _dash_re.ge[g] < _dash_re.gs[g]) _dash_re.gs[g] = _dash_re.ge[g] = -1;
+    }
+    _dash_re.gs[0] = _dash_re.mstart;
+    _dash_re.ge[0] = _dash_re.mend;
+    size = _dash_re.mend - _dash_re.mstart + 1;
+    if (_dash_re.mtext && _dash_re.mtext_size < size) {
+        _dash_re_free(_dash_re.mtext, _dash_re.mtext_size);
+        _dash_re.mtext = NULL;
+    }
+    if (!_dash_re.mtext) {
+        _dash_re.mtext_size = size < 64 ? 64 : size;
+        _dash_re.mtext = (UBYTE *)_dash_re_alloc(_dash_re.mtext_size);
+    }
+    _dash_re.mbase = _dash_re.mstart;
+    if (_dash_re.mtext) {
+        memcpy(_dash_re.mtext, s + _dash_re.mstart, size - 1);
+        _dash_re.mtext[size - 1] = 0;
+    }
+}
+
+/* Runs the program from pc at pos: TRUE and the match in mstart, mend (and its groups). whole: only a match
+   that ends the text. A group's SAVE leaves on the stack the value it changes, put back when going back. */
 static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole) {
-    LONG nbits = _dash_re.n * (len + 1), stack_size = 64, sp = 0, steps = 0, c, n;
+    LONG nbits = _dash_re.n * (len + 1), stack_size = 64, sp = 0, steps = 0, c, n, g;
     UBYTE *seen = NULL;
     LONG *stack;
     BOOL found = FALSE;
+    for (g = 0; g < 2 * (_dash_re.ngroups + 1); g++) _dash_re.cap[g] = -1;
     if (nbits <= 4L * 1024 * 1024) seen = (UBYTE *)_dash_re_alloc((nbits + 7) / 8);
     stack = (LONG *)_dash_re_alloc(stack_size * 2 * sizeof(LONG));
     if (!stack) { if (seen) _dash_re_free(seen, (nbits + 7) / 8); return FALSE; }
@@ -10590,6 +10657,10 @@ static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole
     while (sp && !found) {
         pos = stack[--sp];
         pc = stack[--sp];
+        if (pc < 0) {                  /* going back over a SAVE: its old value */
+            _dash_re.cap[-1 - pc] = pos;
+            continue;
+        }
         for (;;) {
             _DashReInst *in;
             if (seen) {
@@ -10631,19 +10702,19 @@ static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole
                 continue;
             }
             case _DASH_RE_SPLIT:
-                if (sp + 2 > stack_size * 2) {
-                    LONG *bigger = (LONG *)_dash_re_alloc(stack_size * 4 * sizeof(LONG));
-                    if (!bigger) { sp = 0; goto fail; }
-                    memcpy(bigger, stack, sp * sizeof(LONG));
-                    _dash_re_free(stack, stack_size * 2 * sizeof(LONG));
-                    stack = bigger;
-                    stack_size *= 2;
-                }
-                stack[sp++] = in->y; stack[sp++] = pos;
+                if (!_dash_re_push(&stack, &stack_size, &sp, in->y, pos)) { sp = 0; goto fail; }
                 pc = in->x;
                 continue;
             case _DASH_RE_JMP: pc = in->x; continue;
-            case _DASH_RE_SAVE: _dash_re.mstart = pos; pc++; continue;
+            case _DASH_RE_SAVE:
+                if (in->x && !_dash_re_push(&stack, &stack_size, &sp, -1 - in->x, _dash_re.cap[in->x])) {
+                    sp = 0;
+                    goto fail;
+                }
+                _dash_re.cap[in->x] = pos;
+                if (!in->x) _dash_re.mstart = pos;
+                pc++;
+                continue;
             case _DASH_RE_BOL: if (pos != 0) goto fail; pc++; continue;
             case _DASH_RE_EOL: if (pos != len && !(pos == len - 1 && s[pos] == '\\n')) goto fail; pc++; continue;
             case _DASH_RE_WORDB:
@@ -10657,6 +10728,7 @@ static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole
             case _DASH_RE_MATCH:
                 if (whole && pos != len) goto fail;
                 _dash_re.mend = pos;
+                _dash_re_keep(s);
                 found = TRUE;
                 break;
             }
@@ -10696,6 +10768,48 @@ static LONG _dash_regex_find(STRPTR pattern, STRPTR text, LONG from, LONG icase)
 
 static LONG _dash_regex_length(void) {
     return _dash_re.mstart >= 0 ? _dash_re.mend - _dash_re.mstart : 0;
+}
+
+/* The groups of the last match (lo pidió David Martínez): n from 1 in the order of their "(", 0 the whole match */
+static LONG _dash_regex_group_count(void) {
+    return _dash_re.ngroups;
+}
+
+static LONG _dash_regex_group_start(LONG n) {
+    if (_dash_re.mstart < 0 || n < 0 || n > _dash_re.ngroups) return -1;
+    return _dash_re.gs[n];
+}
+
+static LONG _dash_regex_group_length(LONG n) {
+    LONG s = _dash_regex_group_start(n);
+    return s < 0 ? 0 : _dash_re.ge[n] - s;
+}
+
+static LONG _dash_regex_group_parent(LONG n) {
+    if (n < 1 || n > _dash_re.ngroups) return -1;
+    return _dash_re.gparent[n];
+}
+
+/* A new text with the group (FALSE: one for a list, TRUE: a temporary) */
+static STRPTR _dash_re_group_text(LONG n, BOOL tmp) {
+    LONG s = _dash_regex_group_start(n), len = _dash_regex_group_length(n);
+    STRPTR r = _dash_str_alloc(s < 0 || !_dash_re.mtext ? 0 : len, tmp);
+    if (r && s >= 0 && _dash_re.mtext && len) _dash_copy(r, _dash_re.mtext + (s - _dash_re.mbase), len);
+    return r;
+}
+
+static STRPTR _dash_regex_group(LONG n) {
+    return _dash_re_group_text(n, TRUE);
+}
+
+/* [String] with groups 1 to regex_group_count() */
+static DashArrayLong *_dash_regex_groups(void) {
+    LONG n = _dash_re.mstart < 0 ? 0 : _dash_re.ngroups, i;
+    DashArrayLong *arr = DashArray_create(n);
+    if (!arr) return NULL;
+    arr->capacity |= (LONG)_DASH_ARR_STRS << 24;
+    for (i = 0; i < n; i++) arr->data[i] = (_DashP)_dash_re_group_text(i + 1, FALSE);
+    return arr;
 }
 
 /* Why the last pattern is wrong, "" if it is right */
@@ -27492,7 +27606,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_split:
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_regex:
-            self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
+            # REGEX_RUNTIME decodes UTF-8 and makes texts and a list of them (regex_groups)
+            self.uses_utf8 = self.uses_strings = self.uses_arrays = True
         if self.uses_siminput:
             self.uses_strings = True   # input_active_title makes a text
         if self.uses_clip:

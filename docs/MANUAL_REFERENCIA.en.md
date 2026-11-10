@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 974 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 980 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -650,6 +650,10 @@ Over UTF-8 texts (anything outside ASCII, from `latin1_to_utf8`); positions and 
 |---|---|
 | `regex_match(pattern, text, ignore_case)` | Whether the whole text fits the pattern |
 | `regex_find(pattern, text, from, ignore_case)` | Where the first match from byte `from` starts, or -1; `regex_length()` gives its length |
+| `regex_group(n)` | Text of group `n` of the last match (0: all of it); `""` if it did not take part (requested by David Martínez) |
+| `regex_groups()` | A `[String]` with the text of groups 1 to `regex_group_count()` |
+| `regex_group_start(n)`, `regex_group_length(n)` | Where the group starts (-1 if it did not take part) and how many bytes it takes |
+| `regex_group_parent(n)` | The group that holds `n` (0 if none): to build the tree of nested ones |
 | `regex_error()` | Why the last pattern is wrong (`""` if it is right); a wrong one gives `false` or -1, without stopping the program |
 | `wildcard_match(pattern, text, ignore_case)` | Excel's wildcards over the whole text: `*` anything, `?` one character, `~` before a character takes it as it is (`~*`, `~?`, `~~`) |
 
@@ -665,7 +669,13 @@ takes about 0.7 ms; with wildcards, 0.3 ms.
 if regex_match("D.", celda, false)        # ODF's VLOOKUP: "D." finds "DD"
 p = regex_find("\\d+", texto, 0, false)    # in a Dash literal, "\\d" is \d
 n = regex_length()
+if regex_match("(\\d+)-(\\d+)", "91-555", false)
+    Print regex_group(1) + " and " + regex_group(2)   # 91 and 555
+end
 ```
+
+Groups are numbered by the order of their `(`, from 1; `(?: )` does not count. In a repeated group the last round
+stays, as in Python.
 
 ### Operator Precedence
 
@@ -4533,7 +4543,7 @@ end
 
 ### Functions by Category
 
-There are 974, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
+There are 980, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
 starts with an introduction (what it is for, what is needed first, the usual flow) and an example run by the tests,
 goes on with the table of its functions and ends with each function explained (parameters, what it returns, what
 happens on failure and the related ones).

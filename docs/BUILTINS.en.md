@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 974 functions, 974 implemented, 0 not implemented.
+Total: 980 functions, 980 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -7439,6 +7439,12 @@ full syntax is in the manual (section 5).
 | [`regex_match(pattern, text, ignore_case)`](#regex_match) | Bool | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
 | [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
 | [`regex_length()`](#regex_length) | Int | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
+| [`regex_group(n)`](#regex_group) | String | Text of group n of the last match (0: the whole match); "" if it did not take part |  |
+| [`regex_groups()`](#regex_groups) | [Int] | The texts of the groups of the last match, 1 to regex_group_count(), as a new [String] |  |
+| [`regex_group_count()`](#regex_group_count) | Int | How many groups that capture the last pattern has ((?: ) does not count) |  |
+| [`regex_group_start(n)`](#regex_group_start) | Int | Byte where group n of the last match starts, -1 if it did not take part |  |
+| [`regex_group_length(n)`](#regex_group_length) | Int | Length in bytes of group n of the last match (0 if it did not take part) |  |
+| [`regex_group_parent(n)`](#regex_group_parent) | Int | The group that holds group n (0 if none, -1 if there is no group n): for nested groups |  |
 | [`regex_error()`](#regex_error) | String | Why the last pattern is wrong, "" if it is right |  |
 | [`wildcard_match(pattern, text, ignore_case)`](#wildcard_match) | Bool | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
 
@@ -7472,6 +7478,67 @@ See also: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
 Returns the length in bytes of the last match; 0 if none.
 
 See also: [`regex_find`](#regex_find).
+
+<a id="regex_group"></a>
+
+### `regex_group(n)` → `String`
+
+- `n`: the group number, from 1 in the order of its `(`; 0 is the whole match.
+
+Returns the text that group caught in the last match (`regex_find` or `regex_match`). If the group did not take
+part (for instance, a `|` branch that was not used), or there is no group `n`, returns `""`. In a repeated group,
+the last round stays. `(?: )` groups without capturing. Requested by David Martínez.
+
+See also: [`regex_groups`](#regex_groups), [`regex_group_start`](#regex_group_start), [`regex_find`](#regex_find).
+
+<a id="regex_groups"></a>
+
+### `regex_groups()` → `[Int]`
+
+Returns a new `[String]` with the text of groups 1 to `regex_group_count()` of the last match, like Python's
+`groups()`; empty if nothing matched. Nested ones come in their place, by the order of their `(`, and
+`regex_group_parent` tells which one holds each.
+
+See also: [`regex_group`](#regex_group), [`regex_group_parent`](#regex_group_parent).
+
+<a id="regex_group_count"></a>
+
+### `regex_group_count()` → `Int`
+
+Returns how many capturing groups the last pattern has; `(?: )` does not count.
+
+See also: [`regex_groups`](#regex_groups).
+
+<a id="regex_group_start"></a>
+
+### `regex_group_start(n)` → `Int`
+
+- `n`: the group, as in `regex_group`.
+
+Returns the byte of the text where the group starts, or -1 if it did not take part.
+
+See also: [`regex_group_length`](#regex_group_length), [`regex_group`](#regex_group).
+
+<a id="regex_group_length"></a>
+
+### `regex_group_length(n)` → `Int`
+
+- `n`: the group, as in `regex_group`.
+
+Returns how many bytes the group takes; 0 if it did not take part.
+
+See also: [`regex_group_start`](#regex_group_start).
+
+<a id="regex_group_parent"></a>
+
+### `regex_group_parent(n)` → `Int`
+
+- `n`: the group.
+
+Returns the group that holds it: in `"((a)(b))"`, 2 and 3 are inside 1, and 1 is inside none (0). -1 if there is
+no group `n`. With this the tree of nested groups can be built.
+
+See also: [`regex_groups`](#regex_groups).
 
 <a id="regex_error"></a>
 

@@ -5694,6 +5694,22 @@ REGEX_FUNCTIONS = {
                         "pattern is wrong); regex_length gives its length"),
     "regex_length": _text("regex_length", [], "LONG", "_dash_regex_length()",
                           "Length in bytes of the last match of regex_find or regex_match (0 if none)"),
+    # the groups of the last match (lo pidió David Martínez): n from 1 in the order of their "(", 0 the whole match
+    "regex_group": _text("regex_group", ["n"], "STRPTR", "_dash_regex_group(${n})",
+                         "Text of group n of the last match (0: the whole match); \"\" if it did not take part"),
+    "regex_groups": BuiltinFunc(name="regex_groups", params=[], return_type="DashArrayLong *",
+                                c_template="_dash_regex_groups()", reads_only=True, list_of="String",
+                                description="The texts of the groups of the last match, 1 to regex_group_count(), "
+                                            "as a new [String]"),
+    "regex_group_count": _text("regex_group_count", [], "LONG", "_dash_regex_group_count()",
+                               "How many groups that capture the last pattern has ((?: ) does not count)"),
+    "regex_group_start": _text("regex_group_start", ["n"], "LONG", "_dash_regex_group_start(${n})",
+                               "Byte where group n of the last match starts, -1 if it did not take part"),
+    "regex_group_length": _text("regex_group_length", ["n"], "LONG", "_dash_regex_group_length(${n})",
+                                "Length in bytes of group n of the last match (0 if it did not take part)"),
+    "regex_group_parent": _text("regex_group_parent", ["n"], "LONG", "_dash_regex_group_parent(${n})",
+                                "The group that holds group n (0 if none, -1 if there is no group n): for "
+                                "nested groups"),
     "regex_error": _text("regex_error", [], "STRPTR", "_dash_regex_error()",
                          "Why the last pattern is wrong, \"\" if it is right"),
     "wildcard_match": _text("wildcard_match", ["pattern", "text", "ignore_case"], "BOOL",
