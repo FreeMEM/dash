@@ -76,4 +76,9 @@ Main
     d.push(K(2, "r", k))
     Print f(s, a)
     Print d[1].o.s
+    # x in ...: los _dash_in_range, _dash_list_has* y _dash_str_has_char de ./dash
+    n = a[0]
+    if n in (a[1]..a[2] step a[0]) or n in a or t in c or t[0] in s
+        Print "in"
+    end
 end

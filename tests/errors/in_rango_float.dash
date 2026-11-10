@@ -1,0 +1,8 @@
+# Test: x in (a..b) con un Float
+# expect: x in (a..b) works on integers, not Float (Int() converts a Float or a Fixed)
+Main
+    x = 1.5
+    if x in (1..10)
+        Print "si"
+    end
+end

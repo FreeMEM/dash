@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Any
 from enum import Enum, auto
 
-from compiler.ast_nodes import (AmigaCast,
+from compiler.ast_nodes import (AmigaCast, InExpr, InRangeExpr,
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -1657,6 +1657,26 @@ class SemanticAnalyzer(ASTVisitor):
     def _type_text(t: DashType) -> str:
         return {DashType.FLOAT: "Float", DashType.DOUBLE: "Double", DashType.FIXED: "Fixed",
                 DashType.STRING: "Strings"}.get(t, "lists")
+
+    def visit_InRangeExpr(self, node: InRangeExpr):
+        """x in (a..b step s): all integers (lo pidió David Martínez)."""
+        for part in (node.value, node.start, node.end, node.step):
+            if part is None:
+                continue
+            self.visit(part)
+            t = self._infer_type(part)
+            if t in (DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.STRING) or t in self._LIST_TYPES:
+                self.error(f"x in (a..b) works on integers, not {self._type_text(t)} "
+                           f"(Int() converts a Float or a Fixed)", node)
+                break
+
+    def visit_InExpr(self, node: InExpr):
+        """x in c: c a list, a String or a dictionary."""
+        self.visit(node.value)
+        self.visit(node.container)
+        t = self._infer_type(node.container)
+        if t in (DashType.INT, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.BOOL):
+            self.error("'in' needs a list, a String, a dictionary or a range (a..b)", node)
 
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""

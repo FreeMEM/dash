@@ -2,6 +2,7 @@
 Dash Language Parser/Transformer
 Converts Lark parse tree to Dash AST nodes.
 """
+import copy
 import re
 from lark import Transformer, Token, Tree
 from typing import List, Any, Optional
@@ -15,7 +16,7 @@ from compiler.ast_nodes import (AmigaStructDef, AmigaField, AmigaCast,
     SourceLocation, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ImportStmt, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod,
     SelfRef, MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
-    ExternFunc, NativeFunc, LambdaFunc, FunctionRef
+    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, InExpr, InRangeExpr
 )
 
 
@@ -1116,14 +1117,58 @@ class DashASTBuilder(Transformer):
         return self._build_binary_chain(items, "and")
 
     def compare_expr(self, items):
-        """Build comparison expression."""
+        """Build comparison expression: a < b, or a chain a < b <= c that is a < b and b <= c
+        (as in Python; lo pidió David Martínez). The middle values are written twice, so they cannot
+        call anything: a call would run twice."""
         if len(items) == 1:
             return items[0]
-        # items = [left, COMP_OP, right]
-        left = items[0]
-        op = items[1].value if isinstance(items[1], Token) else str(items[1])
-        right = items[2]
-        return BinaryOp(left=left, operator=op, right=right)
+        # items = [left, COMP_OP, right, COMP_OP, right...]
+        parts = []
+        for i in range(1, len(items), 2):
+            op = items[i].value if isinstance(items[i], Token) else str(items[i])
+            left = items[i - 1]
+            if i > 1:
+                if not self._chain_safe(left):
+                    raise ValueError("in a chain of comparisons (a < b < c) the middle value cannot call a "
+                                     "function: put it in a variable first, or write x in (a..b)")
+                left = copy.deepcopy(left)
+            parts.append(BinaryOp(left=left, operator=op, right=items[i + 1]))
+        result = parts[0]
+        for part in parts[1:]:
+            result = BinaryOp(left=result, operator="and", right=part)
+        return result
+
+    def _chain_safe(self, node) -> bool:
+        """Can this value be written twice (a variable, a literal, a field, an element, arithmetic of those)?"""
+        if isinstance(node, (VarRef, NumberLiteral, StringLiteral, FloatLiteral, BoolLiteral, NilLiteral,
+                             SelfRef, MemberAccess)):
+            return True
+        if isinstance(node, PropertyAccess):
+            return self._chain_safe(node.object)
+        if isinstance(node, ArrayAccess):
+            return node.default is None and self._chain_safe(node.array) and self._chain_safe(node.index)
+        if isinstance(node, UnaryOp):
+            return self._chain_safe(node.operand)
+        if isinstance(node, BinaryOp):
+            return self._chain_safe(node.left) and self._chain_safe(node.right)
+        return False
+
+    def in_range(self, items):
+        """The (a..b step s) of x in (a..b step s): kept as a tuple for in_expr."""
+        parts = [i for i in items if not (isinstance(i, Token) and i.type in ("RANGE_OP", "STEP"))]
+        return ("range", parts[0], parts[1], parts[2] if len(parts) > 2 else None)
+
+    def in_expr(self, items):
+        """x in (a..b), x in lista, x in texto, x in diccionario (lo pidió David Martínez)."""
+        value, target = items[0], items[1]
+        location = getattr(value, "location", None)
+        if isinstance(target, tuple) and target and target[0] == "range":
+            return InRangeExpr(value=value, start=target[1], end=target[2], step=target[3], location=location)
+        return InExpr(value=value, container=target, location=location)
+
+    def not_in_expr(self, items):
+        """x not in c: not (x in c)."""
+        return UnaryOp(operator="not", operand=self.in_expr(items))
 
     def not_op(self, items) -> UnaryOp:
         """Build NOT expression."""

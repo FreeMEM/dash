@@ -128,6 +128,9 @@ Conversiones: `Int(x)`, `Float(n)`, `Fixed(n)`, `Int("42")`.
 ```ruby
 a + b   a - b   a * b   a / b   a % b      # aritmética (/ y % enteros con Int)
 a == b  a != b  a < b   a > b   a <= b  a >= b
+1 <= a <= 10                                # encadenadas, como en Python
+x in (1..10)   x in (0..20 step 5)          # en un rango de enteros (lo pidió David Martínez)
+x in lista   x in "texto"   x in dicc       # elemento, trozo o carácter, clave; también x not in ...
 x and y   x or y   not x
 a & b   a | b   a ^ b   ~a   a << n   a >> n  # bits de enteros (precedencia de Python)
 "Hola " + nombre                            # concatenar textos

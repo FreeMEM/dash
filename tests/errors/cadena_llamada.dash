@@ -1,0 +1,11 @@
+# Test: una comparación encadenada con una llamada en medio (se haría dos veces)
+# expect: the middle value cannot call a function
+func f() -> Int
+    return 2
+end
+
+Main
+    if 1 < f() < 3
+        Print "si"
+    end
+end

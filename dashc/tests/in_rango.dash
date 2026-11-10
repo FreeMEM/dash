@@ -1,0 +1,66 @@
+# x in (a..b), x in lista/texto/diccionario, not in y comparaciones encadenadas (lo pidió David Martínez)
+
+struct Punto
+    x: Int
+end
+
+var llamadas: Int = 0
+
+func cuenta(n: Int) -> Int
+    llamadas = llamadas + 1
+    return n
+end
+
+func b(v: Bool) -> String
+    if v
+        return "1"
+    end
+    return "0"
+end
+
+Main
+    # dentro de (1..10) entran del 1 al 10
+    dentro = 0
+    for i in (-5..15)
+        if i in (1..10)
+            dentro = dentro + 1
+        end
+    end
+    fuera = 0
+    for i in (-5..15)
+        if i not in (1..10)
+            fuera = fuera + 1
+        end
+    end
+    Print "rango: " + b(5 in (1..10)) + " " + dentro + " " + fuera + " " + b(11 in (1..10))
+    # (10..1) cuenta hacia atrás: también tiene del 1 al 10
+    a = 3
+    Print "atras: " + b(a in (10..1)) + " " + b(10 in (10..1)) + " " + b(0 in (10..1))
+    # con step: los valores que daría el for
+    Print "step: " + b(5 in (1..10 step 2)) + " " + b(4 in (1..10 step 2)) + " " + b(4 in (10..1 step -3)) + " " + b(10 in (10..1 step -3)) + " " + b(5 in (10..1 step -3)) + " " + b(11 in (1..20 step 5))
+    # extremos que no son constantes
+    lo = 2
+    hi = 8
+    Print "variable: " + b(cuenta(5) in (lo..hi)) + " " + b(9 in (lo..hi)) + " " + b(5 in (hi..lo))
+    # una lista escrita ahí
+    Print "literal: " + b(a in [1, 3, 5]) + " " + b(a in [2, 4]) + " " + b(a not in []) + " " + b("b" in ["a", "c"])
+    nums = [4, 8, 15, 16, 23, 42]
+    Print "lista: " + b(15 in nums) + " " + b(14 in nums) + " " + b(14 not in nums) + " " + b(cuenta(5) in nums)
+    nombres = ["Ana", "Luis", "Eva"]
+    quien = "Lu" + "is"
+    Print "textos: " + b(quien in nombres) + " " + b("ana" in nombres) + " " + b("Eva" in nombres)
+    s = "Hola, Dash"
+    c = s[1]
+    Print "texto: " + b("Dash" in s) + " " + b("dash" in s) + " " + b(c in "aeiou") + " " + b(s[0] in "aeiou")
+    edades = {"Ana": 30, "Luis": 25}
+    Print "dict: " + b("Ana" in edades) + " " + b("Eva" in edades) + " " + b("Eva" not in edades)
+    fs = [1.5, 2.5]
+    Print "float: " + b(2.5 in fs) + " " + b(2 in fs)
+    p = Punto(1)
+    q = Punto(1)
+    puntos = [p]
+    Print "struct: " + b(p in puntos) + " " + b(q in puntos)
+    # comparaciones encadenadas
+    Print "cadena: " + b(1 <= a <= 10) + " " + b(1 <= a < 3) + " " + b(0 < a < 5 < 6) + " " + b(a == 3 == 4) + " " + b(nums[0] < nums[1] < nums[2])
+    Print "llamadas: " + b(llamadas == 2) + " " + (llamadas + 1)
+end
