@@ -394,6 +394,15 @@ DESC_ES = {
     "inflate_used": "Los bytes de entrada que usó el último inflate o inflate_auto (con cabecera zlib, también su "
                     "adler32): dónde empieza el siguiente objeto en un pack de git",
     "sha1": "El SHA-1 de n bytes de un búfer, en 40 cifras hexadecimales (así nombra git sus objetos)",
+    "sha256": "El SHA-256 de n bytes de un búfer, en 64 cifras hexadecimales (para comprobar una descarga)",
+    "sha256_text": "El SHA-256 de un texto, en 64 cifras hexadecimales",
+    "sha256_new": "Un SHA-256 hecho por partes con sha256_add y sha256_add_text (un fichero grande, leído a trozos): su número (1-8), 0 si están todos en uso. Lo acaban sha256_hex o sha256_bytes",
+    "sha256_add": "Añade n bytes de un búfer a un SHA-256 de sha256_new",
+    "sha256_add_text": "Añade un texto a un SHA-256 de sha256_new",
+    "sha256_hex": "Acaba un SHA-256 de sha256_new: sus 64 cifras hexadecimales (\"\" si ese número no está en uso)",
+    "sha256_bytes": "Acaba un SHA-256 de sha256_new: sus 32 bytes a un búfer; false si ese número no está en uso",
+    "ed25519_verify": "Si signature (128 cifras hexadecimales) es la firma Ed25519 de n bytes de un búfer hecha con la clave privada de key (la pública, 64 cifras hexadecimales): para fiarse de un fichero que llegó por HTTP o de un espejo",
+    "ed25519_verify_text": "ed25519_verify para un texto",
     "sha1_text": "El SHA-1 de un texto, en 40 cifras hexadecimales",
     "sha1_new": "Un SHA-1 hecho por partes con sha1_add, sha1_add_text y sha1_add_byte: su número (1-8), 0 si están "
                 "todos en uso. Lo acaban sha1_hex o sha1_bytes",

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 965 functions, 965 implemented, 0 not implemented.
+Total: 974 functions, 974 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -6766,6 +6766,15 @@ SHA-1, all on buffers. It is the usual zlib inside the program: no library needs
 | [`sha1_add_byte(sha, b)`](#sha1_add_byte) | — | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
 | [`sha1_hex(sha)`](#sha1_hex) | String | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
 | [`sha1_bytes(sha, out)`](#sha1_bytes) | Bool | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
+| [`sha256(buffer, n)`](#sha256) | String | SHA-256 of n bytes of a buffer, in 64 hex digits (to check a download) |  |
+| [`sha256_text(s)`](#sha256_text) | String | SHA-256 of a text, in 64 hex digits |  |
+| [`sha256_new()`](#sha256_new) | Int | A SHA-256 made bit by bit with sha256_add and sha256_add_text (a big file, read in pieces): its number (1-8), 0 if all are in use. sha256_hex or sha256_bytes end it |  |
+| [`sha256_add(sha, buffer, n)`](#sha256_add) | — | Adds n bytes of a buffer to a SHA-256 of sha256_new |  |
+| [`sha256_add_text(sha, s)`](#sha256_add_text) | — | Adds a text to a SHA-256 of sha256_new |  |
+| [`sha256_hex(sha)`](#sha256_hex) | String | Ends a SHA-256 of sha256_new: its 64 hex digits ("" if that number is not in use) |  |
+| [`sha256_bytes(sha, out)`](#sha256_bytes) | Bool | Ends a SHA-256 of sha256_new: its 32 bytes to a buffer; false if that number is not in use |  |
+| [`ed25519_verify(key, signature, buffer, n)`](#ed25519_verify) | Bool | Whether signature (128 hex digits) is the Ed25519 signature of n bytes of a buffer made with the private key of key (the public key, 64 hex digits): to trust a file that came over plain HTTP or from a mirror |  |
+| [`ed25519_verify_text(key, signature, s)`](#ed25519_verify_text) | Bool | ed25519_verify for a text |  |
 
 <a id="inflate"></a>
 
@@ -6910,6 +6919,99 @@ See also: [`sha1_bytes`](#sha1_bytes).
 Finishes it and writes its 20 bytes to `out`. Returns `false` if that number is not in use.
 
 See also: [`sha1_hex`](#sha1_hex).
+
+<a id="sha256"></a>
+
+### `sha256(buffer, n)` → `String`
+
+- `buffer`, `n`: the bytes.
+
+Returns their SHA-256 as 64 hex digits.
+
+See also: [`sha256_text`](#sha256_text), [`sha256_new`](#sha256_new).
+
+<a id="sha256_text"></a>
+
+### `sha256_text(s)` → `String`
+
+- `s`: the text.
+
+Returns its SHA-256 as 64 hex digits.
+
+See also: [`sha256`](#sha256).
+
+<a id="sha256_new"></a>
+
+### `sha256_new()` → `Int`
+
+Starts a SHA-256 in parts, for a file read in pieces. Returns its number (1 to 8), or 0 if all are in use. Add to it
+with `sha256_add` and `sha256_add_text` and finish with `sha256_hex` or `sha256_bytes`.
+
+See also: [`sha256_add`](#sha256_add), [`sha256_hex`](#sha256_hex).
+
+<a id="sha256_add"></a>
+
+### `sha256_add(sha, buffer, n)`
+
+- `sha`: the number from `sha256_new`.
+- `buffer`, `n`: the bytes to add.
+
+See also: [`sha256_new`](#sha256_new).
+
+<a id="sha256_add_text"></a>
+
+### `sha256_add_text(sha, s)`
+
+- `sha`: the number from `sha256_new`.
+- `s`: the text to add.
+
+See also: [`sha256_new`](#sha256_new).
+
+<a id="sha256_hex"></a>
+
+### `sha256_hex(sha)` → `String`
+
+- `sha`: the number from `sha256_new`.
+
+Finishes it and returns the 64 hex digits; `""` if that number is not in use. The number becomes free.
+
+See also: [`sha256_bytes`](#sha256_bytes).
+
+<a id="sha256_bytes"></a>
+
+### `sha256_bytes(sha, out)` → `Bool`
+
+- `sha`: the number from `sha256_new`.
+- `out`: a 32-byte buffer.
+
+Finishes it and writes its 32 bytes to `out`. Returns `false` if that number is not in use.
+
+See also: [`sha256_hex`](#sha256_hex).
+
+<a id="ed25519_verify"></a>
+
+### `ed25519_verify(key, signature, buffer, n)` → `Bool`
+
+- `key`: the public key, 32 bytes as 64 hex digits.
+- `signature`: the signature, 64 bytes as 128 hex digits.
+- `buffer`, `n`: the signed bytes.
+
+Returns `true` if the signature is good: those bytes were signed by whoever has the private key. So a file that came
+over plain HTTP or from a mirror can be trusted (a package index, a download). It only checks: signing is done on the
+server. It takes some seconds on a 68020.
+
+See also: [`ed25519_verify_text`](#ed25519_verify_text), [`sha256`](#sha256).
+
+<a id="ed25519_verify_text"></a>
+
+### `ed25519_verify_text(key, signature, s)` → `Bool`
+
+- `key`, `signature`: as in `ed25519_verify`.
+- `s`: the signed text.
+
+Returns `true` if the signature is good.
+
+See also: [`ed25519_verify`](#ed25519_verify).
 
 <a id="utf8_functions"></a>
 

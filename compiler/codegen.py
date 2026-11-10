@@ -8700,6 +8700,581 @@ static STRPTR _dash_sha1_text(STRPTR t) {
 }
 """
 
+    # SHA-256 and Ed25519 signature checks, for package managers (Hangar: what is downloaded and the signed index)
+    CRYPTO_RUNTIME = """\
+/* Dash SHA-256 (FIPS 180-4) y verificación de firmas Ed25519 (RFC 8032), para comprobar lo que se baja: sha256 y
+   sha256_text de una vez, o por partes (sha256_new, sha256_add, sha256_add_text, y sha256_hex o sha256_bytes, que lo
+   acaban), y ed25519_verify. Ed25519 sigue el camino de TweetNaCl (dominio público): campo en 16 trozos de 16 bits,
+   puntos extendidos y SHA-512 por dentro. Solo verifica: firmar no hace falta en el Amiga. Hasta 8 SHA-256 a la vez. */
+#define _DASH_SHA256_MAX 8
+typedef struct { ULONG h[8]; ULONG nlo, nhi; UBYTE buf[64]; LONG len; BOOL used; } _DashSha256;
+static _DashSha256 _dash_sha256s[_DASH_SHA256_MAX + 1];
+static const ULONG _dash_k256[64] = {0x428a2f98UL, 0x71374491UL, 0xb5c0fbcfUL, 0xe9b5dba5UL, 0x3956c25bUL, 0x59f111f1UL, 0x923f82a4UL, 0xab1c5ed5UL, 0xd807aa98UL, 0x12835b01UL, 0x243185beUL, 0x550c7dc3UL, 0x72be5d74UL, 0x80deb1feUL, 0x9bdc06a7UL, 0xc19bf174UL, 0xe49b69c1UL, 0xefbe4786UL, 0x0fc19dc6UL, 0x240ca1ccUL, 0x2de92c6fUL, 0x4a7484aaUL, 0x5cb0a9dcUL, 0x76f988daUL, 0x983e5152UL, 0xa831c66dUL, 0xb00327c8UL, 0xbf597fc7UL, 0xc6e00bf3UL, 0xd5a79147UL, 0x06ca6351UL, 0x14292967UL, 0x27b70a85UL, 0x2e1b2138UL, 0x4d2c6dfcUL, 0x53380d13UL, 0x650a7354UL, 0x766a0abbUL, 0x81c2c92eUL, 0x92722c85UL, 0xa2bfe8a1UL, 0xa81a664bUL, 0xc24b8b70UL, 0xc76c51a3UL, 0xd192e819UL, 0xd6990624UL, 0xf40e3585UL, 0x106aa070UL, 0x19a4c116UL, 0x1e376c08UL, 0x2748774cUL, 0x34b0bcb5UL, 0x391c0cb3UL, 0x4ed8aa4aUL, 0x5b9cca4fUL, 0x682e6ff3UL, 0x748f82eeUL, 0x78a5636fUL, 0x84c87814UL, 0x8cc70208UL, 0x90befffaUL, 0xa4506cebUL, 0xbef9a3f7UL, 0xc67178f2UL};
+static const ULONG _dash_h256[8] = {0x6a09e667UL, 0xbb67ae85UL, 0x3c6ef372UL, 0xa54ff53aUL, 0x510e527fUL, 0x9b05688cUL, 0x1f83d9abUL, 0x5be0cd19UL};
+static const unsigned long long _dash_k512[80] = {0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL, 0xe9b5dba58189dbbcULL, 0x3956c25bf348b538ULL, 0x59f111f1b605d019ULL, 0x923f82a4af194f9bULL, 0xab1c5ed5da6d8118ULL, 0xd807aa98a3030242ULL, 0x12835b0145706fbeULL, 0x243185be4ee4b28cULL, 0x550c7dc3d5ffb4e2ULL, 0x72be5d74f27b896fULL, 0x80deb1fe3b1696b1ULL, 0x9bdc06a725c71235ULL, 0xc19bf174cf692694ULL, 0xe49b69c19ef14ad2ULL, 0xefbe4786384f25e3ULL, 0x0fc19dc68b8cd5b5ULL, 0x240ca1cc77ac9c65ULL, 0x2de92c6f592b0275ULL, 0x4a7484aa6ea6e483ULL, 0x5cb0a9dcbd41fbd4ULL, 0x76f988da831153b5ULL, 0x983e5152ee66dfabULL, 0xa831c66d2db43210ULL, 0xb00327c898fb213fULL, 0xbf597fc7beef0ee4ULL, 0xc6e00bf33da88fc2ULL, 0xd5a79147930aa725ULL, 0x06ca6351e003826fULL, 0x142929670a0e6e70ULL, 0x27b70a8546d22ffcULL, 0x2e1b21385c26c926ULL, 0x4d2c6dfc5ac42aedULL, 0x53380d139d95b3dfULL, 0x650a73548baf63deULL, 0x766a0abb3c77b2a8ULL, 0x81c2c92e47edaee6ULL, 0x92722c851482353bULL, 0xa2bfe8a14cf10364ULL, 0xa81a664bbc423001ULL, 0xc24b8b70d0f89791ULL, 0xc76c51a30654be30ULL, 0xd192e819d6ef5218ULL, 0xd69906245565a910ULL, 0xf40e35855771202aULL, 0x106aa07032bbd1b8ULL, 0x19a4c116b8d2d0c8ULL, 0x1e376c085141ab53ULL, 0x2748774cdf8eeb99ULL, 0x34b0bcb5e19b48a8ULL, 0x391c0cb3c5c95a63ULL, 0x4ed8aa4ae3418acbULL, 0x5b9cca4f7763e373ULL, 0x682e6ff3d6b2b8a3ULL, 0x748f82ee5defb2fcULL, 0x78a5636f43172f60ULL, 0x84c87814a1f0ab72ULL, 0x8cc702081a6439ecULL, 0x90befffa23631e28ULL, 0xa4506cebde82bde9ULL, 0xbef9a3f7b2c67915ULL, 0xc67178f2e372532bULL, 0xca273eceea26619cULL, 0xd186b8c721c0c207ULL, 0xeada7dd6cde0eb1eULL, 0xf57d4f7fee6ed178ULL, 0x06f067aa72176fbaULL, 0x0a637dc5a2c898a6ULL, 0x113f9804bef90daeULL, 0x1b710b35131c471bULL, 0x28db77f523047d84ULL, 0x32caab7b40c72493ULL, 0x3c9ebe0a15c9bebcULL, 0x431d67c49c100d4cULL, 0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL, 0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL};
+static const unsigned long long _dash_h512[8] = {0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL, 0x3c6ef372fe94f82bULL, 0xa54ff53a5f1d36f1ULL, 0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL, 0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL};
+#define _DASH_ROR32(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+static void _dash_sha256_block(ULONG *h, const UBYTE *p) {
+    ULONG w[64], a, b, c, d, e, f, g, k, t1, t2;
+    LONG i;
+    for (i = 0; i < 16; i++)
+        w[i] = ((ULONG)p[4 * i] << 24) | ((ULONG)p[4 * i + 1] << 16) | ((ULONG)p[4 * i + 2] << 8) | p[4 * i + 3];
+    for (i = 16; i < 64; i++) {
+        ULONG s0 = _DASH_ROR32(w[i - 15], 7) ^ _DASH_ROR32(w[i - 15], 18) ^ (w[i - 15] >> 3);
+        ULONG s1 = _DASH_ROR32(w[i - 2], 17) ^ _DASH_ROR32(w[i - 2], 19) ^ (w[i - 2] >> 10);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4]; f = h[5]; g = h[6]; k = h[7];
+    for (i = 0; i < 64; i++) {
+        t1 = k + (_DASH_ROR32(e, 6) ^ _DASH_ROR32(e, 11) ^ _DASH_ROR32(e, 25)) + ((e & f) ^ (~e & g)) + _dash_k256[i] + w[i];
+        t2 = (_DASH_ROR32(a, 2) ^ _DASH_ROR32(a, 13) ^ _DASH_ROR32(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+        k = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += k;
+}
+
+/* Un SHA-256 nuevo al que añadir: su número (1-8), o 0 si están todos en uso */
+static LONG _dash_sha256_new(void) {
+    LONG i, j;
+    for (i = 1; i <= _DASH_SHA256_MAX; i++)
+        if (!_dash_sha256s[i].used) {
+            _DashSha256 *s = &_dash_sha256s[i];
+            for (j = 0; j < 8; j++) s->h[j] = _dash_h256[j];
+            s->nlo = s->nhi = 0;
+            s->len = 0;
+            s->used = TRUE;
+            return i;
+        }
+    return 0;
+}
+
+static _DashSha256 *_dash_sha256_get(LONG id) {
+    return id >= 1 && id <= _DASH_SHA256_MAX && _dash_sha256s[id].used ? &_dash_sha256s[id] : NULL;
+}
+
+static void _dash_sha256_add(LONG id, APTR data, LONG n) {
+    _DashSha256 *s = _dash_sha256_get(id);
+    const UBYTE *p = (const UBYTE *)data;
+    if (!s || !p || n <= 0) return;
+    if ((s->nlo += (ULONG)n) < (ULONG)n) s->nhi++;
+    while (n > 0) {
+        LONG k = 64 - s->len;
+        if (k > n) k = n;
+        CopyMem((APTR)p, s->buf + s->len, k);
+        s->len += k;
+        p += k;
+        n -= k;
+        if (s->len == 64) {
+            _dash_sha256_block(s->h, s->buf);
+            s->len = 0;
+        }
+    }
+}
+
+static void _dash_sha256_add_text(LONG id, STRPTR t) {
+    if (t) _dash_sha256_add(id, t, strlen((char *)t));
+}
+
+/* El final: los 32 bytes a out, y el número vuelve a estar libre */
+static BOOL _dash_sha256_end(LONG id, UBYTE *out) {
+    _DashSha256 *s = _dash_sha256_get(id);
+    ULONG hi, lo;
+    LONG i;
+    if (!s) return FALSE;
+    hi = (s->nhi << 3) | (s->nlo >> 29);
+    lo = s->nlo << 3;
+    s->buf[s->len++] = 0x80;
+    if (s->len > 56) {
+        while (s->len < 64) s->buf[s->len++] = 0;
+        _dash_sha256_block(s->h, s->buf);
+        s->len = 0;
+    }
+    while (s->len < 56) s->buf[s->len++] = 0;
+    for (i = 0; i < 4; i++) {
+        s->buf[56 + i] = (UBYTE)(hi >> (24 - 8 * i));
+        s->buf[60 + i] = (UBYTE)(lo >> (24 - 8 * i));
+    }
+    _dash_sha256_block(s->h, s->buf);
+    for (i = 0; i < 32; i++) out[i] = (UBYTE)(s->h[i >> 2] >> (24 - 8 * (i & 3)));
+    s->used = FALSE;
+    return TRUE;
+}
+
+static STRPTR _dash_sha256_hex(LONG id) {
+    static const char hx[] = "0123456789abcdef";
+    UBYTE d[32];
+    char s[65];
+    LONG i;
+    s[0] = 0;
+    if (_dash_sha256_end(id, d)) {
+        for (i = 0; i < 32; i++) { s[2 * i] = hx[d[i] >> 4]; s[2 * i + 1] = hx[d[i] & 15]; }
+        s[64] = 0;
+    }
+    return _dash_str_dup((STRPTR)s, TRUE);
+}
+
+static BOOL _dash_sha256_bytes(LONG id, APTR out) {
+    UBYTE d[32];
+    if (!out || !_dash_sha256_end(id, d)) return FALSE;
+    CopyMem(d, out, 32);
+    return TRUE;
+}
+
+static STRPTR _dash_sha256(APTR buf, LONG n) {
+    LONG id = _dash_sha256_new();
+    _dash_sha256_add(id, buf, n);
+    return _dash_sha256_hex(id);
+}
+
+static STRPTR _dash_sha256_text(STRPTR t) {
+    LONG id = _dash_sha256_new();
+    _dash_sha256_add_text(id, t);
+    return _dash_sha256_hex(id);
+}
+
+/* ---- SHA-512, solo para Ed25519 ---- */
+typedef unsigned long long _dash_u64;
+typedef struct { _dash_u64 h[8]; ULONG n; UBYTE buf[128]; LONG len; } _DashSha512;
+#define _DASH_ROR64(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
+
+static void _dash_sha512_block(_dash_u64 *h, const UBYTE *p) {
+    _dash_u64 w[80], a, b, c, d, e, f, g, k, t1, t2;
+    LONG i, j;
+    for (i = 0; i < 16; i++) {
+        w[i] = 0;
+        for (j = 0; j < 8; j++) w[i] = (w[i] << 8) | p[8 * i + j];
+    }
+    for (i = 16; i < 80; i++) {
+        _dash_u64 s0 = _DASH_ROR64(w[i - 15], 1) ^ _DASH_ROR64(w[i - 15], 8) ^ (w[i - 15] >> 7);
+        _dash_u64 s1 = _DASH_ROR64(w[i - 2], 19) ^ _DASH_ROR64(w[i - 2], 61) ^ (w[i - 2] >> 6);
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+    }
+    a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4]; f = h[5]; g = h[6]; k = h[7];
+    for (i = 0; i < 80; i++) {
+        t1 = k + (_DASH_ROR64(e, 14) ^ _DASH_ROR64(e, 18) ^ _DASH_ROR64(e, 41)) + ((e & f) ^ (~e & g)) + _dash_k512[i] + w[i];
+        t2 = (_DASH_ROR64(a, 28) ^ _DASH_ROR64(a, 34) ^ _DASH_ROR64(a, 39)) + ((a & b) ^ (a & c) ^ (b & c));
+        k = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += k;
+}
+
+static void _dash_sha512_init(_DashSha512 *s) {
+    LONG i;
+    for (i = 0; i < 8; i++) s->h[i] = _dash_h512[i];
+    s->n = 0;
+    s->len = 0;
+}
+
+static void _dash_sha512_add(_DashSha512 *s, const UBYTE *p, LONG n) {
+    s->n += (ULONG)n;
+    while (n > 0) {
+        LONG k = 128 - s->len;
+        if (k > n) k = n;
+        CopyMem((APTR)p, s->buf + s->len, k);
+        s->len += k;
+        p += k;
+        n -= k;
+        if (s->len == 128) {
+            _dash_sha512_block(s->h, s->buf);
+            s->len = 0;
+        }
+    }
+}
+
+static void _dash_sha512_end(_DashSha512 *s, UBYTE *out) {
+    LONG i;
+    _dash_u64 bits = (_dash_u64)s->n << 3;
+    s->buf[s->len++] = 0x80;
+    if (s->len > 112) {
+        while (s->len < 128) s->buf[s->len++] = 0;
+        _dash_sha512_block(s->h, s->buf);
+        s->len = 0;
+    }
+    while (s->len < 120) s->buf[s->len++] = 0;
+    for (i = 0; i < 8; i++) s->buf[120 + i] = (UBYTE)(bits >> (56 - 8 * i));
+    _dash_sha512_block(s->h, s->buf);
+    for (i = 0; i < 64; i++) out[i] = (UBYTE)(s->h[i >> 3] >> (56 - 8 * (i & 7)));
+}
+
+/* ---- el campo GF(2^255 - 19), en 10 trozos de 26 y 25 bits alternos (como ref10): cada trozo cabe en un LONG y
+   cada producto es una multiplicación de 32 x 32 a 64 (una instrucción en un 68020) ---- */
+typedef LONG _dash_fe[10];
+static const LONG _dash_fe_d[10] = {56195235, 13857412, 51736253, 6949390, 114729, 24766616, 60832955, 30306712, 48412415, 21499315};
+static const LONG _dash_fe_d2[10] = {45281625, 27714825, 36363642, 13898781, 229458, 15978800, 54557047, 27058993, 29715967, 9444199};
+static const LONG _dash_fe_i[10] = {34513072, 25610706, 9377949, 3500415, 12389472, 33281959, 41962654, 31548777, 326685, 11406482};
+static const LONG _dash_fe_bx[10] = {52811034, 25909283, 16144682, 17082669, 27570973, 30858332, 40966398, 8378388, 20764389, 8758491};
+static const LONG _dash_fe_by[10] = {40265304, 26843545, 13421772, 20132659, 26843545, 6710886, 53687091, 13421772, 40265318, 26843545};
+static const LONG _dash_fe_bt[10] = {28827043, 27438313, 39759291, 244362, 8635006, 11264893, 19351346, 13413597, 16611511, 27139452};
+
+static void _dash_fe_copy(_dash_fe r, const _dash_fe a) { LONG i; for (i = 0; i < 10; i++) r[i] = a[i]; }
+static void _dash_fe_set(_dash_fe r, LONG v) { LONG i; r[0] = v; for (i = 1; i < 10; i++) r[i] = 0; }
+
+/* Lleva lo que sobra de cada trozo al siguiente (el último vuelve al primero por 19: 2^255 = 19 mod p) */
+static void _dash_fe_carry64(_dash_fe o, long long h[10]) {
+    long long c;
+    LONG i;
+    for (i = 0; i < 10; i++) {
+        LONG w = (i & 1) ? 25 : 26;
+        c = (h[i] + ((long long)1 << (w - 1))) >> w;
+        h[i] -= c << w;
+        if (i < 9) h[i + 1] += c;
+        else h[0] += c * 19;
+    }
+    c = (h[0] + (1 << 25)) >> 26;
+    h[0] -= c << 26;
+    h[1] += c;
+    for (i = 0; i < 10; i++) o[i] = (LONG)h[i];
+}
+
+static void _dash_fe_carry(_dash_fe o) {
+    long long h[10];
+    LONG i;
+    for (i = 0; i < 10; i++) h[i] = o[i];
+    _dash_fe_carry64(o, h);
+}
+
+static void _dash_fe_add(_dash_fe o, const _dash_fe a, const _dash_fe b) {
+    LONG i;
+    for (i = 0; i < 10; i++) o[i] = a[i] + b[i];
+    _dash_fe_carry(o);
+}
+
+static void _dash_fe_sub(_dash_fe o, const _dash_fe a, const _dash_fe b) {
+    LONG i;
+    for (i = 0; i < 10; i++) o[i] = a[i] - b[i];
+    _dash_fe_carry(o);
+}
+
+/* h_k = suma de f_i g_j con i + j = k, más 19 f_i g_j con i + j = k + 10; por 2 si i y j son impares (los trozos
+   impares son de 25 bits) */
+static void _dash_fe_mul(_dash_fe o, const _dash_fe f, const _dash_fe g) {
+    LONG f2[10], g19[10];
+    long long h[10];
+    LONG i, j, k;
+    for (i = 0; i < 10; i++) {
+        f2[i] = (i & 1) ? 2 * f[i] : f[i];
+        g19[i] = 19 * g[i];
+    }
+    for (k = 0; k < 10; k++) {
+        long long t = 0;
+        for (i = 0; i <= k; i++) {
+            j = k - i;
+            t += (long long)((i & j & 1) ? f2[i] : f[i]) * g[j];
+        }
+        for (i = k + 1; i < 10; i++) {
+            j = k + 10 - i;
+            t += (long long)((i & j & 1) ? f2[i] : f[i]) * g19[j];
+        }
+        h[k] = t;
+    }
+    _dash_fe_carry64(o, h);
+}
+
+static void _dash_fe_sq(_dash_fe o, const _dash_fe a) { _dash_fe_mul(o, a, a); }
+
+static void _dash_fe_sqn(_dash_fe o, const _dash_fe a, LONG n) {
+    _dash_fe_sq(o, a);
+    while (--n > 0) _dash_fe_sq(o, o);
+}
+
+/* Los 32 bytes de un número, ya reducido del todo (0 <= x < p), como en ref10 */
+static void _dash_fe_tobytes(UBYTE *s, const _dash_fe a) {
+    LONG h[10], q, i, pos = 0;
+    unsigned long long acc = 0;
+    LONG bits = 0, n = 0;
+    _dash_fe_copy(h, a);
+    _dash_fe_carry(h);
+    q = (19 * h[9] + (1 << 24)) >> 25;
+    for (i = 0; i < 10; i++) q = (h[i] + q) >> ((i & 1) ? 25 : 26);
+    h[0] += 19 * q;
+    for (i = 0; i < 9; i++) {
+        LONG w = (i & 1) ? 25 : 26;
+        LONG c = h[i] >> w;
+        h[i + 1] += c;
+        h[i] -= c << w;
+    }
+    h[9] &= (1 << 25) - 1;
+    for (i = 0; i < 10; i++) {
+        LONG w = (i & 1) ? 25 : 26;
+        acc |= (unsigned long long)(ULONG)h[i] << bits;
+        bits += w;
+        while (bits >= 8 && n < 32) {
+            s[n++] = (UBYTE)acc;
+            acc >>= 8;
+            bits -= 8;
+        }
+    }
+    while (n < 32) { s[n++] = (UBYTE)acc; acc >>= 8; }
+    (void)pos;
+}
+
+static void _dash_fe_frombytes(_dash_fe h, const UBYTE *s) {
+    LONG i, pos = 0;
+    for (i = 0; i < 10; i++) {
+        LONG w = (i & 1) ? 25 : 26, b;
+        ULONG v = 0;
+        for (b = 0; b < w; b++) {
+            LONG bit = pos + b;
+            if (bit < 255) v |= (ULONG)((s[bit >> 3] >> (bit & 7)) & 1) << b;
+        }
+        h[i] = (LONG)v;
+        pos += w;
+    }
+}
+
+static LONG _dash_fe_neq(const _dash_fe a, const _dash_fe b) {
+    UBYTE c[32], d[32];
+    LONG i, r = 0;
+    _dash_fe_tobytes(c, a);
+    _dash_fe_tobytes(d, b);
+    for (i = 0; i < 32; i++) r |= c[i] ^ d[i];
+    return r != 0;
+}
+
+static LONG _dash_fe_par(const _dash_fe a) {
+    UBYTE d[32];
+    _dash_fe_tobytes(d, a);
+    return d[0] & 1;
+}
+
+/* z^(p-2) = 1/z y z^((p-5)/8), con las cadenas de ref10 (255 cuadrados y 11 multiplicaciones) */
+static void _dash_fe_inv(_dash_fe o, const _dash_fe z) {
+    _dash_fe t0, t1, t2, t3;
+    _dash_fe_sq(t0, z);
+    _dash_fe_sqn(t1, t0, 2);
+    _dash_fe_mul(t1, z, t1);
+    _dash_fe_mul(t0, t0, t1);
+    _dash_fe_sq(t2, t0);
+    _dash_fe_mul(t1, t1, t2);
+    _dash_fe_sqn(t2, t1, 5);
+    _dash_fe_mul(t1, t2, t1);
+    _dash_fe_sqn(t2, t1, 10);
+    _dash_fe_mul(t2, t2, t1);
+    _dash_fe_sqn(t3, t2, 20);
+    _dash_fe_mul(t2, t3, t2);
+    _dash_fe_sqn(t2, t2, 10);
+    _dash_fe_mul(t1, t2, t1);
+    _dash_fe_sqn(t2, t1, 50);
+    _dash_fe_mul(t2, t2, t1);
+    _dash_fe_sqn(t3, t2, 100);
+    _dash_fe_mul(t2, t3, t2);
+    _dash_fe_sqn(t2, t2, 50);
+    _dash_fe_mul(t1, t2, t1);
+    _dash_fe_sqn(t1, t1, 5);
+    _dash_fe_mul(o, t1, t0);
+}
+
+static void _dash_fe_pow2523(_dash_fe o, const _dash_fe z) {
+    _dash_fe t0, t1, t2;
+    _dash_fe_sq(t0, z);
+    _dash_fe_sqn(t1, t0, 2);
+    _dash_fe_mul(t1, z, t1);
+    _dash_fe_mul(t0, t0, t1);
+    _dash_fe_sq(t0, t0);
+    _dash_fe_mul(t0, t1, t0);
+    _dash_fe_sqn(t1, t0, 5);
+    _dash_fe_mul(t0, t1, t0);
+    _dash_fe_sqn(t1, t0, 10);
+    _dash_fe_mul(t1, t1, t0);
+    _dash_fe_sqn(t2, t1, 20);
+    _dash_fe_mul(t1, t2, t1);
+    _dash_fe_sqn(t1, t1, 10);
+    _dash_fe_mul(t0, t1, t0);
+    _dash_fe_sqn(t1, t0, 50);
+    _dash_fe_mul(t1, t1, t0);
+    _dash_fe_sqn(t2, t1, 100);
+    _dash_fe_mul(t1, t2, t1);
+    _dash_fe_sqn(t1, t1, 50);
+    _dash_fe_mul(t0, t1, t0);
+    _dash_fe_sqn(t0, t0, 2);
+    _dash_fe_mul(o, t0, z);
+}
+
+/* ---- puntos de la curva (X, Y, Z, T), coordenadas extendidas con a = -1 ---- */
+static void _dash_ed_add(_dash_fe p[4], _dash_fe q[4]) {
+    _dash_fe a, b, c, d, t, e, f, g, h;
+    _dash_fe_sub(a, p[1], p[0]);
+    _dash_fe_sub(t, q[1], q[0]);
+    _dash_fe_mul(a, a, t);
+    _dash_fe_add(b, p[0], p[1]);
+    _dash_fe_add(t, q[0], q[1]);
+    _dash_fe_mul(b, b, t);
+    _dash_fe_mul(c, p[3], q[3]);
+    _dash_fe_mul(c, c, _dash_fe_d2);
+    _dash_fe_mul(d, p[2], q[2]);
+    _dash_fe_add(d, d, d);
+    _dash_fe_sub(e, b, a);
+    _dash_fe_sub(f, d, c);
+    _dash_fe_add(g, d, c);
+    _dash_fe_add(h, b, a);
+    _dash_fe_mul(p[0], e, f);
+    _dash_fe_mul(p[1], h, g);
+    _dash_fe_mul(p[2], g, f);
+    _dash_fe_mul(p[3], e, h);
+}
+
+/* 2P: 4 cuadrados y 4 multiplicaciones */
+static void _dash_ed_dbl(_dash_fe p[4]) {
+    _dash_fe a, b, c, e, g, f, h, cero;
+    _dash_fe_set(cero, 0);
+    _dash_fe_sq(a, p[0]);
+    _dash_fe_sq(b, p[1]);
+    _dash_fe_sq(c, p[2]);
+    _dash_fe_add(c, c, c);
+    _dash_fe_add(e, p[0], p[1]);
+    _dash_fe_sq(e, e);
+    _dash_fe_sub(e, e, a);
+    _dash_fe_sub(e, e, b);
+    _dash_fe_sub(g, b, a);
+    _dash_fe_sub(f, g, c);
+    _dash_fe_sub(h, cero, a);
+    _dash_fe_sub(h, h, b);
+    _dash_fe_mul(p[0], e, f);
+    _dash_fe_mul(p[1], g, h);
+    _dash_fe_mul(p[3], e, h);
+    _dash_fe_mul(p[2], f, g);
+}
+
+static void _dash_ed_pack(UBYTE *r, _dash_fe p[4]) {
+    _dash_fe tx, ty, zi;
+    _dash_fe_inv(zi, p[2]);
+    _dash_fe_mul(tx, p[0], zi);
+    _dash_fe_mul(ty, p[1], zi);
+    _dash_fe_tobytes(r, ty);
+    r[31] ^= (UBYTE)(_dash_fe_par(tx) << 7);
+}
+
+/* h·P + s·B de una vez (Shamir): un solo bucle de 256 duplicaciones, sumando P, B o P + B según los bits. Sin
+   tiempo constante: al verificar todo es público */
+static void _dash_ed_doble(_dash_fe r[4], _dash_fe pa[4], const UBYTE *h, const UBYTE *s) {
+    _dash_fe tabla[4][4];
+    LONG i, j, k;
+    for (j = 0; j < 4; j++) _dash_fe_copy(tabla[2][j], pa[j]);
+    _dash_fe_copy(tabla[1][0], _dash_fe_bx);
+    _dash_fe_copy(tabla[1][1], _dash_fe_by);
+    _dash_fe_set(tabla[1][2], 1);
+    _dash_fe_copy(tabla[1][3], _dash_fe_bt);
+    for (j = 0; j < 4; j++) _dash_fe_copy(tabla[3][j], tabla[1][j]);
+    _dash_ed_add(tabla[3], tabla[2]);
+    _dash_fe_set(r[0], 0);
+    _dash_fe_set(r[1], 1);
+    _dash_fe_set(r[2], 1);
+    _dash_fe_set(r[3], 0);
+    for (i = 255; i >= 0; i--) {
+        _dash_ed_dbl(r);
+        k = ((s[i >> 3] >> (i & 7)) & 1) | (((h[i >> 3] >> (i & 7)) & 1) << 1);
+        if (k) _dash_ed_add(r, tabla[k]);
+    }
+}
+
+/* -A de una clave pública (32 bytes); -1 si no es un punto de la curva */
+static LONG _dash_ed_unpackneg(_dash_fe r[4], const UBYTE *p) {
+    _dash_fe t, chk, num, den, den2, den4, den6, cero;
+    _dash_fe_set(cero, 0);
+    _dash_fe_set(r[2], 1);
+    _dash_fe_frombytes(r[1], p);
+    _dash_fe_sq(num, r[1]);
+    _dash_fe_mul(den, num, _dash_fe_d);
+    _dash_fe_sub(num, num, r[2]);
+    _dash_fe_add(den, r[2], den);
+    _dash_fe_sq(den2, den);
+    _dash_fe_sq(den4, den2);
+    _dash_fe_mul(den6, den4, den2);
+    _dash_fe_mul(t, den6, num);
+    _dash_fe_mul(t, t, den);
+    _dash_fe_pow2523(t, t);
+    _dash_fe_mul(t, t, num);
+    _dash_fe_mul(t, t, den);
+    _dash_fe_mul(t, t, den);
+    _dash_fe_mul(r[0], t, den);
+    _dash_fe_sq(chk, r[0]);
+    _dash_fe_mul(chk, chk, den);
+    if (_dash_fe_neq(chk, num)) _dash_fe_mul(r[0], r[0], _dash_fe_i);
+    _dash_fe_sq(chk, r[0]);
+    _dash_fe_mul(chk, chk, den);
+    if (_dash_fe_neq(chk, num)) return -1;
+    if (_dash_fe_par(r[0]) == (p[31] >> 7)) _dash_fe_sub(r[0], cero, r[0]);
+    _dash_fe_mul(r[3], r[0], r[1]);
+    return 0;
+}
+
+static const long long _dash_ed_L[32] = {0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde,
+                                         0xf9, 0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10};
+
+static void _dash_ed_modl(UBYTE *r, long long x[64]) {
+    long long carry;
+    LONG i, j;
+    for (i = 63; i >= 32; i--) {
+        carry = 0;
+        for (j = i - 32; j < i - 12; j++) {
+            x[j] += carry - 16 * x[i] * _dash_ed_L[j - (i - 32)];
+            carry = (x[j] + 128) >> 8;
+            x[j] -= carry << 8;
+        }
+        x[j] += carry;
+        x[i] = 0;
+    }
+    carry = 0;
+    for (j = 0; j < 32; j++) {
+        x[j] += carry - (x[31] >> 4) * _dash_ed_L[j];
+        carry = x[j] >> 8;
+        x[j] &= 255;
+    }
+    for (j = 0; j < 32; j++) x[j] -= carry * _dash_ed_L[j];
+    for (i = 0; i < 32; i++) {
+        x[i + 1] += x[i] >> 8;
+        r[i] = (UBYTE)(x[i] & 255);
+    }
+}
+
+static LONG _dash_hexbyte(STRPTR s, LONG i) {
+    LONG v = 0, k;
+    for (k = 0; k < 2; k++) {
+        char c = s[2 * i + k];
+        v <<= 4;
+        if (c >= '0' && c <= '9') v |= c - '0';
+        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+        else return -1;
+    }
+    return v;
+}
+
+/* Si firma (64 bytes en 128 cifras hexadecimales) es la firma Ed25519 de n bytes de un búfer con la clave pública
+   publica (32 bytes en 64 cifras hexadecimales) */
+static BOOL _dash_ed25519_verify(STRPTR publica, STRPTR firma, APTR buf, LONG n) {
+    UBYTE pk[32], sig[64], h[64], t[32];
+    _dash_fe p[4], q[4];
+    long long x[64];
+    _DashSha512 s;
+    LONG i, v;
+    if (!publica || !firma || strlen((char *)publica) != 64 || strlen((char *)firma) != 128 || n < 0 || (n > 0 && !buf))
+        return FALSE;
+    for (i = 0; i < 32; i++) { if ((v = _dash_hexbyte(publica, i)) < 0) return FALSE; pk[i] = (UBYTE)v; }
+    for (i = 0; i < 64; i++) { if ((v = _dash_hexbyte(firma, i)) < 0) return FALSE; sig[i] = (UBYTE)v; }
+    /* S tiene que ser menor que L (sin esto una firma tendría varias formas válidas) */
+    if (sig[63] & 0xe0) return FALSE;
+    if (_dash_ed_unpackneg(q, pk)) return FALSE;
+    _dash_sha512_init(&s);
+    _dash_sha512_add(&s, sig, 32);
+    _dash_sha512_add(&s, pk, 32);
+    if (n > 0) _dash_sha512_add(&s, (const UBYTE *)buf, n);
+    _dash_sha512_end(&s, h);
+    for (i = 0; i < 64; i++) x[i] = h[i];
+    _dash_ed_modl(h, x);
+    _dash_ed_doble(p, q, h, sig + 32);
+    _dash_ed_pack(t, p);
+    v = 0;
+    for (i = 0; i < 32; i++) v |= t[i] ^ sig[i];
+    return v == 0;
+}
+
+static BOOL _dash_ed25519_verify_text(STRPTR publica, STRPTR firma, STRPTR t) {
+    return _dash_ed25519_verify(publica, firma, t, t ? strlen((char *)t) : 0);
+}
+"""
+
     ZLIB_RUNTIME = """\
 /* Dash zlib Runtime */
 long dash_zlib_inflate(const void *src, long n, void *dst, long max);
@@ -23005,6 +23580,7 @@ _RUNTIME_FLAGS = [
     ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
     ("APPWIN_RUNTIME", "uses_appwin"),      # Trasfondo 2.0: icons dropped on a window (the dock)
     ("SHA1_RUNTIME", "uses_sha1"),          # dashgit: SHA-1
+    ("CRYPTO_RUNTIME", "uses_crypto"),      # Hangar: SHA-256 and Ed25519
     ("ICON_RUNTIME", "uses_icons"),         # Trasfondo 2.0: icons drawn by icon.library (the dock)
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
@@ -23347,6 +23923,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
         self.uses_mui_drop: bool = False # mui_on_drop (MUI_APPDROP_RUNTIME, dashweb D83)
         self.uses_sha1: bool = False     # sha1, sha1_new... (SHA1_RUNTIME, dashgit)
+        self.uses_crypto: bool = False   # sha256, ed25519_verify... (CRYPTO_RUNTIME, Hangar)
         self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
@@ -23700,6 +24277,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.APPWIN_RUNTIME)
         if self.uses_sha1:
             parts.append(CTemplates.SHA1_RUNTIME)
+        if self.uses_crypto:
+            parts.append(CTemplates.CRYPTO_RUNTIME)
         if self.uses_icons:
             parts.append(CTemplates.ICON_RUNTIME)
         if self.uses_mouse:
@@ -26816,8 +27395,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # catalog_language and date_text give a String
         if self.uses_cx or self.uses_meter or self.uses_mouse or self.uses_wm:
             self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
-        if self.uses_sha1:
-            self.uses_strings = True   # sha1 gives a String
+        if self.uses_sha1 or self.uses_crypto:
+            self.uses_strings = True   # sha1 and sha256 give a String
         if self.uses_mui_drop:
             self.uses_appwin = True    # its queue, read with app_drop
             self.needs_mui = True
