@@ -32,6 +32,23 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.9.1 (2026-11-10)
+
+The language does not change. News in the Amiga package and in Forja, which comes inside it.
+
+- **Forja 0.6.0** updates Dash from the Amiga itself. In the Project menu, "Look for a new version of Dash..."
+  asks GitHub and, if there is a newer one, asks whether to install it. It updates the whole Dash drawer: the `dash`
+  command, Forja, Inferencia, `lib/` and the examples. It checks everything before changing anything; if something
+  arrives damaged, Dash stays as it was. Your own files in the drawer are not touched. When Forja opens it looks
+  once a day and only says so in the output (it can be turned off in Preferences). Over ARexx, `ACTUALIZAR`.
+- **Forja 0.6.0** has a new button bar: coloured icons with their names, and smaller. The debugger buttons are
+  always shown, grey while not debugging, and the one under the pointer lights up.
+- The package also brings `dash-2.9.1-amiga.tar`, which is what Forja downloads: each file of the drawer compressed
+  on its own, so the Amiga does not need `lha`.
+- If you have Dash 2.9.0 or older, install this one by hand (Install from the `.lha`). From 2.9.1 on, Forja brings
+  the next ones.
+- Tested on the emulated A1200 (FS-UAE) against a copy of GitHub on the PC. Not on a real Amiga.
+
 ### 2.9.0 (2026-11-10)
 
 New syntax, a new module and a new function, and two fixes. What compiled before still does the same.

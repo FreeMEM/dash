@@ -33,6 +33,23 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.9.1 (2026-11-10)
+
+El lenguaje no cambia. Novedades del paquete del Amiga y de Forja, que va dentro.
+
+- **Forja 0.6.0** pone Dash al día desde el propio Amiga. En el menú Proyecto, "Buscar versión nueva de Dash..."
+  mira en GitHub y, si hay una más nueva, pregunta si la instala. Cambia todo el cajón de Dash: la orden `dash`,
+  Forja, Inferencia, `lib/` y los ejemplos. Antes de tocar nada lo comprueba todo; si algo llega mal, Dash se queda
+  como estaba. Los ficheros propios del cajón no se tocan. Al abrir Forja mira una vez al día y solo avisa en la
+  salida (se apaga en Preferencias). Por ARexx, `ACTUALIZAR`.
+- **Forja 0.6.0** tiene una barra de botones nueva: iconos de color con su nombre, más pequeña. Los botones del
+  depurador se ven siempre, en gris mientras no se depura, y el que está bajo el puntero se ilumina.
+- El paquete trae también `dash-2.9.1-amiga.tar`, que es lo que baja Forja: cada fichero del cajón comprimido aparte,
+  para no necesitar `lha` en el Amiga.
+- Quien tenga Dash 2.9.0 o anterior lo instala a mano esta vez (Instalar del `.lha`). Desde la 2.9.1, Forja trae las
+  siguientes.
+- Probado en el A1200 emulado (FS-UAE) contra una copia de GitHub en el PC. No en un Amiga de verdad.
+
 ### 2.9.0 (2026-11-10)
 
 Sintaxis nueva, un módulo y una función nuevos, y dos arreglos. Lo que ya compilaba sigue igual.

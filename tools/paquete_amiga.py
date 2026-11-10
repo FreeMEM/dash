@@ -3,6 +3,7 @@
 runtimes, la carpeta lib/ de los import, los ejemplos que compila y el instalador.
 
     python3 tools/paquete_amiga.py        →  build/paquete_amiga/Dash/...  y  build/dash-<versión>-amiga.lha (.readme)
+                                             y  build/dash-<versión>-amiga.tar (para el botón de actualizar de Forja)
 
 El .readme (el manifiesto de Aminet y Hangar) sale de paquete/paquete.txt.
 
@@ -10,11 +11,14 @@ Construye dashc para el Amiga (make -C dashc amiga, con el gcc de bebbo) y prueb
 que llevan C no van). Necesita el lha de 68k (/opt/amiga/bin/lha) para que el archivo guarde bien los atributos.
 """
 
+import gzip
+import io
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 raiz = Path(__file__).resolve().parent.parent
@@ -119,8 +123,29 @@ def main():
     subprocess.run(["/opt/amiga/bin/lha", "ao5q", str(lha), "Dash", "Dash.info", "Dash.readme"] + ficheros, cwd=dest,
                    check=True)
     print(lha)
+    print(tar_actualizar(caj, raiz / f"build/dash-{version}-amiga.tar"))
     if fuera:
         print("ejemplos fuera (llevan C):", " ".join(fuera))
+
+
+def tar_actualizar(caj, tar):
+    """Lo que baja Forja para poner Dash al día sin lha (que no todos los Amiga tienen): un tar ustar con cada fichero
+    del cajón comprimido aparte con gzip, "Dash/<ruta>.gz". Así se descomprime de uno en uno, con poca memoria, con
+    inflate_auto, y su CRC lo comprueba. Sin el instalador: el cajón ya está en su sitio. En el PC, tar x y gunzip -r."""
+    tar.unlink(missing_ok=True)
+    with tarfile.open(tar, "w", format=tarfile.USTAR_FORMAT) as t:
+        for d, _, fs in sorted(os.walk(caj)):
+            for f in sorted(fs):
+                ruta = Path(d) / f
+                rel = ruta.relative_to(caj).as_posix()
+                if rel in ("Instalar", "Instalar.info"):
+                    continue
+                datos = gzip.compress(ruta.read_bytes(), compresslevel=9, mtime=0)
+                info_t = tarfile.TarInfo("Dash/" + rel + ".gz")
+                info_t.size = len(datos)
+                info_t.mode = 0o644
+                t.addfile(info_t, io.BytesIO(datos))
+    return tar
 
 
 if __name__ == "__main__":
