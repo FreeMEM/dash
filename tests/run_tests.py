@@ -382,6 +382,21 @@ def run_error_test(test_file: Path) -> TestResult:
     else:
         error = None
 
+    # '# expect-dash: <text>': ./dash (straight to hunk) must fail too, with that text
+    expected_dash = next((l[len("# expect-dash:"):].strip() for l in test_file.read_text().splitlines()
+                          if l.startswith("# expect-dash:")), None)
+    if error is None and expected_dash is not None and (PROJECT_ROOT / "dashc" / "dashc").exists():
+        direct = subprocess.run(
+            [str(PROJECT_ROOT / "dash"), str(test_file),
+             "-o", str(PROJECT_ROOT / "build" / f"err_{test_file.stem}")],
+            capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60
+        )
+        out = direct.stdout + direct.stderr
+        if direct.returncode == 0:
+            error = f"./dash compiled it but should fail with: {expected_dash}"
+        elif expected_dash not in out:
+            error = f"./dash: expected '{expected_dash}', got: {out.strip()[:200]}"
+
     return TestResult(name=name, passed=error is None, transpile_ok=False,
                       compile_ok=False, error_message=error, duration=duration)
 
