@@ -33,6 +33,20 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.10.0 (2026-11-10)
+
+Funciones nuevas para las expresiones regulares. Lo que ya compilaba sigue igual.
+
+- **Nuevo:** los grupos de las expresiones regulares, lo que atrapa cada `( )` (lo pidió David Martínez).
+  `regex_group(n)` da el texto del grupo `n` de lo último que encajó (0 es todo). `regex_groups()` da un `[String]`
+  con todos, como `groups()` de Python. `regex_group_count()`, `regex_group_start(n)` y `regex_group_length(n)`
+  dan cuántos hay, dónde empieza cada uno y cuánto mide. `regex_group_parent(n)` dice dentro de qué grupo está otro,
+  para los anidados. Los grupos se numeran por el orden de su `(`; `(?: )` no cuenta.
+- **Herramienta:** la que hace el `.lha` y el `.readme` de un programa para Aminet se llama ahora
+  `tools/paquete_aminet.py`.
+- El paquete del Amiga trae Forja 0.6.0, como el de la 2.9.1.
+- Probado en A500, A1200 (3.1) y A1200 con OS 3.2, emulados, y en DashOS.
+
 ### 2.9.1 (2026-11-10)
 
 El lenguaje no cambia. Novedades del paquete del Amiga y de Forja, que va dentro.
