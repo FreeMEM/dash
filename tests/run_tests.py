@@ -503,14 +503,14 @@ def expected_output(test_file: Path) -> Optional[List[str]]:
 # sessions may be running emulators at the same time)
 EMU_MACHINES = [
     dict(option="emu", prefix="emu", label="FS-UAE A1200", rom_env=None, sys_env="DASH_EMU_SYS",
-         mui_sys_env="DASH_EMU_SYS_MUI", config="", timeout=360, workbench=False),
+         mui_sys_env="DASH_EMU_SYS_MUI", config="", timeout=540, workbench=False),
     # 68000: catches what a 68020 forgives (libgcc calls for 32-bit mul/div/mod, odd addresses)
     dict(option="emu_a500", prefix="emu500", label="FS-UAE A500", rom_env="DASH_KICKSTART_A500",
-         sys_env="DASH_EMU_SYS", mui_sys_env=None, config="amiga_model = A500\n", timeout=700, workbench=False),
+         sys_env="DASH_EMU_SYS", mui_sys_env=None, config="amiga_model = A500\n", timeout=1100, workbench=False),
     # AmigaOS 3.2: the current system, and the only one with ReAction. Its window.class
     # waits for the Workbench, so LoadWB runs first, as on a real Amiga
     dict(option="emu_32", prefix="emu32", label="FS-UAE A1200 OS 3.2", rom_env="DASH_KICKSTART_32",
-         sys_env="DASH_EMU_SYS_32", mui_sys_env="DASH_EMU_SYS_32_MUI", config="", timeout=480, workbench=True),
+         sys_env="DASH_EMU_SYS_32", mui_sys_env="DASH_EMU_SYS_32_MUI", config="", timeout=600, workbench=True),
     # an Amiga like CoffinOS (docs/COFFIN_EMU_LOOP.md): 68040 with JIT, RTG in 32 bits, its own disk with MUI,
     # AmiSSL, Trasfondo, DOpus5...; every test in one boot from a copy of $DASH_EMU_DISK_COFFIN
     dict(option="emu_coffin", prefix="emucoffin", label="FS-UAE CoffinOS (68040, RTG)", rom_env="DASH_KICKSTART_32",
