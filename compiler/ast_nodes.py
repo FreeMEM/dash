@@ -125,6 +125,7 @@ class WindowDef(ASTNode):
         "width": "int", "height": "int", "left": "int", "top": "int",
         "closegadget": "bool", "dragbar": "bool", "depthgadget": "bool",
         "sizegadget": "bool", "borderless": "bool", "activate": "bool", "rmbtrap": "bool",
+        "backdrop": "bool",
     }
 
     name: str

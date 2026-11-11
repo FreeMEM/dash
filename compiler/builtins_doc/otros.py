@@ -244,6 +244,33 @@ Returns 0 if done, -1 if there is no such commodity, -2 if it has no port, -99 w
     "wm_pointer_y": _f("Devuelve la y del puntero en la pantalla del Workbench.\n", "Returns the pointer's y on the Workbench screen.\n", ["wm_pointer_x"]),
     "wm_bar_height": _f("Devuelve el alto de la barra de título de la pantalla del Workbench, donde suelen empezar las ventanas.\n",
                         "Returns the height of the Workbench screen's title bar, where windows usually start.\n", []),
+    "screen_show_title": _f("""\
+- `on`: `true` para que la barra de título de la pantalla vaya delante de sus ventanas de fondo (como viene), `false`
+  para que vaya detrás.
+
+Sirve para una barra propia en una ventana de fondo (`window_next_backdrop` o la propiedad `backdrop`) que ocupa el
+sitio de la del Workbench: con la del sistema delante, la ventana de fondo quedaría tapada. Es de la pantalla de la
+ventana del programa o, sin ella, de la pública por defecto.
+""", """\
+- `on`: `true` for the screen's title bar in front of its backdrop windows (as it comes), `false` for it behind them.
+
+For a bar of its own in a backdrop window (`window_next_backdrop` or the `backdrop` property) that takes the place of
+the Workbench one: with the system's in front, the backdrop window would be covered. It acts on the screen of the
+program's window or, without one, on the default public screen.
+""", ["window_next_backdrop", "wm_bar_height"]),
+    "window_next_backdrop": _f("""\
+- `on`: `true` para que la próxima ventana declarada (`Window ... end`) que se abra con `.open` sea de fondo.
+
+Una ventana de fondo (backdrop) queda siempre detrás de todas las demás de la pantalla, como la del Workbench con los
+iconos en el escritorio. La propiedad `backdrop true` de `Window` hace lo mismo, pero fija al compilar; con esto se
+decide mientras corre el programa (por ejemplo, según sus preferencias). Vale para una sola apertura.
+""", """\
+- `on`: `true` for the next declared window (`Window ... end`) opened with `.open` to be a backdrop one.
+
+A backdrop window always stays behind every other window of the screen, like the Workbench's with the icons on the
+desktop. The `backdrop true` property of `Window` does the same, but fixed when compiling; this decides it while the
+program runs (for example, from its preferences). It is good for one opening.
+""", ["screen_show_title"]),
     "wm_bar_gadgets": _f("Devuelve a qué distancia del borde derecho de la barra de la pantalla empiezan sus botones del sistema; 0 si no lo sabe.\n",
                          "Returns how far from the right edge of the screen's bar its system buttons start; 0 if unknown.\n", []),
     "file_real_path": _f("- `path`: un fichero o cajón.\n\nDevuelve su ruta real, con el nombre del volumen (`\"SYS:Utilities/Clock\"` da `\"System:Utilities/Clock\"`), para compararla con `wm_path`; `\"\"` si no existe.\n",

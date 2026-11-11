@@ -1559,6 +1559,8 @@ const BuiltinInfo builtin_info[] = {
     {"screen_pixel_rgb", 2, 1, 0, 0, 0, 0u},
     {"screen_save_png", 1, 2, 0, 0, 0, 1u},
     {"screen_save_png", 1, 2, 0, 0, 0, 1u},
+    {"screen_show_title", 1, 0, 1, 0, 0, 0u},
+    {"screen_show_title", 1, 0, 1, 0, 0, 0u},
     {"screen_to_back", 0, 0, 1, 0, 0, 0u},
     {"screen_to_back", 0, 0, 1, 0, 0, 0u},
     {"screen_to_front", 0, 0, 1, 0, 0, 0u},
@@ -1921,6 +1923,8 @@ const BuiltinInfo builtin_info[] = {
     {"window_found_box", 2, 1, 1, 0, 0, 0u},
     {"window_move", 3, 0, 1, 0, 0, 0u},
     {"window_move", 3, 0, 1, 0, 0, 0u},
+    {"window_next_backdrop", 1, 0, 1, 0, 0, 0u},
+    {"window_next_backdrop", 1, 0, 1, 0, 0, 0u},
     {"window_resize", 3, 0, 1, 0, 0, 0u},
     {"window_resize", 3, 0, 1, 0, 0, 0u},
     {"window_title", 2, 0, 1, 0, 0, 2u},
@@ -1968,7 +1972,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1966;
+const int builtin_count = 1970;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

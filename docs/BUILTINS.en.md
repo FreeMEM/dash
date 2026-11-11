@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 983 functions, 983 implemented, 0 not implemented.
+Total: 985 functions, 985 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -9302,6 +9302,8 @@ those dropped on a window.
 | [`wm_pointer_y()`](#wm_pointer_y) | Int | Where the pointer is on the Workbench screen: y |  |
 | [`wm_bar_height()`](#wm_bar_height) | Int | The height of the Workbench screen's title bar (where windows usually start) |  |
 | [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
+| [`screen_show_title(on)`](#screen_show_title) | — | The screen's title bar in front of its backdrop windows (true, as it comes) or behind them (false): for a bar of its own in a backdrop window that takes its place |  |
+| [`window_next_backdrop(on)`](#window_next_backdrop) | — | The next declared window opened with .open is a backdrop window (behind every other window of the screen, as the backdrop property does), decided while the program runs |  |
 | [`file_real_path(path)`](#file_real_path) | String | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
 | [`app_window(handle)`](#app_window) | Bool | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
 | [`app_drop()`](#app_drop) | String | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
@@ -9479,6 +9481,30 @@ Returns the height of the Workbench screen's title bar, where windows usually st
 ### `wm_bar_gadgets()` → `Int`
 
 Returns how far from the right edge of the screen's bar its system buttons start; 0 if unknown.
+
+<a id="screen_show_title"></a>
+
+### `screen_show_title(on)`
+
+- `on`: `true` for the screen's title bar in front of its backdrop windows (as it comes), `false` for it behind them.
+
+For a bar of its own in a backdrop window (`window_next_backdrop` or the `backdrop` property) that takes the place of
+the Workbench one: with the system's in front, the backdrop window would be covered. It acts on the screen of the
+program's window or, without one, on the default public screen.
+
+See also: [`window_next_backdrop`](#window_next_backdrop), [`wm_bar_height`](#wm_bar_height).
+
+<a id="window_next_backdrop"></a>
+
+### `window_next_backdrop(on)`
+
+- `on`: `true` for the next declared window (`Window ... end`) opened with `.open` to be a backdrop one.
+
+A backdrop window always stays behind every other window of the screen, like the Workbench's with the icons on the
+desktop. The `backdrop true` property of `Window` does the same, but fixed when compiling; this decides it while the
+program runs (for example, from its preferences). It is good for one opening.
+
+See also: [`screen_show_title`](#screen_show_title).
 
 <a id="file_real_path"></a>
 

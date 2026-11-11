@@ -14276,6 +14276,19 @@ struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
 struct Window *_dash_win_decl = NULL;   /* the declared window (Window X ... end) opened last: window_use(0) */
 struct Screen *_dash_screen = NULL;
+BOOL _dash_next_backdrop = FALSE;       /* window_next_backdrop: the next declared window opens as a backdrop one */
+static void _dash_window_next_backdrop(LONG on) { _dash_next_backdrop = on ? TRUE : FALSE; }
+/* The screen's title bar in front of its backdrop windows (TRUE, as it comes) or behind them (FALSE): a bar of
+   its own in a backdrop window that replaces it. On the screen of the program's window, or the default one */
+static void _dash_screen_show_title(LONG on) {
+    struct Screen *s = _dash_win ? _dash_win->WScreen : _dash_screen;
+    if (s) { ShowTitle(s, on ? TRUE : FALSE); return; }
+    if ((s = LockPubScreen(NULL)) != NULL) {
+        ShowTitle(s, on ? TRUE : FALSE);
+        UnlockPubScreen(NULL, s);
+    }
+}
+
 /* Runtimes that keep something of a window (menus, gadgets) let go of it here,
    just before every CloseWindow */
 static void (*_dash_close_hooks[3])(struct Window *);
@@ -17189,6 +17202,19 @@ struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
 struct Window *_dash_win_decl = NULL;   /* the declared window (Window X ... end) opened last: window_use(0) */
 struct Screen *_dash_screen = NULL;
+BOOL _dash_next_backdrop = FALSE;       /* window_next_backdrop: the next declared window opens as a backdrop one */
+static void _dash_window_next_backdrop(LONG on) { _dash_next_backdrop = on ? TRUE : FALSE; }
+/* The screen's title bar in front of its backdrop windows (TRUE, as it comes) or behind them (FALSE): a bar of
+   its own in a backdrop window that replaces it. On the screen of the program's window, or the default one */
+static void _dash_screen_show_title(LONG on) {
+    struct Screen *s = _dash_win ? _dash_win->WScreen : _dash_screen;
+    if (s) { ShowTitle(s, on ? TRUE : FALSE); return; }
+    if ((s = LockPubScreen(NULL)) != NULL) {
+        ShowTitle(s, on ? TRUE : FALSE);
+        UnlockPubScreen(NULL, s);
+    }
+}
+
 /* Runtimes that keep something of a window (menus, gadgets) let go of it here,
    just before every CloseWindow */
 static void (*_dash_close_hooks[3])(struct Window *);
@@ -23595,6 +23621,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_Borderless, $borderless,
         WA_RMBTrap, $rmbtrap,
         WA_Activate, $activate,
+        WA_Backdrop, $backdrop || _dash_next_backdrop,   /* behind every other window of the screen */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
@@ -23603,6 +23630,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_PubScreenFallBack, TRUE,
         TAG_DONE);
 
+    _dash_next_backdrop = FALSE;
     if (!win_$name) _dash_exit(20);
     _dash_win = win_$name;
     _dash_win_decl = win_$name;
@@ -25559,6 +25587,7 @@ static {ret_type} {method_name}({params_str}) {{
             borderless=self._get_window_prop(window_def, "borderless", "FALSE"),
             rmbtrap=self._get_window_prop(window_def, "rmbtrap", "FALSE"),
             activate=self._get_window_prop(window_def, "activate", "TRUE"),
+            backdrop=self._get_window_prop(window_def, "backdrop", "FALSE"),
             idcmp_flags=idcmp_str
         )
         self.emit(code)
