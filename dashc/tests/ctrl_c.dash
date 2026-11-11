@@ -1,7 +1,7 @@
 # Test: Ctrl-C para un programa en un bucle (lo que hace Parar en Forja con run_break, o Break en el Shell). El
 # programa se arranca otra vez a sí mismo con run_start; la copia ("hijo") da vueltas a un while sin fin (solo, o
-# con un for dentro: el for acaba su vuelta y el while lo ve), y el padre le manda Ctrl-C con run_break: la copia acaba
-# con "***Break" y código 5, con la limpieza de siempre.
+# con un for sin llamadas dentro: el for acaba su vuelta y el while lo ve) o a un for que tarda (con time_delay: lo ve
+# el for), y el padre le manda Ctrl-C con run_break: la copia acaba con "***Break" y código 5, con la limpieza de siempre.
 
 func vueltas_for()
     Print "hijo for: empieza"
@@ -13,9 +13,22 @@ func vueltas_for()
     end
 end
 
+# Un for que acaba solo pero tarda (llama a algo en cada vuelta): también lo mira
+func vueltas_lentas()
+    Print "hijo lento: empieza"
+    for i in (1..100000)
+        time_delay(1)
+    end
+    Print "no llega"
+end
+
 func hijo(que: String)
     if que == "for"
         vueltas_for()
+        return
+    end
+    if que == "lento"
+        vueltas_lentas()
         return
     end
     Print "hijo: empieza"
@@ -40,5 +53,7 @@ Main
     else
         probar("while")
         probar("for")
+        probar("lento")
     end
 end
+

@@ -26340,8 +26340,9 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.indent_level += 1
         self.context.enter_scope("loop")
         body = f"{self.context.indent}    _dash_ac_loop();\n" if self.autoclose else ""
-        # Ctrl-C (BREAK_RUNTIME): in a while that can go on for ever; not in one that counts (it ends), like ./dash
-        if self.auto_break and not self._counted_while(node):
+        # Ctrl-C (BREAK_RUNTIME): in a while that can go on for ever, or that calls something; not in one that counts
+        # without calls (it ends soon), like ./dash
+        if self.auto_break and (not self._counted_while(node) or self._body_calls(node.body)):
             body += f"{self.context.indent}_DASH_BRK();\n"
         body += self._loop_body_head(mark)
         for s in node.body:
@@ -26404,7 +26405,9 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.indent_level += 1
         self.context.enter_scope("loop")
         self.context.declare_var(node.variable)  # Loop var is declared by for (borrowed)
-        body = self._loop_body_head(mark)
+        # Ctrl-C (BREAK_RUNTIME): a for ends by itself; with a call in it, it can take long and the check costs nothing
+        body = f"{self.context.indent}_DASH_BRK();\n" if self.auto_break and self._body_calls(node.body) else ""
+        body += self._loop_body_head(mark)
         if ((var_type.startswith("struct:") or var_type == "array" or var_type.startswith("dict"))
                 and not self._loop_keeps_elements(node)):
             # an element of a list of objects: the body could replace it in the
@@ -27313,6 +27316,12 @@ static {ret_type} {method_name}({params_str}) {{
     def _loop_body_head(self, mark: str) -> str:
         """First statement of every loop iteration: release the previous iteration's temporaries."""
         return f"{self.context.indent}_dash_tmp_release({mark});\n"
+
+    def _body_calls(self, body) -> bool:
+        """Is there a call (a function, a builtin, a method, Print) in these statements? A loop that calls something
+        checks Ctrl-C on every iteration even if it ends by itself (a for with time_delay can take minutes): next to
+        the call it costs nothing (BREAK_RUNTIME)."""
+        return any(isinstance(n, (FunctionCall, MethodCall, PrintStmt)) for n in self._walk_nodes(body))
 
     def _counted_while(self, node: WhileStmt) -> bool:
         """while v < n (or <=, >, >=, !=) whose body steps v by a constant once, at its top level, and assigns it

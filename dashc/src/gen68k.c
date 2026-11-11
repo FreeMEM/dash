@@ -598,7 +598,8 @@ static int pow2(long k)
 /* modo de prueba, como ./dash: DASH_TEST_AUTOCLOSE=<segundos> al compilar (el programa acaba solo; tools/emu_run.py)
    y DASH_PRINT_FLUSH=1 (cada Print sale enseguida) */
 static int autoclose, print_flush;
-static int auto_brk;        /* Ctrl-C en cada vuelta de los while que no cuentan (brk_check): los que pueden no acabar */
+static int auto_brk;        /* Ctrl-C en cada vuelta (brk_check) de los while que no cuentan y de los bucles con llamadas */
+static int body_calls(NodeList *b);
 
 #ifdef DASH_A64
 #include "ta64_ops.c"
@@ -3822,6 +3823,7 @@ static void gen_for(Node *n)
     }
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4179,6 +4181,7 @@ static int gen_counted_while(Node *n)
     }
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = -1;                                      /* no hay continue */
     enter_scope();
@@ -4481,6 +4484,7 @@ static void gen_foreach_str(Node *n)
     if (len_slot >= 0) use_slot(len_slot);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4984,6 +4988,7 @@ static void gen_keys_loop(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5104,6 +5109,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     use_slot(cnt_slot);
     def_label(top);
     mark_release(ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5173,6 +5179,7 @@ static void gen_foreach(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -6355,6 +6362,31 @@ static void debug_text(Program *p)
     }
     for (i = 0; i < dbg_lines.n; i++)
         dbg_printf("L %ld %d %d\n", labels.v[dbg_lines.v[i].label], dbg_lines.v[i].file, dbg_lines.v[i].line);
+}
+
+/* ¿hay alguna llamada (una función, un builtin, Print) en estas sentencias? Un bucle que llama a algo mira Ctrl-C en cada
+   vuelta aunque acabe solo (un for con time_delay puede tardar minutos), porque a su lado no cuesta nada; uno sin
+   llamadas que acaba solo (un for, un while que cuenta) no lo mira */
+static int node_calls(Node *n)
+{
+    int i;
+    if (!n) return 0;
+    if (n->kind == E_CALL || n->kind == S_PRINT) return 1;
+    for (i = 0; i < n->args.n; i++)
+        if (node_calls(n->args.v[i])) return 1;
+    for (i = 0; i < n->body.n; i++)
+        if (node_calls(n->body.v[i])) return 1;
+    for (i = 0; i < n->els.n; i++)
+        if (node_calls(n->els.v[i])) return 1;
+    return node_calls(n->a) || node_calls(n->b) || node_calls(n->c);
+}
+
+static int body_calls(NodeList *b)
+{
+    int i;
+    for (i = 0; i < b->n; i++)
+        if (node_calls(b->v[i])) return 1;
+    return 0;
 }
 
 /* ¿llama el programa a algo que atiende Ctrl-C por su cuenta? (entonces sus bucles no lo miran) */

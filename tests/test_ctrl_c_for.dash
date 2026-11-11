@@ -1,11 +1,9 @@
 # Test: Ctrl-C en un while con un for dentro (como tests/test_ctrl_c.dash, con el camino de C por @native): el for
-# no lo mira (acaba siempre) y termina su vuelta; el while, en su siguiente vuelta, para el programa. Un while que
-# cuenta tampoco lo mira (expect-c: el de while true, una vez).
+# llama a algo, así que lo mira y para en su siguiente vuelta; el while que cuenta, sin llamadas, no lo mira.
 # expect-c: _DASH_BRK();
 # expect-rc: 5
 # expect-out: vuelta 0 (4 del for, 3 del while que cuenta)
 # expect-out: vuelta 1 (4 del for, 3 del while que cuenta)
-# expect-out: vuelta 2 (4 del for, 3 del while que cuenta)
 # expect-out: ***Break
 
 @native func ctrl_c()
