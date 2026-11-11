@@ -209,13 +209,13 @@ Changes the window's size. Like `window_move`, Intuition does it a moment later.
         "see": ["window_move", "window_border_top"],
     },
     "window_to_front": {
-        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana delante de las demás de su pantalla.\n",
-        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window in front of the others on its screen.\n",
+        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana delante de las demás de su pantalla; una de fondo, delante de las otras de fondo. Si ya está delante, no hace nada.\n",
+        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window in front of the others on its screen; a backdrop one, in front of the other backdrop ones. If it already is, it does nothing.\n",
         "see": ["window_to_back", "window_activate"],
     },
     "window_to_back": {
-        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.\n",
-        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window behind the others on its screen (in front of the backdrop ones and of the title bar). If it already is, it does nothing: it can be called every tick to keep a window at the back.\n",
+        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título; una de fondo, detrás de las otras de fondo). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.\n",
+        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window behind the others on its screen (in front of the backdrop ones and of the title bar; a backdrop one, behind the other backdrop ones). If it already is, it does nothing: it can be called every tick to keep a window at the back.\n",
         "see": ["window_to_front"],
     },
     "window_activate": {

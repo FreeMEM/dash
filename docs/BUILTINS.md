@@ -9729,7 +9729,8 @@ Devuelve a qué distancia del borde derecho de la barra de la pantalla empiezan 
 
 Sirve para una barra propia en una ventana de fondo (`window_next_backdrop` o la propiedad `backdrop`) que ocupa el
 sitio de la del Workbench: con la del sistema delante, la ventana de fondo quedaría tapada. Es de la pantalla de la
-ventana del programa o, sin ella, de la pública por defecto.
+ventana del programa o, sin ella, de la pública por defecto. Si ya está como se pide, no hace nada: se puede llamar
+en cada vuelta (el Workbench vuelve a sacar el título al dejar de ir de fondo).
 
 Ver también: [`window_next_backdrop`](#window_next_backdrop), [`wm_bar_height`](#wm_bar_height).
 
@@ -10402,7 +10403,7 @@ Ver también: [`window_move`](#window_move), [`window_border_top`](#window_borde
 
 - `handle`: el número de la ventana; 0, la actual.
 
-Pone la ventana delante de las demás de su pantalla.
+Pone la ventana delante de las demás de su pantalla; una de fondo, delante de las otras de fondo. Si ya está delante, no hace nada.
 
 Ver también: [`window_to_back`](#window_to_back), [`window_activate`](#window_activate).
 
@@ -10412,7 +10413,7 @@ Ver también: [`window_to_back`](#window_to_back), [`window_activate`](#window_a
 
 - `handle`: el número de la ventana; 0, la actual.
 
-Pone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.
+Pone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título; una de fondo, detrás de las otras de fondo). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.
 
 Ver también: [`window_to_front`](#window_to_front).
 

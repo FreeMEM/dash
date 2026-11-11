@@ -1,9 +1,15 @@
 # Test: window_to_back puts a window behind the others, and does nothing when it is already there (Trasfondo's
-# bar inside the title bar calls it every tick to stay behind the windows sent to the back; Ferrán García)
+# bar inside the title bar calls it every tick to stay behind the windows sent to the back; Ferrán García).
+# window_to_front with a backdrop window: in front of the other backdrop ones (the full bar, so that one opened
+# later does not cover it); screen_show_title, twice the same, does nothing the second time
 # expect-c: LAYERBACKDROP
 # expect-out: delante Ventana dos
 # expect-out: atras Ventana uno
 # expect-out: otra vez Ventana uno
+# expect-out: fondo delante Fondo dos
+# expect-out: fondo atras Fondo uno
+# expect-out: fondo al frente Fondo dos
+# expect-out: fondo otra vez Fondo dos
 # expect-out: fin
 
 Window Uno
@@ -20,6 +26,33 @@ Window Dos
     top 50
     width 200
     height 60
+end
+
+Window FondoUno
+    title "Fondo uno"
+    top 100
+    width 200
+    height 60
+    backdrop true
+end
+
+Window FondoDos
+    title "Fondo dos"
+    top 120
+    width 200
+    height 60
+    backdrop true
+end
+
+# la de delante de las de fondo de este programa
+func primera_fondo() -> String
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_flags(i) & 32 != 0 and wm_flags(i) & 2 != 0
+            return wm_title(i)
+        end
+    end
+    return "ninguna"
 end
 
 # la de delante de las de este programa
@@ -44,5 +77,21 @@ Main
     window_to_back(0)                # ya está detrás: nada
     time_delay(25)
     Print "otra vez #{primera()}"
+    FondoUno.open
+    FondoDos.open
+    time_delay(25)
+    Print "fondo delante #{primera_fondo()}"
+    window_to_back(0)                # FondoDos, detrás de FondoUno
+    time_delay(25)
+    Print "fondo atras #{primera_fondo()}"
+    window_to_front(0)
+    time_delay(25)
+    Print "fondo al frente #{primera_fondo()}"
+    window_to_front(0)               # ya está delante de las de fondo: nada
+    time_delay(25)
+    Print "fondo otra vez #{primera_fondo()}"
+    screen_show_title(false)
+    screen_show_title(false)
+    screen_show_title(true)
     Print "fin"
 end

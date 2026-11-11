@@ -256,13 +256,15 @@ Returns 0 if done, -1 if there is no such commodity, -2 if it has no port, -99 w
 
 Sirve para una barra propia en una ventana de fondo (`window_next_backdrop` o la propiedad `backdrop`) que ocupa el
 sitio de la del Workbench: con la del sistema delante, la ventana de fondo quedaría tapada. Es de la pantalla de la
-ventana del programa o, sin ella, de la pública por defecto.
+ventana del programa o, sin ella, de la pública por defecto. Si ya está como se pide, no hace nada: se puede llamar
+en cada vuelta (el Workbench vuelve a sacar el título al dejar de ir de fondo).
 """, """\
 - `on`: `true` for the screen's title bar in front of its backdrop windows (as it comes), `false` for it behind them.
 
 For a bar of its own in a backdrop window (`window_next_backdrop` or the `backdrop` property) that takes the place of
 the Workbench one: with the system's in front, the backdrop window would be covered. It acts on the screen of the
-program's window or, without one, on the default public screen.
+program's window or, without one, on the default public screen. If it already is as asked, it does nothing: it can
+be called every tick (the Workbench brings the title back when it stops being a backdrop window).
 """, ["window_next_backdrop", "wm_bar_height"]),
     "window_next_backdrop": _f("""\
 - `on`: `true` para que la próxima ventana declarada (`Window ... end`) que se abra con `.open` sea de fondo.
