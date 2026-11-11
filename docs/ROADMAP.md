@@ -1083,6 +1083,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       en MUI 3.8, Amiga+V no pega en la barra de direcciones). `mui_active_object(win)`: el objeto con el teclado
       (de un desplegable con texto, el desplegable); `mui_string_pos` y `mui_set_string_pos`: el cursor de un campo.
       `mui_set_active` con un desplegable va a su campo. 983 funciones. `tests/test_mui_string_pos.dash`
+- [x] Pegar, copiar y cortar en los campos de texto de MUI 3.8 (2026-11-11, Alex Agauser y Ferrán García): MUI 3.8
+      no lo hace, y `mui_string` y `mui_combo` llevan allí el gancho de edición de GadTools y ReAction (Ctrl o Amiga
+      con V, C y X). MUI 4 y 5 lo hacen solos. Probado a mano en `sys32rtg38` por los dos caminos.
 
 ## Notas y Decisiones
 

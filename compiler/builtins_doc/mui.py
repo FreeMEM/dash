@@ -387,12 +387,15 @@ A button. Pressing it fires the `mui_on_press` event.
 - `maxlen`: cuántas letras caben como mucho.
 
 Un campo de texto de una línea. `mui_get_text` lo lee; `mui_on_ack` avisa al pulsar Return y `mui_on_change` con
-cada cambio.
+cada cambio. Ctrl o Amiga con V pegan donde está el cursor; con MUI 3.8, que no lo hace, lo pone Dash, y además C
+copia todo el texto y X lo corta (lo contaron Alex Agauser y Ferrán García).
 """, """\
 - `initial`: the starting text.
 - `maxlen`: the most letters it holds.
 
 A one-line text field. `mui_get_text` reads it; `mui_on_ack` fires on Return and `mui_on_change` on every change.
+Ctrl or Amiga with V paste at the cursor; with MUI 3.8, which does not, Dash adds it, and C also copies the whole
+text and X cuts it (reported by Alex Agauser and Ferrán García).
 """, ["mui_get_text", "mui_on_ack", "mui_text_editor"]),
     "mui_text_editor": _f("""\
 - `lines`: cuántas líneas de alto.
@@ -491,15 +494,14 @@ Changes its text; for a window, the title.
 
 Devuelve el objeto de la ventana que tiene el teclado, como el campo de texto donde se está escribiendo, o 0 si no
 hay ninguno. En un desplegable con texto (`mui_combo`) devuelve el desplegable. Sirve para que una opción de menú
-haga algo en el campo activo, como pegar donde está el cursor: en MUI 3.8, Amiga+V no pega en un campo de texto de
-una ventana con menús (lo contaron Alex Agauser y Ferrán García, en Tachyon).
+haga algo en el campo activo, como pegar donde está el cursor (lo contaron Alex Agauser y Ferrán García, en
+Tachyon).
 """, """\
 - `win`: the window.
 
 Returns the object of the window that has the keyboard, such as the text field being typed in, or 0 if there is
 none. For a drop-down with text (`mui_combo`) it returns the drop-down. It lets a menu item act on the active field,
-like pasting where the cursor is: in MUI 3.8, Amiga+V does not paste into a text field of a window with menus
-(reported by Alex Agauser and Ferrán García, in Tachyon).
+like pasting where the cursor is (reported by Alex Agauser and Ferrán García, in Tachyon).
 """, ["mui_set_active", "mui_string_pos", "mui_window_active"]),
     "mui_string_pos": _f("""\
 - `obj`: un campo de texto o un desplegable con texto.

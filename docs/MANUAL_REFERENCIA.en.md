@@ -3025,8 +3025,9 @@ Each one explained, with its parameters and an example run by the tests: [BUILTI
 
 In text and number fields (`gt_string`, `gt_integer`, and also `textfield_create`, `integer_create` and
 `ra_add_string`), right Amiga, left Amiga or Ctrl with V paste the clipboard at the cursor (its first line; in a
-number field, only the digits), with C copy the whole text and with X cut it. MUI's paste by themselves, with right
-Amiga or Ctrl + V, and copy what is selected.
+number field, only the digits), with C copy the whole text and with X cut it. MUI 4 and 5 fields paste by
+themselves, with right Amiga or Ctrl + V, and copy what is selected. With MUI 3.8, which does not, `mui_string` and
+`mui_combo` work like the GadTools ones (reported by Alex Agauser and Ferrán García).
 
 ---
 
