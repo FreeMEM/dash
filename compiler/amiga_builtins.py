@@ -4957,6 +4957,10 @@ TASK_FUNCTIONS = {
                     "width, 7 maximum height (0 or 65535: no limit), 8-11 its borders (left, top, right, bottom), "
                     "12 and 13 where the free part of its title bar starts and ends, 14 and 15 the middle of its close "
                     "gadget (-1 without one), from its corner; -1 outside the list"),
+    "wm_box_now": BuiltinFunc(
+        name="wm_box_now", params=["id", "what"], return_type="LONG", c_template="_dash_wm_box_now(${id}, ${what})",
+        description="What wm_box gives (0-15), of the window of that id as it is now, without waiting while a "
+                    "window is being dragged; -1 if it is gone"),
     "wm_close": BuiltinFunc(
         name="wm_close", params=["id"], return_type="BOOL", c_template="_dash_wm_close(${id})",
         description="Asks a window's program to close it: a click on its close gadget, as the user would, and the "
@@ -6054,7 +6058,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])

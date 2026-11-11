@@ -9,6 +9,7 @@
 # expect-out: barra true true
 # expect-out: cerrar true
 # expect-out: doble true
+# expect-out: ahora true true
 # expect-out: eventos 101 102
 # expect-out: donde true true
 # expect-out: cuando true
@@ -37,6 +38,7 @@ Main
     Print "barra #{wm_box(i, 12) > 0} #{wm_box(i, 13) > wm_box(i, 12) and wm_box(i, 13) <= wm_box(i, 2)}"
     Print "cerrar #{wm_box(i, 14) >= 0 and wm_box(i, 14) < wm_box(i, 12) and wm_box(i, 15) < wm_box(i, 9)}"
     Print "doble #{wm_double_click_ms() > 0}"
+    Print "ahora #{wm_box_now(wm_id(i), 0) == wm_box(i, 0) and wm_box_now(wm_id(i), 13) == wm_box(i, 13)} #{wm_box_now(1, 0) == -1}"
     x = wm_box(i, 0)
     y = wm_box(i, 1)
     # the other window in front and active: the click on "WM ev" must reach it and make it active

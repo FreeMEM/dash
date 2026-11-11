@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 991 funciones, 991 implementadas, 0 sin implementar.
+Total: 992 funciones, 992 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -9336,6 +9336,7 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_back(id)`](#wm_back) | Bool | Una ventana detrás de las demás; false si ya no está abierta |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Hace activa una ventana (las teclas van a ella); false si ya no está abierta |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta |  |
+| [`wm_box_now(id, what)`](#wm_box_now) | Int | Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se arrastra una ventana; -1 si ya no está |  |
 | [`wm_close(id)`](#wm_close) | Bool | Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el puntero vuelve donde estaba; false si ya no está o no tiene ese botón |  |
 | [`wm_double_click_ms()`](#wm_double_click_ms) | Int | El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input) |  |
 | [`wm_active()`](#wm_active) | Int | El id de la ventana activa, si está en la pantalla del Workbench; 0 si no |  |
@@ -9477,6 +9478,17 @@ Ver también: [`wm_active`](#wm_active).
 La pasa a su otro tamaño, como su botón de zoom. Devuelve `false` si ya no está.
 
 Ver también: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_box_now"></a>
+
+### `wm_box_now(id, what)` → `Int`
+
+- `id`: el id de la ventana (`wm_id`).
+- `what`: lo mismo que en `wm_box`, de 0 a 15.
+
+Devuelve ese dato de la ventana tal como está ahora, sin `wm_read`. No espera mientras Intuition arrastra una ventana (`wm_read` sí): sirve para saber dónde estaba una ventana justo al empezar a arrastrarla. -1 si ya no está.
+
+Ver también: [`wm_box`](#wm_box).
 
 <a id="wm_close"></a>
 

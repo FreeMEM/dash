@@ -4468,6 +4468,36 @@ static BOOL _dash_wm_set_box(LONG id, LONG x, LONG y, LONG wd, LONG ht) {
     return TRUE;
 }
 
+/* What wm_box gives, of the window of that id as it is now (under Forbid, without the screen's layer lock: it does
+   not wait while Intuition drags a window); -1 if it is gone */
+static LONG _dash_wm_box_now(LONG id, LONG what) {
+    struct Window *w;
+    WORD z[4];
+    LONG r = -1;
+    Forbid();
+    if ((w = _dash_wm_find(id)) && what >= 0 && what <= 15) {
+        switch (what) {
+        case 0: r = w->LeftEdge; break;
+        case 1: r = w->TopEdge; break;
+        case 2: r = w->Width; break;
+        case 3: r = w->Height; break;
+        case 4: r = w->MinWidth; break;
+        case 5: r = w->MinHeight; break;
+        case 6: r = (UWORD)w->MaxWidth; break;
+        case 7: r = (UWORD)w->MaxHeight; break;
+        case 8: r = w->BorderLeft; break;
+        case 9: r = w->BorderTop; break;
+        case 10: r = w->BorderRight; break;
+        case 11: r = w->BorderBottom; break;
+        default:
+            _dash_wm_title_zone(w, &z[0], &z[1], &z[2], &z[3]);
+            r = z[what - 12];
+        }
+    }
+    Permit();
+    return r;
+}
+
 /* The time between two clicks that makes a double click, from Intuition's preferences (Input), in ms */
 static LONG _dash_wm_double_click_ms(void) {
     struct Preferences p;

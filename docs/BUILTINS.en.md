@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 991 functions, 991 implemented, 0 not implemented.
+Total: 992 functions, 992 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -9338,6 +9338,7 @@ those dropped on a window.
 | [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_box_now(id, what)`](#wm_box_now) | Int | What wm_box gives (0-15), of the window of that id as it is now, without waiting while a window is being dragged; -1 if it is gone |  |
 | [`wm_close(id)`](#wm_close) | Bool | Asks a window's program to close it: a click on its close gadget, as the user would, and the pointer back where it was; false if it is gone or has no close gadget |  |
 | [`wm_double_click_ms()`](#wm_double_click_ms) | Int | The longest time between two clicks of a double click, in ms (Input preferences) |  |
 | [`wm_active()`](#wm_active) | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
@@ -9479,6 +9480,17 @@ See also: [`wm_active`](#wm_active).
 Switches it to its other size, like its zoom button. Returns `false` if it is gone.
 
 See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_box_now"></a>
+
+### `wm_box_now(id, what)` → `Int`
+
+- `id`: the window's id (`wm_id`).
+- `what`: the same as in `wm_box`, 0 to 15.
+
+Returns that value of the window as it is now, without `wm_read`. It does not wait while Intuition drags a window (`wm_read` does): it tells where a window was right when a drag starts. -1 if it is gone.
+
+See also: [`wm_box`](#wm_box).
 
 <a id="wm_close"></a>
 

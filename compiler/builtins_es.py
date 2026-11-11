@@ -784,6 +784,8 @@ DESC_ES = {
     "wm_back": "Una ventana detrás de las demás; false si ya no está abierta",
     "wm_activate": "Hace activa una ventana (las teclas van a ella); false si ya no está abierta",
     "wm_zip": "Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta",
+    "wm_box_now": "Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se "
+                  "arrastra una ventana; -1 si ya no está",
     "wm_close": "Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el "
                 "puntero vuelve donde estaba; false si ya no está o no tiene ese botón",
     "wm_double_click_ms": "El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input)",

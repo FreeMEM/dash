@@ -1089,10 +1089,10 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Mirar clics y teclas sin quitárselos a nadie (2026-11-12, para las ventanas modernas de Trasfondo que pidió
       el usuario): `cx_watch_add` (un filtro de commodity que deja seguir el evento), `cx_event_x`, `cx_event_y` y
       `cx_event_ms` (dónde estaba el puntero y cuándo, apuntado en el input handler con un CX_CUSTOM),
-      `wm_double_click_ms`, `wm_box` 8 a 15 (bordes, parte libre de la barra de título, botón de cerrar) y
-      `wm_close` (un clic en su botón de cerrar). Los filtros de `cx_key_add` y `cx_watch_add` ya no miran los
+      `wm_double_click_ms`, `wm_box` 8 a 15 (bordes, parte libre de la barra de título, botón de cerrar), `wm_box_now`
+      (sin esperar mientras Intuition arrastra una ventana) y `wm_close` (un clic en su botón de cerrar). Los filtros de `cx_key_add` y `cx_watch_add` ya no miran los
       botones del ratón pulsados si la descripción no los nombra: `"rawmouse mouse_leftpress"` no llegaba nunca.
-      991 funciones. `tests/test_wm_eventos.dash`
+      992 funciones. `tests/test_wm_eventos.dash`
 
 ## Notas y Decisiones
 
