@@ -3831,9 +3831,12 @@ Un programa que atiende Ctrl-C él mismo no lo recibe en sus bucles: el que llam
 `single_instance`, `mui_wait_event` o `mui_wait_event_signals`, o a algún `cx_` de las commodities. Así acaba a su
 manera (por ejemplo, guardando antes lo que tenga). Con `DASH_NO_BREAK=1` al compilar, tampoco.
 
-Mirarlo cuesta una lectura de memoria y una comprobación por vuelta: al lado de una llamada no se nota; en un `while`
-muy apretado sin llamadas, sí (hasta el doble de tiempo). Un programa que espera a su ventana (sin dar
-vueltas) no lo ve hasta que le llega un mensaje: se para cerrando su ventana.
+Casi no cuesta nada. Con `./dash`, cada bucle lleva una instrucción vacía (`nop`) que Ctrl-C cambia por un salto al
+final; hasta entonces, el `while` más apretado sin llamadas tarda un 16 % más en un A1200 y un 8 % más en un A500. Con
+`./dash --gcc` cada vuelta mira un byte: en ese mismo bucle, un 60 % más. Al lado de una llamada no se nota. Las
+tareas de `task_start` también acaban su función en la vuelta siguiente: si no, el programa las esperaría para siempre
+al salir. Un programa que espera a su ventana (sin dar vueltas) no lo ve hasta que le llega un mensaje: se para
+cerrando su ventana.
 
 ### Un programa sin ventana que se puede parar: break_check y single_instance
 

@@ -3830,9 +3830,12 @@ A program that handles Ctrl-C itself does not get it in its loops: one that call
 `single_instance`, `mui_wait_event` or `mui_wait_event_signals`, or any commodity `cx_`. That way it ends in its own
 way (for example, saving what it has first). With `DASH_NO_BREAK=1` when compiling, neither.
 
-The check costs one memory read and one test per iteration: next to a call it does not show; in a very tight `while`
-without calls it does (up to twice the time). A program that waits for its window (without looping)
-does not see it until a message arrives: close its window to stop it.
+It costs almost nothing. With `./dash`, every loop has an empty instruction (`nop`) that Ctrl-C turns into a jump to
+the end; until then, the tightest `while` without calls takes 16 % longer on an A1200 and 8 % longer on an A500. With
+`./dash --gcc` every iteration checks a byte: 60 % longer in that same loop. Next to a call it does not show. Tasks
+started with `task_start` also end their function at their next iteration: otherwise the program would wait for them
+for ever when it exits. A program that waits for its window (without looping) does not see it until a message
+arrives: close its window to stop it.
 
 ### A windowless program that can be stopped: break_check and single_instance
 
