@@ -840,17 +840,34 @@ static void cmp_d0_k(long k, int small)
 
 static void test_bit_d0(int bit) { w(0x0800); w(bit); }   /* btst #bit,d0: Z si está a 0 */
 
-/* Ctrl-C en cada vuelta de un while que no cuenta (sin break_check ni MUI en el programa): el bit 12 (SIGBREAKF_CTRL_C) de
-   tc_SigRecvd de la tarea, el bit 4 del byte 28; si está, _dl_brk acaba el programa ("***Break", código 5).
-   movea.l _dl_brk_task,a0; btst #4,28(a0); beq.s +6; jsr _dl_brk (a0 es de trabajo entre sentencias) */
+/* Ctrl-C en cada vuelta de un while que no cuenta y de los bucles con llamadas (sin break_check ni MUI en el
+   programa): un NOP, apuntado en la tabla _dl_brk_sites. Ctrl-C a la tarea del programa es una excepción de exec
+   (_dash_brk_on del runtime) que cambia esos NOP por TRAP #14: en la vuelta siguiente, _dash_trap lleva el programa a
+   _dl_brk ("***Break", código 5). Hasta entonces, el bucle solo paga el NOP */
 static void brk_check(void)
 {
-    w(0x2079);
-    add_reloc((uint32_t)obj->code.n, -1, "_dl_brk_task");
+    if (pass == 2) {
+        int lb = new_label();
+        def_label(lb);
+        VEC_PUSH(brk_sites, lb);
+    }
+    w(0x4E71);
+}
+
+/* move.l #etiqueta,símbolo del runtime (al empezar, antes de _dash_start) */
+static void set_rt_label(const char *sym, int label)
+{
+    Fixup f;
+    w(0x23FC);
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 1;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    add_reloc(f.at, HK_CODE, NULL);
     l(0);
-    w(0x0828); w(4); w(28);
-    w(0x6706);
-    jsr_sym("_dl_brk");
+    add_reloc((uint32_t)obj->code.n, -1, sym);
+    l(0);
 }
 static void debug_nop(void) { w(0x4E71); }             /* nop: donde --debug pone un TRAP */
 

@@ -296,21 +296,28 @@ static void _dash_fail_at(const char *what, LONG w) {
     # CPU exceptions of the program's task (address error, illegal instruction, division by zero...):
     # instead of the Guru, a message and the normal cleanup (the system goes on). Every program has it.
     # Ctrl-C in loops: "Break" in the Shell, Parar in Forja, the debugger's end. Every iteration of a while that
-    # can go on for ever (not a for, nor a while that counts: they end) looks at the task's signals (one read and a
-    # test); a program that handles Ctrl-C itself (break_check, MUI, single_instance, commodities) does not get it,
-    # nor DASH_NO_BREAK=1
+    # can go on for ever (not a for, nor a while that counts: they end), and of a loop with calls, tests a byte that
+    # the exception of Ctrl-C sets (_dash_brk_on, TRAP_RUNTIME); a program that handles Ctrl-C itself (break_check,
+    # MUI, single_instance, commodities) does not get it, nor DASH_NO_BREAK=1
     BREAK_RUNTIME = """\
-/* Ctrl-C stops a program in a loop: "***Break" and return code 5, with the normal cleanup */
-static struct Task *_dash_brk_task;
-static void _dash_brk(void) __attribute__((noreturn, noinline));
+/* Ctrl-C stops a program in a loop: "***Break" and return code 5, with the normal cleanup (in a task of
+   task_start, its function ends) */
+extern volatile UBYTE _dash_brk_flag;
+extern struct Task *_dash_brk_task;
+void _dash_brk_on(void (*go)(void), ULONG *sites);
+static void _dash_brk(void) __attribute__((noinline));
+extern void (*_dash_brk_subquit)(void);
 static void _dash_brk(void) {
+    if (FindTask(NULL) != _dash_brk_task) {
+        if (_dash_brk_subquit) _dash_brk_subquit();   /* a task of task_start: its function ends */
+        return;
+    }
     SetSignal(0L, SIGBREAKF_CTRL_C);
     if (Output()) PutStr((CONST_STRPTR)"***Break\\n");   /* (buffered, after what Print left) */
     _dash_exit(5);
-    for (;;) ;
 }
-/* (volatile: in a loop without calls GCC would read it once, before the loop) */
-#define _DASH_BRK() do { if (((volatile struct Task *)_dash_brk_task)->tc_SigRecvd & SIGBREAKF_CTRL_C) _dash_brk(); } while (0)
+/* (volatile: set by the exception of Ctrl-C, _dash_brk_exc) */
+#define _DASH_BRK() do { if (_dash_brk_flag) _dash_brk(); } while (0)
 """
 
     TRAP_RUNTIME = """\
@@ -335,7 +342,14 @@ __asm__(
 "       .even\\n"
 "       .globl  __dash_trap\\n"
 "__dash_trap:\\n"
-"       cmpl    #2,sp@\\n"
+"       cmpl    #46,sp@\\n"
+"       bne     7f\\n"
+"       tstl    __dash_brk_go\\n"
+"       beq     9f\\n"
+"       addql   #4,sp\\n"
+"       movel   __dash_brk_go,sp@(2)\\n"
+"       rte\\n"
+"7:     cmpl    #2,sp@\\n"
 "       bcs     9f\\n"
 "       cmpl    #11,sp@\\n"
 "       bhi     9f\\n"
@@ -402,6 +416,79 @@ static __attribute__((noinline)) void _dash_trap_on(void) {
     _dash_trap_old = t->tc_TrapCode;
     t->tc_TrapCode = (APTR)_dash_trap;
     _dash_atexit(_dash_trap_off);
+}
+
+/* Ctrl-C in loops (BREAK_RUNTIME of ./dash --gcc, brk_check of ./dash): Ctrl-C to the program's task is an exec
+   exception (SetExcept). _dash_brk_exc sets _dash_brk_flag, which the loops of ./dash --gcc test, and turns the NOPs
+   that ./dash puts in its loops (the table that ends in 0) into TRAP #14: the next time round, _dash_trap takes the
+   program to _dash_brk_go (its "***Break" and the end). Until then a loop pays for a NOP (./dash) or for testing a
+   byte (./dash --gcc). The signal is put back: whatever waits for it still sees it. Tasks of task_start: their
+   function ends there (_dash_brk_sub, _dash_task_quit), and the program waits for them at its end. */
+volatile UBYTE _dash_brk_flag = 0;
+struct Task *_dash_brk_task = NULL;
+void (*_dash_brk_go)(void) = NULL;
+APTR _dash_brk_subold = NULL;
+void (*_dash_brk_subquit)(void) = NULL;
+static ULONG *_dash_brk_sites = NULL;
+static APTR _dash_brk_oldcode, _dash_brk_olddata;
+static ULONG _dash_brk_oldmask;
+void _dash_brk_exc(void);
+void _dash_brk_sub(void);
+ULONG _dash_brk_hit(void) __attribute__((used));
+ULONG _dash_brk_hit(void) {
+    ULONG *s;
+    _dash_brk_flag = 1;
+    if (_dash_brk_sites) {
+        Forbid();             /* (a task of the program, with more priority, could be on one of them) */
+        for (s = _dash_brk_sites; *s; s++) *(volatile UWORD *)*s = 0x4E4E;   /* trap #14 */
+        Permit();
+        CacheClearU();
+    }
+    SetSignal(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C);
+    return 0;                 /* (once is enough: the exception stays off) */
+}
+__asm__(
+"       .text\\n"
+"       .even\\n"
+"       .globl  __dash_brk_exc\\n"
+"__dash_brk_exc:\\n"
+"       moveml  d1/a0-a1,sp@-\\n"
+"       jsr     __dash_brk_hit\\n"
+"       moveml  sp@+,d1/a0-a1\\n"
+"       rts\\n"
+"       .globl  __dash_brk_sub\\n"
+"__dash_brk_sub:\\n"
+"       cmpl    #46,sp@\\n"
+"       bne     1f\\n"
+"       addql   #4,sp\\n"
+"       movel   __dash_brk_subquit,sp@(2)\\n"
+"       rte\\n"
+"1:     movel   __dash_brk_subold,sp@-\\n"
+"       rts\\n"
+);
+
+static void _dash_brk_off(void) {
+    struct Task *t = _dash_brk_task;
+    if (!t || t->tc_ExceptCode != (APTR)_dash_brk_exc) return;
+    SetExcept(0, SIGBREAKF_CTRL_C);
+    t->tc_ExceptCode = _dash_brk_oldcode;
+    t->tc_ExceptData = _dash_brk_olddata;
+    if (_dash_brk_oldmask) SetExcept(_dash_brk_oldmask, SIGBREAKF_CTRL_C);
+}
+
+/* go: where a loop's TRAP #14 takes the program (without a return address); sites: ./dash's NOPs, or NULL */
+void _dash_brk_on(void (*go)(void), ULONG *sites) {
+    struct Task *t = FindTask(NULL);
+    if (_dash_brk_task) return;
+    _dash_brk_task = t;
+    if (t->tc_SigExcept & ~SIGBREAKF_CTRL_C) return;   /* the task already has exceptions of its own */
+    _dash_brk_go = go;
+    _dash_brk_sites = sites;
+    _dash_brk_oldcode = t->tc_ExceptCode;
+    _dash_brk_olddata = t->tc_ExceptData;
+    _dash_atexit(_dash_brk_off);
+    t->tc_ExceptCode = (APTR)_dash_brk_exc;
+    _dash_brk_oldmask = SetExcept(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C;
 }
 
 /* Where pc is in the program: its hunk (segment) and offset, from the process's segment list */
@@ -2176,17 +2263,74 @@ struct _DashTask {
     volatile LONG done;
     struct Task *owner;              /* the program, signalled when f returns (task_signal) */
     struct _DashTask *next;          /* all of them, for the exit */
+    ULONG sp;                        /* (the stack where its function was called: Ctrl-C ends it there) */
 };
 static struct _DashTask *_dash_tasks = NULL;
 static struct _DashTask *_dash_task_next = NULL;
 static volatile ULONG _dash_task_sigmask = 0;
 static BYTE _dash_task_sigbit = -1;
 
+#ifndef _DASH_DASHOS
+/* Ctrl-C (TRAP_RUNTIME): the program stops at the next turn of a loop, and a task too: its function ends there, as
+   if it returned 0 (_dash_task_quit, from a loop of ./dash --gcc or from the TRAP #14 of one of ./dash) */
+extern struct Task *_dash_brk_task;
+extern APTR _dash_brk_subold;
+extern void (*_dash_brk_subquit)(void);
+void _dash_brk_sub(void);
+LONG _dash_task_call(LONG (*f)(LONG), LONG arg, ULONG *sp);
+void _dash_task_quit(void);
+ULONG _dash_task_sp(void) __attribute__((used));
+ULONG _dash_task_sp(void) {
+    struct Task *me = FindTask(NULL);
+    struct _DashTask *t;
+    ULONG sp = 0;
+    Forbid();
+    for (t = _dash_tasks; t; t = t->next)
+        if (t->self == me && !t->done) { sp = t->sp; break; }
+    Permit();
+    return sp;
+}
+__asm__(
+"       .text\\n"
+"       .even\\n"
+"       .globl  __dash_task_call\\n"
+"__dash_task_call:\\n"
+"       moveml  d2-d7/a2-a6,sp@-\\n"
+"       movel   sp@(56),a0\\n"
+"       movel   sp,a0@\\n"
+"       movel   sp@(52),sp@-\\n"
+"       movel   sp@(52),a0\\n"
+"       jsr     a0@\\n"
+"       addql   #4,sp\\n"
+"       moveml  sp@+,d2-d7/a2-a6\\n"
+"       rts\\n"
+"       .globl  __dash_task_quit\\n"
+"__dash_task_quit:\\n"
+"       jsr     __dash_task_sp\\n"
+"       tstl    d0\\n"
+"       bne     1f\\n"
+"       rts\\n"
+"1:     movel   d0,sp\\n"
+"       moveml  sp@+,d2-d7/a2-a6\\n"
+"       moveq   #0,d0\\n"
+"       rts\\n"
+);
+#endif
 static void _dash_task_proc(void) {
     struct _DashTask *t = _dash_task_next;
     t->self = FindTask(NULL);
+#ifndef _DASH_DASHOS
+    if (_dash_brk_task) {
+        _dash_brk_subquit = _dash_task_quit;
+        _dash_brk_subold = t->self->tc_TrapCode;
+        t->self->tc_TrapCode = (APTR)_dash_brk_sub;
+    }
+    SetTaskPri(t->self, t->pri);
+    t->result = _dash_task_call(t->func, t->arg, &t->sp);
+#else
     SetTaskPri(t->self, t->pri);
     t->result = t->func(t->arg);
+#endif
 #ifdef _DASH_NET_RUNTIME
     _dash_net_release();  /* the network, if it was this task's: closed by its own process (D69) */
 #endif
@@ -24896,7 +25040,7 @@ static LONG _dash_event_window_handle(void) {{
             anchor = "static void _dash_exit(int code);\n"
             assert program.count(anchor) >= 1, "BREAK_RUNTIME: no _dash_exit prototype"
             program = program.replace(anchor, anchor + CTemplates.BREAK_RUNTIME, 1)
-            program = program.replace("    _dash_trap_on();\n", "    _dash_trap_on();\n    _dash_brk_task = FindTask(NULL);\n", 1)
+            program = program.replace("    _dash_trap_on();\n", "    _dash_trap_on();\n    _dash_brk_on(_dash_brk, NULL);\n", 1)
         if self.profile:
             names = ", ".join('"' + n.replace('"', "") + '"' for n in self.prof_names)
             runtime = CTemplates.PROFILE_RUNTIME.replace("$cuantas", str(len(self.prof_names))).replace("$names", names)

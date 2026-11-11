@@ -36,6 +36,7 @@ typedef struct { int func, type, off, line; char *name; } DbgVar;
 static struct { DbgLine *v; int n, cap; } dbg_lines;
 static struct { DbgFunc *v; int n, cap; } dbg_funcs;
 static struct { DbgVar *v; int n, cap; } dbg_vars;
+static struct { int *v; int n, cap; } brk_sites;   /* los NOP de Ctrl-C (brk_check), para la tabla _dl_brk_sites */
 static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
 #ifdef DASH_A64
@@ -5950,7 +5951,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 /* lo generado hasta un punto, para deshacer lo que venga después */
 /* (también lo de la depuración: una función generada y tirada no debe dejar líneas que apunten a código que ya no
    está; el depurador ponía su NOP encima de otro código. Lo vio Forja) */
-typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n; long sink; } Mark;
+typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n, brk_n; long sink; } Mark;
 
 static Mark mark(void)
 {
@@ -5963,6 +5964,7 @@ static Mark mark(void)
     m.dlines_n = dbg_lines.n;
     m.dfuncs_n = dbg_funcs.n;
     m.dvars_n = dbg_vars.n;
+    m.brk_n = brk_sites.n;
     m.sink = sink_off;
     return m;
 }
@@ -5978,6 +5980,7 @@ static void undo(Mark *m)
     dbg_lines.n = m->dlines_n;
     dbg_funcs.n = m->dfuncs_n;
     dbg_vars.n = m->dvars_n;
+    brk_sites.n = m->brk_n;
     sink_off = m->sink;
 }
 
@@ -6424,7 +6427,7 @@ static int prog_handles_break(Program *p)
 
 void gen_program(Program *p, Obj *o)
 {
-    int i, main_label, again, files_label;
+    int i, main_label, again, files_label, brk_label = -1;
     prog = p;
     obj = o;
     {
@@ -6565,6 +6568,12 @@ void gen_program(Program *p, Obj *o)
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     if (p->version) set_rt_var("__dash_version", p->version, 0);   /* program_version() */
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
+#ifndef DASH_A64
+    if (auto_brk) {
+        brk_label = new_label();
+        set_rt_label("_dl_brk_sites", brk_label);    /* los NOP de Ctrl-C de los bucles (brk_check) */
+    }
+#endif
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
         lit_init_label = new_label();
@@ -6646,6 +6655,15 @@ void gen_program(Program *p, Obj *o)
     def_label(files_label);
     for (i = 0; i < src_files.n && i < 63; i++) code_data_ptr(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
     code_long(0);
+#ifndef DASH_A64
+    if (brk_label >= 0) {
+        /* los NOP de Ctrl-C (brk_check), terminados en 0: el runtime los cambia por TRAP #14 al llegar Ctrl-C */
+        code_align();
+        def_label(brk_label);
+        for (i = 0; i < brk_sites.n; i++) code_ptr(brk_sites.v[i]);
+        code_long(0);
+    }
+#endif
     if (profile) {
         /* --perfil: el nombre de cada función (0 es Main) */
         code_align();

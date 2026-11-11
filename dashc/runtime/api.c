@@ -183,6 +183,9 @@ const char *_dash_stdiowin = "CON://///AUTO/CLOSE/WAIT";
 static BPTR dash_wb_con, dash_wb_in, dash_wb_out;
 
 struct Task *dl_brk_task;   /* la del programa, para Ctrl-C en los bucles (dl_brk) */
+ULONG *dl_brk_sites;        /* los NOP de Ctrl-C de los bucles, terminados en 0 (lo pone el programa al empezar) */
+extern void _dash_brk_on(void (*go)(void), ULONG *sites);
+void dl_brk(void);
 
 /* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
 LONG _dash_init(const char *cmd, LONG len)
@@ -210,6 +213,7 @@ LONG _dash_init(const char *cmd, LONG len)
     }
 #endif
     _dash_trap_on();
+    if (dl_brk_sites && *dl_brk_sites) _dash_brk_on(dl_brk, dl_brk_sites);   /* Ctrl-C en los bucles */
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 37);
@@ -445,10 +449,12 @@ LONG dl_event_code(void) { return dl_ev_code; }
    enseguida */
 void dl_ac_loop(void) { _dash_ac_loop(); }
 
-/* Ctrl-C en los bucles (brk_check de gen68k.c, como BREAK_RUNTIME de ./dash --gcc): la tarea del programa, y el
-   final cuando llega: "***Break" y código 5, con la limpieza de siempre */
+/* Ctrl-C en los bucles (brk_check de gen68k.c, como BREAK_RUNTIME de ./dash --gcc): adonde lleva _dash_trap el
+   TRAP #14 que dejó Ctrl-C en el NOP de un bucle (sin dirección de vuelta: no vuelve). "***Break" y código 5, con la
+   limpieza de siempre */
 void dl_brk(void)
 {
+    if (FindTask(NULL) != dl_brk_task) return;
     SetSignal(0L, SIGBREAKF_CTRL_C);
     if (Output()) PutStr((CONST_STRPTR)"***Break\n");   /* (con búfer, detrás de lo que dejó Print) */
     _dash_exit(5);
