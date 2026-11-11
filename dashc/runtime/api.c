@@ -360,6 +360,7 @@ LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
         WA_Borderless, (d->flags & 16) != 0,
         WA_Activate, (d->flags & 32) != 0,
         WA_RMBTrap, (d->flags & 64) != 0,      /* rmbtrap: el botón derecho al programa (On RightClick), sin menús */
+        WA_Backdrop, (d->flags & 128) != 0 || _dash_next_backdrop,   /* backdrop o window_next_backdrop: detrás de todas */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
@@ -367,6 +368,7 @@ LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
         _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: la pública por defecto */
         WA_PubScreenFallBack, TRUE,
         TAG_DONE);
+    _dash_next_backdrop = FALSE;
     if (!w) _dash_exit(20);
     _dash_win = w;
     _dash_win_decl = w;

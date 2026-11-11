@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 983 funciones, 983 implementadas, 0 sin implementar.
+Total: 985 funciones, 985 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -9301,6 +9301,8 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_pointer_y()`](#wm_pointer_y) | Int | Dónde está el puntero en la pantalla del Workbench: la y |  |
 | [`wm_bar_height()`](#wm_bar_height) | Int | El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas) |  |
 | [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | A qué distancia del borde derecho de la barra de título de la pantalla del Workbench empiezan sus botones del sistema (el de profundidad), preguntado a la pantalla; 0 si no lo sabe |  |
+| [`screen_show_title(on)`](#screen_show_title) | — | La barra de título de la pantalla delante de sus ventanas de fondo (true, como viene) o detrás (false): para una barra propia, en una ventana de fondo, que ocupe su sitio |  |
+| [`window_next_backdrop(on)`](#window_next_backdrop) | — | La próxima ventana declarada que se abra con .open es de fondo (backdrop: detrás de todas las demás de la pantalla, como la propiedad backdrop), decidido mientras corre el programa |  |
 | [`file_real_path(path)`](#file_real_path) | String | La ruta real de un fichero o cajón, como la nombra su sistema de ficheros ("SYS:Utilities/Clock" da "System:Utilities/Clock"), para compararla con wm_path: "" si no está |  |
 | [`app_window(handle)`](#app_window) | Bool | La ventana (0 la actual, o un número de window_create) acepta iconos soltados encima desde el Workbench (AppWindow): true si los acepta. Los da app_drop |  |
 | [`app_drop()`](#app_drop) | String | La ruta del siguiente icono soltado en una app_window, "" si no hay (se mira desde On Timer); app_drop_x y app_drop_y, dónde cayó |  |
@@ -9478,6 +9480,31 @@ Devuelve el alto de la barra de título de la pantalla del Workbench, donde suel
 ### `wm_bar_gadgets()` → `Int`
 
 Devuelve a qué distancia del borde derecho de la barra de la pantalla empiezan sus botones del sistema; 0 si no lo sabe.
+
+<a id="screen_show_title"></a>
+
+### `screen_show_title(on)`
+
+- `on`: `true` para que la barra de título de la pantalla vaya delante de sus ventanas de fondo (como viene), `false`
+  para que vaya detrás.
+
+Sirve para una barra propia en una ventana de fondo (`window_next_backdrop` o la propiedad `backdrop`) que ocupa el
+sitio de la del Workbench: con la del sistema delante, la ventana de fondo quedaría tapada. Es de la pantalla de la
+ventana del programa o, sin ella, de la pública por defecto.
+
+Ver también: [`window_next_backdrop`](#window_next_backdrop), [`wm_bar_height`](#wm_bar_height).
+
+<a id="window_next_backdrop"></a>
+
+### `window_next_backdrop(on)`
+
+- `on`: `true` para que la próxima ventana declarada (`Window ... end`) que se abra con `.open` sea de fondo.
+
+Una ventana de fondo (backdrop) queda siempre detrás de todas las demás de la pantalla, como la del Workbench con los
+iconos en el escritorio. La propiedad `backdrop true` de `Window` hace lo mismo, pero fija al compilar; con esto se
+decide mientras corre el programa (por ejemplo, según sus preferencias). Vale para una sola apertura.
+
+Ver también: [`screen_show_title`](#screen_show_title).
 
 <a id="file_real_path"></a>
 

@@ -6116,7 +6116,7 @@ static void gen_window_descs(void)
         long left = 50, top = 50, width = 0, height = 0, flags = 1 | 2 | 4 | 32, k;
         const char *title = "";
         static const char *const fl[] = {"closegadget", "dragbar", "depthgadget", "sizegadget", "borderless", "activate",
-                                         "rmbtrap"};
+                                         "rmbtrap", "backdrop"};
         for (j = 0; j < wd->props.n; j++) {
             Node *v = wd->props.v[j];
             int f;
@@ -6131,9 +6131,9 @@ static void gen_window_descs(void)
             else if (!strcmp(v->name, "width")) width = k;
             else if (!strcmp(v->name, "height")) height = k;
             else {
-                for (f = 0; f < 7 && strcmp(fl[f], v->name); f++)
+                for (f = 0; f < 8 && strcmp(fl[f], v->name); f++)
                     ;
-                if (f < 7) flags = k ? flags | 1L << f : flags & ~(1L << f);
+                if (f < 8) flags = k ? flags | 1L << f : flags & ~(1L << f);
             }
         }
         code_align();

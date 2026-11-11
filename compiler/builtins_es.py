@@ -787,6 +787,8 @@ DESC_ES = {
     "wm_pointer_x": "Dónde está el puntero en la pantalla del Workbench: la x",
     "wm_pointer_y": "Dónde está el puntero en la pantalla del Workbench: la y",
     "wm_bar_height": "El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas)",
+    "screen_show_title": "La barra de título de la pantalla delante de sus ventanas de fondo (true, como viene) o detrás (false): para una barra propia, en una ventana de fondo, que ocupe su sitio",
+    "window_next_backdrop": "La próxima ventana declarada que se abra con .open es de fondo (backdrop: detrás de todas las demás de la pantalla, como la propiedad backdrop), decidido mientras corre el programa",
     "wm_bar_gadgets": "A qué distancia del borde derecho de la barra de título de la pantalla del Workbench empiezan sus botones del sistema (el de profundidad), preguntado a la pantalla; 0 si no lo sabe",
     "cx_hotkey": "La tecla rápida de la commodity, según su descripción (\"ctrl alt t\"): cx_command da 6 al pulsarla; "
                  "false si la descripción no vale (o no hay cx_broker); \"\" la quita",

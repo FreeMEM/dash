@@ -4975,6 +4975,14 @@ TASK_FUNCTIONS = {
     "wm_bar_height": BuiltinFunc(
         name="wm_bar_height", params=[], return_type="LONG", c_template="_dash_wm_bar_height()",
         description="The height of the Workbench screen's title bar (where windows usually start)"),
+    "screen_show_title": BuiltinFunc(
+        name="screen_show_title", params=["on"], return_type="void", c_template="_dash_screen_show_title(${on})",
+        description="The screen's title bar in front of its backdrop windows (true, as it comes) or behind them "
+                    "(false): for a bar of its own in a backdrop window that takes its place"),
+    "window_next_backdrop": BuiltinFunc(
+        name="window_next_backdrop", params=["on"], return_type="void", c_template="_dash_window_next_backdrop(${on})",
+        description="The next declared window opened with .open is a backdrop window (behind every other window of "
+                    "the screen, as the backdrop property does), decided while the program runs"),
     "wm_bar_gadgets": BuiltinFunc(
         name="wm_bar_gadgets", params=[], return_type="LONG", c_template="_dash_wm_bar_gadgets()",
         description="How far from the right edge of the Workbench screen's title bar its system gadgets start (the "
@@ -6021,7 +6029,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])

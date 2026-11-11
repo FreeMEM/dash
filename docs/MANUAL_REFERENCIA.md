@@ -47,7 +47,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 983 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 985 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -1438,6 +1438,7 @@ end
 | `borderless` | Sin bordes (por defecto `false`) | Bool |
 | `activate` | Activa la ventana al abrirla (por defecto `true`) | Bool |
 | `rmbtrap` | El botón derecho va al programa (`On RightClick`), no a los menús (por defecto `false`) | Bool |
+| `backdrop` | Ventana de fondo: siempre detrás de las demás de la pantalla, como la del Workbench con los iconos en el escritorio (por defecto `false`). Para decidirlo al ejecutar, `window_next_backdrop(true)` antes de `.open` | Bool |
 
 `closegadget`, `dragbar` y `depthgadget` valen `true` por defecto. Una propiedad
 desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
@@ -4543,7 +4544,7 @@ end
 
 ### Funciones por Categoria
 
-Son 980, todas implementadas. La lista completa está en [docs/BUILTINS.md](BUILTINS.md), por grupos: cada grupo
+Son 985, todas implementadas. La lista completa está en [docs/BUILTINS.md](BUILTINS.md), por grupos: cada grupo
 empieza con una introducción (para qué sirve, qué hace falta antes, el flujo de siempre) y un ejemplo que se prueba
 con los tests, sigue con la tabla de sus funciones y acaba con cada función explicada (parámetros, qué devuelve, qué
 pasa si falla y las relacionadas).

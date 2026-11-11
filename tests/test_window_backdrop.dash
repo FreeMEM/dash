@@ -1,0 +1,51 @@
+# Test: backdrop windows (Trasfondo's bar behind every other window, Ferrán García). The backdrop property of Window
+# and window_next_backdrop, decided while running (good for one opening: the next window is a normal one again);
+# screen_show_title puts the screen's title bar behind the backdrop windows and back in front.
+# expect-c: WA_Backdrop
+# expect-out: propiedad true
+# expect-out: al ejecutar true
+# expect-out: la siguiente false
+# expect-out: fin
+
+Window Fija
+    title "Ventana fija"
+    width 200
+    height 60
+    backdrop true
+end
+
+Window Elegida
+    title "Ventana elegida"
+    width 200
+    height 60
+end
+
+Window Siguiente
+    title "Ventana siguiente"
+    width 200
+    height 60
+end
+
+# si la ventana de ese título, de este programa, es de fondo
+func de_fondo(titulo: String) -> Bool
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_title(i) == titulo and wm_flags(i) & 32 != 0
+            return wm_flags(i) & 2 != 0
+        end
+    end
+    return false
+end
+
+Main
+    Fija.open
+    Print "propiedad #{de_fondo("Ventana fija")}"
+    window_next_backdrop(true)
+    Elegida.open
+    Print "al ejecutar #{de_fondo("Ventana elegida")}"
+    Siguiente.open
+    Print "la siguiente #{de_fondo("Ventana siguiente")}"
+    screen_show_title(false)
+    screen_show_title(true)
+    Print "fin"
+end
