@@ -1,0 +1,71 @@
+# Test: una variable que se lee después de copiar en línea una función con variables propias (lo encontró
+# Forja: la sangría automática). La copia tomaba el registro de la variable y la pisaba antes de usarla.
+# expect-out: resta 4
+# expect-out: compara 1
+# expect-out: compara al revés 1
+# expect-out: lista 30
+# expect-out: guarda 7
+# expect-out: suma 9
+func espacios(s: String) -> Int
+    n = 0
+    while n < s.length and s[n:n + 1] == " "
+        n = n + 1
+    end
+    return n
+end
+
+func resta(a: String, b: String) -> Int
+    v = espacios(a)
+    v = v - 4
+    if v < 0
+        v = 0
+    end
+    return espacios(b) - v
+end
+
+func compara(a: String, b: String) -> Int
+    v = espacios(a)
+    v = v - 3
+    if espacios(b) > v
+        return 1
+    end
+    return 0
+end
+
+func compara_reves(a: String, b: String) -> Int
+    v = espacios(a)
+    v = v - 3
+    if v < espacios(b)
+        return 1
+    end
+    return 0
+end
+
+func lista(a: String, b: String) -> Int
+    l = [10, 20, 30, 40]
+    l[0] = espacios(a)
+    return l[espacios(b) - 2]
+end
+
+func guarda(a: String, b: String) -> Int
+    l = [0, 0, 0, 0, 0, 0]
+    i = espacios(a) + 1
+    l[i] = espacios(b) + 5
+    return l[i]
+end
+
+func suma(a: String, b: String) -> Int
+    x = espacios(a) + 2
+    y = espacios(b) + 3
+    z = x + y
+    return z
+end
+
+Main
+    Print "resta #{resta("    x", "    y")}"
+    Print "compara #{compara("    x", "  y")}"
+    Print "compara al revés #{compara_reves("    x", "  y")}"
+    Print "lista #{lista("  x", "    y")}"
+    Print "guarda #{guarda(" x", "  y")}"
+    Print "suma #{suma("  x", "  y")}"
+end
