@@ -6412,8 +6412,9 @@ static BPTR _dash_wb_path(void) {
 /* Dash text fields of GadTools and ReAction: Ctrl, left Amiga or right Amiga with V pastes the text of the
    clipboard at the cursor (its first line; in a number field, only its digits), with C copies the whole text and
    with X cuts it. Intuition's string gadgets do none of it (right Amiga + V wrote a "v"), so they get this string
-   edit hook (GTST_EditHook, GTIN_EditHook, STRINGA_EditHook). MUI's strings paste by themselves (right Amiga or
-   Ctrl + V, and copy what is selected), and their edit hook does not get the keys held down: not there.
+   edit hook (GTST_EditHook, GTIN_EditHook, STRINGA_EditHook), and so do MUI 3.8's (MUIA_String_EditHook). MUI 4
+   and 5 strings paste by themselves (right Amiga or Ctrl + V, and copy what is selected), and their edit hook does
+   not get the keys held down: not there.
    Intuition calls it from input.device's task: clipboard.device is kept open by the program, so opening it there
    again never loads it from disk, and nothing of Dash's memory is touched. */
 #include <intuition/sghooks.h>
@@ -21869,12 +21870,26 @@ static APTR _dash_mui_label(STRPTR text) {
     return _dash_mui_add_kind(MUI_MakeObjectA(MUIO_Label, params), _DASH_MUI_TEXT);
 }
 
+#ifndef _DASH_EDIT_HOOK
+#define _DASH_EDIT_HOOK NULL   /* (no text field in the program: no EDITKEYS_RUNTIME) */
+#endif
+
+/* MUI 3.8 (muimaster below 20): its text fields neither paste nor copy (Amiga + V wrote a "v", and the key did not
+   reach the menu; told by Alex Agauser and Ferran Garcia in Tachyon). They get Dash's edit hook of GadTools and
+   ReAction: Ctrl or Amiga with V, C and X. MUI 4 and 5 do it themselves and their hook does not get those keys. */
+static Object *_dash_mui_edit_keys(Object *str) {
+    struct Hook *hook;
+    if (str && MUIMasterBase->lib_Version < 20 && (hook = _DASH_EDIT_HOOK))
+        SetAttrs(str, MUIA_String_EditHook, (IPTR)hook, TAG_DONE);
+    return str;
+}
+
 static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
-    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_String,
+    return _dash_mui_add_kind(_dash_mui_edit_keys(_DASH_MUI_NEW(MUIC_String,
         MUIA_Frame, MUIV_Frame_String,
         MUIA_CycleChain, 1,
         MUIA_String_MaxLen, (maxlen > 0 ? maxlen : 80) + 1,   /* MaxLen counts the final 0 */
-        MUIA_String_Contents, (IPTR)initial), _DASH_MUI_STRING);
+        MUIA_String_Contents, (IPTR)initial)), _DASH_MUI_STRING);
 }
 
 /* A text field of several lines (Dash 2.0, Inferencia: the question), Textinputscroll.mcc of MUI: lines high, with
@@ -22172,6 +22187,7 @@ static APTR _dash_mui_combo(STRPTR text, STRPTR options) {
         MUIA_CycleChain, 1,
         MUIA_String_MaxLen, 81,
         MUIA_String_Contents, (IPTR)text);
+    _dash_mui_edit_keys(str);
     {
         ULONG params[] = { MUII_PopUp };
         button = MUI_MakeObjectA(MUIO_PopButton, params);
@@ -27609,7 +27625,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
-        if builtin.name in ("gt_string", "gt_integer", "textfield_create", "integer_create", "ra_add_string"):
+        if builtin.name in ("gt_string", "gt_integer", "textfield_create", "integer_create", "ra_add_string",
+                            "mui_string", "mui_combo"):
             self.uses_editkeys = True  # its edit hook: pasting with Ctrl or Amiga + V (EDITKEYS_RUNTIME)
         if self.uses_editkeys:
             self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME

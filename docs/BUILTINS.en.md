@@ -11486,6 +11486,8 @@ See also: [`mui_columns_begin`](#mui_columns_begin), [`mui_text`](#mui_text).
 - `maxlen`: the most letters it holds.
 
 A one-line text field. `mui_get_text` reads it; `mui_on_ack` fires on Return and `mui_on_change` on every change.
+Ctrl or Amiga with V paste at the cursor; with MUI 3.8, which does not, Dash adds it, and C also copies the whole
+text and X cuts it (reported by Alex Agauser and Ferrán García).
 
 See also: [`mui_get_text`](#mui_get_text), [`mui_on_ack`](#mui_on_ack), [`mui_text_editor`](#mui_text_editor).
 
@@ -11581,8 +11583,7 @@ See also: [`mui_get_text`](#mui_get_text).
 
 Returns the object of the window that has the keyboard, such as the text field being typed in, or 0 if there is
 none. For a drop-down with text (`mui_combo`) it returns the drop-down. It lets a menu item act on the active field,
-like pasting where the cursor is: in MUI 3.8, Amiga+V does not paste into a text field of a window with menus
-(reported by Alex Agauser and Ferrán García, in Tachyon).
+like pasting where the cursor is (reported by Alex Agauser and Ferrán García, in Tachyon).
 
 See also: [`mui_set_active`](#mui_set_active), [`mui_string_pos`](#mui_string_pos), [`mui_window_active`](#mui_window_active).
 

@@ -11494,7 +11494,8 @@ Ver también: [`mui_columns_begin`](#mui_columns_begin), [`mui_text`](#mui_text)
 - `maxlen`: cuántas letras caben como mucho.
 
 Un campo de texto de una línea. `mui_get_text` lo lee; `mui_on_ack` avisa al pulsar Return y `mui_on_change` con
-cada cambio.
+cada cambio. Ctrl o Amiga con V pegan donde está el cursor; con MUI 3.8, que no lo hace, lo pone Dash, y además C
+copia todo el texto y X lo corta (lo contaron Alex Agauser y Ferrán García).
 
 Ver también: [`mui_get_text`](#mui_get_text), [`mui_on_ack`](#mui_on_ack), [`mui_text_editor`](#mui_text_editor).
 
@@ -11591,8 +11592,8 @@ Ver también: [`mui_get_text`](#mui_get_text).
 
 Devuelve el objeto de la ventana que tiene el teclado, como el campo de texto donde se está escribiendo, o 0 si no
 hay ninguno. En un desplegable con texto (`mui_combo`) devuelve el desplegable. Sirve para que una opción de menú
-haga algo en el campo activo, como pegar donde está el cursor: en MUI 3.8, Amiga+V no pega en un campo de texto de
-una ventana con menús (lo contaron Alex Agauser y Ferrán García, en Tachyon).
+haga algo en el campo activo, como pegar donde está el cursor (lo contaron Alex Agauser y Ferrán García, en
+Tachyon).
 
 Ver también: [`mui_set_active`](#mui_set_active), [`mui_string_pos`](#mui_string_pos), [`mui_window_active`](#mui_window_active).
 

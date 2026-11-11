@@ -1,6 +1,7 @@
-# Pasting in MUI text fields (Ferrán García, Tachyon's address bar): MUI's strings paste by themselves with right
-# Amiga + V and with Ctrl + V (Dash's edit hook of GadTools and ReAction is not for them: MUI does not give it the
-# keys held down). The program started again as "teclas" types them.
+# Pasting in MUI text fields (Ferrán García, Tachyon's address bar): MUI 4 and 5 strings paste by themselves with
+# right Amiga + V and with Ctrl + V (Dash's edit hook of GadTools and ReAction is not for them: MUI does not give it
+# the keys held down); MUI 3.8's get that hook (Alex Agauser; tried by hand with ~/.cache/dash-emu/sys32rtg38,
+# also Amiga + C and X). The program started again as "teclas" types them.
 # emu-needs: muimaster.library
 # expect-out: Amiga derecha + V: [http://freemem.space]
 # expect-out: Ctrl + V: [ab http://freemem.space]

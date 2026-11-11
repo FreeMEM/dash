@@ -3025,8 +3025,9 @@ Cada una explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md
 
 En los campos de texto y de números (`gt_string`, `gt_integer`, y también `textfield_create`, `integer_create` y
 `ra_add_string`), Amiga derecha, Amiga izquierda o Ctrl con V pegan el portapapeles donde está el cursor (su
-primera línea; en uno de números, solo las cifras), con C copian todo el texto y con X lo cortan. Los de MUI pegan
-solos, con Amiga derecha o Ctrl + V, y copian lo que esté seleccionado.
+primera línea; en uno de números, solo las cifras), con C copian todo el texto y con X lo cortan. Los de MUI 4 y 5
+pegan solos, con Amiga derecha o Ctrl + V, y copian lo que esté seleccionado. Con MUI 3.8, que no lo hace,
+`mui_string` y `mui_combo` funcionan como los de GadTools (lo contaron Alex Agauser y Ferrán García).
 
 ---
 
