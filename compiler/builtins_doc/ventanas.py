@@ -214,8 +214,8 @@ Changes the window's size. Like `window_move`, Intuition does it a moment later.
         "see": ["window_to_back", "window_activate"],
     },
     "window_to_back": {
-        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana detrás de las demás de su pantalla.\n",
-        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window behind the others on its screen.\n",
+        "es": "- `handle`: el número de la ventana; 0, la actual.\n\nPone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.\n",
+        "en": "- `handle`: the window's number; 0, the current one.\n\nPuts the window behind the others on its screen (in front of the backdrop ones and of the title bar). If it already is, it does nothing: it can be called every tick to keep a window at the back.\n",
         "see": ["window_to_front"],
     },
     "window_activate": {

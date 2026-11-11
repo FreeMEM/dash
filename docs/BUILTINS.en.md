@@ -10410,7 +10410,7 @@ See also: [`window_to_back`](#window_to_back), [`window_activate`](#window_activ
 
 - `handle`: the window's number; 0, the current one.
 
-Puts the window behind the others on its screen.
+Puts the window behind the others on its screen (in front of the backdrop ones and of the title bar). If it already is, it does nothing: it can be called every tick to keep a window at the back.
 
 See also: [`window_to_front`](#window_to_front).
 

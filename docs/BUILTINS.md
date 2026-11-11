@@ -10412,7 +10412,7 @@ Ver también: [`window_to_back`](#window_to_back), [`window_activate`](#window_a
 
 - `handle`: el número de la ventana; 0, la actual.
 
-Pone la ventana detrás de las demás de su pantalla.
+Pone la ventana detrás de las demás de su pantalla (delante de las de fondo y de la barra de título). Si ya está detrás, no hace nada: se puede llamar en cada vuelta para que una ventana se quede siempre atrás.
 
 Ver también: [`window_to_front`](#window_to_front).
 

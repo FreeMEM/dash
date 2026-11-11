@@ -1,0 +1,48 @@
+# Test: window_to_back puts a window behind the others, and does nothing when it is already there (Trasfondo's
+# bar inside the title bar calls it every tick to stay behind the windows sent to the back; Ferrán García)
+# expect-c: LAYERBACKDROP
+# expect-out: delante Ventana dos
+# expect-out: atras Ventana uno
+# expect-out: otra vez Ventana uno
+# expect-out: fin
+
+Window Uno
+    title "Ventana uno"
+    left 20
+    top 30
+    width 200
+    height 60
+end
+
+Window Dos
+    title "Ventana dos"
+    left 60
+    top 50
+    width 200
+    height 60
+end
+
+# la de delante de las de este programa
+func primera() -> String
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_flags(i) & 32 != 0
+            return wm_title(i)
+        end
+    end
+    return "ninguna"
+end
+
+Main
+    Uno.open
+    Dos.open
+    time_delay(25)
+    Print "delante #{primera()}"
+    window_to_back(0)                # la actual: Dos
+    time_delay(25)
+    Print "atras #{primera()}"
+    window_to_back(0)                # ya está detrás: nada
+    time_delay(25)
+    Print "otra vez #{primera()}"
+    Print "fin"
+end

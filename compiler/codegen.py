@@ -16248,6 +16248,8 @@ static LONG _dash_music_row(void) { return _dash_mod_row; }
     # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
     WINMGR_RUNTIME = """\
 /* Dash Window Handles */
+#include <graphics/layers.h>
+#include <proto/layers.h>    /* (window_to_back: is it already at the back?) */
 #define _DASH_MAX_WINDOWS 16
 static struct Window *_dash_windows[_DASH_MAX_WINDOWS + 1];
 
@@ -16380,9 +16382,20 @@ static void _dash_window_to_front(LONG h) {
     if (w) WindowToFront(w);
 }
 
+/* Behind the other windows. If it already is (behind it there are only backdrop layers: the screen's title
+   bar and a backdrop Workbench), nothing: Intuition would rearrange the layers anyway, and a program that calls
+   it every tick to stay at the back (Trasfondo's bar inside the title bar) would spend 2 % of a 68030 on it */
 static void _dash_window_to_back(LONG h) {
     struct Window *w = _dash_window_get(h);
-    if (w) WindowToBack(w);
+    struct Layer *l;
+    BOOL delante;
+    if (!w || !w->WLayer) return;
+    LockLayerInfo(&w->WScreen->LayerInfo);
+    l = w->WLayer->back;
+    while (l && l->Window == (APTR)w) l = l->back;       /* (a GimmeZeroZero window has two) */
+    delante = l && !(l->Flags & LAYERBACKDROP);
+    UnlockLayerInfo(&w->WScreen->LayerInfo);
+    if (delante) WindowToBack(w);
 }
 
 /* The current window, the one gfx_ and the rest draw in: a handle of window_create, or 0 the declared window
