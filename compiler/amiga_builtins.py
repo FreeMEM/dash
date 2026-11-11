@@ -3908,6 +3908,28 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_set_text(${obj}, ${text})",
         description="Change the text of a text field, text, button, menu item or window title"
     ),
+    "mui_active_object": BuiltinFunc(
+        name="mui_active_object",
+        params=["win"],
+        return_type="APTR",
+        c_template="_dash_mui_active_object(${win})",
+        description="The object of the window that has the keyboard (a text field being typed in), or 0 (Tachyon, "
+                    "told by Alex Agauser and Ferrán García)"
+    ),
+    "mui_string_pos": BuiltinFunc(
+        name="mui_string_pos",
+        params=["obj"],
+        return_type="LONG",
+        c_template="_dash_mui_string_pos(${obj})",
+        description="Where the cursor of a text field is: 0 before the first character, its length at the end"
+    ),
+    "mui_set_string_pos": BuiltinFunc(
+        name="mui_set_string_pos",
+        params=["obj", "pos"],
+        return_type="void",
+        c_template="_dash_mui_set_string_pos(${obj}, ${pos})",
+        description="Puts the cursor of a text field at that position (0 is the start; past the end, at the end)"
+    ),
     "mui_set_enabled": BuiltinFunc(
         name="mui_set_enabled",
         params=["obj", "enabled"],

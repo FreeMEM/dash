@@ -857,6 +857,8 @@ const BuiltinInfo builtin_info[] = {
     {"mouse_x", 0, 1, 1, 0, 0, 0u},
     {"mouse_y", 0, 1, 1, 0, 0, 0u},
     {"mouse_y", 0, 1, 1, 0, 0, 0u},
+    {"mui_active_object", 1, 1, 1, 0, 0, 0u},
+    {"mui_active_object", 1, 1, 1, 0, 0, 0u},
     {"mui_app_begin", 2, 1, 0, 0, 0, 3u},
     {"mui_app_begin", 2, 1, 0, 0, 0, 3u},
     {"mui_app_end", 0, 0, 1, 0, 0, 0u},
@@ -1013,6 +1015,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_set_enabled", 2, 0, 1, 0, 0, 0u},
     {"mui_set_range", 3, 0, 1, 0, 0, 0u},
     {"mui_set_range", 3, 0, 1, 0, 0, 0u},
+    {"mui_set_string_pos", 2, 0, 1, 0, 0, 0u},
+    {"mui_set_string_pos", 2, 0, 1, 0, 0, 0u},
     {"mui_set_text", 2, 0, 0, 0, 0, 2u},
     {"mui_set_text", 2, 0, 0, 0, 0, 2u},
     {"mui_set_text_pen", 4, 0, 1, 0, 0, 0u},
@@ -1029,6 +1033,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_space", 0, 1, 1, 0, 0, 0u},
     {"mui_string", 2, 1, 0, 0, 0, 1u},
     {"mui_string", 2, 1, 0, 0, 0, 1u},
+    {"mui_string_pos", 1, 1, 1, 0, 0, 0u},
+    {"mui_string_pos", 1, 1, 1, 0, 0, 0u},
     {"mui_submenu_begin", 1, 1, 0, 0, 0, 1u},
     {"mui_submenu_begin", 1, 1, 0, 0, 0, 1u},
     {"mui_submenu_end", 0, 0, 1, 0, 0, 0u},
@@ -1962,7 +1968,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1960;
+const int builtin_count = 1966;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

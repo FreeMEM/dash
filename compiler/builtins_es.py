@@ -1138,6 +1138,11 @@ DESC_ES = {
     "mui_get_text": "El texto de un campo de texto, un texto, un botón o el título de una ventana",
     "mui_set_text": "Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una "
                     "ventana",
+    "mui_active_object": "El objeto de la ventana que tiene el teclado (un campo de texto donde se escribe), o 0 "
+                         "(Tachyon, lo contaron Alex Agauser y Ferrán García)",
+    "mui_string_pos": "Dónde está el cursor de un campo de texto: 0 delante del primer carácter, su largo al final",
+    "mui_set_string_pos": "Pone el cursor de un campo de texto en esa posición (0 es el principio; pasado el final, "
+                          "al final)",
     "mui_set_enabled": "Activa o desactiva (en gris) un objeto, una opción de menú o un menú entero",
     "mui_on_change": "mui_wait_event da id cuando cambia el valor o el texto",
     "mui_on_ack": "mui_wait_event da id cuando se pulsa Return en un campo de texto (en un mui_combo, también al elegir "

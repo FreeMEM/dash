@@ -1,0 +1,58 @@
+# mui_active_object, mui_string_pos, mui_set_string_pos (Tachyon: pegar con una opción de menú, porque en MUI 3.8
+# Amiga+V no pega; lo contaron Alex Agauser y Ferrán García). Un campo de texto y un desplegable con texto: cuál
+# tiene el teclado, dónde está el cursor y pegar en medio.
+# emu-needs: muimaster.library
+# expect-out: nada activo: 1
+# expect-out: activo el campo: 1
+# expect-out: tras mui_set_text: 5
+# expect-out: cursor: 2
+# expect-out: pegado: hoXYlaa cursor 4
+# expect-out: fuera de rango: 7 0
+# expect-out: activo el desplegable: 1
+# expect-out: desplegable: 1
+# expect-out: un texto: 0
+# expect-out: fin
+
+func si(b: Bool) -> String
+    if b
+        return "1"
+    end
+    return "0"
+end
+
+Main
+    if mui_app_begin("Cursor", "DASHCURSOR") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Cursor", 0)
+            t = mui_text("etiqueta")
+            s = mui_string("", 40)
+            c = mui_combo("abc", "uno|dos")
+        mui_window_end()
+        mui_window_open(w)
+        Print "nada activo: " + si(mui_active_object(w) == 0)
+        mui_set_active(w, s)
+        Print "activo el campo: " + si(mui_active_object(w) == s)
+        mui_set_text(s, "holaa")
+        Print "tras mui_set_text: " + mui_string_pos(s)
+        mui_set_string_pos(s, 2)
+        Print "cursor: " + mui_string_pos(s)
+        # pegar "XY" donde está el cursor
+        texto = mui_get_text(s)
+        p = mui_string_pos(s)
+        mui_set_text(s, texto[:p] + "XY" + texto[p:])
+        mui_set_string_pos(s, p + 2)
+        Print "pegado: " + mui_get_text(s) + " cursor " + mui_string_pos(s)
+        mui_set_string_pos(s, 99)
+        a = mui_string_pos(s)
+        mui_set_string_pos(s, -3)
+        Print "fuera de rango: " + a + " " + mui_string_pos(s)
+        mui_set_active(w, c)
+        Print "activo el desplegable: " + si(mui_active_object(w) == c)
+        mui_set_string_pos(c, 1)
+        Print "desplegable: " + mui_string_pos(c)
+        Print "un texto: " + mui_string_pos(t)
+        mui_app_end()
+        Print "fin"
+    end
+end
