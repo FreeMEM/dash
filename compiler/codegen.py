@@ -4573,13 +4573,17 @@ static BOOL _dash_wm_do(LONG id, LONG what) {
     return TRUE;
 }
 
-/* The active window, if it is on the Workbench screen; 0 if not */
+/* The active window, if it is on the Workbench screen; 0 if not. Under Forbid, not LockIBase: Intuition holds that
+   lock while a window is being dragged, and this must answer at once (TrasfondoVentanas asks it on the click that
+   starts the drag) */
 static LONG _dash_wm_active(void) {
     struct Screen *s = _dash_wm_screen();
-    ULONG lock = LockIBase(0);
-    struct Window *w = IntuitionBase->ActiveWindow;
-    LONG r = w && w->WScreen == s ? (LONG)w : 0;
-    UnlockIBase(lock);
+    struct Window *w;
+    LONG r;
+    Forbid();
+    w = IntuitionBase->ActiveWindow;
+    r = w && w->WScreen == s ? (LONG)w : 0;
+    Permit();
     return r;
 }
 
