@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 980 functions, 980 implemented, 0 not implemented.
+Total: 983 functions, 983 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11089,6 +11089,9 @@ end
 | [`mui_set_value(obj, value)`](#mui_set_value) | — | Set the value (fires mui_on_change like the user would) |  |
 | [`mui_get_text(obj)`](#mui_get_text) | String | Text of a text field, text, button or window title |  |
 | [`mui_set_text(obj, text)`](#mui_set_text) | — | Change the text of a text field, text, button, menu item or window title |  |
+| [`mui_active_object(win)`](#mui_active_object) | Int (address) | The object of the window that has the keyboard (a text field being typed in), or 0 (Tachyon, told by Alex Agauser and Ferrán García) |  |
+| [`mui_string_pos(obj)`](#mui_string_pos) | Int | Where the cursor of a text field is: 0 before the first character, its length at the end |  |
+| [`mui_set_string_pos(obj, pos)`](#mui_set_string_pos) | — | Puts the cursor of a text field at that position (0 is the start; past the end, at the end) |  |
 | [`mui_set_enabled(obj, enabled)`](#mui_set_enabled) | — | Enable or disable (ghost) an object, a menu item or a whole menu |  |
 | [`mui_on_change(obj, id)`](#mui_on_change) | — | mui_wait_event returns id when the value or text changes |  |
 | [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
@@ -11543,6 +11546,42 @@ See also: [`mui_set_text`](#mui_set_text), [`mui_get_value`](#mui_get_value).
 Changes its text; for a window, the title.
 
 See also: [`mui_get_text`](#mui_get_text).
+
+<a id="mui_active_object"></a>
+
+### `mui_active_object(win)` → `Int (address)`
+
+- `win`: the window.
+
+Returns the object of the window that has the keyboard, such as the text field being typed in, or 0 if there is
+none. For a drop-down with text (`mui_combo`) it returns the drop-down. It lets a menu item act on the active field,
+like pasting where the cursor is: in MUI 3.8, Amiga+V does not paste into a text field of a window with menus
+(reported by Alex Agauser and Ferrán García, in Tachyon).
+
+See also: [`mui_set_active`](#mui_set_active), [`mui_string_pos`](#mui_string_pos), [`mui_window_active`](#mui_window_active).
+
+<a id="mui_string_pos"></a>
+
+### `mui_string_pos(obj)` → `Int`
+
+- `obj`: a text field or a drop-down with text.
+
+Returns where the cursor is: 0 before the first character and the length of the text if it is at the end. With any
+other object it returns 0.
+
+See also: [`mui_set_string_pos`](#mui_set_string_pos), [`mui_active_object`](#mui_active_object), [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_string_pos"></a>
+
+### `mui_set_string_pos(obj, pos)`
+
+- `obj`: a text field or a drop-down with text.
+- `pos`: the position, as in `mui_string_pos`. A number larger than the length puts it at the end and a negative
+  one at the start.
+
+Puts the cursor there. `mui_set_text` leaves it at the end of the new text, so to paste in the middle it goes after.
+
+See also: [`mui_string_pos`](#mui_string_pos), [`mui_set_text`](#mui_set_text).
 
 <a id="mui_set_enabled"></a>
 
@@ -12238,9 +12277,10 @@ See also: [`mui_window_size`](#mui_window_size).
 - `win`: the window.
 - `obj`: one of its objects, usually a text field.
 
-Makes it the active object: the cursor goes to that field and you can type without clicking.
+Makes it the active object: the cursor goes to that field and you can type without clicking. For a drop-down with
+text (`mui_combo`), to its field.
 
-See also: [`mui_string`](#mui_string).
+See also: [`mui_string`](#mui_string), [`mui_active_object`](#mui_active_object).
 
 <a id="mui_window_size"></a>
 

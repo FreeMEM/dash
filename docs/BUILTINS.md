@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 980 funciones, 980 implementadas, 0 sin implementar.
+Total: 983 funciones, 983 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11094,6 +11094,9 @@ end
 | [`mui_set_value(obj, value)`](#mui_set_value) | — | Cambia el valor (dispara mui_on_change como lo haría el usuario) |  |
 | [`mui_get_text(obj)`](#mui_get_text) | String | El texto de un campo de texto, un texto, un botón o el título de una ventana |  |
 | [`mui_set_text(obj, text)`](#mui_set_text) | — | Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una ventana |  |
+| [`mui_active_object(win)`](#mui_active_object) | Int (dirección) | El objeto de la ventana que tiene el teclado (un campo de texto donde se escribe), o 0 (Tachyon, lo contaron Alex Agauser y Ferrán García) |  |
+| [`mui_string_pos(obj)`](#mui_string_pos) | Int | Dónde está el cursor de un campo de texto: 0 delante del primer carácter, su largo al final |  |
+| [`mui_set_string_pos(obj, pos)`](#mui_set_string_pos) | — | Pone el cursor de un campo de texto en esa posición (0 es el principio; pasado el final, al final) |  |
 | [`mui_set_enabled(obj, enabled)`](#mui_set_enabled) | — | Activa o desactiva (en gris) un objeto, una opción de menú o un menú entero |  |
 | [`mui_on_change(obj, id)`](#mui_on_change) | — | mui_wait_event da id cuando cambia el valor o el texto |  |
 | [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event da id cuando se pulsa Return en un campo de texto (en un mui_combo, también al elegir una línea) |  |
@@ -11552,6 +11555,42 @@ Ver también: [`mui_set_text`](#mui_set_text), [`mui_get_value`](#mui_get_value)
 Cambia su texto; en una ventana, el título.
 
 Ver también: [`mui_get_text`](#mui_get_text).
+
+<a id="mui_active_object"></a>
+
+### `mui_active_object(win)` → `Int (dirección)`
+
+- `win`: la ventana.
+
+Devuelve el objeto de la ventana que tiene el teclado, como el campo de texto donde se está escribiendo, o 0 si no
+hay ninguno. En un desplegable con texto (`mui_combo`) devuelve el desplegable. Sirve para que una opción de menú
+haga algo en el campo activo, como pegar donde está el cursor: en MUI 3.8, Amiga+V no pega en un campo de texto de
+una ventana con menús (lo contaron Alex Agauser y Ferrán García, en Tachyon).
+
+Ver también: [`mui_set_active`](#mui_set_active), [`mui_string_pos`](#mui_string_pos), [`mui_window_active`](#mui_window_active).
+
+<a id="mui_string_pos"></a>
+
+### `mui_string_pos(obj)` → `Int`
+
+- `obj`: un campo de texto o un desplegable con texto.
+
+Devuelve dónde está el cursor: 0 delante del primer carácter y el largo del texto si está al final. Con otro objeto
+devuelve 0.
+
+Ver también: [`mui_set_string_pos`](#mui_set_string_pos), [`mui_active_object`](#mui_active_object), [`mui_get_text`](#mui_get_text).
+
+<a id="mui_set_string_pos"></a>
+
+### `mui_set_string_pos(obj, pos)`
+
+- `obj`: un campo de texto o un desplegable con texto.
+- `pos`: la posición, como en `mui_string_pos`. Un número mayor que el largo lo deja al final y uno negativo, al
+  principio.
+
+Pone el cursor ahí. `mui_set_text` lo deja al final del texto nuevo, así que para pegar en medio va después.
+
+Ver también: [`mui_string_pos`](#mui_string_pos), [`mui_set_text`](#mui_set_text).
 
 <a id="mui_set_enabled"></a>
 
@@ -12244,9 +12283,10 @@ Ver también: [`mui_window_size`](#mui_window_size).
 - `win`: la ventana.
 - `obj`: un objeto de ella, normalmente un campo de texto.
 
-Lo hace el objeto activo: el cursor va a ese campo y se puede escribir sin hacer clic.
+Lo hace el objeto activo: el cursor va a ese campo y se puede escribir sin hacer clic. Con un desplegable con texto
+(`mui_combo`), a su campo.
 
-Ver también: [`mui_string`](#mui_string).
+Ver también: [`mui_string`](#mui_string), [`mui_active_object`](#mui_active_object).
 
 <a id="mui_window_size"></a>
 

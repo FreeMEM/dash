@@ -21642,8 +21642,11 @@ static void _dash_mui_window_move(APTR win, LONG dx, LONG dy) {
     if (w) MoveWindow(w, dx, dy);
 }
 
+static Object *_dash_mui_combo_str(Object *obj);
+
+/* (a combo: its text field, as mui_active_object gives it back) */
 static void _dash_mui_set_active(APTR win, APTR obj) {
-    if (win && obj) SetAttrs((Object *)win, MUIA_Window_ActiveObject, (IPTR)obj, TAG_DONE);
+    if (win && obj) SetAttrs((Object *)win, MUIA_Window_ActiveObject, (IPTR)_dash_mui_combo_str(obj), TAG_DONE);
 }
 
 static LONG _dash_mui_window_active(APTR win) {
@@ -22339,6 +22342,39 @@ static void _dash_mui_set_text(APTR obj, STRPTR text) {
         }
     }
     SetAttrs(_dash_mui_combo_str(obj), attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
+}
+
+/* The object with the keyboard (Tachyon: paste from a menu item, Amiga+V does not paste in MUI 3.8; told by Alex
+   Agauser and Ferran Garcia). The text field of a combo gives the combo, the object Dash handed out */
+static APTR _dash_mui_active_object(APTR win) {
+    IPTR active = 0, parent = 0;
+    if (!win) return NULL;
+    GetAttr(MUIA_Window_ActiveObject, (Object *)win, &active);
+    if (active && GetAttr(MUIA_Parent, (Object *)active, &parent) && parent &&
+        _dash_mui_kind((Object *)parent) == _DASH_MUI_COMBO)
+        active = parent;
+    return (APTR)active;
+}
+
+/* The cursor of a text field: 0 before the first character */
+static LONG _dash_mui_string_pos(APTR obj) {
+    IPTR pos = 0;
+    Object *str = _dash_mui_combo_str(obj);
+    if (!str || _dash_mui_text_attr(obj) != MUIA_String_Contents) return 0;
+    GetAttr(MUIA_String_BufferPos, str, &pos);
+    return (LONG)pos;
+}
+
+static void _dash_mui_set_string_pos(APTR obj, LONG pos) {
+    STRPTR text = NULL;
+    LONG len;
+    Object *str = _dash_mui_combo_str(obj);
+    if (!str || _dash_mui_text_attr(obj) != MUIA_String_Contents) return;
+    GetAttr(MUIA_String_Contents, str, (IPTR *)&text);
+    len = text ? (LONG)strlen((char *)text) : 0;
+    if (pos > len) pos = len;
+    if (pos < 0) pos = 0;
+    SetAttrs(str, MUIA_String_BufferPos, pos, TAG_DONE);
 }
 
 static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {

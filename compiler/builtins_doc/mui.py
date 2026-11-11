@@ -486,6 +486,45 @@ Cambia su texto; en una ventana, el título.
 
 Changes its text; for a window, the title.
 """, ["mui_get_text"]),
+    "mui_active_object": _f("""\
+- `win`: la ventana.
+
+Devuelve el objeto de la ventana que tiene el teclado, como el campo de texto donde se está escribiendo, o 0 si no
+hay ninguno. En un desplegable con texto (`mui_combo`) devuelve el desplegable. Sirve para que una opción de menú
+haga algo en el campo activo, como pegar donde está el cursor: en MUI 3.8, Amiga+V no pega en un campo de texto de
+una ventana con menús (lo contaron Alex Agauser y Ferrán García, en Tachyon).
+""", """\
+- `win`: the window.
+
+Returns the object of the window that has the keyboard, such as the text field being typed in, or 0 if there is
+none. For a drop-down with text (`mui_combo`) it returns the drop-down. It lets a menu item act on the active field,
+like pasting where the cursor is: in MUI 3.8, Amiga+V does not paste into a text field of a window with menus
+(reported by Alex Agauser and Ferrán García, in Tachyon).
+""", ["mui_set_active", "mui_string_pos", "mui_window_active"]),
+    "mui_string_pos": _f("""\
+- `obj`: un campo de texto o un desplegable con texto.
+
+Devuelve dónde está el cursor: 0 delante del primer carácter y el largo del texto si está al final. Con otro objeto
+devuelve 0.
+""", """\
+- `obj`: a text field or a drop-down with text.
+
+Returns where the cursor is: 0 before the first character and the length of the text if it is at the end. With any
+other object it returns 0.
+""", ["mui_set_string_pos", "mui_active_object", "mui_get_text"]),
+    "mui_set_string_pos": _f("""\
+- `obj`: un campo de texto o un desplegable con texto.
+- `pos`: la posición, como en `mui_string_pos`. Un número mayor que el largo lo deja al final y uno negativo, al
+  principio.
+
+Pone el cursor ahí. `mui_set_text` lo deja al final del texto nuevo, así que para pegar en medio va después.
+""", """\
+- `obj`: a text field or a drop-down with text.
+- `pos`: the position, as in `mui_string_pos`. A number larger than the length puts it at the end and a negative
+  one at the start.
+
+Puts the cursor there. `mui_set_text` leaves it at the end of the new text, so to paste in the middle it goes after.
+""", ["mui_string_pos", "mui_set_text"]),
     "mui_set_enabled": _f("""\
 - `obj`: un objeto, una opción de menú o un menú entero.
 - `enabled`: `false` lo desactiva (en gris, no responde); `true` lo vuelve a activar.
@@ -541,13 +580,15 @@ A bubble with the text, shown when the pointer rests a moment over the object.
 - `win`: la ventana.
 - `obj`: un objeto de ella, normalmente un campo de texto.
 
-Lo hace el objeto activo: el cursor va a ese campo y se puede escribir sin hacer clic.
+Lo hace el objeto activo: el cursor va a ese campo y se puede escribir sin hacer clic. Con un desplegable con texto
+(`mui_combo`), a su campo.
 """, """\
 - `win`: the window.
 - `obj`: one of its objects, usually a text field.
 
-Makes it the active object: the cursor goes to that field and you can type without clicking.
-""", ["mui_string"]),
+Makes it the active object: the cursor goes to that field and you can type without clicking. For a drop-down with
+text (`mui_combo`), to its field.
+""", ["mui_string", "mui_active_object"]),
     "mui_width": _f("""\
 - `obj`: el objeto.
 

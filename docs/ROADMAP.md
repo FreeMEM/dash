@@ -1079,6 +1079,10 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       `regex_group_count`, `regex_group_start`, `regex_group_length` y `regex_group_parent`, que da el árbol de los
       anidados: una lista de Dash no mezcla textos y sublistas. El motor guarda el inicio y el fin de cada grupo y
       los deshace al volver atrás. 980 funciones. Dash 2.10.0. `tests/test_regex_grupos.dash`, `dashc/tests/regex_grupos.dash`
+- [x] Pegar desde un menú en un campo de texto MUI (2026-11-11, Tachyon; lo contaron Alex Agauser y Ferrán García:
+      en MUI 3.8, Amiga+V no pega en la barra de direcciones). `mui_active_object(win)`: el objeto con el teclado
+      (de un desplegable con texto, el desplegable); `mui_string_pos` y `mui_set_string_pos`: el cursor de un campo.
+      `mui_set_active` con un desplegable va a su campo. 983 funciones. `tests/test_mui_string_pos.dash`
 
 ## Notas y Decisiones
 
