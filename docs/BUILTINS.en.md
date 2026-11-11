@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 985 functions, 985 implemented, 0 not implemented.
+Total: 991 functions, 991 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -5611,6 +5611,10 @@ end
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
 | [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
+| [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Like cx_key_add, but the event also goes on to the other programs: to watch clicks and keys without taking them (cx_command gives 100 + n) |  |
+| [`cx_event_x()`](#cx_event_x) | Int | Where the pointer was (x, on the Workbench screen) at the last event cx_command gave (cx_key_add, cx_watch_add) |  |
+| [`cx_event_y()`](#cx_event_y) | Int | Where the pointer was (y) at the last event cx_command gave |  |
+| [`cx_event_ms()`](#cx_event_ms) | Int | When the last event cx_command gave happened, in ms (to tell a double click: the difference with the previous one) |  |
 | [`cx_command()`](#cx_command) | Int | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
 | [`cx_wait(ms)`](#cx_wait) | Int | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
 | [`disks_read(ms)`](#disks_read) | Int | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
@@ -5870,6 +5874,44 @@ See also: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 
 See also: [`cx_hotkey`](#cx_hotkey).
+
+<a id="cx_watch_add"></a>
+
+### `cx_watch_add(description, n)` → `Bool`
+
+- `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
+- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+
+Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
+taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and
+`cx_event_x`, `cx_event_y` and `cx_event_ms` tell where and when it happened. Returns `false` if the description is
+not valid.
+
+See also: [`cx_key_add`](#cx_key_add), [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_x"></a>
+
+### `cx_event_x()` → `Int`
+
+Returns where the pointer was (x, on the Workbench screen) at the last event `cx_command` gave, from `cx_key_add` or `cx_watch_add`.
+
+See also: [`cx_event_y`](#cx_event_y), [`cx_event_ms`](#cx_event_ms).
+
+<a id="cx_event_y"></a>
+
+### `cx_event_y()` → `Int`
+
+Returns where the pointer was (y) at the last event `cx_command` gave.
+
+See also: [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_ms"></a>
+
+### `cx_event_ms()` → `Int`
+
+Returns when the last event `cx_command` gave happened, in milliseconds. Only the difference between two means anything: with `wm_double_click_ms`, whether two clicks are a double click.
+
+See also: [`wm_double_click_ms`](#wm_double_click_ms).
 
 <a id="cx_command"></a>
 
@@ -9289,13 +9331,15 @@ those dropped on a window.
 | [`wm_title(i)`](#wm_title) | String | The title of window i of the last wm_read ("" if it has none) |  |
 | [`wm_task(i)`](#wm_task) | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
-| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit), 8-11 its borders (left, top, right, bottom), 12 and 13 where the free part of its title bar starts and ends, 14 and 15 the middle of its close gadget (-1 without one), from its corner; -1 outside the list |  |
 | [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
 | [`wm_front(id)`](#wm_front) | Bool | A window in front of the others; false if it is not open any more |  |
 | [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_close(id)`](#wm_close) | Bool | Asks a window's program to close it: a click on its close gadget, as the user would, and the pointer back where it was; false if it is gone or has no close gadget |  |
+| [`wm_double_click_ms()`](#wm_double_click_ms) | Int | The longest time between two clicks of a double click, in ms (Input preferences) |  |
 | [`wm_active()`](#wm_active) | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
 | [`wm_at(x, y)`](#wm_at) | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
 | [`wm_pointer_x()`](#wm_pointer_x) | Int | Where the pointer is on the Workbench screen: x |  |
@@ -9369,7 +9413,7 @@ See also: [`file_real_path`](#file_real_path).
 ### `wm_box(i, what)` → `Int`
 
 - `i`: the window, from 0, of the last `wm_read`.
-- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit).
+- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit), 8 to 11 its borders (left, top, right, bottom), 12 and 13 where the free part of its title bar starts and ends (no gadgets: the part you drag), 14 and 15 the middle of its close gadget (-1 without one); these from the window's corner.
 
 Returns that value, or -1 outside the list.
 
@@ -9435,6 +9479,24 @@ See also: [`wm_active`](#wm_active).
 Switches it to its other size, like its zoom button. Returns `false` if it is gone.
 
 See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_close"></a>
+
+### `wm_close(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Asks its program to close it: clicks its close gadget, as the user would, and leaves the pointer where it was. Only its program can close it; if it asks first, it will ask. Returns `false` if it is gone or has no close gadget.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_double_click_ms"></a>
+
+### `wm_double_click_ms()` → `Int`
+
+Returns the longest time between the two clicks of a double click, in milliseconds, from the Input preferences.
+
+See also: [`cx_event_ms`](#cx_event_ms).
 
 <a id="wm_active"></a>
 

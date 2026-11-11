@@ -93,7 +93,7 @@ errors").
 
 ### Amiga API
 
-985 built-in functions, all implemented, each one explained with its parameters and an example per group in [docs/BUILTINS.en.md](docs/BUILTINS.en.md) (generated from the code).
+991 built-in functions, all implemented, each one explained with its parameters and an example per group in [docs/BUILTINS.en.md](docs/BUILTINS.en.md) (generated from the code).
 
 - **Intuition** — Windows, screens, event loops (also across several windows), menus, `On Click`, `On Timer`;
   `window_create` with the inner size (flag 8) and the window borders (`window_border_top`...) and the

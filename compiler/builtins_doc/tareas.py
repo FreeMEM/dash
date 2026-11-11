@@ -149,6 +149,30 @@ Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no si
 
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 """, ["cx_hotkey"]),
+    "cx_watch_add": _f("""\
+- `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
+- `n`: su número, de 1 a 32 (el mismo espacio que `cx_key_add`).
+
+Como `cx_key_add`, pero el evento sigue también a los demás programas: sirve para mirar clics y teclas sin
+quitárselos (un doble clic en la barra de título de cualquier ventana, por ejemplo). `cx_command` da 100 + `n`, y
+`cx_event_x`, `cx_event_y` y `cx_event_ms` dicen dónde y cuándo fue. Devuelve `false` si la descripción no vale.
+""", """\
+- `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
+- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+
+Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
+taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and
+`cx_event_x`, `cx_event_y` and `cx_event_ms` tell where and when it happened. Returns `false` if the description is
+not valid.
+""", ["cx_key_add", "cx_event_x"]),
+    "cx_event_x": _f("Devuelve dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio `cx_command`, de `cx_key_add` o `cx_watch_add`.\n",
+                     "Returns where the pointer was (x, on the Workbench screen) at the last event `cx_command` gave, from `cx_key_add` or `cx_watch_add`.\n",
+                     ["cx_event_y", "cx_event_ms"]),
+    "cx_event_y": _f("Devuelve dónde estaba el puntero (y) en el último evento que dio `cx_command`.\n",
+                     "Returns where the pointer was (y) at the last event `cx_command` gave.\n", ["cx_event_x"]),
+    "cx_event_ms": _f("Devuelve cuándo fue el último evento que dio `cx_command`, en milisegundos. Solo vale la diferencia entre dos: con `wm_double_click_ms`, si dos clics son un doble clic.\n",
+                      "Returns when the last event `cx_command` gave happened, in milliseconds. Only the difference between two means anything: with `wm_double_click_ms`, whether two clicks are a double click.\n",
+                      ["wm_double_click_ms"]),
     "cx_command": _f("Devuelve la siguiente orden de Exchange o de una tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 la tecla rápida, 100 + n las de `cx_key_add`.\n",
                      "Returns the next command from Exchange or a hot key: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 quit, 6 the hot key, 100 + n those of `cx_key_add`.\n",
                      ["cx_wait"]),

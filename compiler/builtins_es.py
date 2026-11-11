@@ -773,7 +773,9 @@ DESC_ES = {
     "icon_height": "El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_free": "Libera un icono de icon_load (los que queden, al salir)",
     "wm_box": "De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, "
-              "7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista",
+              "7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde "
+              "empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin "
+              "él), desde su esquina; -1 fuera de la lista",
     "wm_flags": "De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, "
                 "16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester",
     "wm_set_box": "Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene "
@@ -782,6 +784,9 @@ DESC_ES = {
     "wm_back": "Una ventana detrás de las demás; false si ya no está abierta",
     "wm_activate": "Hace activa una ventana (las teclas van a ella); false si ya no está abierta",
     "wm_zip": "Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta",
+    "wm_close": "Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el "
+                "puntero vuelve donde estaba; false si ya no está o no tiene ese botón",
+    "wm_double_click_ms": "El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input)",
     "wm_active": "El id de la ventana activa, si está en la pantalla del Workbench; 0 si no",
     "wm_at": "El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna",
     "wm_pointer_x": "Dónde está el puntero en la pantalla del Workbench: la x",
@@ -792,6 +797,13 @@ DESC_ES = {
     "wm_bar_gadgets": "A qué distancia del borde derecho de la barra de título de la pantalla del Workbench empiezan sus botones del sistema (el de profundidad), preguntado a la pantalla; 0 si no lo sabe",
     "cx_hotkey": "La tecla rápida de la commodity, según su descripción (\"ctrl alt t\"): cx_command da 6 al pulsarla; "
                  "false si la descripción no vale (o no hay cx_broker); \"\" la quita",
+    "cx_watch_add": "Como cx_key_add, pero el evento sigue también a los demás programas: para mirar clics y teclas "
+                    "sin quitárselos (cx_command da 100 + n)",
+    "cx_event_x": "Dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio cx_command "
+                  "(cx_key_add, cx_watch_add)",
+    "cx_event_y": "Dónde estaba el puntero (y) en el último evento que dio cx_command",
+    "cx_event_ms": "Cuándo fue el último evento que dio cx_command, en ms (para saber si es un doble clic: la "
+                   "diferencia con el anterior)",
     "cx_command": "La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, "
                   "4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su "
                   "tecla)",

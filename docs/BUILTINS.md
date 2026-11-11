@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 985 funciones, 985 implementadas, 0 sin implementar.
+Total: 991 funciones, 991 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -5611,6 +5611,10 @@ end
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
 | [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
+| [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Como cx_key_add, pero el evento sigue también a los demás programas: para mirar clics y teclas sin quitárselos (cx_command da 100 + n) |  |
+| [`cx_event_x()`](#cx_event_x) | Int | Dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio cx_command (cx_key_add, cx_watch_add) |  |
+| [`cx_event_y()`](#cx_event_y) | Int | Dónde estaba el puntero (y) en el último evento que dio cx_command |  |
+| [`cx_event_ms()`](#cx_event_ms) | Int | Cuándo fue el último evento que dio cx_command, en ms (para saber si es un doble clic: la diferencia con el anterior) |  |
 | [`cx_command()`](#cx_command) | Int | La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su tecla) |  |
 | [`cx_wait(ms)`](#cx_wait) | Int | Espera, sin gastar nada, hasta que llegue una orden (la da como cx_command), un Ctrl-C (-1, se borra) o pasen ms milisegundos (0) |  |
 | [`disks_read(ms)`](#disks_read) | Int | Lee los volúmenes montados (con disco dentro), su tamaño y su espacio libre, preguntando a todos a la vez y esperando como mucho ms milisegundos: cuántos hay. No pide ningún disco |  |
@@ -5869,6 +5873,43 @@ Ver también: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no sigue a los demás programas.
 
 Ver también: [`cx_hotkey`](#cx_hotkey).
+
+<a id="cx_watch_add"></a>
+
+### `cx_watch_add(description, n)` → `Bool`
+
+- `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
+- `n`: su número, de 1 a 32 (el mismo espacio que `cx_key_add`).
+
+Como `cx_key_add`, pero el evento sigue también a los demás programas: sirve para mirar clics y teclas sin
+quitárselos (un doble clic en la barra de título de cualquier ventana, por ejemplo). `cx_command` da 100 + `n`, y
+`cx_event_x`, `cx_event_y` y `cx_event_ms` dicen dónde y cuándo fue. Devuelve `false` si la descripción no vale.
+
+Ver también: [`cx_key_add`](#cx_key_add), [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_x"></a>
+
+### `cx_event_x()` → `Int`
+
+Devuelve dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio `cx_command`, de `cx_key_add` o `cx_watch_add`.
+
+Ver también: [`cx_event_y`](#cx_event_y), [`cx_event_ms`](#cx_event_ms).
+
+<a id="cx_event_y"></a>
+
+### `cx_event_y()` → `Int`
+
+Devuelve dónde estaba el puntero (y) en el último evento que dio `cx_command`.
+
+Ver también: [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_ms"></a>
+
+### `cx_event_ms()` → `Int`
+
+Devuelve cuándo fue el último evento que dio `cx_command`, en milisegundos. Solo vale la diferencia entre dos: con `wm_double_click_ms`, si dos clics son un doble clic.
+
+Ver también: [`wm_double_click_ms`](#wm_double_click_ms).
 
 <a id="cx_command"></a>
 
@@ -9288,13 +9329,15 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_title(i)`](#wm_title) | String | El título de la ventana i del último wm_read ("" si no tiene) |  |
 | [`wm_task(i)`](#wm_task) | String | El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | La ruta del programa de la ventana i (el directorio del que se cargó su proceso y su nombre): "" si no es de un proceso, o si la ventana se cerró desde el wm_read |  |
-| [`wm_box(i, what)`](#wm_box) | Int | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista |  |
+| [`wm_box(i, what)`](#wm_box) | Int | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin él), desde su esquina; -1 fuera de la lista |  |
 | [`wm_flags(i)`](#wm_flags) | Int | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después |  |
 | [`wm_front(id)`](#wm_front) | Bool | Una ventana delante de las demás; false si ya no está abierta |  |
 | [`wm_back(id)`](#wm_back) | Bool | Una ventana detrás de las demás; false si ya no está abierta |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Hace activa una ventana (las teclas van a ella); false si ya no está abierta |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta |  |
+| [`wm_close(id)`](#wm_close) | Bool | Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el puntero vuelve donde estaba; false si ya no está o no tiene ese botón |  |
+| [`wm_double_click_ms()`](#wm_double_click_ms) | Int | El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input) |  |
 | [`wm_active()`](#wm_active) | Int | El id de la ventana activa, si está en la pantalla del Workbench; 0 si no |  |
 | [`wm_at(x, y)`](#wm_at) | Int | El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna |  |
 | [`wm_pointer_x()`](#wm_pointer_x) | Int | Dónde está el puntero en la pantalla del Workbench: la x |  |
@@ -9368,7 +9411,7 @@ Ver también: [`file_real_path`](#file_real_path).
 ### `wm_box(i, what)` → `Int`
 
 - `i`: la ventana, desde 0, del último `wm_read`.
-- `what`: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 y 5 el mínimo, 6 y 7 el máximo (0 o 65535: sin límite).
+- `what`: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 y 5 el mínimo, 6 y 7 el máximo (0 o 65535: sin límite), 8 a 11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde empieza y acaba la parte libre de su barra de título (sin botones: la que se arrastra), 14 y 15 el centro de su botón de cerrar (-1 sin él); estos, desde la esquina de la ventana.
 
 Devuelve ese dato, o -1 fuera de la lista.
 
@@ -9434,6 +9477,24 @@ Ver también: [`wm_active`](#wm_active).
 La pasa a su otro tamaño, como su botón de zoom. Devuelve `false` si ya no está.
 
 Ver también: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_close"></a>
+
+### `wm_close(id)` → `Bool`
+
+- `id`: el id de la ventana (`wm_id`).
+
+Pide a su programa que la cierre: hace clic en su botón de cerrar, como el usuario, y deja el puntero donde estaba. Solo su programa puede cerrarla; si pregunta antes, preguntará. Devuelve `false` si ya no está o no tiene ese botón.
+
+Ver también: [`wm_box`](#wm_box).
+
+<a id="wm_double_click_ms"></a>
+
+### `wm_double_click_ms()` → `Int`
+
+Devuelve el tiempo máximo entre los dos clics de un doble clic, en milisegundos, el de las preferencias de Input.
+
+Ver también: [`cx_event_ms`](#cx_event_ms).
 
 <a id="wm_active"></a>
 

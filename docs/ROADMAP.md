@@ -1086,6 +1086,13 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Pegar, copiar y cortar en los campos de texto de MUI 3.8 (2026-11-11, Alex Agauser y Ferrán García): MUI 3.8
       no lo hace, y `mui_string` y `mui_combo` llevan allí el gancho de edición de GadTools y ReAction (Ctrl o Amiga
       con V, C y X). MUI 4 y 5 lo hacen solos. Probado a mano en `sys32rtg38` por los dos caminos.
+- [x] Mirar clics y teclas sin quitárselos a nadie (2026-11-12, para las ventanas modernas de Trasfondo que pidió
+      el usuario): `cx_watch_add` (un filtro de commodity que deja seguir el evento), `cx_event_x`, `cx_event_y` y
+      `cx_event_ms` (dónde estaba el puntero y cuándo, apuntado en el input handler con un CX_CUSTOM),
+      `wm_double_click_ms`, `wm_box` 8 a 15 (bordes, parte libre de la barra de título, botón de cerrar) y
+      `wm_close` (un clic en su botón de cerrar). Los filtros de `cx_key_add` y `cx_watch_add` ya no miran los
+      botones del ratón pulsados si la descripción no los nombra: `"rawmouse mouse_leftpress"` no llegaba nunca.
+      991 funciones. `tests/test_wm_eventos.dash`
 
 ## Notas y Decisiones
 

@@ -261,6 +261,12 @@ const BuiltinInfo builtin_info[] = {
     {"cx_broker", 4, 2, 1, 0, 0, 7u},
     {"cx_command", 0, 1, 1, 0, 0, 0u},
     {"cx_command", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_ms", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_ms", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_x", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_x", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_y", 0, 1, 1, 0, 0, 0u},
+    {"cx_event_y", 0, 1, 1, 0, 0, 0u},
     {"cx_hotkey", 1, 2, 1, 0, 0, 1u},
     {"cx_hotkey", 1, 2, 1, 0, 0, 1u},
     {"cx_key_add", 2, 2, 1, 0, 0, 1u},
@@ -269,6 +275,8 @@ const BuiltinInfo builtin_info[] = {
     {"cx_send", 2, 1, 0, 0, 0, 1u},
     {"cx_wait", 1, 1, 1, 0, 0, 0u},
     {"cx_wait", 1, 1, 1, 0, 0, 0u},
+    {"cx_watch_add", 2, 2, 1, 0, 0, 1u},
+    {"cx_watch_add", 2, 2, 1, 0, 0, 1u},
     {"cycle_create", 6, 1, 1, 0, 0, 32u},
     {"cycle_create", 6, 1, 1, 0, 0, 32u},
     {"cycle_get", 1, 1, 1, 0, 0, 0u},
@@ -1949,6 +1957,10 @@ const BuiltinInfo builtin_info[] = {
     {"wm_bar_height", 0, 1, 1, 0, 0, 0u},
     {"wm_box", 2, 1, 1, 0, 0, 0u},
     {"wm_box", 2, 1, 1, 0, 0, 0u},
+    {"wm_close", 1, 2, 1, 0, 0, 0u},
+    {"wm_close", 1, 2, 1, 0, 0, 0u},
+    {"wm_double_click_ms", 0, 1, 1, 0, 0, 0u},
+    {"wm_double_click_ms", 0, 1, 1, 0, 0, 0u},
     {"wm_flags", 1, 1, 1, 0, 0, 0u},
     {"wm_flags", 1, 1, 1, 0, 0, 0u},
     {"wm_front", 1, 2, 1, 0, 0, 0u},
@@ -1972,7 +1984,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 1970;
+const int builtin_count = 1982;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},
