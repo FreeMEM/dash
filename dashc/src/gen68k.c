@@ -633,6 +633,21 @@ static int simple(Node *n, Var *v)
     return 0;
 }
 
+/* n, que simple() ya dio, se usa ahora, después de generar otra cosa: su vida llega hasta aquí. Si no, una
+   variable nueva de lo generado entre medias (la de una función copiada en línea) podía tomar su registro y
+   pisarla antes de usarla: v = v - 4 y luego "return espacios(b) - v" restaba lo que dejó la copia. */
+static void keep_alive(Node *n)
+{
+    int i;
+    Local *lc;
+    for (i = repls.n - 1; i >= 0; i--)
+        if (repls.v[i].n == n) {
+            slot_end.v[repls.v[i].slot] = ++event;
+            return;
+        }
+    if (n->kind == E_VAR && (lc = find_local(n->name)) != NULL && lc->slot >= 0) slot_end.v[lc->slot] = ++event;
+}
+
 static int gen_expr(Node *n);
 static void gen_in(Node *n);
 static Node *in_const(Node *n);
@@ -1300,6 +1315,7 @@ static void str_code_inline(Node *s, Node *i)
         int zero = new_label(), done = new_label();
         Var vl;
         index_to_d1(i);
+        keep_alive(s);
         use_slot(ps);
         vl = slot_var(ps, TY_INT);
         cmp_d1_ea(&vl);                                /* largo */
@@ -1315,6 +1331,7 @@ static void str_code_inline(Node *s, Node *i)
     int slow = new_label(), zero = new_label(), done = new_label();
     if (simple(s, &vs) && vs.kind != V_CONST) {
         index_to_d1(i);
+        keep_alive(s);
         load_a0(&vs);
     } else {
         value(s);
@@ -1741,6 +1758,7 @@ static int gen_arr_index(Node *n)
     if (arr_local(n->a, &va)) {
         /* la lista es una variable local: el índice primero y la lista directa a a0, sin pasar por la pila */
         value(n->b);
+        keep_alive(n->a);
         load_a0(&va);
     } else {
         value(n->a);
@@ -2096,6 +2114,7 @@ static void gen_arr_store(Node *target, Node *v)
         /* la lista es una variable local: el índice a d1 (simple, o por la pila si no), el valor a d0 y la lista a a0 */
         if (simple(a[1], &vi) && (vi.kind == V_CONST || vi.type == TY_INT || vi.type == TY_CHAR)) {
             elem_value(a[2], et);
+            keep_alive(a[1]);
             load_var(1, &vi);                          /* move.l i,d1 */
         } else {
             value(a[1]);
@@ -2103,6 +2122,7 @@ static void gen_arr_store(Node *target, Node *v)
             elem_value(a[2], et);
             pop_d1();
         }
+        keep_alive(a[0]);
         load_a0(&va);
         arr_put();
         return;
@@ -2311,9 +2331,11 @@ static void gen_binary(Node *n)
         bin_ea(n->op, &v);
     } else if (simple(n->b, &v)) {
         value(n->a);
+        keep_alive(n->b);
         bin_ea(n->op, &v);
     } else if (commutative(n->op) && simple(n->a, &v)) {
         value(n->b);
+        keep_alive(n->a);
         bin_ea(n->op, &v);
     } else {
         Var d1 = {V_REG, 0, 1, TY_INT, 0};
@@ -2507,6 +2529,7 @@ static int gen_compare(Node *n)
             return cc;
         }
         value(n->a);
+        keep_alive(n->b);
         if (vb.kind == V_CONST && vb.val == 0) tst_d0();
         else cmp_reg_ea(0, &vb);                       /* d0 con b */
         return cc;
@@ -2514,6 +2537,7 @@ static int gen_compare(Node *n)
     if (simple(n->a, &va)) {
         /* b - a: la condición al revés */
         value(n->b);
+        keep_alive(n->a);
         cmp_reg_ea(0, &va);                            /* d0 con a */
         return swap_cc(cc);
     }
@@ -4192,6 +4216,7 @@ static int assign_in_reg(Node *n)
             store_d0(&v);
             return 1;
         }
+        keep_alive(e->b);                              /* (b se lee después de poner a en la nueva) */
     }
     load_var(v.reg, &va);                              /* move.l a,dN */
     if (vb.kind == V_CONST) {
