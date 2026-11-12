@@ -64,6 +64,11 @@ extern unsigned char *stbi_load_from_memory(const unsigned char *buffer, int len
 extern int stbi_info_from_memory(const unsigned char *buffer, int len, int *x, int *y, int *comp);
 extern void stbi_image_free(void *p);
 
+/* Set by Dash's cleanup at the end of the program (_dash_imgdec_stop, before it waits for its tasks): a decode still
+   running in a process of image_decode_start stops soon (the long loops of TJpgDec, stb_image and libwebp look at
+   it) and gives NULL; a 1280 x 1024 JPEG takes seconds on a 68040 and minutes on a 68020 (Tachyon after an abort) */
+volatile long dash_imgdec_stopped = 0;
+
 /* The whole file in memory; NULL if it cannot be read */
 static UBYTE *dash_imgdec_file(const char *name, LONG *len)
 {
@@ -131,7 +136,7 @@ static int dash_jpeg_out(JDEC *jd, void *bitmap, JRECT *r)
     if (x1 >= img->w) x1 = img->w - 1;
     for (y = r->top; y <= r->bottom; y++, src += width * 3)
         if (y < img->h && x0 <= x1) memcpy(img->px + (y * img->w + x0) * 3, src, (x1 - x0 + 1) * 3);
-    return 1;
+    return !dash_imgdec_stopped;   /* (0: TJpgDec stops, JDR_INTR) */
 }
 
 /* A baseline JPEG reduced by 2^s; NULL if TJpgDec cannot (progressive JPEG...) */
@@ -166,7 +171,7 @@ static void dash_imgdec_reduce(DashImgDec *img, LONG k)
     UBYTE *px, *d;
     if (k < 2 || w < 1 || h < 1) return;
     if (!(px = (UBYTE *)AllocVec(w * h * c, MEMF_ANY))) return;
-    for (y = 0, d = px; y < h; y++)
+    for (y = 0, d = px; y < h && !dash_imgdec_stopped; y++)
         for (x = 0; x < w; x++) {
             sum[0] = sum[1] = sum[2] = sum[3] = 0;
             for (j = 0; j < k; j++) {
@@ -220,8 +225,10 @@ static DashImgDec *dash_imgdec_stb(UBYTE *data, LONG len, LONG maxw, LONG maxh)
 static DashImgDec *dash_imgdec_webp(UBYTE *data, LONG len, LONG maxw, LONG maxh)
 {
     WebPDecoderConfig cfg;
+    WebPIDecoder *idec;
+    VP8StatusCode st;
     DashImgDec *img;
-    LONG w, h, tw, th, c;
+    LONG w, h, tw, th, c, pos;
     if (!WebPInitDecoderConfig(&cfg)) return NULL;
     if (WebPGetFeatures(data, len, &cfg.input) != VP8_STATUS_OK || cfg.input.has_animation) return NULL;
     w = cfg.input.width;
@@ -247,12 +254,22 @@ static DashImgDec *dash_imgdec_webp(UBYTE *data, LONG len, LONG maxw, LONG maxh)
     cfg.output.u.RGBA.rgba = img->px;
     cfg.output.u.RGBA.stride = tw * c;
     cfg.output.u.RGBA.size = tw * th * c;
-    if (WebPDecode(data, len, &cfg) != VP8_STATUS_OK) {
-        WebPFreeDecBuffer(&cfg.output);
+    /* (incremental, 16 KB more each time: between them it looks at dash_imgdec_stopped) */
+    if (!(idec = WebPIDecode(NULL, 0, &cfg))) {
         dash_imgdec_free(img);
         return NULL;
     }
+    for (pos = 0, st = VP8_STATUS_SUSPENDED; st == VP8_STATUS_SUSPENDED && !dash_imgdec_stopped; ) {
+        pos = len - pos > 16384 ? pos + 16384 : len;
+        st = WebPIUpdate(idec, data, pos);
+        if (st == VP8_STATUS_SUSPENDED && pos == len) break;
+    }
+    WebPIDelete(idec);
     WebPFreeDecBuffer(&cfg.output);
+    if (st != VP8_STATUS_OK) {
+        dash_imgdec_free(img);
+        return NULL;
+    }
     return img;
 }
 
@@ -331,8 +348,12 @@ void *dash_imgdec_decode(const char *file, long maxw, long maxh)
         img = dash_imgdec_webp(data, len, maxw, maxh);
     else if (dash_imgdec_is_svg(data, len))
         img = dash_imgdec_svg(data, len, maxw, maxh, limit);
-    if (!img) img = dash_imgdec_stb(data, len, maxw, maxh);
+    if (!img && !dash_imgdec_stopped) img = dash_imgdec_stb(data, len, maxw, maxh);
     FreeVec(data);
+    if (img && dash_imgdec_stopped) {
+        dash_imgdec_free(img);
+        img = NULL;
+    }
     return img;
 }
 

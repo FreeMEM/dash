@@ -33,6 +33,9 @@ static void *dash_stbi_realloc(void *p, size_t n)
 #define STBI_MALLOC(sz) dash_stbi_malloc(sz)
 #define STBI_REALLOC(p, sz) dash_stbi_realloc(p, sz)
 #define STBI_FREE(p) dash_stbi_free(p)
+/* the long loops end when the program does (dash_imgdec_stopped, set by Dash's cleanup: image_decode_start's process at the exit) */
+extern volatile long dash_imgdec_stopped;
+#define STBI__DASH_STOP() dash_imgdec_stopped
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
 #define STBI_NO_SIMD

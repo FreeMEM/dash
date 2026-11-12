@@ -36,7 +36,7 @@ def arrancar(lineas, trabajo: Path, limite=600):
     rom = os.environ.get("DASH_KICKSTART_32")
     if not disco or not Path(disco).is_file() or not rom:
         sys.exit("hacen falta $DASH_EMU_DISK_COFFIN (el disco) y $DASH_KICKSTART_32 (la ROM 3.2.3)")
-    lineas = ["FailAt 21"] + lineas + ["C:Wait 12", 'Echo "fin" >DASHRUN:hecho.txt']
+    lineas = ["FailAt 1000000"] + lineas + ["C:Wait 12", 'Echo "fin" >DASHRUN:hecho.txt']
     (trabajo / "Run-Sequence").write_text("\n".join(lineas) + "\n", encoding="latin-1")
     (trabajo / "hecho.txt").unlink(missing_ok=True)
     conf = trabajo.parent / "disco.fs-uae"

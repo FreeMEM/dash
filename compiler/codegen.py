@@ -2265,6 +2265,7 @@ struct _DashTask {
     struct Task *owner;              /* the program, signalled when f returns (task_signal) */
     struct _DashTask *next;          /* all of them, for the exit */
     ULONG sp;                        /* (the stack where its function was called: Ctrl-C ends it there) */
+    void (*drop)(LONG result, LONG arg);   /* at the exit, for one the program never took: frees its result */
 };
 static struct _DashTask *_dash_tasks = NULL;
 static struct _DashTask *_dash_task_next = NULL;
@@ -2410,9 +2411,16 @@ static void _dash_task_free(LONG h) {
     FreeVec(t);
 }
 
-/* At exit: the processes run code of the program, which must stay loaded until they end */
+/* At exit: the processes run code of the program, which must stay loaded until they end (image_decode_start's
+   have been told to stop before: _dash_imgdec_stop). What one leaves that the program never took (a decoded image),
+   freed by its drop */
 static void _dash_task_cleanup(void) {
-    while (_dash_tasks) _dash_task_free((LONG)_dash_tasks);
+    while (_dash_tasks) {
+        struct _DashTask *t = _dash_tasks;
+        _dash_task_wait(t);
+        if (t->drop) t->drop(t->result, t->arg);
+        _dash_task_free((LONG)t);
+    }
     if (_dash_task_sigbit >= 0) { FreeSignal(_dash_task_sigbit); _dash_task_sigbit = -1; _dash_task_sigmask = 0; }
 }
 """
@@ -10228,6 +10236,7 @@ long dash_imgdec_height(void *d);
 long dash_imgdec_alpha(void *d);
 void *dash_imgdec_pixels(void *d);
 void dash_imgdec_free(void *d);
+extern volatile long dash_imgdec_stopped;
 
 static LONG _dash_image_decode(STRPTR file, LONG maxw, LONG maxh) { return (LONG)dash_imgdec_decode((const char *)file, maxw, maxh); }
 static LONG _dash_image_decoded_width(LONG d) { return dash_imgdec_width((void *)d); }
@@ -10244,6 +10253,15 @@ static LONG _dash_imgdec_job(LONG arg) {
     _DashImgDecJob *j = (_DashImgDecJob *)arg;
     return (LONG)dash_imgdec_decode(j->file, j->maxw, j->maxh);
 }
+/* At the end of the program: the decodes still running stop (before the program waits for its tasks), and what
+   one decoded that the program never took with image_decode_finish is freed with its job (a Tachyon that ends with
+   an abort while YouTube's pictures decode: it waited for each of them, and their memory did not come back) */
+/* (it writes the flag itself: ./dash keeps a cleanup only if it touches data the program uses, dashc/src/hunk.c) */
+static void _dash_imgdec_stop(void) { dash_imgdec_stopped = 1; }
+static void _dash_imgdec_drop(LONG result, LONG arg) {
+    dash_imgdec_free((void *)result);
+    FreeVec((APTR)arg);
+}
 static LONG _dash_image_decode_start(STRPTR file, LONG maxw, LONG maxh) {
     _DashImgDecJob *j;
     LONG t;
@@ -10253,6 +10271,7 @@ static LONG _dash_image_decode_start(STRPTR file, LONG maxw, LONG maxh) {
     j->maxh = maxh;
     strcpy(j->file, (const char *)file);
     if (!(t = _dash_task_start_with((APTR)_dash_imgdec_job, (LONG)j, 262144, -1))) FreeVec(j);
+    else ((struct _DashTask *)t)->drop = _dash_imgdec_drop;
     return t;
 }
 static BOOL _dash_image_decode_ready(LONG t) { return _dash_task_done(t) != 0; }
@@ -25421,6 +25440,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_syslist_cleanup();\n")
         if self.uses_netbg:
             cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
+        if self.uses_imgdec:
+            cleanup.insert(0, "    _dash_imgdec_stop();\n")   # before the tasks are waited for: its decodes stop
         if self.uses_instance:
             cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cx:

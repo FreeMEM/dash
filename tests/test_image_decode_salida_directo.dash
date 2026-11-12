@@ -1,0 +1,20 @@
+# Test (built by ./dash straight to hunk; by ./dash --gcc: test_image_decode_salida.dash): a program that ends
+# while image_decode_start decodes does not wait for the whole picture (the decode stops), and the picture it
+# decoded but never took comes back (Tachyon ending with an abort while YouTube's
+# pictures decoded: it waited for each of them, seconds at 94 % of the CPU, and their memory stayed taken).
+# The program makes an 800 x 600 grey PNG in RAM:, decodes it once to know how long it takes (3 s on the A1200),
+# and runs itself twice: "hijo" starts a decode and ends at once; "hijo2" waits until the picture is decoded (1.4 MB
+# taken) and ends without image_decode_finish. Where a decode takes under a second and a half (a fast machine), the
+# time says nothing.
+# dash-direct:
+# expect-out: decodificada: true
+# expect-out: el hijo no esperó a la imagen: true
+# expect-out: hijo2: la imagen ocupa memoria: true
+# expect-out: memoria devuelta: true
+# expect-out: fin
+
+import "lib/salida_imagen.dash"
+
+Main
+    prueba_salida()
+end

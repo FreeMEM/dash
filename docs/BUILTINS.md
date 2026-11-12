@@ -9025,6 +9025,9 @@ Ver también: [`image_decode_start`](#image_decode_start), [`image_from_decoded`
 Empieza a decodificar en otro proceso y vuelve enseguida. Devuelve un número para `image_decode_ready` e
 `image_decode_finish`, o 0 si no pudo empezar.
 
+Si el programa acaba con una sin terminar, esa decodificación se para y el programa no la espera. Una imagen que
+acabó y no se recogió con `image_decode_finish` se libera al salir.
+
 Ver también: [`image_decode_ready`](#image_decode_ready), [`image_decode_finish`](#image_decode_finish).
 
 <a id="image_decode_ready"></a>

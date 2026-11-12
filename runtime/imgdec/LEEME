@@ -1,8 +1,9 @@
 Decodificar imágenes para `image_decode` (Dash 2.0: lo que Tachyon hacía con @native, lib/imagen_dec.dash).
 
 - stb_image v2.30 (Sean Barrett), https://github.com/nothings/stb, commit f58f558c120e9b32c217290b80bad1a0729fbb2c.
-  `stb_image.h` con un cambio: `stbi__gif_load` toma su estado (unos 35 KB) de la memoria y no de la pila
-  (un programa de Dash tiene 16 KB: el GIF se colgaba). Licencia: dominio público o MIT (al final del fichero). PNG, GIF, BMP y los JPEG
+  `stb_image.h` con dos cambios: `stbi__gif_load` toma su estado (unos 35 KB) de la memoria y no de la pila
+  (un programa de Dash tiene 16 KB: el GIF se colgaba), y los bucles largos de JPEG y PNG miran `STBI__DASH_STOP()`
+  (`dash_imgdec_stopped`: al acabar el programa, la decodificación de `image_decode_start` se para). Licencia: dominio público o MIT (al final del fichero). PNG, GIF, BMP y los JPEG
   que TJpgDec no lee (progresivos).
 - TJpgDec R0.03 (ChaN, 2021), http://elm-chan.org/fsw/tjpgd/ (arc/tjpgd3.zip, src/). `tjpgd.c` y `tjpgd.h` sin
   cambios; `tjpgdcnf.h` con JD_SZBUF 4096 y JD_FASTDECODE 2. Licencia: libre para cualquier uso, conservando el

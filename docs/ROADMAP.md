@@ -1128,6 +1128,11 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       forma de abrirla o cerrarla (su botón de cerrar, `mui_window_close`, `mui_window_dispose`). `MUIA_Window_Sleep`
       es un contador: cada modal apunta lo que durmió y lo despierta una sola vez, así que se anidan. 1005
       funciones. `tests/test_mui_modal.dash`, `tests/test_mui_modal_directo.dash`
+- [x] Salir sin esperar a las imágenes (2026-11-12, Tachyon tras un abort: la CPU al 94 % un rato y memoria que no
+      volvía). Al acabar, las decodificaciones de `image_decode_start` se paran (TJpgDec, stb_image, WebP por trozos)
+      y la imagen que el programa no recogió se libera. Además, `tools/emu_run.py` arranca con `FailAt 1000000`: un
+      programa que sale con 127 (abort) ya no para los siguientes. Bitácora: `docs/LIMPIEZA_LOOP.md`.
+      `tests/test_image_decode_salida.dash`, `tests/test_image_decode_salida_directo.dash`
 
 ## Notas y Decisiones
 

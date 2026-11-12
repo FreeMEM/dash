@@ -9027,6 +9027,9 @@ See also: [`image_decode_start`](#image_decode_start), [`image_from_decoded`](#i
 Starts decoding in another process and returns at once. Returns a number for `image_decode_ready` and
 `image_decode_finish`, or 0 if it could not start.
 
+If the program ends with one unfinished, that decode stops and the program does not wait for it. A picture that
+was decoded but never taken with `image_decode_finish` is freed at the exit.
+
 See also: [`image_decode_ready`](#image_decode_ready), [`image_decode_finish`](#image_decode_finish).
 
 <a id="image_decode_ready"></a>
