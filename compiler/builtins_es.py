@@ -259,6 +259,23 @@ DESC_ES = {
     "dir_entry_size": "El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón)",
     "dir_entry_is_dir": "Verdadero si la entrada i del último dir_read es un cajón",
     "dir_entry_date": "La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970",
+    "dir_entry_protection": "Los bits de protección de la entrada i del último dir_read, como los guarda el sistema de "
+                            "ficheros (0-3 d e w r puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no la hay",
+    "dir_entry_comment": "El comentario (nota) de la entrada i del último dir_read; \"\" si no tiene",
+    "file_protection": "Los bits de protección de un fichero o cajón, como los guarda el sistema de ficheros (0-3 d e w r "
+                       "puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no se puede leer",
+    "file_set_protection": "Pone los bits de protección de un fichero o cajón (como los da file_protection); false si no pudo",
+    "file_comment": "El comentario (nota) de un fichero o cajón; \"\" si no tiene o no se puede leer",
+    "file_set_comment": "Pone el comentario (nota) de un fichero o cajón (hasta 79 letras; \"\" lo quita); false si no pudo",
+    "file_date": "La fecha del último cambio de un fichero o cajón, como time_unix; 0 si no se puede leer",
+    "file_set_date": "Pone la fecha de un fichero o cajón (como time_unix); false si no pudo",
+    "file_copy_attrs": "Da a dest los bits de protección, el comentario y la fecha de src (una copia igual que el "
+                       "original); false si alguno no se pudo poner",
+    "file_copy_begin": "Empieza a copiar un fichero a trozos (file_copy_step, file_copy_end), para enseñar cómo va y "
+                       "poder parar: su número (1-8), 0 si no se puede (dest se reemplaza)",
+    "file_copy_step": "Copia hasta most bytes más de la copia n: cuántos copió, 0 cuando ha acabado, -1 si hubo un error",
+    "file_copy_end": "Acaba la copia n: con keep true y la copia entera, la copia se queda con los bits, el comentario y "
+                     "la fecha del original (true); si no, se borra lo copiado (false)",
     "console_read": "Lee de la consola",
     "console_write": "Escribe en la consola (sin búfer)",
     "file_load": "Carga un fichero entero en un búfer: los bytes leídos, o -1",

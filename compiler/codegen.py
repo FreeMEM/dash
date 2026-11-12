@@ -16287,7 +16287,7 @@ static BOOL _dash_dir_create(STRPTR path) {
 
 /* dir_read(path): what a directory holds, sorted by name (case does not count), kept until the next dir_read;
    dir_entry_*(i) read it (Dash 2.0, for Inferencia) */
-typedef struct { LONG size, date; BOOL dir; char name[1]; } _DashDirEnt;
+typedef struct { LONG size, date, prot; BOOL dir; char *comment; char name[1]; } _DashDirEnt;
 static _DashDirEnt **_dash_dir_ents = NULL;
 static LONG _dash_dir_n = 0, _dash_dir_cap = 0;
 
@@ -16333,8 +16333,12 @@ static LONG _dash_dir_read(STRPTR path) {
             _dash_dir_ents = v;
             _dash_dir_cap = cap;
         }
-        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName), MEMF_ANY))) break;
+        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName) + 1 +
+                                          strlen(fib->fib_Comment), MEMF_ANY))) break;
         strcpy(e->name, fib->fib_FileName);
+        e->comment = e->name + strlen(e->name) + 1;          /* (after the name, in the same block) */
+        strcpy(e->comment, fib->fib_Comment);
+        e->prot = fib->fib_Protection;
         e->dir = fib->fib_DirEntryType > 0 && fib->fib_DirEntryType != ST_SOFTLINK;
         e->size = e->dir ? 0 : fib->fib_Size;
         /* (as time_unix: seconds since 1970 by the system's clock) */
@@ -16364,8 +16368,130 @@ static STRPTR _dash_dir_entry_name(LONG i) {
 static LONG _dash_dir_entry_size(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->size : -1; }
 static BOOL _dash_dir_entry_is_dir(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->dir : FALSE; }
 static LONG _dash_dir_entry_date(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->date : 0; }
+static LONG _dash_dir_entry_protection(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->prot : -1; }
+static STRPTR _dash_dir_entry_comment(LONG i) {
+    _DashDirEnt *e = _dash_dir_ent(i);
+    return _dash_str_dup(e ? (STRPTR)e->comment : (STRPTR)"", TRUE);
+}
+
+/* The protection bits, the comment and the date of a file or drawer, to read and to set (for a file manager:
+   Trasfondo's). The bits as the file system keeps them: 0-3 (d, e, w, r) set mean NOT allowed; 4 a, 5 p, 6 s, 7 h */
+static struct FileInfoBlock *_dash_file_fib(STRPTR path) {
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    if (!path || !(lock = Lock(path, SHARED_LOCK))) return NULL;
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL);
+    if (fib && !Examine(lock, fib)) { FreeDosObject(DOS_FIB, fib); fib = NULL; }
+    UnLock(lock);
+    return fib;
+}
+static LONG _dash_file_protection(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    LONG r = -1;
+    if (fib) { r = fib->fib_Protection; FreeDosObject(DOS_FIB, fib); }
+    return r;
+}
+static STRPTR _dash_file_comment(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    STRPTR r = _dash_str_dup(fib ? (STRPTR)fib->fib_Comment : (STRPTR)"", TRUE);
+    if (fib) FreeDosObject(DOS_FIB, fib);
+    return r;
+}
+static LONG _dash_file_date(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    LONG r = 0;
+    if (fib) {
+        r = 252460800L + fib->fib_Date.ds_Days * 86400L + fib->fib_Date.ds_Minute * 60L + fib->fib_Date.ds_Tick / 50;
+        FreeDosObject(DOS_FIB, fib);
+    }
+    return r;
+}
+static BOOL _dash_file_set_protection(STRPTR path, LONG bits) { return path && SetProtection(path, bits); }
+static BOOL _dash_file_set_comment(STRPTR path, STRPTR text) {
+    return path && SetComment(path, text ? text : (STRPTR)"");
+}
+static BOOL _dash_file_set_date(STRPTR path, LONG t) {
+    struct DateStamp ds;
+    t -= 252460800L;                                      /* (from 1970 to the Amiga's 1978) */
+    if (!path || t < 0) return FALSE;
+    ds.ds_Days = t / 86400L;
+    ds.ds_Minute = (t % 86400L) / 60;
+    ds.ds_Tick = (t % 60) * 50;
+    return SetFileDate(path, &ds);
+}
+/* The bits, the comment and the date of src, given to dest (after copying a file, the copy the same) */
+static BOOL _dash_file_copy_attrs(STRPTR src, STRPTR dest) {
+    struct FileInfoBlock *fib = _dash_file_fib(src);
+    BOOL ok;
+    if (!fib || !dest) { if (fib) FreeDosObject(DOS_FIB, fib); return FALSE; }
+    ok = SetProtection(dest, fib->fib_Protection);
+    ok = SetComment(dest, fib->fib_Comment) && ok;
+    ok = SetFileDate(dest, &fib->fib_Date) && ok;
+    FreeDosObject(DOS_FIB, fib);
+    return ok;
+}
+
+/* Copying a file in steps (file_copy_begin, file_copy_step, file_copy_end): a file manager shows the progress
+   between two steps and can stop. Up to 8 at once */
+#define _DASH_CP_N 8
+#define _DASH_CP_BUF 32768
+static struct { BPTR in, out; UBYTE *buf; BOOL end, bad; char *src, *dest; } _dash_cp[_DASH_CP_N];
+static LONG _dash_file_copy_begin(STRPTR src, STRPTR dest) {
+    LONG n;
+    if (!src || !dest) return 0;
+    for (n = 0; n < _DASH_CP_N && _dash_cp[n].in; n++) ;
+    if (n == _DASH_CP_N) return 0;
+    _dash_cp[n].buf = (UBYTE *)AllocVec(_DASH_CP_BUF + strlen(src) + strlen(dest) + 2, MEMF_ANY);
+    if (!_dash_cp[n].buf) return 0;
+    _dash_cp[n].src = (char *)_dash_cp[n].buf + _DASH_CP_BUF;
+    strcpy(_dash_cp[n].src, src);
+    _dash_cp[n].dest = _dash_cp[n].src + strlen(src) + 1;
+    strcpy(_dash_cp[n].dest, dest);
+    if (!(_dash_cp[n].in = Open(src, MODE_OLDFILE))) { FreeVec(_dash_cp[n].buf); return 0; }
+    if (!(_dash_cp[n].out = Open(dest, MODE_NEWFILE))) {
+        Close(_dash_cp[n].in);
+        _dash_cp[n].in = 0;
+        FreeVec(_dash_cp[n].buf);
+        return 0;
+    }
+    _dash_cp[n].end = _dash_cp[n].bad = FALSE;
+    return n + 1;
+}
+static LONG _dash_file_copy_step(LONG n, LONG most) {
+    LONG done = 0, want, got;
+    if (n < 1 || n > _DASH_CP_N || !_dash_cp[n - 1].in) return -1;
+    n--;
+    if (_dash_cp[n].bad) return -1;
+    if (_dash_cp[n].end) return 0;
+    if (most < 1) most = _DASH_CP_BUF;
+    while (done < most) {
+        want = most - done < _DASH_CP_BUF ? most - done : _DASH_CP_BUF;
+        got = Read(_dash_cp[n].in, _dash_cp[n].buf, want);
+        if (got < 0) { _dash_cp[n].bad = TRUE; return -1; }
+        if (got == 0) { _dash_cp[n].end = TRUE; break; }
+        if (Write(_dash_cp[n].out, _dash_cp[n].buf, got) != got) { _dash_cp[n].bad = TRUE; return -1; }
+        done += got;
+        if (got < want) { _dash_cp[n].end = TRUE; break; }
+    }
+    return done;
+}
+static BOOL _dash_file_copy_end(LONG n, BOOL keep) {
+    BOOL ok;
+    if (n < 1 || n > _DASH_CP_N || !_dash_cp[n - 1].in) return FALSE;
+    n--;
+    ok = keep && _dash_cp[n].end && !_dash_cp[n].bad;
+    Close(_dash_cp[n].in);
+    if (!Close(_dash_cp[n].out)) ok = FALSE;
+    _dash_cp[n].in = _dash_cp[n].out = 0;
+    if (ok) _dash_file_copy_attrs((STRPTR)_dash_cp[n].src, (STRPTR)_dash_cp[n].dest);
+    else DeleteFile((STRPTR)_dash_cp[n].dest);           /* (half a copy is not left behind) */
+    FreeVec(_dash_cp[n].buf);
+    return ok;
+}
 
 static void _dash_dir_cleanup(void) {
+    LONG n;
+    for (n = 1; n <= _DASH_CP_N; n++) _dash_file_copy_end(n, FALSE);
     if (_dash_dir_changed) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;

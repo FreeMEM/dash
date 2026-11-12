@@ -2720,6 +2720,54 @@ DOS_FUNCTIONS = {
         name="dir_entry_date", params=["i"], return_type="LONG", c_template="_dash_dir_entry_date(${i})",
         needs_dos=True,
         description="Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970"),
+    "dir_entry_protection": BuiltinFunc(
+        name="dir_entry_protection", params=["i"], return_type="LONG", c_template="_dash_dir_entry_protection(${i})",
+        needs_dos=True,
+        description="Protection bits of entry i of the last dir_read, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if there is no entry i"),
+    "dir_entry_comment": BuiltinFunc(
+        name="dir_entry_comment", params=["i"], return_type="STRPTR", c_template="_dash_dir_entry_comment(${i})",
+        needs_dos=True,
+        description="Comment (filenote) of entry i of the last dir_read; \"\" if it has none"),
+    "file_protection": BuiltinFunc(
+        name="file_protection", params=["path"], return_type="LONG", c_template="_dash_file_protection(${path})",
+        needs_dos=True, reads_only=True,
+        description="Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read"),
+    "file_set_protection": BuiltinFunc(
+        name="file_set_protection", params=["path", "bits"], return_type="BOOL", c_template="_dash_file_set_protection(${path}, ${bits})",
+        needs_dos=True, reads_only=True,
+        description="Sets the protection bits of a file or drawer (as file_protection gives them); false if it could not"),
+    "file_comment": BuiltinFunc(
+        name="file_comment", params=["path"], return_type="STRPTR", c_template="_dash_file_comment(${path})",
+        needs_dos=True, reads_only=True,
+        description="Comment (filenote) of a file or drawer; \"\" if it has none or cannot be read"),
+    "file_set_comment": BuiltinFunc(
+        name="file_set_comment", params=["path", "text"], return_type="BOOL", c_template="_dash_file_set_comment(${path}, ${text})",
+        needs_dos=True, reads_only=True,
+        description="Sets the comment (filenote) of a file or drawer (up to 79 characters; \"\" removes it); false if it could not"),
+    "file_date": BuiltinFunc(
+        name="file_date", params=["path"], return_type="LONG", c_template="_dash_file_date(${path})",
+        needs_dos=True, reads_only=True,
+        description="Date of the last change of a file or drawer, as time_unix; 0 if it cannot be read"),
+    "file_set_date": BuiltinFunc(
+        name="file_set_date", params=["path", "t"], return_type="BOOL", c_template="_dash_file_set_date(${path}, ${t})",
+        needs_dos=True, reads_only=True,
+        description="Sets the date of a file or drawer (as time_unix); false if it could not"),
+    "file_copy_attrs": BuiltinFunc(
+        name="file_copy_attrs", params=["src", "dest"], return_type="BOOL", c_template="_dash_file_copy_attrs(${src}, ${dest})",
+        needs_dos=True, reads_only=True,
+        description="Gives dest the protection bits, comment and date of src (a copy the same as the original); false if any could not be set"),
+    "file_copy_begin": BuiltinFunc(
+        name="file_copy_begin", params=["src", "dest"], return_type="LONG", c_template="_dash_file_copy_begin(${src}, ${dest})",
+        needs_dos=True, reads_only=True,
+        description="Starts copying a file in steps (file_copy_step, file_copy_end), to show the progress and be able to stop: its number (1-8), 0 if it cannot (dest is replaced)"),
+    "file_copy_step": BuiltinFunc(
+        name="file_copy_step", params=["n", "most"], return_type="LONG", c_template="_dash_file_copy_step(${n}, ${most})",
+        needs_dos=True,
+        description="Copies up to most bytes more of copy n: how many it copied, 0 when it is finished, -1 on an error"),
+    "file_copy_end": BuiltinFunc(
+        name="file_copy_end", params=["n", "keep"], return_type="BOOL", c_template="_dash_file_copy_end(${n}, ${keep})",
+        needs_dos=True,
+        description="Ends copy n: with keep true and the copy finished, the copy stays with the original's bits, comment and date (true); otherwise the half copy is deleted (false)"),
 
     # Console I/O
     "console_read": BuiltinFunc(

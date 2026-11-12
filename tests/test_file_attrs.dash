@@ -1,0 +1,64 @@
+# Test: the protection bits, comment and date of a file (read and set, alone and from dir_read), and copying in
+# steps with progress (file_copy_begin/step/end): a whole copy keeps the original's bits, comment and date; a
+# cancelled one is deleted. For Trasfondo's file manager.
+# expect-out: proteccion true true
+# expect-out: comentario Una nota
+# expect-out: fecha true
+# expect-out: cajon true Una nota true
+# expect-out: trozos 3 20000
+# expect-out: copia true true true true
+# expect-out: cancelada false false
+# expect-out: sin origen 0
+# expect-out: fin
+
+Main
+    ok = file_write_text("RAM:fa_uno", "hola")
+    p = file_protection("RAM:fa_uno")
+    ok2 = file_set_protection("RAM:fa_uno", p + 4)        # w set: it cannot be written
+    Print "proteccion #{ok2} #{file_protection(\"RAM:fa_uno\") == p + 4}"
+    ok = file_set_protection("RAM:fa_uno", p)
+    ok = file_set_comment("RAM:fa_uno", "Una nota")
+    Print "comentario " + file_comment("RAM:fa_uno")
+    t = 1000000000                                        # 9 September 2001, 01:46:40
+    ok = file_set_date("RAM:fa_uno", t)
+    Print "fecha #{file_date(\"RAM:fa_uno\") == t}"
+    n = dir_read("RAM:")
+    hallado = false
+    for i in (0..n - 1)
+        if dir_entry_name(i) == "fa_uno"
+            hallado = true
+            Print "cajon #{dir_entry_protection(i) == p} " + dir_entry_comment(i) + " #{dir_entry_date(i) == t}"
+        end
+    end
+    if not hallado
+        Print "cajon no esta"
+    end
+    # a file of 20000 bytes, copied in steps of 8000: 8000, 8000, 4000
+    texto = ""
+    for k in (1..2000)
+        texto = texto + "0123456789"
+    end
+    ok = file_write_text("RAM:fa_grande", texto)
+    ok = file_set_comment("RAM:fa_grande", "Grande")
+    ok = file_set_date("RAM:fa_grande", t)
+    c = file_copy_begin("RAM:fa_grande", "RAM:fa_copia")
+    pasos = 0
+    total = 0
+    paso = file_copy_step(c, 8000)
+    while paso > 0
+        pasos = pasos + 1
+        total = total + paso
+        paso = file_copy_step(c, 8000)
+    end
+    Print "trozos #{pasos} #{total}"
+    entera = file_copy_end(c, paso == 0)
+    Print "copia #{entera} #{file_size(\"RAM:fa_copia\") == 20000} #{file_comment(\"RAM:fa_copia\") == \"Grande\"} #{file_date(\"RAM:fa_copia\") == t}"
+    c = file_copy_begin("RAM:fa_grande", "RAM:fa_media")
+    paso = file_copy_step(c, 8000)
+    Print "cancelada #{file_copy_end(c, false)} #{file_exists(\"RAM:fa_media\")}"
+    Print "sin origen #{file_copy_begin(\"RAM:no_existe\", \"RAM:fa_x\")}"
+    ok = file_delete("RAM:fa_uno")
+    ok = file_delete("RAM:fa_grande")
+    ok = file_delete("RAM:fa_copia")
+    Print "fin"
+end

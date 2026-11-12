@@ -1092,7 +1092,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       `wm_double_click_ms`, `wm_box` 8 a 15 (bordes, parte libre de la barra de título, botón de cerrar), `wm_box_now`
       (sin esperar mientras Intuition arrastra una ventana) y `wm_close` (un clic en su botón de cerrar). Los filtros de `cx_key_add` y `cx_watch_add` ya no miran los
       botones del ratón pulsados si la descripción no los nombra: `"rawmouse mouse_leftpress"` no llegaba nunca.
-      992 funciones. `tests/test_wm_eventos.dash`
+      `wm_active` lee bajo Forbid, sin `LockIBase` (Intuition lo tiene cogido mientras se arrastra). `tests/test_wm_eventos.dash`
+- [x] Para el explorador de ficheros de Trasfondo (2026-11-12): bits de protección, comentario y fecha de un
+      fichero, para leer y poner (`file_protection`, `file_set_protection`, `file_comment`, `file_set_comment`,
+      `file_date`, `file_set_date`, `dir_entry_protection`, `dir_entry_comment`), `file_copy_attrs` (como `Copy
+      CLONE`) y copiar a trozos con progreso y cancelar (`file_copy_begin`, `file_copy_step`, `file_copy_end`: la
+      copia entera se queda igual que el original; la cancelada se borra). 1004 funciones. `tests/test_file_attrs.dash`
 
 ## Notas y Decisiones
 

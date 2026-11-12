@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 992 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1004 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -4545,7 +4545,7 @@ end
 
 ### Functions by Category
 
-There are 992, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
+There are 1004, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
 starts with an introduction (what it is for, what is needed first, the usual flow) and an example run by the tests,
 goes on with the table of its functions and ends with each function explained (parameters, what it returns, what
 happens on failure and the related ones).

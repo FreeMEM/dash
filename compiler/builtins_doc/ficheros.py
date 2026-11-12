@@ -346,6 +346,166 @@ Returns the date of its last change in seconds since 1 January 1970, like `time_
 """,
         "see": ["dir_read", "time_unix"],
     },
+    "dir_entry_protection": {
+        "es": """\
+- `i`: la entrada, desde 0.
+
+Devuelve sus bits de protección tal como los guarda el sistema de ficheros: los bits 0 a 3 (d borrar, e ejecutar,
+w escribir, r leer) puestos quieren decir que eso **no** se permite; 4 a (archivado), 5 p (puro), 6 s (guion),
+7 h (oculto). -1 si no hay entrada `i`. Para un explorador de ficheros, como `List`.
+""",
+        "en": """\
+- `i`: the entry, from 0.
+
+Returns its protection bits as the file system keeps them: bits 0 to 3 (d delete, e execute, w write, r read) set
+mean that is **not** allowed; 4 a (archived), 5 p (pure), 6 s (script), 7 h (hidden). -1 if there is no entry `i`.
+For a file manager, like `List`.
+""",
+        "see": ["dir_read", "file_protection"],
+    },
+    "dir_entry_comment": {
+        "es": "- `i`: la entrada, desde 0.\n\nDevuelve su comentario (la nota de `FileNote`); `\"\"` si no tiene.\n",
+        "en": "- `i`: the entry, from 0.\n\nReturns its comment (the note of `FileNote`); `\"\"` if it has none.\n",
+        "see": ["dir_read", "file_comment"],
+    },
+    "file_protection": {
+        "es": """\
+- `path`: el fichero o cajón.
+
+Devuelve sus bits de protección (como `dir_entry_protection`); -1 si no existe o no se puede leer.
+
+```dash
+p = file_protection("RAM:hola")
+if p & 4 != 0
+    Print "no se puede escribir"
+    ok = file_set_protection("RAM:hola", p - 4)   # que se pueda
+end
+```
+""",
+        "en": """\
+- `path`: the file or drawer.
+
+Returns its protection bits (like `dir_entry_protection`); -1 if it does not exist or cannot be read.
+
+```dash
+p = file_protection("RAM:hello")
+if p & 4 != 0
+    Print "it cannot be written"
+    ok = file_set_protection("RAM:hello", p - 4)   # let it be
+end
+```
+""",
+        "see": ["file_set_protection", "dir_entry_protection"],
+    },
+    "file_set_protection": {
+        "es": "- `path`: el fichero o cajón.\n- `bits`: los bits, como los da `file_protection`.\n\nLos pone, como `Protect`. Devuelve `false` si no pudo.\n",
+        "en": "- `path`: the file or drawer.\n- `bits`: the bits, as `file_protection` gives them.\n\nSets them, like `Protect`. Returns `false` if it could not.\n",
+        "see": ["file_protection"],
+    },
+    "file_comment": {
+        "es": "- `path`: el fichero o cajón.\n\nDevuelve su comentario (la nota de `FileNote`); `\"\"` si no tiene o no se puede leer.\n",
+        "en": "- `path`: the file or drawer.\n\nReturns its comment (the note of `FileNote`); `\"\"` if it has none or cannot be read.\n",
+        "see": ["file_set_comment", "dir_entry_comment"],
+    },
+    "file_set_comment": {
+        "es": "- `path`: el fichero o cajón.\n- `text`: el comentario, hasta 79 letras; `\"\"` lo quita.\n\nLo pone, como `FileNote`. Devuelve `false` si no pudo.\n",
+        "en": "- `path`: the file or drawer.\n- `text`: the comment, up to 79 characters; `\"\"` removes it.\n\nSets it, like `FileNote`. Returns `false` if it could not.\n",
+        "see": ["file_comment"],
+    },
+    "file_date": {
+        "es": "- `path`: el fichero o cajón.\n\nDevuelve la fecha de su último cambio, como `time_unix`; 0 si no se puede leer.\n",
+        "en": "- `path`: the file or drawer.\n\nReturns the date of its last change, like `time_unix`; 0 if it cannot be read.\n",
+        "see": ["file_set_date", "dir_entry_date"],
+    },
+    "file_set_date": {
+        "es": "- `path`: el fichero o cajón.\n- `t`: la fecha, como `time_unix`.\n\nLa pone, como `SetDate`. Devuelve `false` si no pudo.\n",
+        "en": "- `path`: the file or drawer.\n- `t`: the date, like `time_unix`.\n\nSets it, like `SetDate`. Returns `false` if it could not.\n",
+        "see": ["file_date"],
+    },
+    "file_copy_attrs": {
+        "es": """\
+- `src`: el original.
+- `dest`: la copia.
+
+Da a `dest` los bits de protección, el comentario y la fecha de `src`, para que la copia quede igual que el
+original (como `Copy CLONE`). Devuelve `false` si alguno no se pudo poner.
+""",
+        "en": """\
+- `src`: the original.
+- `dest`: the copy.
+
+Gives `dest` the protection bits, the comment and the date of `src`, so the copy is the same as the original (like
+`Copy CLONE`). Returns `false` if any could not be set.
+""",
+        "see": ["file_copy", "file_copy_begin"],
+    },
+    "file_copy_begin": {
+        "es": """\
+- `src`: el fichero que se copia.
+- `dest`: la copia; si existía, se reemplaza.
+
+Empieza a copiar a trozos: entre un trozo y otro se puede enseñar cómo va y dejarlo a medias. Devuelve el número
+de la copia (1 a 8; caben 8 a la vez), o 0 si no se puede abrir alguno de los dos.
+
+```dash
+n = file_copy_begin("DH0:grande.lha", "RAM:grande.lha")
+total = file_size("DH0:grande.lha")
+hecho = 0
+paso = file_copy_step(n, 65536)
+while paso > 0 and not parar
+    hecho = hecho + paso
+    Print "#{hecho * 100 / total} %"
+    paso = file_copy_step(n, 65536)
+end
+ok = file_copy_end(n, paso == 0)    # entera: se queda; si no, se borra
+```
+""",
+        "en": """\
+- `src`: the file to copy.
+- `dest`: the copy; if it existed, it is replaced.
+
+Starts copying in steps: between one step and the next the progress can be shown and the copy left half done.
+Returns the copy's number (1 to 8; 8 fit at once), or 0 if either file cannot be opened.
+
+```dash
+n = file_copy_begin("DH0:big.lha", "RAM:big.lha")
+total = file_size("DH0:big.lha")
+done = 0
+step = file_copy_step(n, 65536)
+while step > 0 and not stop
+    done = done + step
+    Print "#{done * 100 / total} %"
+    step = file_copy_step(n, 65536)
+end
+ok = file_copy_end(n, step == 0)    # whole: it stays; otherwise it is deleted
+```
+""",
+        "see": ["file_copy_step", "file_copy_end", "file_copy"],
+    },
+    "file_copy_step": {
+        "es": "- `n`: la copia de `file_copy_begin`.\n- `most`: cuántos bytes como mucho en este trozo.\n\nDevuelve cuántos copió; 0 cuando ya está entera; -1 si hubo un error (disco lleno...).\n",
+        "en": "- `n`: the copy from `file_copy_begin`.\n- `most`: how many bytes at most in this step.\n\nReturns how many it copied; 0 when it is whole; -1 on an error (disk full...).\n",
+        "see": ["file_copy_begin", "file_copy_end"],
+    },
+    "file_copy_end": {
+        "es": """\
+- `n`: la copia de `file_copy_begin`.
+- `keep`: `true` para quedársela.
+
+Cierra los dos ficheros. Con `keep` y la copia entera, la copia se queda con los bits, el comentario y la fecha del
+original y devuelve `true`; si no (cancelada, a medias o con error), borra lo copiado y devuelve `false`. Las que
+queden abiertas al acabar el programa se borran.
+""",
+        "en": """\
+- `n`: the copy from `file_copy_begin`.
+- `keep`: `true` to keep it.
+
+Closes both files. With `keep` and the copy whole, the copy gets the original's bits, comment and date and it
+returns `true`; otherwise (cancelled, half done or with an error) it deletes what was copied and returns `false`.
+Those still open when the program ends are deleted.
+""",
+        "see": ["file_copy_begin", "file_copy_step"],
+    },
     "console_read": {
         "es": """\
 - `buffer`: dónde se lee.

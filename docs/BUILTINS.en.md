@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 992 functions, 992 implemented, 0 not implemented.
+Total: 1004 functions, 1004 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4051,6 +4051,18 @@ end
 | [`dir_entry_size(i)`](#dir_entry_size) | Int | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
 | [`dir_entry_is_dir(i)`](#dir_entry_is_dir) | Bool | True if entry i of the last dir_read is a directory |  |
 | [`dir_entry_date(i)`](#dir_entry_date) | Int | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
+| [`dir_entry_protection(i)`](#dir_entry_protection) | Int | Protection bits of entry i of the last dir_read, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if there is no entry i |  |
+| [`dir_entry_comment(i)`](#dir_entry_comment) | String | Comment (filenote) of entry i of the last dir_read; "" if it has none |  |
+| [`file_protection(path)`](#file_protection) | Int | Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read |  |
+| [`file_set_protection(path, bits)`](#file_set_protection) | Bool | Sets the protection bits of a file or drawer (as file_protection gives them); false if it could not |  |
+| [`file_comment(path)`](#file_comment) | String | Comment (filenote) of a file or drawer; "" if it has none or cannot be read |  |
+| [`file_set_comment(path, text)`](#file_set_comment) | Bool | Sets the comment (filenote) of a file or drawer (up to 79 characters; "" removes it); false if it could not |  |
+| [`file_date(path)`](#file_date) | Int | Date of the last change of a file or drawer, as time_unix; 0 if it cannot be read |  |
+| [`file_set_date(path, t)`](#file_set_date) | Bool | Sets the date of a file or drawer (as time_unix); false if it could not |  |
+| [`file_copy_attrs(src, dest)`](#file_copy_attrs) | Bool | Gives dest the protection bits, comment and date of src (a copy the same as the original); false if any could not be set |  |
+| [`file_copy_begin(src, dest)`](#file_copy_begin) | Int | Starts copying a file in steps (file_copy_step, file_copy_end), to show the progress and be able to stop: its number (1-8), 0 if it cannot (dest is replaced) |  |
+| [`file_copy_step(n, most)`](#file_copy_step) | Int | Copies up to most bytes more of copy n: how many it copied, 0 when it is finished, -1 on an error |  |
+| [`file_copy_end(n, keep)`](#file_copy_end) | Bool | Ends copy n: with keep true and the copy finished, the copy stays with the original's bits, comment and date (true); otherwise the half copy is deleted (false) |  |
 | [`console_read(buffer, maxlen)`](#console_read) | Int | Read from console |  |
 | [`console_write(str)`](#console_write) | — | Write to console |  |
 | [`file_load(filename, buffer, maxsize)`](#file_load) | Int | Load entire file into buffer, returns bytes read or -1 |  |
@@ -4328,6 +4340,160 @@ See also: [`dir_read`](#dir_read).
 Returns the date of its last change in seconds since 1 January 1970, like `time_unix`. 0 if there is no entry `i`.
 
 See also: [`dir_read`](#dir_read), [`time_unix`](#time_unix).
+
+<a id="dir_entry_protection"></a>
+
+### `dir_entry_protection(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns its protection bits as the file system keeps them: bits 0 to 3 (d delete, e execute, w write, r read) set
+mean that is **not** allowed; 4 a (archived), 5 p (pure), 6 s (script), 7 h (hidden). -1 if there is no entry `i`.
+For a file manager, like `List`.
+
+See also: [`dir_read`](#dir_read), [`file_protection`](#file_protection).
+
+<a id="dir_entry_comment"></a>
+
+### `dir_entry_comment(i)` → `String`
+
+- `i`: the entry, from 0.
+
+Returns its comment (the note of `FileNote`); `""` if it has none.
+
+See also: [`dir_read`](#dir_read), [`file_comment`](#file_comment).
+
+<a id="file_protection"></a>
+
+### `file_protection(path)` → `Int`
+
+- `path`: the file or drawer.
+
+Returns its protection bits (like `dir_entry_protection`); -1 if it does not exist or cannot be read.
+
+```dash
+p = file_protection("RAM:hello")
+if p & 4 != 0
+    Print "it cannot be written"
+    ok = file_set_protection("RAM:hello", p - 4)   # let it be
+end
+```
+
+See also: [`file_set_protection`](#file_set_protection), [`dir_entry_protection`](#dir_entry_protection).
+
+<a id="file_set_protection"></a>
+
+### `file_set_protection(path, bits)` → `Bool`
+
+- `path`: the file or drawer.
+- `bits`: the bits, as `file_protection` gives them.
+
+Sets them, like `Protect`. Returns `false` if it could not.
+
+See also: [`file_protection`](#file_protection).
+
+<a id="file_comment"></a>
+
+### `file_comment(path)` → `String`
+
+- `path`: the file or drawer.
+
+Returns its comment (the note of `FileNote`); `""` if it has none or cannot be read.
+
+See also: [`file_set_comment`](#file_set_comment), [`dir_entry_comment`](#dir_entry_comment).
+
+<a id="file_set_comment"></a>
+
+### `file_set_comment(path, text)` → `Bool`
+
+- `path`: the file or drawer.
+- `text`: the comment, up to 79 characters; `""` removes it.
+
+Sets it, like `FileNote`. Returns `false` if it could not.
+
+See also: [`file_comment`](#file_comment).
+
+<a id="file_date"></a>
+
+### `file_date(path)` → `Int`
+
+- `path`: the file or drawer.
+
+Returns the date of its last change, like `time_unix`; 0 if it cannot be read.
+
+See also: [`file_set_date`](#file_set_date), [`dir_entry_date`](#dir_entry_date).
+
+<a id="file_set_date"></a>
+
+### `file_set_date(path, t)` → `Bool`
+
+- `path`: the file or drawer.
+- `t`: the date, like `time_unix`.
+
+Sets it, like `SetDate`. Returns `false` if it could not.
+
+See also: [`file_date`](#file_date).
+
+<a id="file_copy_attrs"></a>
+
+### `file_copy_attrs(src, dest)` → `Bool`
+
+- `src`: the original.
+- `dest`: the copy.
+
+Gives `dest` the protection bits, the comment and the date of `src`, so the copy is the same as the original (like
+`Copy CLONE`). Returns `false` if any could not be set.
+
+See also: [`file_copy`](#file_copy), [`file_copy_begin`](#file_copy_begin).
+
+<a id="file_copy_begin"></a>
+
+### `file_copy_begin(src, dest)` → `Int`
+
+- `src`: the file to copy.
+- `dest`: the copy; if it existed, it is replaced.
+
+Starts copying in steps: between one step and the next the progress can be shown and the copy left half done.
+Returns the copy's number (1 to 8; 8 fit at once), or 0 if either file cannot be opened.
+
+```dash
+n = file_copy_begin("DH0:big.lha", "RAM:big.lha")
+total = file_size("DH0:big.lha")
+done = 0
+step = file_copy_step(n, 65536)
+while step > 0 and not stop
+    done = done + step
+    Print "#{done * 100 / total} %"
+    step = file_copy_step(n, 65536)
+end
+ok = file_copy_end(n, step == 0)    # whole: it stays; otherwise it is deleted
+```
+
+See also: [`file_copy_step`](#file_copy_step), [`file_copy_end`](#file_copy_end), [`file_copy`](#file_copy).
+
+<a id="file_copy_step"></a>
+
+### `file_copy_step(n, most)` → `Int`
+
+- `n`: the copy from `file_copy_begin`.
+- `most`: how many bytes at most in this step.
+
+Returns how many it copied; 0 when it is whole; -1 on an error (disk full...).
+
+See also: [`file_copy_begin`](#file_copy_begin), [`file_copy_end`](#file_copy_end).
+
+<a id="file_copy_end"></a>
+
+### `file_copy_end(n, keep)` → `Bool`
+
+- `n`: the copy from `file_copy_begin`.
+- `keep`: `true` to keep it.
+
+Closes both files. With `keep` and the copy whole, the copy gets the original's bits, comment and date and it
+returns `true`; otherwise (cancelled, half done or with an error) it deletes what was copied and returns `false`.
+Those still open when the program ends are deleted.
+
+See also: [`file_copy_begin`](#file_copy_begin), [`file_copy_step`](#file_copy_step).
 
 <a id="console_read"></a>
 
