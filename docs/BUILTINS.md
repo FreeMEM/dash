@@ -2030,7 +2030,7 @@ Ver también: [`screen_open`](#screen_open), [`window_close`](#window_close).
 
 ### `screen_width()` → `Int`
 
-Devuelve el ancho en píxeles de la pantalla propia o, si no hay, de la pantalla de la ventana actual. Sin ninguna, 640.
+Devuelve el ancho en píxeles de la pantalla propia o, si no hay, de la pantalla de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana (el Workbench, por lo general): sirve para medir una ventana antes de abrirla.
 
 Ver también: [`screen_height`](#screen_height).
 
@@ -2038,7 +2038,7 @@ Ver también: [`screen_height`](#screen_height).
 
 ### `screen_height()` → `Int`
 
-Devuelve el alto en píxeles de la pantalla propia o de la de la ventana actual. Sin ninguna, 256.
+Devuelve el alto en píxeles de la pantalla propia o de la de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana.
 
 Ver también: [`screen_width`](#screen_width).
 

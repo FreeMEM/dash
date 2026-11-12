@@ -2026,7 +2026,7 @@ See also: [`screen_open`](#screen_open), [`window_close`](#window_close).
 
 ### `screen_width()` → `Int`
 
-Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, 640.
+Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, that of the public screen where a window would open (the Workbench, as a rule): it helps to size a window before opening it.
 
 See also: [`screen_height`](#screen_height).
 
@@ -2034,7 +2034,7 @@ See also: [`screen_height`](#screen_height).
 
 ### `screen_height()` → `Int`
 
-Returns the height in pixels of the program's screen or of the current window's. With neither, 256.
+Returns the height in pixels of the program's screen or of the current window's. With neither, that of the public screen where a window would open.
 
 See also: [`screen_width`](#screen_width).
 

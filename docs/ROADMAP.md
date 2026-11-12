@@ -1113,6 +1113,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       mandan al fondo y recuperar su sitio si el Workbench deja de ir de fondo o se abre otra ventana de fondo (2
       puntos de CPU menos en un 68030). Con una ventana de fondo, `window_to_back` y `window_to_front` la mueven entre
       las de fondo. `tests/test_window_to_back.dash`
+- [x] `screen_width` y `screen_height` sin ventana (2026-11-12): miden la pantalla pública donde se abriría una
+      ventana (el Workbench), no 640 x 256, para medir una ventana antes de abrirla (TrasfondoPrefs se apretaba en
+      pantallas grandes). `tests/test_screen_size.dash`
 - [x] Esconder ventanas (2026-11-12, para los espacios virtuales de TrasfondoVentanas): `wm_hide(id)` y
       `wm_show(id)` (HideWindow y ShowWindow de Intuition 46, AmigaOS 3.2), `wm_can_hide()` y el bit 256 de
       `wm_flags` (escondida: su capa lleva LAYERHIDDEN). En 3.1 no hacen nada y dan `false`. La opción de IControl
