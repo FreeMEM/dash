@@ -25353,8 +25353,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_relaunch_now();\n")   # after all the rest: single_instance's port too
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
-        if cleanup:
-            main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n" + "".join(cleanup), 1)
+        # first of all, what Print left in the buffer: if a later step hangs (a task that never ends, a heap
+        # broken by the C of @link), it is already out (Tachyon after an abort of QuickJS)
+        cleanup.insert(0, "    if (DOSBase && Output()) Flush(Output());\n")
+        main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n" + "".join(cleanup), 1)
         parts.append(main_code)
 
         program = "\n".join(parts)
