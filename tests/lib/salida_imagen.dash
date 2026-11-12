@@ -1,0 +1,90 @@
+# What tests/test_image_decode_salida.dash and test_image_decode_salida_directo.dash run (the same, by
+# ./dash --gcc and by ./dash): see there.
+
+const ANCHO = 800
+const ALTO = 600
+const FICHERO = "RAM:salida_gris.png"
+
+func chunk(b: Int, pos: Int, tipo: String, datos: Int, n: Int) -> Int
+    buffer_set_long(b, pos, n)
+    i = 0
+    while i < 4
+        buffer_set_byte(b, pos + 4 + i, str_code(tipo, i))
+        i = i + 1
+    end
+    if n > 0
+        buffer_copy(b, pos + 8, datos, 0, n)
+    end
+    buffer_set_long(b, pos + 8 + n, crc32(b + pos + 4, n + 4, 0))
+    return pos + 12 + n
+end
+
+# un PNG gris de ANCHO x ALTO (zlib con su suma adler a 0: stb_image no la mira)
+func hacer_png() -> Bool
+    fila = ANCHO + 1
+    crudo = buffer_alloc(fila * ALTO)
+    buffer_fill(crudo, 0, fila * ALTO, 128)
+    y = 0
+    while y < ALTO
+        buffer_set_byte(crudo, y * fila, 0)
+        y = y + 1
+    end
+    zmax = fila * ALTO + 1024
+    z = buffer_alloc(zmax)
+    buffer_set_byte(z, 0, 0x78)
+    buffer_set_byte(z, 1, 0x01)
+    n = deflate(crudo, fila * ALTO, z + 2, zmax - 6, 1)
+    buffer_free(crudo)
+    if n < 0
+        buffer_free(z)
+        return false
+    end
+    buffer_set_long(z, n + 2, 0)
+    cab = buffer_alloc(13)
+    buffer_set_long(cab, 0, ANCHO)
+    buffer_set_long(cab, 4, ALTO)
+    buffer_set_byte(cab, 8, 8)
+    png = buffer_alloc(n + 128)
+    buffer_set_long(png, 0, 0x89504E47)
+    buffer_set_long(png, 4, 0x0D0A1A0A)
+    pos = chunk(png, 8, "IHDR", cab, 13)
+    pos = chunk(png, pos, "IDAT", z, n + 6)
+    pos = chunk(png, pos, "IEND", 0, 0)
+    ok = file_save(FICHERO, png, pos)
+    buffer_free(png)
+    buffer_free(cab)
+    buffer_free(z)
+    return ok
+end
+
+func prueba_salida()
+    if arg(0) == "hijo"
+        t = image_decode_start(FICHERO, 0, 0)
+        time_delay(10)
+    elif arg(0) == "hijo2"
+        m0 = mem_total()
+        t = image_decode_start(FICHERO, 0, 0)
+        while not image_decode_ready(t)
+            time_delay(5)
+        end
+        Print "hijo2: la imagen ocupa memoria: #{m0 - mem_total() > 1000000}"
+    else
+        hacer_png()
+        t0 = time_ms()
+        d = image_decode(FICHERO, 0, 0)
+        tarda = time_ms() - t0
+        image_decoded_free(d)
+        Print "decodificada: #{d != 0}"
+        orden = "\"" + program_path() + "\""
+        t0 = time_ms()
+        run_command(orden + " hijo")
+        hijo = time_ms() - t0
+        Print "el hijo no esperó a la imagen: #{tarda < 1500 or hijo < tarda / 2}"
+        antes = mem_total()
+        run_command(orden + " hijo2")
+        perdida = antes - mem_total()
+        Print "memoria devuelta: #{perdida < 500000}"
+        file_delete(FICHERO)
+        Print "fin"
+    end
+end

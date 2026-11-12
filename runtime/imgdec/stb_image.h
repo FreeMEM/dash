@@ -598,6 +598,11 @@ STBIDEF int   stbi_zlib_decode_noheader_buffer(char *obuffer, int olen, const ch
 #include <stdio.h>
 #endif
 
+// Dash: image_decode_start's process stops when the program ends (dash_imgdec_stopped): the long loops look at it
+#ifndef STBI__DASH_STOP
+#define STBI__DASH_STOP() 0
+#endif
+
 #ifndef STBI_ASSERT
 #include <assert.h>
 #define STBI_ASSERT(x) assert(x)
@@ -2961,6 +2966,7 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            if (STBI__DASH_STOP()) return 0;
             for (i=0; i < w; ++i) {
                int ha = z->img_comp[n].ha;
                if (!stbi__jpeg_decode_block(z, data, z->huff_dc+z->img_comp[n].hd, z->huff_ac+ha, z->fast_ac[ha], n, z->dequant[z->img_comp[n].tq])) return 0;
@@ -2980,6 +2986,7 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int i,j,k,x,y;
          STBI_SIMD_ALIGN(short, data[64]);
          for (j=0; j < z->img_mcu_y; ++j) {
+            if (STBI__DASH_STOP()) return 0;
             for (i=0; i < z->img_mcu_x; ++i) {
                // scan an interleaved mcu... process scan_n components in order
                for (k=0; k < z->scan_n; ++k) {
@@ -3018,6 +3025,7 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            if (STBI__DASH_STOP()) return 0;
             for (i=0; i < w; ++i) {
                short *data = z->img_comp[n].coeff + 64 * (i + j * z->img_comp[n].coeff_w);
                if (z->spec_start == 0) {
@@ -3040,6 +3048,7 @@ static int stbi__parse_entropy_coded_data(stbi__jpeg *z)
       } else { // interleaved
          int i,j,k,x,y;
          for (j=0; j < z->img_mcu_y; ++j) {
+            if (STBI__DASH_STOP()) return 0;
             for (i=0; i < z->img_mcu_x; ++i) {
                // scan an interleaved mcu... process scan_n components in order
                for (k=0; k < z->scan_n; ++k) {
@@ -3086,6 +3095,7 @@ static void stbi__jpeg_finish(stbi__jpeg *z)
          int w = (z->img_comp[n].x+7) >> 3;
          int h = (z->img_comp[n].y+7) >> 3;
          for (j=0; j < h; ++j) {
+            if (STBI__DASH_STOP()) return;
             for (i=0; i < w; ++i) {
                short *data = z->img_comp[n].coeff + 64 * (i + j * z->img_comp[n].coeff_w);
                stbi__jpeg_dequantize(data, z->dequant[z->img_comp[n].tq]);
@@ -3925,6 +3935,7 @@ static stbi_uc *load_jpeg_image(stbi__jpeg *z, int *out_x, int *out_y, int *comp
       // now go ahead and resample
       for (j=0; j < z->s->img_y; ++j) {
          stbi_uc *out = output + n * z->s->img_x * j;
+         if (STBI__DASH_STOP()) { STBI_FREE(output); stbi__cleanup_jpeg(z); return stbi__errpuc("stopped", "Stopped"); }
          for (k=0; k < decode_n; ++k) {
             stbi__resample *r = &res_comp[k];
             int y_bot = r->ystep >= (r->vs >> 1);
@@ -4310,6 +4321,7 @@ static int stbi__parse_huffman_block(stbi__zbuf *a)
 {
    char *zout = a->zout;
    for(;;) {
+      if (STBI__DASH_STOP()) return 0;
       int z = stbi__zhuffman_decode(a, &a->z_length);
       if (z < 256) {
          if (z < 0) return stbi__err("bad huffman code","Corrupt PNG"); // error in huffman codes
@@ -4735,6 +4747,7 @@ static int stbi__create_png_image_raw(stbi__png *a, stbi_uc *raw, stbi__uint32 r
    }
 
    for (j=0; j < y; ++j) {
+      if (STBI__DASH_STOP()) { all_ok = 0; break; }
       // cur/prior filter buffers alternate
       stbi_uc *cur = filter_buf + (j & 1)*img_width_bytes;
       stbi_uc *prior = filter_buf + (~j & 1)*img_width_bytes;
