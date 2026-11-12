@@ -46,5 +46,16 @@ caídas siempre había un `dash_task` en marcha.
 - Codegen (los dos caminos): `_dash_imgdec_stop()` va en la limpieza antes de esperar las tareas; `_DashTask` tiene
   un `drop` que `_dash_task_cleanup` llama para la tarea que nadie recogió: `image_decode_start` libera ahí la
   imagen y su trabajo.
-- Test: `tests/test_image_decode_salida.dash` (se lanza a sí mismo: un hijo que acaba con una decodificación a medias
-  y otro que acaba sin recoger la imagen).
+- Test: `tests/test_image_decode_salida.dash` y `_directo` (el mismo por `./dash`; el cuerpo en
+  `tests/lib/salida_imagen.dash`). Hace un PNG gris de 800 x 600 y se lanza a sí mismo: un hijo que acaba con una
+  decodificación a medias y otro que acaba sin recoger la imagen.
+- `./dash` (dashc/src/hunk.c) solo mete una limpieza de puntero débil si toca datos que el programa usa: la primera
+  versión llamaba a una función de la librería y quedaba fuera. `_dash_imgdec_stop` pone la variable ella misma.
+
+## Resultados
+
+- Con el Dash de antes (A1200, los dos caminos): el hijo tardaba en salir lo que la imagen entera (4,9 s frente a
+  4,7 s) y se perdían 1,4 MB con la imagen no recogida. Con el arreglo: el hijo sale en 0,4 s y la memoria vuelve.
+- Ojo al probar: los programas del Dash de antes, en el mismo arranque, dejan memoria perdida y los siguientes ya
+  no tienen para decodificar (salió "decodificada: false" con el arreglo por eso).
+- Runner: los dos tests en A1200, A500 y A1200 con 3.2, bien. Sin emulador, 631 de 631. `compile_all.sh`, 34/34.
