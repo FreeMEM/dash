@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1005 funciones, 1005 implementadas, 0 sin implementar.
+Total: 1008 funciones, 1008 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -5776,7 +5776,7 @@ end
 | [`tooltype(name, default)`](#tooltype) | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
-| [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 64, n de 1 a 64; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
 | [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Como cx_key_add, pero el evento sigue también a los demás programas: para mirar clics y teclas sin quitárselos (cx_command da 100 + n) |  |
 | [`cx_event_x()`](#cx_event_x) | Int | Dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio cx_command (cx_key_add, cx_watch_add) |  |
 | [`cx_event_y()`](#cx_event_y) | Int | Dónde estaba el puntero (y) en el último evento que dio cx_command |  |
@@ -6034,7 +6034,7 @@ Ver también: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 ### `cx_key_add(description, n)` → `Bool`
 
 - `description`: la tecla, o un botón del ratón (`"rawmouse lalt mouse_leftpress"`); `""` la quita.
-- `n`: su número, de 1 a 32.
+- `n`: su número, de 1 a 64.
 
 Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no sigue a los demás programas.
 
@@ -6045,7 +6045,7 @@ Ver también: [`cx_hotkey`](#cx_hotkey).
 ### `cx_watch_add(description, n)` → `Bool`
 
 - `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: su número, de 1 a 32 (el mismo espacio que `cx_key_add`).
+- `n`: su número, de 1 a 64 (el mismo espacio que `cx_key_add`).
 
 Como `cx_key_add`, pero el evento sigue también a los demás programas: sirve para mirar clics y teclas sin
 quitárselos (un doble clic en la barra de título de cualquier ventana, por ejemplo). `cx_command` da 100 + `n`, y
@@ -9496,12 +9496,15 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_task(i)`](#wm_task) | String | El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | La ruta del programa de la ventana i (el directorio del que se cargó su proceso y su nombre): "" si no es de un proceso, o si la ventana se cerró desde el wm_read |  |
 | [`wm_box(i, what)`](#wm_box) | Int | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin él), desde su esquina; -1 fuera de la lista |  |
-| [`wm_flags(i)`](#wm_flags) | Int | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester |  |
+| [`wm_flags(i)`](#wm_flags) | Int | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester, 256 escondida (wm_hide) |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después |  |
 | [`wm_front(id)`](#wm_front) | Bool | Una ventana delante de las demás; false si ya no está abierta |  |
 | [`wm_back(id)`](#wm_back) | Bool | Una ventana detrás de las demás; false si ya no está abierta |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Hace activa una ventana (las teclas van a ella); false si ya no está abierta |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta |  |
+| [`wm_hide(id)`](#wm_hide) | Bool | Esconde una ventana (AmigaOS 3.2: HideWindow); su programa sigue y puede dibujar en ella. false si ya no está abierta o el sistema no puede (wm_can_hide) |  |
+| [`wm_show(id)`](#wm_show) | Bool | Vuelve a enseñar una ventana escondida, delante de las demás; false si ya no está abierta o el sistema no puede (wm_can_hide) |  |
+| [`wm_can_hide()`](#wm_can_hide) | Bool | true si el sistema puede esconder ventanas (wm_hide, wm_show): AmigaOS 3.2 o posterior (Intuition 46) |  |
 | [`wm_box_now(id, what)`](#wm_box_now) | Int | Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se arrastra una ventana; -1 si ya no está |  |
 | [`wm_close(id)`](#wm_close) | Bool | Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el puntero vuelve donde estaba; false si ya no está o no tiene ese botón |  |
 | [`wm_double_click_ms()`](#wm_double_click_ms) | Int | El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input) |  |
@@ -9590,7 +9593,7 @@ Ver también: [`wm_set_box`](#wm_set_box).
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
-Devuelve, sumados: 1 se puede redimensionar, 2 de fondo, 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester.
+Devuelve, sumados: 1 se puede redimensionar, 2 de fondo, 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester, 256 escondida (`wm_hide`).
 
 Ver también: [`wm_box`](#wm_box).
 
@@ -9644,6 +9647,34 @@ Ver también: [`wm_active`](#wm_active).
 La pasa a su otro tamaño, como su botón de zoom. Devuelve `false` si ya no está.
 
 Ver también: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_hide"></a>
+
+### `wm_hide(id)` → `Bool`
+
+- `id`: el id de la ventana (`wm_id`).
+
+La esconde del todo (HideWindow de AmigaOS 3.2). Su programa sigue y puede dibujar en ella: si es de refresco inteligente, lo verá al volver. Sigue en la lista de `wm_read`, con 256 en `wm_flags`, y `wm_at` no la encuentra. Intuition lo hace en su siguiente evento de entrada (una décima de segundo como mucho). Devuelve `false` si ya no está o el sistema no puede (`wm_can_hide`).
+
+Ver también: [`wm_show`](#wm_show), [`wm_can_hide`](#wm_can_hide).
+
+<a id="wm_show"></a>
+
+### `wm_show(id)` → `Bool`
+
+- `id`: el id de la ventana (`wm_id`).
+
+Vuelve a enseñar una ventana escondida con `wm_hide`, delante de las demás. Devuelve `false` si ya no está o el sistema no puede.
+
+Ver también: [`wm_hide`](#wm_hide).
+
+<a id="wm_can_hide"></a>
+
+### `wm_can_hide()` → `Bool`
+
+Devuelve `true` si el sistema puede esconder ventanas: AmigaOS 3.2 o posterior (Intuition 46). En 3.1, `wm_hide` y `wm_show` no hacen nada y dan `false`.
+
+Ver también: [`wm_hide`](#wm_hide).
 
 <a id="wm_box_now"></a>
 
@@ -10222,7 +10253,7 @@ end
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Abre una ventana; da su número 1..16 (0: no se pudo); flags: 1 se puede cambiar de tamaño, 2 sin bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes). Pasa a ser la ventana actual |  |
+| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Abre una ventana; da su número 1..16 (0: no se pudo); flags: 1 se puede cambiar de tamaño, 2 sin bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes), 16 el botón derecho al programa, 32 sin activarse. Pasa a ser la ventana actual |  |
 | [`window_border_top()`](#window_border_top) | Int | El borde de arriba de la ventana actual (con la barra de título); los gadgets cuentan desde dentro, sin él |  |
 | [`window_border_bottom()`](#window_border_bottom) | Int | El borde de abajo de la ventana actual |  |
 | [`window_border_left()`](#window_border_left) | Int | El borde izquierdo de la ventana actual |  |
@@ -10290,7 +10321,8 @@ end
 - `x`, `y`: la posición en la pantalla.
 - `w`, `h`: el tamaño, 40 x 20 como poco.
 - `flags`: se suman. 1 = se puede cambiar de tamaño; 2 = sin bordes; 4 = sin botón de cerrar; 8 = `w` y `h` son
-  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús.
+  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús;
+  32 = no se activa al abrirse: la ventana activa sigue siéndolo (para un aviso que va y viene).
 
 Abre la ventana en la pantalla del programa, si se abrió una, o en el Workbench. Devuelve su número (1 a 16) y la
 hace la ventana actual: los `gfx_*` dibujan en ella. Devuelve 0 si no se pudo abrir o si ya hay 16.

@@ -3099,7 +3099,7 @@ INTUITION_EXPANDED = {
         params=["title", "x", "y", "w", "h", "flags"],
         return_type="LONG",
         c_template="_dash_window_create(${title}, ${x}, ${y}, ${w}, ${h}, ${flags})",
-        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window"
+        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders), 16 the right button to the program, 32 not activated. It becomes the current window"
     ),
     "window_border_top": BuiltinFunc(
         name="window_border_top", params=[], return_type="LONG", c_template="_dash_window_border(0)",
@@ -4916,7 +4916,7 @@ TASK_FUNCTIONS = {
     "cx_key_add": BuiltinFunc(
         name="cx_key_add", params=["description", "n"], return_type="BOOL",
         c_template="_dash_cx_key_add(${description}, ${n})",
-        description="One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: \"rawmouse "
+        description="One more hotkey for the commodity (up to 64, n from 1 to 64; a mouse button too: \"rawmouse "
                     "lalt mouse_leftpress\"): cx_command gives 100 + n when it is pressed, and the event goes no "
                     "further; \"\" takes hotkey n away; false if the description is not valid (or there is no cx_broker)"),
     "cx_watch_add": BuiltinFunc(
@@ -5028,7 +5028,7 @@ TASK_FUNCTIONS = {
     "wm_flags": BuiltinFunc(
         name="wm_flags", params=["i"], return_type="LONG", c_template="_dash_wm_flags(${i})",
         description="Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, "
-                    "32 the program's own, 64 a Workbench drawer, 128 with a requester open"),
+                    "32 the program's own, 64 a Workbench drawer, 128 with a requester open, 256 hidden (wm_hide)"),
     "wm_set_box": BuiltinFunc(
         name="wm_set_box", params=["id", "x", "y", "width", "height"], return_type="BOOL",
         c_template="_dash_wm_set_box(${id}, ${x}, ${y}, ${width}, ${height})",
@@ -5046,6 +5046,17 @@ TASK_FUNCTIONS = {
     "wm_zip": BuiltinFunc(
         name="wm_zip", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 3)",
         description="A window to its other size, as its zoom gadget does; false if it is not open any more"),
+    "wm_hide": BuiltinFunc(
+        name="wm_hide", params=["id"], return_type="BOOL", c_template="_dash_wm_hide(${id}, FALSE)",
+        description="Hides a window (AmigaOS 3.2: HideWindow); its program goes on and can draw in it. false if it "
+                    "is not open any more or the system cannot (wm_can_hide)"),
+    "wm_show": BuiltinFunc(
+        name="wm_show", params=["id"], return_type="BOOL", c_template="_dash_wm_hide(${id}, TRUE)",
+        description="Shows a hidden window again, in front of the others; false if it is not open any more or the "
+                    "system cannot (wm_can_hide)"),
+    "wm_can_hide": BuiltinFunc(
+        name="wm_can_hide", params=[], return_type="BOOL", c_template="_dash_wm_can_hide()",
+        description="true if the system can hide windows (wm_hide, wm_show): AmigaOS 3.2 or later (Intuition 46)"),
     "wm_active": BuiltinFunc(
         name="wm_active", params=[], return_type="LONG", c_template="_dash_wm_active()",
         description="The id of the active window, if it is on the Workbench screen; 0 if not"),
@@ -6115,7 +6126,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_hide", "wm_show", "wm_can_hide", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])

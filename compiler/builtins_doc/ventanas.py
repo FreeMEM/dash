@@ -72,7 +72,8 @@ FUNCS = {
 - `x`, `y`: la posición en la pantalla.
 - `w`, `h`: el tamaño, 40 x 20 como poco.
 - `flags`: se suman. 1 = se puede cambiar de tamaño; 2 = sin bordes; 4 = sin botón de cerrar; 8 = `w` y `h` son
-  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús.
+  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús;
+  32 = no se activa al abrirse: la ventana activa sigue siéndolo (para un aviso que va y viene).
 
 Abre la ventana en la pantalla del programa, si se abrió una, o en el Workbench. Devuelve su número (1 a 16) y la
 hace la ventana actual: los `gfx_*` dibujan en ella. Devuelve 0 si no se pudo abrir o si ya hay 16.
@@ -82,7 +83,8 @@ hace la ventana actual: los `gfx_*` dibujan en ella. Devuelve 0 si no se pudo ab
 - `x`, `y`: the position on the screen.
 - `w`, `h`: the size, at least 40 x 20.
 - `flags`: they add up. 1 = resizable; 2 = borderless; 4 = no close button; 8 = `w` and `h` are the inside, without
-  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus.
+  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus; 32 = it does not
+  become active when it opens: the active window stays so (for a notice that comes and goes).
 
 Opens the window on the program's screen, if one was opened, or on the Workbench. Returns its number (1 to 16) and
 makes it the current window: the `gfx_*` functions draw in it. Returns 0 if it could not be opened or if there are

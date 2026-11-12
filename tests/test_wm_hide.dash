@@ -1,0 +1,62 @@
+# Test: wm_hide and wm_show (for TrasfondoVentanas' virtual desktops). On AmigaOS 3.2 (Intuition 46) the window
+# hides completely: it stays in wm_read with 256 in wm_flags and wm_at does not find it; wm_show brings it back. On
+# 3.1, wm_can_hide is false and both return false without doing anything. window_create with flag 32 does not take
+# the focus (TrasfondoVentanas' notice of the desktop).
+# expect-c: HideWindow(w)
+# expect-out: esconde true
+# expect-out: vuelve true
+# expect-out: sin activar true
+# expect-out: fin
+
+Window Prueba
+    title "Escondida"
+    left 100
+    top 60
+    width 200
+    height 80
+end
+
+# la ventana de este programa: su índice en wm_read, o -1
+func propia() -> Int
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_title(i) == "Escondida" and wm_flags(i) & 32 != 0
+            return i
+        end
+    end
+    return -1
+end
+
+# espera (hasta 2 s) a que la ventana esté escondida o no, como se pida
+func esperar(escondida: Bool) -> Bool
+    for k in (0..99)
+        i = propia()
+        if i >= 0 and (wm_flags(i) & 256 != 0) == escondida
+            return true
+        end
+        time_delay(1)
+    end
+    return false
+end
+
+Main
+    Prueba.open
+    time_delay(10)
+    id = wm_id(propia())
+    if wm_can_hide()
+        ok = wm_hide(id)
+        Print "esconde #{ok and esperar(true) and wm_at(150, 90) != id}"
+        ok = wm_show(id)
+        Print "vuelve #{ok and esperar(false) and wm_at(150, 90) == id}"
+    else
+        Print "esconde #{not wm_hide(id)}"
+        Print "vuelve #{not wm_show(id) and wm_flags(propia()) & 256 == 0}"
+    end
+    ok = wm_activate(id)                       # (escondida, dejó de ser la activa)
+    time_delay(10)
+    av = window_create("", 10, 10, 80, 30, 2 + 4 + 32)
+    time_delay(10)
+    Print "sin activar #{av != 0 and input_active_title() == \"Escondida\"}"
+    window_close(av)
+    Print "fin"
+end

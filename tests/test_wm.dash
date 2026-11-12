@@ -9,6 +9,7 @@
 # expect-out: fija 150x60
 # expect-out: cerrada false false
 # expect-out: teclas true true false true
+# expect-out: hasta 64 true false
 
 # the own window among the ones of the screen; -1 if it is not there
 func propia(titulo: String) -> Int
@@ -59,5 +60,6 @@ Main
         teclas = teclas + " #{cx_key_add(\"esto no vale\", 3)} #{cx_key_add(\"\", 2)}"
     end
     Print teclas
+    Print "hasta 64 #{cx_key_add(\"ctrl alt shift 9\", 64)} #{cx_key_add(\"ctrl alt shift 8\", 65)}"
     window_close(a)
 end
