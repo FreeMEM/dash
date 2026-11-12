@@ -187,6 +187,16 @@ ULONG *dl_brk_sites;        /* los NOP de Ctrl-C de los bucles, terminados en 0 
 extern void _dash_brk_on(void (*go)(void), ULONG *sites);
 void dl_brk(void);
 
+/* Desde _dash_start (rt_math.s), ya en la pila de Main (la nueva de @stack, si la hay): el manejador de las
+   excepciones, que sigue en _dash_trap_recover sobre esta pila, y Ctrl-C en los bucles. Antes iba en _dash_init, en la
+   pila del shell (4 KB con Run): el aviso y la limpieza de una excepción la desbordaban, y el programa desaparecía
+   sin aviso y sin devolver la memoria (Tachyon en Amiberry con JIT) */
+void _dash_main_begin(void)
+{
+    _dash_trap_on();
+    if (dl_brk_sites && *dl_brk_sites) _dash_brk_on(dl_brk, dl_brk_sites);   /* Ctrl-C en los bucles */
+}
+
 /* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
 LONG _dash_init(const char *cmd, LONG len)
 {
@@ -212,8 +222,6 @@ LONG _dash_init(const char *cmd, LONG len)
         __asm__ volatile ("fmove.l %0,%%fpcr" : : "d"(v));
     }
 #endif
-    _dash_trap_on();
-    if (dl_brk_sites && *dl_brk_sites) _dash_brk_on(dl_brk, dl_brk_sites);   /* Ctrl-C en los bucles */
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 37);

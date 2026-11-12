@@ -40,6 +40,8 @@ seconds after boot (tools/emu_run.py --screenshot, all of them in the same run):
 screen must have that colour. Not on the A500 (reading the screen takes seconds there).
 "# fpu" builds a test as ./dash --fpu and runs it on a 68040 (with C:SetPatch and 68040.library from the
 Workbench files, tools/emu_sys_from_hdf.sh); not on the A500.
+"# dash-direct: <options>" runs, in the emulator, the program built by ./dash straight to hunk with those options
+(the C of ./dash --gcc must still compile): for what only the direct path does.
 "# workbench" runs a test only on the machines that load the Workbench first (--emu-32).
 "# rtg" runs a test only with --emu-32, in its own boot on a 68040 with a graphics card (FS-UAE's uaegfx and
 Picasso96) and the files of $DASH_EMU_SYS_32_RTG (a 3.2 Workbench on a 16-bit RTG screen: dashweb's
@@ -122,6 +124,15 @@ def wants_rtg(test_file: Path) -> bool:
 def wants_fpu(test_file: Path) -> bool:
     """'# fpu': built as ./dash --fpu (68020 + 68881 code) and, with --emu, run on a 68040 (D46)."""
     return any(l.strip() == "# fpu" for l in test_file.read_text().splitlines())
+
+
+def direct_options(test_file: Path) -> Optional[List[str]]:
+    """'# dash-direct: <options>': the program the emulator runs is built by ./dash straight to hunk (dashc), with
+    those options, instead of ./dash --gcc (the C build must still compile). For what only the direct path does."""
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# dash-direct:"):
+            return l.split(":", 1)[1].split()
+    return None
 
 
 def wants_memcheck(test_file: Path) -> bool:
@@ -341,6 +352,15 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
             error_message=str(e),
             duration=time.time() - start_time
         )
+
+    direct = direct_options(test_file)
+    if direct is not None and (PROJECT_ROOT / "dashc" / "dashc").exists():
+        result = subprocess.run([str(PROJECT_ROOT / "dash"), str(test_file), "-o", str(exe_file), *direct],
+                                capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60)
+        if result.returncode != 0:
+            return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
+                              error_message="./dash: " + (result.stdout + result.stderr).strip()[:300],
+                              duration=time.time() - start_time)
 
     duration = time.time() - start_time
     return TestResult(
