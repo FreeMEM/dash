@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1005 funciones, 1005 implementadas, 0 sin implementar.
+Total: 1008 funciones, 1008 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -9496,12 +9496,15 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_task(i)`](#wm_task) | String | El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | La ruta del programa de la ventana i (el directorio del que se cargó su proceso y su nombre): "" si no es de un proceso, o si la ventana se cerró desde el wm_read |  |
 | [`wm_box(i, what)`](#wm_box) | Int | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin él), desde su esquina; -1 fuera de la lista |  |
-| [`wm_flags(i)`](#wm_flags) | Int | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester |  |
+| [`wm_flags(i)`](#wm_flags) | Int | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester, 256 escondida (wm_hide) |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después |  |
 | [`wm_front(id)`](#wm_front) | Bool | Una ventana delante de las demás; false si ya no está abierta |  |
 | [`wm_back(id)`](#wm_back) | Bool | Una ventana detrás de las demás; false si ya no está abierta |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Hace activa una ventana (las teclas van a ella); false si ya no está abierta |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta |  |
+| [`wm_hide(id)`](#wm_hide) | Bool | Esconde una ventana (AmigaOS 3.2: HideWindow); su programa sigue y puede dibujar en ella. false si ya no está abierta o el sistema no puede (wm_can_hide) |  |
+| [`wm_show(id)`](#wm_show) | Bool | Vuelve a enseñar una ventana escondida, delante de las demás; false si ya no está abierta o el sistema no puede (wm_can_hide) |  |
+| [`wm_can_hide()`](#wm_can_hide) | Bool | true si el sistema puede esconder ventanas (wm_hide, wm_show): AmigaOS 3.2 o posterior (Intuition 46) |  |
 | [`wm_box_now(id, what)`](#wm_box_now) | Int | Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se arrastra una ventana; -1 si ya no está |  |
 | [`wm_close(id)`](#wm_close) | Bool | Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el puntero vuelve donde estaba; false si ya no está o no tiene ese botón |  |
 | [`wm_double_click_ms()`](#wm_double_click_ms) | Int | El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input) |  |
@@ -9590,7 +9593,7 @@ Ver también: [`wm_set_box`](#wm_set_box).
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
-Devuelve, sumados: 1 se puede redimensionar, 2 de fondo, 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester.
+Devuelve, sumados: 1 se puede redimensionar, 2 de fondo, 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester, 256 escondida (`wm_hide`).
 
 Ver también: [`wm_box`](#wm_box).
 
@@ -9644,6 +9647,34 @@ Ver también: [`wm_active`](#wm_active).
 La pasa a su otro tamaño, como su botón de zoom. Devuelve `false` si ya no está.
 
 Ver también: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_hide"></a>
+
+### `wm_hide(id)` → `Bool`
+
+- `id`: el id de la ventana (`wm_id`).
+
+La esconde del todo (HideWindow de AmigaOS 3.2). Su programa sigue y puede dibujar en ella: si es de refresco inteligente, lo verá al volver. Sigue en la lista de `wm_read`, con 256 en `wm_flags`, y `wm_at` no la encuentra. Intuition lo hace en su siguiente evento de entrada (una décima de segundo como mucho). Devuelve `false` si ya no está o el sistema no puede (`wm_can_hide`).
+
+Ver también: [`wm_show`](#wm_show), [`wm_can_hide`](#wm_can_hide).
+
+<a id="wm_show"></a>
+
+### `wm_show(id)` → `Bool`
+
+- `id`: el id de la ventana (`wm_id`).
+
+Vuelve a enseñar una ventana escondida con `wm_hide`, delante de las demás. Devuelve `false` si ya no está o el sistema no puede.
+
+Ver también: [`wm_hide`](#wm_hide).
+
+<a id="wm_can_hide"></a>
+
+### `wm_can_hide()` → `Bool`
+
+Devuelve `true` si el sistema puede esconder ventanas: AmigaOS 3.2 o posterior (Intuition 46). En 3.1, `wm_hide` y `wm_show` no hacen nada y dan `false`.
+
+Ver también: [`wm_hide`](#wm_hide).
 
 <a id="wm_box_now"></a>
 

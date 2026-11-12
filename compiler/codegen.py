@@ -4523,6 +4523,7 @@ static LONG _dash_wm_read(void) {
         if (w->UserPort && w->UserPort->mp_SigTask == me) f |= 32;
         if (w->Flags & WFLG_WBENCHWINDOW) f |= 64;
         if (w->FirstRequest) f |= 128;
+        if (l->Flags & 0x1000) f |= 256;          /* LAYERHIDDEN (V45): hidden with wm_hide */
         _dash_wm_fl[i] = f;
         _dash_wm_copy(_dash_wm_title[i], w->Title, -1, 80);
         _dash_wm_owner(w, _dash_wm_task[i]);
@@ -4732,6 +4733,21 @@ static BOOL _dash_wm_do(LONG id, LONG what) {
     case 2: ActivateWindow(w); break;
     case 3: ZipWindow(w); break;
     }
+    Permit();
+    return TRUE;
+}
+
+/* Hide a window (HideWindow, Intuition V46: AmigaOS 3.2) or show it again in front of the others (ShowWindow).
+   Intuition does it at its next input event (a tenth of a second at most). FALSE if it is gone or the system has
+   no such call */
+static BOOL _dash_wm_can_hide(void) { return IntuitionBase->LibNode.lib_Version >= 46; }
+static BOOL _dash_wm_hide(LONG id, BOOL show) {
+    struct Window *w;
+    if (!_dash_wm_can_hide()) return FALSE;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    if (show) ShowWindow(w, (struct Window *)1);   /* (WINDOW_FRONTMOST) */
+    else HideWindow(w);
     Permit();
     return TRUE;
 }

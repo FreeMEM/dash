@@ -1985,6 +1985,8 @@ const BuiltinInfo builtin_info[] = {
     {"wm_box", 2, 1, 1, 0, 0, 0u},
     {"wm_box_now", 2, 1, 1, 0, 0, 0u},
     {"wm_box_now", 2, 1, 1, 0, 0, 0u},
+    {"wm_can_hide", 0, 2, 1, 0, 0, 0u},
+    {"wm_can_hide", 0, 2, 1, 0, 0, 0u},
     {"wm_close", 1, 2, 1, 0, 0, 0u},
     {"wm_close", 1, 2, 1, 0, 0, 0u},
     {"wm_double_click_ms", 0, 1, 1, 0, 0, 0u},
@@ -1993,6 +1995,8 @@ const BuiltinInfo builtin_info[] = {
     {"wm_flags", 1, 1, 1, 0, 0, 0u},
     {"wm_front", 1, 2, 1, 0, 0, 0u},
     {"wm_front", 1, 2, 1, 0, 0, 0u},
+    {"wm_hide", 1, 2, 1, 0, 0, 0u},
+    {"wm_hide", 1, 2, 1, 0, 0, 0u},
     {"wm_id", 1, 1, 1, 0, 0, 0u},
     {"wm_id", 1, 1, 1, 0, 0, 0u},
     {"wm_path", 1, 3, 1, 0, 0, 0u},
@@ -2005,6 +2009,8 @@ const BuiltinInfo builtin_info[] = {
     {"wm_read", 0, 1, 1, 0, 0, 0u},
     {"wm_set_box", 5, 2, 1, 0, 0, 0u},
     {"wm_set_box", 5, 2, 1, 0, 0, 0u},
+    {"wm_show", 1, 2, 1, 0, 0, 0u},
+    {"wm_show", 1, 2, 1, 0, 0, 0u},
     {"wm_task", 1, 3, 1, 0, 0, 0u},
     {"wm_task", 1, 3, 1, 0, 0, 0u},
     {"wm_title", 1, 3, 1, 0, 0, 0u},
@@ -2012,7 +2018,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2010;
+const int builtin_count = 2016;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

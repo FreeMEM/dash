@@ -1113,6 +1113,11 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       mandan al fondo y recuperar su sitio si el Workbench deja de ir de fondo o se abre otra ventana de fondo (2
       puntos de CPU menos en un 68030). Con una ventana de fondo, `window_to_back` y `window_to_front` la mueven entre
       las de fondo. `tests/test_window_to_back.dash`
+- [x] Esconder ventanas (2026-11-12, para los espacios virtuales de TrasfondoVentanas): `wm_hide(id)` y
+      `wm_show(id)` (HideWindow y ShowWindow de Intuition 46, AmigaOS 3.2), `wm_can_hide()` y el bit 256 de
+      `wm_flags` (escondida: su capa lleva LAYERHIDDEN). En 3.1 no hacen nada y dan `false`. La opción de IControl
+      de ventanas fuera de la pantalla no sirve para esto: Intuition deja siempre unos píxeles a la vista. 1008
+      funciones. `tests/test_wm_hide.dash`
 - [x] Ventanas modales de MUI (2026-11-12, lo pidió David Martínez): `mui_window_modal(win)`, antes de
       `mui_window_open`. Mientras `win` está abierta, las demás ventanas abiertas de la aplicación duermen
       (`MUIA_Window_Sleep`: puntero de ocupado, no atienden). Un aviso de MUI sobre `MUIA_Window_Open` pilla cualquier

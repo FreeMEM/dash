@@ -794,13 +794,19 @@ DESC_ES = {
               "empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin "
               "él), desde su esquina; -1 fuera de la lista",
     "wm_flags": "De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, "
-                "16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester",
+                "16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester, "
+                "256 escondida (wm_hide)",
     "wm_set_box": "Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene "
                   "botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después",
     "wm_front": "Una ventana delante de las demás; false si ya no está abierta",
     "wm_back": "Una ventana detrás de las demás; false si ya no está abierta",
     "wm_activate": "Hace activa una ventana (las teclas van a ella); false si ya no está abierta",
     "wm_zip": "Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta",
+    "wm_hide": "Esconde una ventana (AmigaOS 3.2: HideWindow); su programa sigue y puede dibujar en ella. false si ya "
+               "no está abierta o el sistema no puede (wm_can_hide)",
+    "wm_show": "Vuelve a enseñar una ventana escondida, delante de las demás; false si ya no está abierta o el sistema "
+               "no puede (wm_can_hide)",
+    "wm_can_hide": "true si el sistema puede esconder ventanas (wm_hide, wm_show): AmigaOS 3.2 o posterior (Intuition 46)",
     "wm_box_now": "Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se "
                   "arrastra una ventana; -1 si ya no está",
     "wm_close": "Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el "
