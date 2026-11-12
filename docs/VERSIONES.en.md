@@ -32,6 +32,15 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.12.1 (2026-11-12)
+
+For Trasfondo 2.9's bar. Nothing changes in what compiled.
+
+- **Fix:** `window_to_back`, `window_to_front` and `screen_show_title` do nothing if the window or the screen already
+  is so: they can be called every tick at no cost. `window_to_back` with a backdrop window puts it behind the other
+  backdrop ones. Trasfondo's bar inside the title bar now uses 2 points less CPU on a 68030, and the full bar gets
+  its place back if the Workbench stops being a backdrop (reported by Ferrán García).
+
 ### 2.12.0 (2026-11-12)
 
 What Trasfondo's modern windows and file manager need, which the user asked for. Everything that compiled still
