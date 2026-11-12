@@ -36,6 +36,7 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | `mui_window_end()` | Cierra el grupo raíz, crea la ventana y la añade a la aplicación. |
 | `mui_window_open(win) -> Bool` | Abre la ventana (false si no se pudo: pantalla pequeña, sin memoria). |
 | `mui_window_close(win)` | La cierra (sigue existiendo). |
+| `mui_window_modal(win)` | Modal (antes de abrirla): mientras está abierta, las demás ventanas abiertas de la aplicación duermen (`MUIA_Window_Sleep`: puntero de ocupado, no atienden). Se anidan: cada modal despierta solo lo que durmió. |
 | `mui_window_size(win, ancho, alto)` | Tamaño al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de abrirla). |
 | `mui_window_fullscreen(win)` | Ocupa toda la pantalla, sin bordes, barra de título ni gadgets (antes de abrirla). |
 | `mui_window_own_screen(win) -> Bool` | Pantalla completa en una pantalla propia, como la pública (antes de abrirla; false: en la pública). |

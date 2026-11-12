@@ -3815,6 +3815,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_window_close(${win})",
         description="Close a window (it still exists)"
     ),
+    "mui_window_modal": BuiltinFunc(
+        name="mui_window_modal",
+        params=["win"],
+        return_type="void",
+        c_template="_dash_mui_window_modal(${win})",
+        description="Make win modal (before mui_window_open): while it is open, the application's other open windows "
+                    "sleep (busy pointer, no input). Modals can nest"
+    ),
     "mui_window_active": BuiltinFunc(
         name="mui_window_active",
         params=["win"],

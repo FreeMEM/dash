@@ -36,6 +36,7 @@ menus, cycles, tabs) are copied by the runtime into its pool, and live until `mu
 | `mui_window_end()` | Closes the root group, creates the window and adds it to the application. |
 | `mui_window_open(win) -> Bool` | Opens the window (false if it could not: screen too small, out of memory). |
 | `mui_window_close(win)` | Closes it (it still exists). |
+| `mui_window_modal(win)` | Modal (before opening it): while it is open, the application's other open windows sleep (`MUIA_Window_Sleep`: busy pointer, no input). They nest: each modal wakes only what it put to sleep. |
 | `mui_window_size(win, ancho, alto)` | Size when opened, as a percentage of the visible screen, centered (before opening it). |
 | `mui_window_fullscreen(win)` | Fills the whole screen, with no borders, title bar or gadgets (before opening it). |
 | `mui_window_own_screen(win) -> Bool` | Full screen on a screen of its own, like the public one (before opening it; false: on the public screen). |

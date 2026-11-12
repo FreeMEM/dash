@@ -1,0 +1,80 @@
+# Modal MUI windows (mui_window_modal, lo pidió David Martínez): while the modal is open the application's other
+# open windows sleep (MUIA_Window_Sleep), and wake when it closes, whichever way: mui_window_close, its close gadget
+# (a MUIA_Window_CloseRequest, as a click on it would) or mui_window_dispose. MUIA_Window_Sleep is a counter: a
+# modal over a modal or opening the same modal twice must not wake anything too early or leave it asleep. A window
+# opened while the modal is open stays awake. The behaviour with keys, built by ./dash straight to hunk:
+# test_mui_modal_directo.dash.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_window_modal(
+# expect-out: abierta la principal: 0
+# expect-out: modal A: 1 0
+# expect-out: modal B sobre A: 1 1 0
+# expect-out: cerrada B: 1 0
+# expect-out: botón de cerrar de A: 0 0
+# expect-out: A otra vez y C abierta: 1 0
+# expect-out: A abierta dos veces y cerrada: 0 0
+# expect-out: A con C: 1 1
+# expect-out: A liberada: 0 0
+# expect-out: C hecha modal ya abierta: 1
+# expect-out: cerrada C: 0
+# expect-out: fin
+
+@native func dormida(win: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_Window_Sleep, (Object *)win, &v);
+    return v != 0;
+"""
+end
+
+@native func boton_cerrar(win: Int)
+"""
+    SetAttrs((Object *)win, MUIA_Window_CloseRequest, TRUE, TAG_DONE);
+"""
+end
+
+func ventana(titulo: String) -> Int
+    w = mui_window_begin(titulo, 0)
+        mui_text(titulo)
+    mui_window_end()
+    return w
+end
+
+Main
+    if mui_app_begin("Modales", "DASHMODALES") == 0
+        Print "sin MUI"
+    else
+        m = ventana("Principal")
+        a = ventana("A")
+        b = ventana("B")
+        c = ventana("C")
+        mui_window_modal(a)
+        mui_window_modal(b)
+        mui_window_open(m)
+        Print "abierta la principal: #{dormida(m)}"
+        mui_window_open(a)
+        Print "modal A: #{dormida(m)} #{dormida(a)}"
+        mui_window_open(b)
+        Print "modal B sobre A: #{dormida(m)} #{dormida(a)} #{dormida(b)}"
+        mui_window_close(b)
+        Print "cerrada B: #{dormida(m)} #{dormida(a)}"
+        boton_cerrar(a)
+        Print "botón de cerrar de A: #{dormida(m)} #{dormida(a)}"
+        mui_window_open(a)
+        mui_window_open(c)
+        Print "A otra vez y C abierta: #{dormida(m)} #{dormida(c)}"
+        mui_window_open(a)
+        mui_window_close(a)
+        Print "A abierta dos veces y cerrada: #{dormida(m)} #{dormida(c)}"
+        mui_window_open(a)
+        Print "A con C: #{dormida(m)} #{dormida(c)}"
+        mui_window_dispose(a)
+        Print "A liberada: #{dormida(m)} #{dormida(c)}"
+        mui_window_modal(c)
+        Print "C hecha modal ya abierta: #{dormida(m)}"
+        mui_window_close(c)
+        Print "cerrada C: #{dormida(m)}"
+        mui_app_end()
+        Print "fin"
+    end
+end

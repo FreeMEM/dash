@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1004 functions, 1004 implemented, 0 not implemented.
+Total: 1005 functions, 1005 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11336,6 +11336,7 @@ end
 | [`mui_window_end()`](#mui_window_end) | — | End the window started with mui_window_begin |  |
 | [`mui_window_open(win)`](#mui_window_open) | Int | Open a window; false if it could not open |  |
 | [`mui_window_close(win)`](#mui_window_close) | — | Close a window (it still exists) |  |
+| [`mui_window_modal(win)`](#mui_window_modal) | — | Make win modal (before mui_window_open): while it is open, the application's other open windows sleep (busy pointer, no input). Modals can nest |  |
 | [`mui_window_active(win)`](#mui_window_active) | Int | 1 if the window is the active one (several windows from one .dashui share event numbers; dashweb D32) |  |
 | [`mui_vgroup_begin()`](#mui_vgroup_begin) | Int (address) | Start a vertical group inside the open group |  |
 | [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (address) | Start a horizontal group inside the open group |  |
@@ -11607,6 +11608,29 @@ See also: [`mui_window_close`](#mui_window_close), [`mui_window_open_back`](#mui
 Closes it. It still exists with all its objects and values: `mui_window_open` opens it again as it was.
 
 See also: [`mui_window_open`](#mui_window_open), [`mui_window_dispose`](#mui_window_dispose).
+
+<a id="mui_window_modal"></a>
+
+### `mui_window_modal(win)`
+
+- `win`: the window that will be modal.
+
+Goes before `mui_window_open(win)`. When `win` opens, the application's other open windows sleep: they show the
+busy pointer and ignore the mouse and the keyboard. When `win` closes (with `mui_window_close`, its close gadget or
+`mui_window_dispose`), they wake up. It holds for every time it opens. They nest: a modal opened over another one
+puts the first one to sleep too, and when it closes it wakes nobody too early. A window opened while the modal is
+already open does not sleep. (Requested by David Martínez.)
+
+```ruby
+dlg = mui_window_begin("Options", 0)
+    ok = mui_button("_OK")
+    mui_on_press(ok, 10)
+mui_window_end()
+mui_window_modal(dlg)
+mui_window_open(dlg)
+```
+
+See also: [`mui_window_open`](#mui_window_open), [`mui_window_close`](#mui_window_close).
 
 <a id="mui_window_active"></a>
 

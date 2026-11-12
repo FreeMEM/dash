@@ -1113,6 +1113,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       mandan al fondo y recuperar su sitio si el Workbench deja de ir de fondo o se abre otra ventana de fondo (2
       puntos de CPU menos en un 68030). Con una ventana de fondo, `window_to_back` y `window_to_front` la mueven entre
       las de fondo. `tests/test_window_to_back.dash`
+- [x] Ventanas modales de MUI (2026-11-12, lo pidió David Martínez): `mui_window_modal(win)`, antes de
+      `mui_window_open`. Mientras `win` está abierta, las demás ventanas abiertas de la aplicación duermen
+      (`MUIA_Window_Sleep`: puntero de ocupado, no atienden). Un aviso de MUI sobre `MUIA_Window_Open` pilla cualquier
+      forma de abrirla o cerrarla (su botón de cerrar, `mui_window_close`, `mui_window_dispose`). `MUIA_Window_Sleep`
+      es un contador: cada modal apunta lo que durmió y lo despierta una sola vez, así que se anidan. 1005
+      funciones. `tests/test_mui_modal.dash`, `tests/test_mui_modal_directo.dash`
 
 ## Notas y Decisiones
 

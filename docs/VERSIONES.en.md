@@ -32,6 +32,16 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.13.0 (2026-11-12)
+
+Modal MUI windows. Everything that compiled still compiles the same.
+
+- **New:** `mui_window_modal(win)`, before `mui_window_open(win)`: while `win` is open, the program's other open
+  windows sleep (busy pointer, they do not respond) and when it closes, however it is closed, they wake up. They
+  can be stacked. Asked for by David Martínez. 1005 functions.
+- **Fix:** a program that aborts from `@link` C code now shows what it printed and the message, even if its
+  clean-up hangs (found by Tachyon).
+
 ### 2.12.1 (2026-11-12)
 
 For Trasfondo 2.9's bar. Nothing changes in what compiled.

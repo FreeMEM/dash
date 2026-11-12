@@ -33,13 +33,15 @@ func girar(n: Int) -> Int
     return t
 end
 
+# (no espera a task_done: con la máquina cargada, la tarea acababa por el Ctrl-C y el bucle lo veía antes que su
+# propio Ctrl-C, y salía "no llega" con 0. Así, el Ctrl-C para el bucle y, al salir, también tiene que acabar la
+# tarea: si no, el programa se quedaría esperándola)
 func vueltas_tarea()
     h = task_start(girar, 1)
     Print "hijo tarea: empieza"
-    while not task_done(h)
+    while true
         time_delay(1)
     end
-    Print "no llega"
 end
 
 func hijo(que: String)

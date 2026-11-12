@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1004 funciones, 1004 implementadas, 0 sin implementar.
+Total: 1005 funciones, 1005 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11341,6 +11341,7 @@ end
 | [`mui_window_end()`](#mui_window_end) | — | Acaba la ventana empezada con mui_window_begin |  |
 | [`mui_window_open(win)`](#mui_window_open) | Int | Abre una ventana; false si no se pudo |  |
 | [`mui_window_close(win)`](#mui_window_close) | — | Cierra una ventana (sigue existiendo) |  |
+| [`mui_window_modal(win)`](#mui_window_modal) | — | Hace modal la ventana (antes de mui_window_open): mientras está abierta, las demás ventanas abiertas de la aplicación duermen (puntero de ocupado, no atienden). Se pueden anidar |  |
 | [`mui_window_active(win)`](#mui_window_active) | Int | 1 si la ventana es la activa (varias ventanas de un .dashui comparten números de evento; dashweb D32) |  |
 | [`mui_vgroup_begin()`](#mui_vgroup_begin) | Int (dirección) | Empieza un grupo vertical dentro del grupo abierto |  |
 | [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (dirección) | Empieza un grupo horizontal dentro del grupo abierto |  |
@@ -11613,6 +11614,29 @@ Ver también: [`mui_window_close`](#mui_window_close), [`mui_window_open_back`](
 La cierra. Sigue existiendo con todos sus objetos y valores: `mui_window_open` la vuelve a abrir igual.
 
 Ver también: [`mui_window_open`](#mui_window_open), [`mui_window_dispose`](#mui_window_dispose).
+
+<a id="mui_window_modal"></a>
+
+### `mui_window_modal(win)`
+
+- `win`: la ventana que será modal.
+
+Va antes de `mui_window_open(win)`. Al abrirse `win`, las demás ventanas abiertas de la aplicación se duermen:
+enseñan el puntero de ocupado y no atienden al ratón ni al teclado. Al cerrarse `win` (con `mui_window_close`, su
+botón de cerrar o `mui_window_dispose`), se despiertan. Vale para cada vez que se abra. Se pueden anidar: una modal
+abierta sobre otra duerme también la primera, y al cerrarse no despierta a nadie antes de tiempo. Una ventana que
+se abre con la modal ya abierta no se duerme. (Lo pidió David Martínez.)
+
+```ruby
+dlg = mui_window_begin("Opciones", 0)
+    ok = mui_button("_Aceptar")
+    mui_on_press(ok, 10)
+mui_window_end()
+mui_window_modal(dlg)
+mui_window_open(dlg)
+```
+
+Ver también: [`mui_window_open`](#mui_window_open), [`mui_window_close`](#mui_window_close).
 
 <a id="mui_window_active"></a>
 

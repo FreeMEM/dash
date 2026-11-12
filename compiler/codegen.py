@@ -21922,6 +21922,13 @@ static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
 static Object *_dash_mui_wins[_DASH_MUI_WINS];
 static LONG _dash_mui_nwins = 0;
 static Object *_dash_mui_last_win = NULL;
+/* mui_window_modal: the modal windows, and each window a modal keeps asleep */
+#define _DASH_MUI_SLEEPS 64
+static Object *_dash_mui_modal_win[_DASH_MUI_WINS];     /* the modal windows */
+static LONG _dash_mui_nmodal = 0;
+static Object *_dash_mui_sleep_by[_DASH_MUI_SLEEPS];    /* a modal open... */
+static Object *_dash_mui_sleep_win[_DASH_MUI_SLEEPS];   /* ...and a window it keeps asleep */
+static LONG _dash_mui_nsleep = 0;
 /* the window of an object being set up: the one being built, or the last one built (what a .dashui sets after
    mui_window_end) */
 #define _DASH_MUI_OWNER (_dash_mui_cur_win ? _dash_mui_cur_win : _dash_mui_last_win)
@@ -21978,6 +21985,7 @@ static STRPTR _dash_mui_keep(STRPTR text) {
 static STRPTR *_dash_mui_entries(STRPTR options);
 
 static void _dash_mui_app_end(void) {
+    _dash_mui_nmodal = _dash_mui_nsleep = 0;   /* (nothing to wake: the windows close as they go) */
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
     {
@@ -22116,12 +22124,15 @@ static void _dash_mui_window_end(void) {
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
 
+static void _dash_mui_modal_wake(Object *win);
+
 static LONG _dash_mui_window_open(APTR win) {
     IPTR open = FALSE;
     if (!win) return 0;
     SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);   /* (after a mui_window_open_back) */
     SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
     GetAttr(MUIA_Window_Open, win, &open);
+    if (!open) _dash_mui_modal_wake(win);   /* (a modal that could not open) */
     return open != 0;
 }
 
@@ -22133,6 +22144,7 @@ static LONG _dash_mui_window_open_back(APTR win) {
     SetAttrs(win, MUIA_Window_Activate, FALSE, TAG_DONE);
     SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
     GetAttr(MUIA_Window_Open, win, &open);
+    if (!open) _dash_mui_modal_wake(win);   /* (a modal that could not open) */
     return open != 0;
 }
 
@@ -22150,6 +22162,86 @@ static void _dash_mui_window_activate(APTR win) {
 
 static void _dash_mui_window_close(APTR win) {
     if (win) SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+}
+
+/* mui_window_modal(win) (lo pidió David Martínez): while win is open, the application's other windows sleep
+   (MUIA_Window_Sleep: the busy pointer, no input). Only those open when it opens: a closed one put to sleep would
+   open asleep, and a modal over a modal must not. MUIA_Window_Sleep is a counter in MUI: each window put to sleep
+   is noted with the modal that did it and woken once when that one closes, so modals nest.
+   A notify on MUIA_Window_Open catches every way of opening or closing (mui_window_open, its close gadget,
+   mui_window_close, mui_window_dispose). */
+static struct Hook _dash_mui_modal_hook;
+
+static LONG _dash_mui_modal_find(Object *win) {
+    LONG i;
+    for (i = 0; i < _dash_mui_nmodal; i++)
+        if (_dash_mui_modal_win[i] == win) return i;
+    return -1;
+}
+
+static void _dash_mui_modal_wake(Object *win) {
+    LONG i, j;
+    for (i = j = 0; i < _dash_mui_nsleep; i++)
+        if (_dash_mui_sleep_by[i] == win) SetAttrs(_dash_mui_sleep_win[i], MUIA_Window_Sleep, FALSE, TAG_DONE);
+        else {
+            _dash_mui_sleep_by[j] = _dash_mui_sleep_by[i];
+            _dash_mui_sleep_win[j++] = _dash_mui_sleep_win[i];
+        }
+    _dash_mui_nsleep = j;
+}
+
+static void _dash_mui_modal_sleep_one(Object *win, Object *w) {
+    if (!w || w == win || _dash_mui_nsleep >= _DASH_MUI_SLEEPS) return;
+    _dash_mui_sleep_by[_dash_mui_nsleep] = win;
+    _dash_mui_sleep_win[_dash_mui_nsleep++] = w;
+    SetAttrs(w, MUIA_Window_Sleep, TRUE, TAG_DONE);
+}
+
+/* win has just opened: put the other open windows to sleep, once */
+static void _dash_mui_modal_sleep(Object *win) {
+    LONG i;
+    IPTR open;
+    if (_dash_mui_modal_find(win) < 0) return;
+    for (i = 0; i < _dash_mui_nsleep; i++)
+        if (_dash_mui_sleep_by[i] == win) return;
+    for (i = 0; i < _dash_mui_nwins; i++) {
+        open = FALSE;
+        if (_dash_mui_wins[i] != win) GetAttr(MUIA_Window_Open, _dash_mui_wins[i], &open);
+        if (open) _dash_mui_modal_sleep_one(win, _dash_mui_wins[i]);
+    }
+}
+
+static ULONG _dash_mui_modal_entry(struct Hook *h __asm("a0"), Object *win __asm("a2"), IPTR *args __asm("a1")) {
+    (void)h;
+    if (args[0]) _dash_mui_modal_sleep(win);
+    else _dash_mui_modal_wake(win);
+    return 0;
+}
+
+static void _dash_mui_window_modal(APTR win_) {
+    Object *win = (Object *)win_;
+    IPTR open = FALSE;
+    if (!win || !_dash_mui_app || _dash_mui_modal_find(win) >= 0 || _dash_mui_nmodal >= _DASH_MUI_WINS) return;
+    _dash_mui_modal_win[_dash_mui_nmodal++] = win;
+    _dash_mui_modal_hook.h_Entry = (ULONG (*)())_dash_mui_modal_entry;
+    _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_Open, MUIV_EveryTime, MUIV_Notify_Self, 3,
+                 MUIM_CallHook, (IPTR)&_dash_mui_modal_hook, MUIV_TriggerValue);
+    GetAttr(MUIA_Window_Open, win, &open);
+    if (open) _dash_mui_modal_sleep(win);   /* (already open: from now on) */
+}
+
+/* a window disposed: it is no longer a modal or asleep (its close has already woken what it kept asleep) */
+static void _dash_mui_modal_forget(Object *win) {
+    LONG i, j;
+    for (i = j = 0; i < _dash_mui_nmodal; i++)
+        if (_dash_mui_modal_win[i] != win) _dash_mui_modal_win[j++] = _dash_mui_modal_win[i];
+    _dash_mui_nmodal = j;
+    for (i = j = 0; i < _dash_mui_nsleep; i++)
+        if (_dash_mui_sleep_by[i] != win && _dash_mui_sleep_win[i] != win) {
+            _dash_mui_sleep_by[j] = _dash_mui_sleep_by[i];
+            _dash_mui_sleep_win[j++] = _dash_mui_sleep_win[i];
+        }
+    _dash_mui_nsleep = j;
 }
 
 /* TRUE if the window is the active one: the one the user is using (dashweb D32: several windows
@@ -22965,6 +23057,7 @@ static void _dash_mui_window_dispose(APTR win_) {
         if (_dash_mui_wins[i] == win) k = i;
     if (k < 0 || win == _dash_mui_cur_win) return;
     SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+    _dash_mui_modal_forget(win);
     /* (each entry knows its window; MUIA_WindowObject for one set up later, from outside) */
     for (i = j = 0; i < _dash_mui_npress; i++)
         if (_dash_mui_press_win[i] != win && !_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
