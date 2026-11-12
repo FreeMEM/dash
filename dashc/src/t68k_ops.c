@@ -839,6 +839,36 @@ static void cmp_d0_k(long k, int small)
 }
 
 static void test_bit_d0(int bit) { w(0x0800); w(bit); }   /* btst #bit,d0: Z si está a 0 */
+
+/* Ctrl-C en cada vuelta de un while que no cuenta y de los bucles con llamadas (sin break_check ni MUI en el
+   programa): un NOP, apuntado en la tabla _dl_brk_sites. Ctrl-C a la tarea del programa es una excepción de exec
+   (_dash_brk_on del runtime) que cambia esos NOP por TRAP #14: en la vuelta siguiente, _dash_trap lleva el programa a
+   _dl_brk ("***Break", código 5). Hasta entonces, el bucle solo paga el NOP */
+static void brk_check(void)
+{
+    if (pass == 2) {
+        int lb = new_label();
+        def_label(lb);
+        VEC_PUSH(brk_sites, lb);
+    }
+    w(0x4E71);
+}
+
+/* move.l #etiqueta,símbolo del runtime (al empezar, antes de _dash_start) */
+static void set_rt_label(const char *sym, int label)
+{
+    Fixup f;
+    w(0x23FC);
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 1;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    add_reloc(f.at, HK_CODE, NULL);
+    l(0);
+    add_reloc((uint32_t)obj->code.n, -1, sym);
+    l(0);
+}
 static void debug_nop(void) { w(0x4E71); }             /* nop: donde --debug pone un TRAP */
 
 /* deja bytes de la pila antes de un salto (break, Stop, return): el código de después no lo ve (sin sp_depth) */

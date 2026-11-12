@@ -33,6 +33,31 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.11.0 (2026-11-12)
+
+Ctrl-C para los programas que dan vueltas, y funciones nuevas para MUI y para las ventanas de fondo. Lo que ya
+compilaba sigue compilando, salvo lo que guardaba en una variable algo de otro tipo (ver abajo).
+
+- **Nuevo:** Ctrl-C para cualquier programa que esté en un bucle: `Break` en la Shell, el botón Parar de Forja o el
+  final del depurador. El programa escribe `***Break` y acaba con código 5, con la limpieza de siempre. Antes, un
+  bucle sin fin obligaba a reiniciar el Amiga. Casi no cuesta: con `./dash`, el bucle más apretado tarda un 16 % más
+  en un A1200 y un 8 % más en un A500; al lado de una llamada no se nota. Las tareas de `task_start` también acaban.
+  Un programa que atiende Ctrl-C él mismo (`break_check`, MUI, `single_instance`, commodities) sigue igual, y
+  `DASH_NO_BREAK=1` al compilar lo quita. Hace falta para el Parar de Forja 0.6.1 (lo contó David Martínez).
+- **Nuevo:** `mui_active_object`, `mui_string_pos` y `mui_set_string_pos`, para pegar desde un menú donde está el
+  cursor de un campo de texto MUI (en MUI 3.8, Amiga+V no pega en la barra de direcciones de Tachyon; lo contaron
+  Alex Agauser y Ferrán García).
+- **Nuevo:** ventanas de fondo: la propiedad `backdrop` de `Window`, `window_next_backdrop` para decidirlo al
+  ejecutar y `screen_show_title` para la barra de título de la pantalla. Así la barra de Trasfondo queda siempre
+  detrás de las demás ventanas (lo contó Ferrán García).
+- **Arreglo:** con MUI 3.8, `mui_string` y `mui_combo` pegan, copian y cortan con Ctrl o Amiga + V, C y X; MUI 3.8
+  no lo hacía solo (lo contaron Alex Agauser y Ferrán García).
+- **Arreglo:** `./dash` daba cuentas mal sin avisar en casos como `return espacios(b) - v`: una función copiada en
+  línea pisaba el registro de una variable que se usaba después (salía 0 en vez de 4). Lo encontró Forja.
+- **Arreglo:** `./dash` rechaza, como ya hacía `./dash --gcc`, guardar en una variable algo de otro tipo (un
+  número en un `String`, un `Float` en un `Int`...). Antes compilaba y en el Amiga daba basura o un cuelgue. Un
+  programa así ya no compila: hay que convertir el valor (`Int(x)`, `"#{n}"`...).
+
 ### 2.10.0 (2026-11-10)
 
 Funciones nuevas para las expresiones regulares. Lo que ya compilaba sigue igual.

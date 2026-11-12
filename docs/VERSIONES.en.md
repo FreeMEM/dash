@@ -32,6 +32,31 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.11.0 (2026-11-12)
+
+Ctrl-C for programs that loop, and new functions for MUI and for backdrop windows. What compiled still compiles,
+except storing a value of another type in a variable (see below).
+
+- **New:** Ctrl-C stops any program that is in a loop: `Break` in the Shell, Forja's Stop button or the end of the
+  debugger. The program writes `***Break` and ends with return code 5, with the usual cleanup. Before, an endless
+  loop meant rebooting the Amiga. It costs almost nothing: with `./dash`, the tightest loop takes 16 % longer on an
+  A1200 and 8 % longer on an A500; next to a call it does not show. Tasks of `task_start` end too. A program that
+  handles Ctrl-C itself (`break_check`, MUI, `single_instance`, commodities) stays the same, and `DASH_NO_BREAK=1`
+  when compiling turns it off. Forja 0.6.1's Stop needs it (reported by David Martínez).
+- **New:** `mui_active_object`, `mui_string_pos` and `mui_set_string_pos`, to paste from a menu at the cursor of an
+  MUI text field (in MUI 3.8, Amiga+V does not paste in Tachyon's address bar; reported by Alex Agauser and Ferrán
+  García).
+- **New:** backdrop windows: the `backdrop` property of `Window`, `window_next_backdrop` to decide it at run time and
+  `screen_show_title` for the screen's title bar. Trasfondo's bar now stays behind every other window (reported by
+  Ferrán García).
+- **Fix:** with MUI 3.8, `mui_string` and `mui_combo` paste, copy and cut with Ctrl or Amiga + V, C and X; MUI 3.8
+  did not do it by itself (reported by Alex Agauser and Ferrán García).
+- **Fix:** `./dash` got some sums wrong without warning, as in `return espacios(b) - v`: a function copied inline
+  overwrote the register of a variable used afterwards (0 instead of 4). Forja found it.
+- **Fix:** `./dash` rejects, as `./dash --gcc` already did, storing a value of another type in a variable (a number
+  in a `String`, a `Float` in an `Int`...). It used to compile and give garbage or a hang on the Amiga. Such a
+  program no longer compiles: convert the value (`Int(x)`, `"#{n}"`...).
+
 ### 2.10.0 (2026-11-10)
 
 New functions for regular expressions. What compiled before still does the same.

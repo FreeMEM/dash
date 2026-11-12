@@ -1,0 +1,25 @@
+# Test: un programa que atiende Ctrl-C él mismo (break_check) no lo recibe en sus bucles: lo ve break_check y sigue
+# (su propia limpieza al salir no se corta).
+# expect-no-c: _DASH_BRK();
+# expect-out: visto en 10
+# expect-out: fin
+
+@native func ctrl_c()
+"""
+    SetSignal(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C);
+"""
+end
+
+Main
+    i = 0
+    while i < 20
+        i = i + 1
+        if i == 10
+            ctrl_c()
+        end
+        if break_check()
+            Print "visto en #{i}"
+        end
+    end
+    Print "fin"
+end
