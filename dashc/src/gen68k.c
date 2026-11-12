@@ -36,6 +36,7 @@ typedef struct { int func, type, off, line; char *name; } DbgVar;
 static struct { DbgLine *v; int n, cap; } dbg_lines;
 static struct { DbgFunc *v; int n, cap; } dbg_funcs;
 static struct { DbgVar *v; int n, cap; } dbg_vars;
+static struct { int *v; int n, cap; } brk_sites;   /* los NOP de Ctrl-C (brk_check), para la tabla _dl_brk_sites */
 static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
 #ifdef DASH_A64
@@ -598,6 +599,8 @@ static int pow2(long k)
 /* modo de prueba, como ./dash: DASH_TEST_AUTOCLOSE=<segundos> al compilar (el programa acaba solo; tools/emu_run.py)
    y DASH_PRINT_FLUSH=1 (cada Print sale enseguida) */
 static int autoclose, print_flush;
+static int auto_brk;        /* Ctrl-C en cada vuelta (brk_check) de los while que no cuentan y de los bucles con llamadas */
+static int body_calls(NodeList *b);
 
 #ifdef DASH_A64
 #include "ta64_ops.c"
@@ -3821,6 +3824,7 @@ static void gen_for(Node *n)
     }
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4178,6 +4182,7 @@ static int gen_counted_while(Node *n)
     }
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = -1;                                      /* no hay continue */
     enter_scope();
@@ -4480,6 +4485,7 @@ static void gen_foreach_str(Node *n)
     if (len_slot >= 0) use_slot(len_slot);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4983,6 +4989,7 @@ static void gen_keys_loop(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5103,6 +5110,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     use_slot(cnt_slot);
     def_label(top);
     mark_release(ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5172,6 +5180,7 @@ static void gen_foreach(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
+    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5596,6 +5605,7 @@ static void gen_stmt(Node *n)
         else if (!true_at_entry(n->a)) gen_branch(n->a, done, 0);   /* si se sabe que se cumple, nada */
         def_label(top);
         mark_release(&ms);
+        if (auto_brk) brk_check();
         if (autoclose) rt_call("_dl_ac_loop", 0, 0);
         lp.brk = done;
         lp.cont = test;
@@ -5941,7 +5951,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 /* lo generado hasta un punto, para deshacer lo que venga después */
 /* (también lo de la depuración: una función generada y tirada no debe dejar líneas que apunten a código que ya no
    está; el depurador ponía su NOP encima de otro código. Lo vio Forja) */
-typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n; long sink; } Mark;
+typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n, brk_n; long sink; } Mark;
 
 static Mark mark(void)
 {
@@ -5954,6 +5964,7 @@ static Mark mark(void)
     m.dlines_n = dbg_lines.n;
     m.dfuncs_n = dbg_funcs.n;
     m.dvars_n = dbg_vars.n;
+    m.brk_n = brk_sites.n;
     m.sink = sink_off;
     return m;
 }
@@ -5969,6 +5980,7 @@ static void undo(Mark *m)
     dbg_lines.n = m->dlines_n;
     dbg_funcs.n = m->dfuncs_n;
     dbg_vars.n = m->dvars_n;
+    brk_sites.n = m->brk_n;
     sink_off = m->sink;
 }
 
@@ -6355,9 +6367,67 @@ static void debug_text(Program *p)
         dbg_printf("L %ld %d %d\n", labels.v[dbg_lines.v[i].label], dbg_lines.v[i].file, dbg_lines.v[i].line);
 }
 
+/* ¿hay alguna llamada (una función, un builtin, Print) en estas sentencias? Un bucle que llama a algo mira Ctrl-C en cada
+   vuelta aunque acabe solo (un for con time_delay puede tardar minutos), porque a su lado no cuesta nada; uno sin
+   llamadas que acaba solo (un for, un while que cuenta) no lo mira */
+static int node_calls(Node *n)
+{
+    int i;
+    if (!n) return 0;
+    if (n->kind == E_CALL || n->kind == S_PRINT) return 1;
+    for (i = 0; i < n->args.n; i++)
+        if (node_calls(n->args.v[i])) return 1;
+    for (i = 0; i < n->body.n; i++)
+        if (node_calls(n->body.v[i])) return 1;
+    for (i = 0; i < n->els.n; i++)
+        if (node_calls(n->els.v[i])) return 1;
+    return node_calls(n->a) || node_calls(n->b) || node_calls(n->c);
+}
+
+static int body_calls(NodeList *b)
+{
+    int i;
+    for (i = 0; i < b->n; i++)
+        if (node_calls(b->v[i])) return 1;
+    return 0;
+}
+
+/* ¿llama el programa a algo que atiende Ctrl-C por su cuenta? (entonces sus bucles no lo miran) */
+static int handles_break(Node *n)
+{
+    int i;
+    static const char *own[] = { "break_check", "single_instance", "mui_wait_event", "mui_wait_event_signals", NULL };
+    if (!n) return 0;
+    if (n->kind == E_CALL && n->name) {
+        if (!strncmp(n->name, "cx_", 3)) return 1;
+        for (i = 0; own[i]; i++)
+            if (!strcmp(n->name, own[i])) return 1;
+    }
+    for (i = 0; i < n->args.n; i++)
+        if (handles_break(n->args.v[i])) return 1;
+    for (i = 0; i < n->body.n; i++)
+        if (handles_break(n->body.v[i])) return 1;
+    for (i = 0; i < n->els.n; i++)
+        if (handles_break(n->els.v[i])) return 1;
+    return handles_break(n->a) || handles_break(n->b) || handles_break(n->c);
+}
+
+static int prog_handles_break(Program *p)
+{
+    int i, j;
+    for (i = 0; i < p->main.n; i++)
+        if (handles_break(p->main.v[i])) return 1;
+    for (i = 0; i < p->funcs.n; i++)
+        for (j = 0; j < p->funcs.v[i].body.n; j++)
+            if (handles_break(p->funcs.v[i].body.v[j])) return 1;
+    for (i = 0; i < p->globals.n; i++)
+        if (handles_break(p->globals.v[i].init)) return 1;
+    return 0;
+}
+
 void gen_program(Program *p, Obj *o)
 {
-    int i, main_label, again, files_label;
+    int i, main_label, again, files_label, brk_label = -1;
     prog = p;
     obj = o;
     {
@@ -6366,6 +6436,10 @@ void gen_program(Program *p, Obj *o)
         if (autoclose < 0) autoclose = 0;
         e = getenv("DASH_PRINT_FLUSH");
         print_flush = e && *e && strcmp(e, "0");
+        /* Ctrl-C en los bucles, como ./dash --gcc (BREAK_RUNTIME): no si el programa lo atiende él (break_check,
+           single_instance, la espera de MUI, los commodities) ni con DASH_NO_BREAK=1 */
+        e = getenv("DASH_NO_BREAK");
+        auto_brk = !(e && *e && strcmp(e, "0")) && !prog_handles_break(p);
     }
 
     call_sites = xmalloc(sizeof(int) * (p->funcs.n + 1));
@@ -6494,6 +6568,12 @@ void gen_program(Program *p, Obj *o)
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     if (p->version) set_rt_var("__dash_version", p->version, 0);   /* program_version() */
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
+#ifndef DASH_A64
+    if (auto_brk) {
+        brk_label = new_label();
+        set_rt_label("_dl_brk_sites", brk_label);    /* los NOP de Ctrl-C de los bucles (brk_check) */
+    }
+#endif
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
         lit_init_label = new_label();
@@ -6575,6 +6655,15 @@ void gen_program(Program *p, Obj *o)
     def_label(files_label);
     for (i = 0; i < src_files.n && i < 63; i++) code_data_ptr(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
     code_long(0);
+#ifndef DASH_A64
+    if (brk_label >= 0) {
+        /* los NOP de Ctrl-C (brk_check), terminados en 0: el runtime los cambia por TRAP #14 al llegar Ctrl-C */
+        code_align();
+        def_label(brk_label);
+        for (i = 0; i < brk_sites.n; i++) code_ptr(brk_sites.v[i]);
+        code_long(0);
+    }
+#endif
     if (profile) {
         /* --perfil: el nombre de cada función (0 es Main) */
         code_align();

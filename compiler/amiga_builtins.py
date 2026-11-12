@@ -4881,7 +4881,8 @@ TASK_FUNCTIONS = {
     "break_check": BuiltinFunc(
         name="break_check", params=[], return_type="BOOL",
         c_template="((SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0)",
-        description="True if Ctrl-C came (\"Break\" in the Shell, or another copy: single_instance); it is cleared"),
+        description="True if Ctrl-C came (\"Break\" in the Shell, or another copy: single_instance); it is cleared. "
+                    "A program that calls it does not get Ctrl-C in its loops: it handles it"),
     "single_instance": BuiltinFunc(
         name="single_instance", params=["name"], return_type="BOOL",
         c_template="_dash_single_instance(${name})",

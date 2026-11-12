@@ -1,0 +1,68 @@
+# Test: Ctrl-C para un programa en un bucle (lo que hace Parar en Forja con run_break, o Break en el Shell). El
+# programa se arranca otra vez a sí mismo con run_start; la copia ("hijo") da vueltas a un while sin fin (solo, o
+# con un for sin llamadas dentro: el for acaba su vuelta y el while lo ve) o a un for que tarda (con time_delay: lo ve
+# el for), y el padre le manda Ctrl-C con run_break: la copia acaba con "***Break" y código 5, con la limpieza de siempre.
+# expect-c: _DASH_BRK();
+# expect-out: hijo: empieza
+# expect-out: ***Break
+# expect-out: rc 5
+# expect-out: hijo for: empieza
+# expect-out: ***Break
+# expect-out: rc 5
+# expect-out: hijo lento: empieza
+# expect-out: ***Break
+# expect-out: rc 5
+
+func vueltas_for()
+    Print "hijo for: empieza"
+    t = 0
+    while true
+        for i in (1..1000)
+            t = t + i
+        end
+    end
+end
+
+# Un for que acaba solo pero tarda (llama a algo en cada vuelta): también lo mira
+func vueltas_lentas()
+    Print "hijo lento: empieza"
+    for i in (1..100000)
+        time_delay(1)
+    end
+    Print "no llega"
+end
+
+func hijo(que: String)
+    if que == "for"
+        vueltas_for()
+        return
+    end
+    if que == "lento"
+        vueltas_lentas()
+        return
+    end
+    Print "hijo: empieza"
+    i = 0
+    while true
+        i = i + 1
+    end
+end
+
+func probar(que: String)
+    h = run_start("\"" + program_path() + "\" hijo " + que, 0)
+    time_delay(50)
+    run_break(h)
+    salida = run_finish(h)
+    Print str_trim(salida)
+    Print "rc #{run_rc()}"
+end
+
+Main
+    if arg(0) == "hijo"
+        hijo(arg(1))
+    else
+        probar("while")
+        probar("for")
+        probar("lento")
+    end
+end

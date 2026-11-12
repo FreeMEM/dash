@@ -1,0 +1,11 @@
+# Un programa con break_check atiende Ctrl-C él mismo: sus bucles no lo miran (sin Ctrl-C, igual que antes)
+Main
+    i = 0
+    while i < 20
+        i = i + 1
+        if break_check()
+            Print "visto en #{i}"
+        end
+    end
+    Print "fin #{i}"
+end

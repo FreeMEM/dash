@@ -1074,7 +1074,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       Dash 2.9.0. `tests/test_in_rango.dash`, `dashc/tests/in_rango.dash` y tres de `tests/errors/`
 
 - [x] `screen_save_png` (2026-11-09): la pantalla de delante a un PNG de color verdadero, con paleta o con tarjeta
-      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`- [x] Grupos de las expresiones regulares (2026-11-10, lo pidió David Martínez): lo que atrapa cada `( )`.
+      gráfica, para las capturas de Trasfondo (lo pidió JaviTecH). Dash 2.8.0. `tests/test_screen_save_png.dash`
+- [x] Grupos de las expresiones regulares (2026-11-10, lo pidió David Martínez): lo que atrapa cada `( )`.
       `regex_group(n)` (0: todo lo que encajó), `regex_groups()` (un `[String]`, como `groups()` de Python),
       `regex_group_count`, `regex_group_start`, `regex_group_length` y `regex_group_parent`, que da el árbol de los
       anidados: una lista de Dash no mezcla textos y sublistas. El motor guarda el inicio y el fin de cada grupo y
@@ -1082,10 +1083,18 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Pegar desde un menú en un campo de texto MUI (2026-11-11, Tachyon; lo contaron Alex Agauser y Ferrán García:
       en MUI 3.8, Amiga+V no pega en la barra de direcciones). `mui_active_object(win)`: el objeto con el teclado
       (de un desplegable con texto, el desplegable); `mui_string_pos` y `mui_set_string_pos`: el cursor de un campo.
-      `mui_set_active` con un desplegable va a su campo. 983 funciones. `tests/test_mui_string_pos.dash`
+      `mui_set_active` con un desplegable va a su campo. 983 funciones. Dash 2.11.0. `tests/test_mui_string_pos.dash`
 - [x] Pegar, copiar y cortar en los campos de texto de MUI 3.8 (2026-11-11, Alex Agauser y Ferrán García): MUI 3.8
       no lo hace, y `mui_string` y `mui_combo` llevan allí el gancho de edición de GadTools y ReAction (Ctrl o Amiga
-      con V, C y X). MUI 4 y 5 lo hacen solos. Probado a mano en `sys32rtg38` por los dos caminos.
+      con V, C y X). MUI 4 y 5 lo hacen solos. Probado a mano en `sys32rtg38` por los dos caminos. Dash 2.11.0.
+- [x] Ventanas de fondo (2026-11-11, lo contó Ferrán García): la propiedad `backdrop` de `Window`,
+      `window_next_backdrop` y `screen_show_title`, para que la barra de Trasfondo quede siempre detrás. 985
+      funciones. Dash 2.11.0. `tests/test_window_backdrop.dash`
+- [x] Ctrl-C en los bucles (2026-11-12, lo contó David Martínez: Parar de Forja no paraba un bucle sin fin). La
+      excepción de exec de Ctrl-C cambia un NOP de cada bucle por TRAP #14 (`./dash`) o pone un byte que miran los
+      bucles (`./dash --gcc`); también acaba las tareas de `task_start`. Peor caso con `./dash`: +16 % en A1200, +8 %
+      en A500. No en los programas que atienden Ctrl-C ellos mismos ni con `DASH_NO_BREAK=1`. Dash 2.11.0.
+      `tests/test_ctrl_c*.dash`, `dashc/tests/ctrl_c*.dash`
 - [x] Mirar clics y teclas sin quitárselos a nadie (2026-11-12, para las ventanas modernas de Trasfondo que pidió
       el usuario): `cx_watch_add` (un filtro de commodity que deja seguir el evento), `cx_event_x`, `cx_event_y` y
       `cx_event_ms` (dónde estaba el puntero y cuándo, apuntado en el input handler con un CX_CUSTOM),

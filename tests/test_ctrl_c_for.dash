@@ -1,0 +1,32 @@
+# Test: Ctrl-C en un while con un for dentro (como tests/test_ctrl_c.dash, con el camino de C por @native): el for
+# llama a algo, así que lo mira y para en su siguiente vuelta; el while que cuenta, sin llamadas, no lo mira.
+# expect-c: _DASH_BRK();
+# expect-rc: 5
+# expect-out: vuelta 0 (4 del for, 3 del while que cuenta)
+# expect-out: vuelta 1 (4 del for, 3 del while que cuenta)
+# expect-out: ***Break
+
+@native func ctrl_c()
+"""
+    SetSignal(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C);
+"""
+end
+
+Main
+    vueltas = 0
+    while true
+        n = 0
+        for x in [1, 2, 3, 4]
+            if vueltas == 2 and x == 2
+                ctrl_c()
+            end
+            n = n + 1
+        end
+        k = 0
+        while k < 3
+            k = k + 1
+        end
+        Print "vuelta #{vueltas} (#{n} del for, #{k} del while que cuenta)"
+        vueltas = vueltas + 1
+    end
+end
