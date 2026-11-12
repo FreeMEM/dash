@@ -33,6 +33,15 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.12.1 (2026-11-12)
+
+Para la barra de Trasfondo 2.9. Nada cambia en lo que compilaba.
+
+- **Arreglo:** `window_to_back`, `window_to_front` y `screen_show_title` no hacen nada si la ventana o la pantalla ya
+  están así: se pueden llamar en cada vuelta sin gastar. `window_to_back` con una ventana de fondo la pone detrás de
+  las otras de fondo. La barra de Trasfondo en la barra de título gasta así 2 puntos menos de CPU en un 68030, y la
+  barra completa recupera su sitio si el Workbench deja de ir de fondo (lo contó Ferrán García).
+
 ### 2.12.0 (2026-11-12)
 
 Lo que necesitan las ventanas modernas y el explorador de ficheros de Trasfondo, que pidió el usuario. Todo lo que
