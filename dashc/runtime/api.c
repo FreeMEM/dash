@@ -254,6 +254,9 @@ void (*_dash_weak_dl_close_windows)(void) = dl_close_windows;
 /* Desde _dash_quit, al acabar de cualquier forma: como el final de main y la lista de salida de libnix */
 void _dash_finish(void)
 {
+    /* antes que nada, lo que dejó Print en el búfer: si un paso de después se cuelga (una tarea que no acaba, la
+       memoria del C de @link rota), ya ha salido (Tachyon tras un abort de QuickJS) */
+    if (DOSBase && Output()) Flush(Output());
     if (bench_tr) {
         struct MsgPort *port = bench_tr->tr_node.io_Message.mn_ReplyPort;
         CloseDevice((struct IORequest *)bench_tr);
