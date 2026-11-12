@@ -4116,7 +4116,7 @@ extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
 static struct MsgPort *_dash_cx_port = NULL;
 static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
-static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add and cx_watch_add, by n */
+static CxObj *_dash_cx_keys[65];       /* the hotkeys of cx_key_add and cx_watch_add, by n */
 /* Where the pointer was and when, for each event of cx_key_add and cx_watch_add: written in the input handler
    (_dash_cx_note, a CX_CUSTOM before the CX_SEND), read in the same order by cx_command (cx_event_x/y/ms). The
    pointer is that of the screen of the broker (the default public one, the Workbench's) */
@@ -4299,7 +4299,7 @@ static BOOL _dash_cx_hotkey(STRPTR descr) {
 static BOOL _dash_cx_filter_add(STRPTR descr, LONG n, BOOL watch) {
     IX ix;
     CxObj *filter;
-    if (!_dash_cx_broker || n < 1 || n > 32) return FALSE;
+    if (!_dash_cx_broker || n < 1 || n > 64) return FALSE;
     if (!descr || !*descr) {                  /* "": that one goes */
         if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); _dash_cx_keys[n] = NULL; }
         return TRUE;
@@ -4341,7 +4341,7 @@ static LONG _dash_cx_command(void) {
         LONG r = 0;
         ReplyMsg((struct Message *)m);
         if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
-        else if (type == CXM_IEVENT && id > 100 && id <= 132) {
+        else if (type == CXM_IEVENT && id > 100 && id <= 164) {
             r = (LONG)id;
             if (_dash_cx_ev_out != _dash_cx_ev_in) {   /* (its CX_CUSTOM wrote where and when) */
                 ULONG i = _dash_cx_ev_out % _DASH_CX_EV;
@@ -4531,6 +4531,7 @@ static LONG _dash_wm_read(void) {
         if (w->UserPort && w->UserPort->mp_SigTask == me) f |= 32;
         if (w->Flags & WFLG_WBENCHWINDOW) f |= 64;
         if (w->FirstRequest) f |= 128;
+        if (l->Flags & 0x1000) f |= 256;          /* LAYERHIDDEN (V45): hidden with wm_hide */
         _dash_wm_fl[i] = f;
         _dash_wm_copy(_dash_wm_title[i], w->Title, -1, 80);
         _dash_wm_owner(w, _dash_wm_task[i]);
@@ -4740,6 +4741,21 @@ static BOOL _dash_wm_do(LONG id, LONG what) {
     case 2: ActivateWindow(w); break;
     case 3: ZipWindow(w); break;
     }
+    Permit();
+    return TRUE;
+}
+
+/* Hide a window (HideWindow, Intuition V46: AmigaOS 3.2) or show it again in front of the others (ShowWindow).
+   Intuition does it at its next input event (a tenth of a second at most). FALSE if it is gone or the system has
+   no such call */
+static BOOL _dash_wm_can_hide(void) { return IntuitionBase->LibNode.lib_Version >= 46; }
+static BOOL _dash_wm_hide(LONG id, BOOL show) {
+    struct Window *w;
+    if (!_dash_wm_can_hide()) return FALSE;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    if (show) ShowWindow(w, (struct Window *)1);   /* (WINDOW_FRONTMOST) */
+    else HideWindow(w);
     Permit();
     return TRUE;
 }
@@ -16311,7 +16327,7 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_RMBTrap, (flags & 16) != 0,   /* 16: the right button to the program (On RightClick), no menus */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
-        WA_Activate, TRUE,
+        WA_Activate, !(flags & 32),   /* 32: it does not take the focus (a notice that comes and goes) */
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, _DASH_WIN_IDCMP,
         _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */

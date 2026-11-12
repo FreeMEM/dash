@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1005 functions, 1005 implemented, 0 not implemented.
+Total: 1008 functions, 1008 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -5776,7 +5776,7 @@ end
 | [`tooltype(name, default)`](#tooltype) | String | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
-| [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 64, n from 1 to 64; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
 | [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Like cx_key_add, but the event also goes on to the other programs: to watch clicks and keys without taking them (cx_command gives 100 + n) |  |
 | [`cx_event_x()`](#cx_event_x) | Int | Where the pointer was (x, on the Workbench screen) at the last event cx_command gave (cx_key_add, cx_watch_add) |  |
 | [`cx_event_y()`](#cx_event_y) | Int | Where the pointer was (y) at the last event cx_command gave |  |
@@ -6035,7 +6035,7 @@ See also: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 ### `cx_key_add(description, n)` → `Bool`
 
 - `description`: the key, or a mouse button (`"rawmouse lalt mouse_leftpress"`); `""` removes it.
-- `n`: its number, 1 to 32.
+- `n`: its number, 1 to 64.
 
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 
@@ -6046,7 +6046,7 @@ See also: [`cx_hotkey`](#cx_hotkey).
 ### `cx_watch_add(description, n)` → `Bool`
 
 - `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+- `n`: its number, 1 to 64 (the same numbers as `cx_key_add`).
 
 Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
 taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and
@@ -9501,12 +9501,15 @@ those dropped on a window.
 | [`wm_task(i)`](#wm_task) | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
 | [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit), 8-11 its borders (left, top, right, bottom), 12 and 13 where the free part of its title bar starts and ends, 14 and 15 the middle of its close gadget (-1 without one), from its corner; -1 outside the list |  |
-| [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
+| [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open, 256 hidden (wm_hide) |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
 | [`wm_front(id)`](#wm_front) | Bool | A window in front of the others; false if it is not open any more |  |
 | [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_hide(id)`](#wm_hide) | Bool | Hides a window (AmigaOS 3.2: HideWindow); its program goes on and can draw in it. false if it is not open any more or the system cannot (wm_can_hide) |  |
+| [`wm_show(id)`](#wm_show) | Bool | Shows a hidden window again, in front of the others; false if it is not open any more or the system cannot (wm_can_hide) |  |
+| [`wm_can_hide()`](#wm_can_hide) | Bool | true if the system can hide windows (wm_hide, wm_show): AmigaOS 3.2 or later (Intuition 46) |  |
 | [`wm_box_now(id, what)`](#wm_box_now) | Int | What wm_box gives (0-15), of the window of that id as it is now, without waiting while a window is being dragged; -1 if it is gone |  |
 | [`wm_close(id)`](#wm_close) | Bool | Asks a window's program to close it: a click on its close gadget, as the user would, and the pointer back where it was; false if it is gone or has no close gadget |  |
 | [`wm_double_click_ms()`](#wm_double_click_ms) | Int | The longest time between two clicks of a double click, in ms (Input preferences) |  |
@@ -9595,7 +9598,7 @@ See also: [`wm_set_box`](#wm_set_box).
 
 - `i`: the window, from 0, of the last `wm_read`.
 
-Returns, added up: 1 resizable, 2 backdrop, 4 borderless, 8 active, 16 with a drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester.
+Returns, added up: 1 resizable, 2 backdrop, 4 borderless, 8 active, 16 with a drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester, 256 hidden (`wm_hide`).
 
 See also: [`wm_box`](#wm_box).
 
@@ -9649,6 +9652,34 @@ See also: [`wm_active`](#wm_active).
 Switches it to its other size, like its zoom button. Returns `false` if it is gone.
 
 See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_hide"></a>
+
+### `wm_hide(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Hides it completely (AmigaOS 3.2's HideWindow). Its program goes on and can draw in it: with smart refresh, it shows when it comes back. It stays in the `wm_read` list, with 256 in `wm_flags`, and `wm_at` does not find it. Intuition does it at its next input event (a tenth of a second at most). Returns `false` if it is gone or the system cannot (`wm_can_hide`).
+
+See also: [`wm_show`](#wm_show), [`wm_can_hide`](#wm_can_hide).
+
+<a id="wm_show"></a>
+
+### `wm_show(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Shows a window hidden with `wm_hide` again, in front of the others. Returns `false` if it is gone or the system cannot.
+
+See also: [`wm_hide`](#wm_hide).
+
+<a id="wm_can_hide"></a>
+
+### `wm_can_hide()` → `Bool`
+
+Returns `true` if the system can hide windows: AmigaOS 3.2 or later (Intuition 46). On 3.1, `wm_hide` and `wm_show` do nothing and return `false`.
+
+See also: [`wm_hide`](#wm_hide).
 
 <a id="wm_box_now"></a>
 
@@ -10222,7 +10253,7 @@ end
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
+| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders), 16 the right button to the program, 32 not activated. It becomes the current window |  |
 | [`window_border_top()`](#window_border_top) | Int | The top border of the current window (title bar included); gadgets count from the inside, without it |  |
 | [`window_border_bottom()`](#window_border_bottom) | Int | The bottom border of the current window |  |
 | [`window_border_left()`](#window_border_left) | Int | The left border of the current window |  |
@@ -10290,7 +10321,8 @@ end
 - `x`, `y`: the position on the screen.
 - `w`, `h`: the size, at least 40 x 20.
 - `flags`: they add up. 1 = resizable; 2 = borderless; 4 = no close button; 8 = `w` and `h` are the inside, without
-  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus.
+  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus; 32 = it does not
+  become active when it opens: the active window stays so (for a notice that comes and goes).
 
 Opens the window on the program's screen, if one was opened, or on the Workbench. Returns its number (1 to 16) and
 makes it the current window: the `gfx_*` functions draw in it. Returns 0 if it could not be opened or if there are
