@@ -1,0 +1,65 @@
+# Modal MUI windows (mui_window_modal, lo pidió David Martínez), built by ./dash straight to hunk: a sleeping window
+# ignores the keyboard. The program activates the main window and types its button's shortcut (input_key) with
+# a modal open over it, with a second modal over the first one, and after closing each: the button
+# only answers when no modal is open. The sleep counters, read one by one: test_mui_modal.dash.
+# emu-needs: muimaster.library
+# dash-direct:
+# expect-out: sin modal: 1
+# expect-out: con la modal: 0
+# expect-out: con dos modales: 0
+# expect-out: cerrada la segunda: 0
+# expect-out: cerrada la primera: 1
+# expect-out: fin
+
+const TECLA_X = 0x32
+const BOTON = 5
+const RELOJ = 9
+
+# 1 if the button's event arrives within half a second of typing its shortcut in the main window
+func pulsa(m: Int) -> Int
+    mui_window_activate(m)
+    mui_timer(300, RELOJ)
+    ev = mui_wait_event()
+    input_key(TECLA_X, 0)
+    mui_timer(500, RELOJ)
+    llego = 0
+    ev = mui_wait_event()
+    while ev != RELOJ and ev != -1
+        if ev == BOTON
+            llego = 1
+        end
+        ev = mui_wait_event()
+    end
+    return llego
+end
+
+Main
+    if mui_app_begin("Modales", "DASHMODALES2") == 0
+        Print "sin MUI"
+    else
+        m = mui_window_begin("Principal", 0)
+            boton = mui_button("_x pulsar")
+            mui_on_press(boton, BOTON)
+        mui_window_end()
+        d = mui_window_begin("Primera modal", 0)
+            mui_text("una")
+        mui_window_end()
+        e = mui_window_begin("Segunda modal", 0)
+            mui_text("dos")
+        mui_window_end()
+        mui_window_modal(d)
+        mui_window_modal(e)
+        mui_window_open(m)
+        Print "sin modal: #{pulsa(m)}"
+        mui_window_open(d)
+        Print "con la modal: #{pulsa(m)}"
+        mui_window_open(e)
+        Print "con dos modales: #{pulsa(m)}"
+        mui_window_close(e)
+        Print "cerrada la segunda: #{pulsa(m)}"
+        mui_window_close(d)
+        Print "cerrada la primera: #{pulsa(m)}"
+        mui_app_end()
+        Print "fin"
+    end
+end

@@ -168,6 +168,41 @@ La cierra. Sigue existiendo con todos sus objetos y valores: `mui_window_open` l
 
 Closes it. It still exists with all its objects and values: `mui_window_open` opens it again as it was.
 """, ["mui_window_open", "mui_window_dispose"]),
+    "mui_window_modal": _f("""\
+- `win`: la ventana que será modal.
+
+Va antes de `mui_window_open(win)`. Al abrirse `win`, las demás ventanas abiertas de la aplicación se duermen:
+enseñan el puntero de ocupado y no atienden al ratón ni al teclado. Al cerrarse `win` (con `mui_window_close`, su
+botón de cerrar o `mui_window_dispose`), se despiertan. Vale para cada vez que se abra. Se pueden anidar: una modal
+abierta sobre otra duerme también la primera, y al cerrarse no despierta a nadie antes de tiempo. Una ventana que
+se abre con la modal ya abierta no se duerme. (Lo pidió David Martínez.)
+
+```ruby
+dlg = mui_window_begin("Opciones", 0)
+    ok = mui_button("_Aceptar")
+    mui_on_press(ok, 10)
+mui_window_end()
+mui_window_modal(dlg)
+mui_window_open(dlg)
+```
+""", """\
+- `win`: the window that will be modal.
+
+Goes before `mui_window_open(win)`. When `win` opens, the application's other open windows sleep: they show the
+busy pointer and ignore the mouse and the keyboard. When `win` closes (with `mui_window_close`, its close gadget or
+`mui_window_dispose`), they wake up. It holds for every time it opens. They nest: a modal opened over another one
+puts the first one to sleep too, and when it closes it wakes nobody too early. A window opened while the modal is
+already open does not sleep. (Requested by David Martínez.)
+
+```ruby
+dlg = mui_window_begin("Options", 0)
+    ok = mui_button("_OK")
+    mui_on_press(ok, 10)
+mui_window_end()
+mui_window_modal(dlg)
+mui_window_open(dlg)
+```
+""", ["mui_window_open", "mui_window_close"]),
     "mui_window_dispose": _f("""\
 - `win`: la ventana.
 

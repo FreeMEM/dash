@@ -1148,6 +1148,8 @@ DESC_ES = {
     "mui_window_end": "Acaba la ventana empezada con mui_window_begin",
     "mui_window_open": "Abre una ventana; false si no se pudo",
     "mui_window_close": "Cierra una ventana (sigue existiendo)",
+    "mui_window_modal": "Hace modal la ventana (antes de mui_window_open): mientras está abierta, las demás ventanas "
+                        "abiertas de la aplicación duermen (puntero de ocupado, no atienden). Se pueden anidar",
     "mui_window_active": "1 si la ventana es la activa (varias ventanas de un .dashui comparten números de evento; "
                          "dashweb D32)",
     "mui_vgroup_begin": "Empieza un grupo vertical dentro del grupo abierto",
