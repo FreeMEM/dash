@@ -20,6 +20,7 @@ Main
     q = Punto(4, "dos \"x\"", [p])
     f = 1.5
     ok = true
+    for k in (1..2) end
     r = mira(q, 2)
     Print "r: #{r}"
 end

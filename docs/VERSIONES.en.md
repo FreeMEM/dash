@@ -50,6 +50,8 @@ compiles the same.
 - **Fix:** a `"rawmouse mouse_leftpress"` filter of `cx_key_add` never arrived: the mouse buttons counted as keys
   held down. Now they do not count unless the description names them.
 - **Fix:** `wm_active` no longer waits while a window is being dragged.
+- **Fix:** the `./dash` debugger showed the compiler's hidden variables (nameless; Forja showed them as
+  "Int = ?" after a `for`). Found by Forja's variable tree that David Martínez asked for.
 - **Fix:** a program built with `./dash` that fails with an exception now shows the message instead of hanging
   silently (found by Tachyon on Amiberry).
 

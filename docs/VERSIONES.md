@@ -51,6 +51,8 @@ compilaba sigue compilando igual.
 - **Arreglo:** un filtro `"rawmouse mouse_leftpress"` de `cx_key_add` no llegaba nunca: los botones del ratón
   contaban como teclas pulsadas. Ahora no cuentan si la descripción no los nombra.
 - **Arreglo:** `wm_active` ya no espera mientras se arrastra una ventana.
+- **Arreglo:** el depurador de `./dash` enseñaba como variables las ocultas del compilador (sin nombre; Forja las
+  ponía como "Int = ?" tras un `for`). Lo destapó el árbol de variables de Forja que pidió David Martínez.
 - **Arreglo:** un programa hecho con `./dash` que falla con una excepción ya da el aviso, en vez de quedarse colgado
   sin sacar nada (lo destapó Tachyon en Amiberry).
 
