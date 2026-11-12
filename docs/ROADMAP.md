@@ -1106,7 +1106,7 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       fichero, para leer y poner (`file_protection`, `file_set_protection`, `file_comment`, `file_set_comment`,
       `file_date`, `file_set_date`, `dir_entry_protection`, `dir_entry_comment`), `file_copy_attrs` (como `Copy
       CLONE`) y copiar a trozos con progreso y cancelar (`file_copy_begin`, `file_copy_step`, `file_copy_end`: la
-      copia entera se queda igual que el original; la cancelada se borra). 1004 funciones. `tests/test_file_attrs.dash`
+      copia entera se queda igual que el original; la cancelada se borra). 1004 funciones. Dash 2.12.0. `tests/test_file_attrs.dash`
 
 ## Notas y Decisiones
 
