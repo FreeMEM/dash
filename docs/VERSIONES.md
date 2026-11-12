@@ -40,6 +40,8 @@ Ventanas modales de MUI. Todo lo que compilaba sigue compilando igual.
 - **Nuevo:** `mui_window_modal(win)`, antes de `mui_window_open(win)`: mientras `win` está abierta, las demás
   ventanas abiertas del programa duermen (puntero de ocupado, no atienden) y al cerrarla, de cualquier forma, se
   despiertan. Se pueden poner una encima de otra. Lo pidió David Martínez. 1005 funciones.
+- **Arreglo:** un programa que aborta desde el C de `@link` ya muestra lo que imprimió y el aviso, aunque su
+  limpieza se cuelgue (lo destapó Tachyon).
 
 ### 2.12.1 (2026-11-12)
 
