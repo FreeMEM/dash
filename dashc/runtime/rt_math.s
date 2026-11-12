@@ -248,7 +248,8 @@ __dash_start:
 	move.l	d0,a0
 	move.l	4.w,a6
 	jsr	-732(a6)		| StackSwap: ya en la nueva
-2:	move.l	dash_entry_sp,a0
+2:	jsr	__dash_main_begin	| las excepciones y Ctrl-C, sobre la pila de Main
+	move.l	dash_entry_sp,a0
 	move.l	44(a0),a0
 	jsr	(a0)
 	moveq	#0,d0

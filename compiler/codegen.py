@@ -207,6 +207,7 @@ static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP
     if (DOSBase && Output()) {
         VPrintf((CONST_STRPTR)fmt, args);
         PutStr((CONST_STRPTR)"\\n");
+        Flush(Output());   /* now: if the cleanup after it fails, the message is already out */
     }
 #ifndef _DASH_DASHOS
     else if (IntuitionBase) {
