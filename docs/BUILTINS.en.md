@@ -9730,7 +9730,8 @@ Returns how far from the right edge of the screen's bar its system buttons start
 
 For a bar of its own in a backdrop window (`window_next_backdrop` or the `backdrop` property) that takes the place of
 the Workbench one: with the system's in front, the backdrop window would be covered. It acts on the screen of the
-program's window or, without one, on the default public screen.
+program's window or, without one, on the default public screen. If it already is as asked, it does nothing: it can
+be called every tick (the Workbench brings the title back when it stops being a backdrop window).
 
 See also: [`window_next_backdrop`](#window_next_backdrop), [`wm_bar_height`](#wm_bar_height).
 
@@ -10400,7 +10401,7 @@ See also: [`window_move`](#window_move), [`window_border_top`](#window_border_to
 
 - `handle`: the window's number; 0, the current one.
 
-Puts the window in front of the others on its screen.
+Puts the window in front of the others on its screen; a backdrop one, in front of the other backdrop ones. If it already is, it does nothing.
 
 See also: [`window_to_back`](#window_to_back), [`window_activate`](#window_activate).
 
@@ -10410,7 +10411,7 @@ See also: [`window_to_back`](#window_to_back), [`window_activate`](#window_activ
 
 - `handle`: the window's number; 0, the current one.
 
-Puts the window behind the others on its screen.
+Puts the window behind the others on its screen (in front of the backdrop ones and of the title bar; a backdrop one, behind the other backdrop ones). If it already is, it does nothing: it can be called every tick to keep a window at the back.
 
 See also: [`window_to_front`](#window_to_front).
 

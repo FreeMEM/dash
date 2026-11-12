@@ -1107,6 +1107,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       `file_date`, `file_set_date`, `dir_entry_protection`, `dir_entry_comment`), `file_copy_attrs` (como `Copy
       CLONE`) y copiar a trozos con progreso y cancelar (`file_copy_begin`, `file_copy_step`, `file_copy_end`: la
       copia entera se queda igual que el original; la cancelada se borra). 1004 funciones. Dash 2.12.0. `tests/test_file_attrs.dash`
+- [x] Mantener una ventana detrás o delante sin gastar (2026-11-12, la barra de Trasfondo; lo contó Ferrán García).
+      `window_to_back`, `window_to_front` y `screen_show_title` no hacen nada si ya está así (miran las capas bajo
+      `LockLayerInfo` y `SHOWTITLE`): la barra los llama cada 200 ms para quedarse detrás de las ventanas que se
+      mandan al fondo y recuperar su sitio si el Workbench deja de ir de fondo o se abre otra ventana de fondo (2
+      puntos de CPU menos en un 68030). Con una ventana de fondo, `window_to_back` y `window_to_front` la mueven entre
+      las de fondo. `tests/test_window_to_back.dash`
 
 ## Notas y Decisiones
 
