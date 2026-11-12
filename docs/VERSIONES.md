@@ -33,6 +33,14 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.13.0 (2026-11-12)
+
+Ventanas modales de MUI. Todo lo que compilaba sigue compilando igual.
+
+- **Nuevo:** `mui_window_modal(win)`, antes de `mui_window_open(win)`: mientras `win` está abierta, las demás
+  ventanas abiertas del programa duermen (puntero de ocupado, no atienden) y al cerrarla, de cualquier forma, se
+  despiertan. Se pueden poner una encima de otra. Lo pidió David Martínez. 1005 funciones.
+
 ### 2.12.1 (2026-11-12)
 
 Para la barra de Trasfondo 2.9. Nada cambia en lo que compilaba.
