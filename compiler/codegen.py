@@ -4108,7 +4108,7 @@ extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
 static struct MsgPort *_dash_cx_port = NULL;
 static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
-static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add and cx_watch_add, by n */
+static CxObj *_dash_cx_keys[65];       /* the hotkeys of cx_key_add and cx_watch_add, by n */
 /* Where the pointer was and when, for each event of cx_key_add and cx_watch_add: written in the input handler
    (_dash_cx_note, a CX_CUSTOM before the CX_SEND), read in the same order by cx_command (cx_event_x/y/ms). The
    pointer is that of the screen of the broker (the default public one, the Workbench's) */
@@ -4291,7 +4291,7 @@ static BOOL _dash_cx_hotkey(STRPTR descr) {
 static BOOL _dash_cx_filter_add(STRPTR descr, LONG n, BOOL watch) {
     IX ix;
     CxObj *filter;
-    if (!_dash_cx_broker || n < 1 || n > 32) return FALSE;
+    if (!_dash_cx_broker || n < 1 || n > 64) return FALSE;
     if (!descr || !*descr) {                  /* "": that one goes */
         if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); _dash_cx_keys[n] = NULL; }
         return TRUE;
@@ -4333,7 +4333,7 @@ static LONG _dash_cx_command(void) {
         LONG r = 0;
         ReplyMsg((struct Message *)m);
         if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
-        else if (type == CXM_IEVENT && id > 100 && id <= 132) {
+        else if (type == CXM_IEVENT && id > 100 && id <= 164) {
             r = (LONG)id;
             if (_dash_cx_ev_out != _dash_cx_ev_in) {   /* (its CX_CUSTOM wrote where and when) */
                 ULONG i = _dash_cx_ev_out % _DASH_CX_EV;

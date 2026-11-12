@@ -140,25 +140,25 @@ The commodity's hot key: pressing it makes `cx_command` give 6. Returns `false` 
 """, ["cx_key_add", "cx_command"]),
     "cx_key_add": _f("""\
 - `description`: la tecla, o un botón del ratón (`"rawmouse lalt mouse_leftpress"`); `""` la quita.
-- `n`: su número, de 1 a 32.
+- `n`: su número, de 1 a 64.
 
 Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no sigue a los demás programas.
 """, """\
 - `description`: the key, or a mouse button (`"rawmouse lalt mouse_leftpress"`); `""` removes it.
-- `n`: its number, 1 to 32.
+- `n`: its number, 1 to 64.
 
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 """, ["cx_hotkey"]),
     "cx_watch_add": _f("""\
 - `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: su número, de 1 a 32 (el mismo espacio que `cx_key_add`).
+- `n`: su número, de 1 a 64 (el mismo espacio que `cx_key_add`).
 
 Como `cx_key_add`, pero el evento sigue también a los demás programas: sirve para mirar clics y teclas sin
 quitárselos (un doble clic en la barra de título de cualquier ventana, por ejemplo). `cx_command` da 100 + `n`, y
 `cx_event_x`, `cx_event_y` y `cx_event_ms` dicen dónde y cuándo fue. Devuelve `false` si la descripción no vale.
 """, """\
 - `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+- `n`: its number, 1 to 64 (the same numbers as `cx_key_add`).
 
 Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
 taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and

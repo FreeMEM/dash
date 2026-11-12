@@ -5776,7 +5776,7 @@ end
 | [`tooltype(name, default)`](#tooltype) | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
-| [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 64, n de 1 a 64; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
 | [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Como cx_key_add, pero el evento sigue también a los demás programas: para mirar clics y teclas sin quitárselos (cx_command da 100 + n) |  |
 | [`cx_event_x()`](#cx_event_x) | Int | Dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio cx_command (cx_key_add, cx_watch_add) |  |
 | [`cx_event_y()`](#cx_event_y) | Int | Dónde estaba el puntero (y) en el último evento que dio cx_command |  |
@@ -6034,7 +6034,7 @@ Ver también: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 ### `cx_key_add(description, n)` → `Bool`
 
 - `description`: la tecla, o un botón del ratón (`"rawmouse lalt mouse_leftpress"`); `""` la quita.
-- `n`: su número, de 1 a 32.
+- `n`: su número, de 1 a 64.
 
 Una tecla rápida más: `cx_command` da 100 + `n` al pulsarla, y el evento no sigue a los demás programas.
 
@@ -6045,7 +6045,7 @@ Ver también: [`cx_hotkey`](#cx_hotkey).
 ### `cx_watch_add(description, n)` → `Bool`
 
 - `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: su número, de 1 a 32 (el mismo espacio que `cx_key_add`).
+- `n`: su número, de 1 a 64 (el mismo espacio que `cx_key_add`).
 
 Como `cx_key_add`, pero el evento sigue también a los demás programas: sirve para mirar clics y teclas sin
 quitárselos (un doble clic en la barra de título de cualquier ventana, por ejemplo). `cx_command` da 100 + `n`, y

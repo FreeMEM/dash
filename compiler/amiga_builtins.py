@@ -4916,7 +4916,7 @@ TASK_FUNCTIONS = {
     "cx_key_add": BuiltinFunc(
         name="cx_key_add", params=["description", "n"], return_type="BOOL",
         c_template="_dash_cx_key_add(${description}, ${n})",
-        description="One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: \"rawmouse "
+        description="One more hotkey for the commodity (up to 64, n from 1 to 64; a mouse button too: \"rawmouse "
                     "lalt mouse_leftpress\"): cx_command gives 100 + n when it is pressed, and the event goes no "
                     "further; \"\" takes hotkey n away; false if the description is not valid (or there is no cx_broker)"),
     "cx_watch_add": BuiltinFunc(

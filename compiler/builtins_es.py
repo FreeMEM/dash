@@ -760,7 +760,7 @@ DESC_ES = {
     "cx_broker": "El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, "
                  "título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se "
                  "quita al acabar el programa",
-    "cx_key_add": "Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "
+    "cx_key_add": "Una tecla rápida más para la commodity (hasta 64, n de 1 a 64; también un botón del ratón: "
                   "\"rawmouse lalt mouse_leftpress\"): cx_command da 100 + n al pulsarla, y el evento no sigue; "
                   "\"\" quita la tecla n; false si la descripción no vale (o no hay cx_broker)",
     "wm_read": "Lee las ventanas de la pantalla del Workbench, de delante atrás (hasta 64): cuántas, para wm_id, "

@@ -5776,7 +5776,7 @@ end
 | [`tooltype(name, default)`](#tooltype) | String | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
-| [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
+| [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 64, n from 1 to 64; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
 | [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Like cx_key_add, but the event also goes on to the other programs: to watch clicks and keys without taking them (cx_command gives 100 + n) |  |
 | [`cx_event_x()`](#cx_event_x) | Int | Where the pointer was (x, on the Workbench screen) at the last event cx_command gave (cx_key_add, cx_watch_add) |  |
 | [`cx_event_y()`](#cx_event_y) | Int | Where the pointer was (y) at the last event cx_command gave |  |
@@ -6035,7 +6035,7 @@ See also: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 ### `cx_key_add(description, n)` → `Bool`
 
 - `description`: the key, or a mouse button (`"rawmouse lalt mouse_leftpress"`); `""` removes it.
-- `n`: its number, 1 to 32.
+- `n`: its number, 1 to 64.
 
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 
@@ -6046,7 +6046,7 @@ See also: [`cx_hotkey`](#cx_hotkey).
 ### `cx_watch_add(description, n)` → `Bool`
 
 - `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
-- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+- `n`: its number, 1 to 64 (the same numbers as `cx_key_add`).
 
 Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
 taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and
