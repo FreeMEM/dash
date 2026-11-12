@@ -33,6 +33,22 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.14.0 (2026-11-12)
+
+Lo que necesitan los espacios virtuales de TrasfondoVentanas, y salir sin esperar a las imágenes. Todo lo que
+compilaba sigue compilando igual.
+
+- **Nuevo:** esconder ventanas de otros programas: `wm_hide(id)` y `wm_show(id)` (AmigaOS 3.2; la ventana
+  desaparece del todo y su programa sigue) y `wm_can_hide()`, que dice si el sistema puede. En 3.1 no hacen nada y
+  dan `false`. El bit 256 de `wm_flags` dice si está escondida. 1008 funciones.
+- **Nuevo:** `window_create` con el flag 32 abre la ventana sin activarla: un aviso que no quita el foco.
+- **Mejora:** `cx_key_add` y `cx_watch_add` admiten hasta 64 teclas (antes 32).
+- **Arreglo:** sin pantalla propia ni ventana, `screen_width()` y `screen_height()` miden la pantalla pública
+  (el Workbench), no 640 x 256. Sirve para medir una ventana antes de abrirla.
+- **Arreglo:** al acabar, las imágenes que `image_decode_start` aún decodifica se paran en vez de esperarlas, y las
+  que el programa no recogió se liberan. Tras un fallo, Tachyon esperaba a cada foto (casi 3 minutos con una de
+  1920x1080 en un A1200) y no devolvía 1,4 MB por imagen.
+
 ### 2.13.0 (2026-11-12)
 
 Ventanas modales de MUI. Todo lo que compilaba sigue compilando igual.

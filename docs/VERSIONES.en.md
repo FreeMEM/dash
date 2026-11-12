@@ -32,6 +32,22 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.14.0 (2026-11-12)
+
+What TrasfondoVentanas virtual spaces need, and exiting without waiting for images. Everything that compiled
+still compiles the same.
+
+- **New:** hide other programs' windows: `wm_hide(id)` and `wm_show(id)` (AmigaOS 3.2; the window disappears
+  completely and its program keeps running) and `wm_can_hide()`, which says whether the system can. On 3.1 they do
+  nothing and return `false`. Bit 256 of `wm_flags` says whether it is hidden. 1008 functions.
+- **New:** `window_create` with flag 32 opens the window without activating it: a notice that does not steal focus.
+- **Improvement:** `cx_key_add` and `cx_watch_add` accept up to 64 keys (32 before).
+- **Fix:** with no own screen or window, `screen_width()` and `screen_height()` measure the public screen (the
+  Workbench), not 640 x 256. Useful to size a window before opening it.
+- **Fix:** on exit, images `image_decode_start` is still decoding are stopped instead of waited for, and those the
+  program never collected are freed. After a crash, Tachyon waited for every photo (almost 3 minutes for a
+  1920x1080 one on an A1200) and did not give back 1.4 MB per image.
+
 ### 2.13.0 (2026-11-12)
 
 Modal MUI windows. Everything that compiled still compiles the same.
