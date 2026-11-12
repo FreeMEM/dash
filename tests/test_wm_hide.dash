@@ -1,9 +1,11 @@
 # Test: wm_hide and wm_show (for TrasfondoVentanas' virtual desktops). On AmigaOS 3.2 (Intuition 46) the window
 # hides completely: it stays in wm_read with 256 in wm_flags and wm_at does not find it; wm_show brings it back. On
-# 3.1, wm_can_hide is false and both return false without doing anything.
+# 3.1, wm_can_hide is false and both return false without doing anything. window_create with flag 32 does not take
+# the focus (TrasfondoVentanas' notice of the desktop).
 # expect-c: HideWindow(w)
 # expect-out: esconde true
 # expect-out: vuelve true
+# expect-out: sin activar true
 # expect-out: fin
 
 Window Prueba
@@ -50,5 +52,11 @@ Main
         Print "esconde #{not wm_hide(id)}"
         Print "vuelve #{not wm_show(id) and wm_flags(propia()) & 256 == 0}"
     end
+    ok = wm_activate(id)                       # (escondida, dejó de ser la activa)
+    time_delay(10)
+    av = window_create("", 10, 10, 80, 30, 2 + 4 + 32)
+    time_delay(10)
+    Print "sin activar #{av != 0 and input_active_title() == \"Escondida\"}"
+    window_close(av)
     Print "fin"
 end

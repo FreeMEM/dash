@@ -16308,7 +16308,7 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_RMBTrap, (flags & 16) != 0,   /* 16: the right button to the program (On RightClick), no menus */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
-        WA_Activate, TRUE,
+        WA_Activate, !(flags & 32),   /* 32: it does not take the focus (a notice that comes and goes) */
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, _DASH_WIN_IDCMP,
         _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */

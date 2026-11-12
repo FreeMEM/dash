@@ -944,7 +944,8 @@ DESC_ES = {
     "task_free": "Olvida la tarea (la espera si sigue en marcha); al acabar, el programa espera a las que queden",
     # Intuition
     "window_create": "Abre una ventana; da su número 1..16 (0: no se pudo); flags: 1 se puede cambiar de tamaño, 2 sin "
-                     "bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes). Pasa a ser la ventana "
+                     "bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes), 16 el botón derecho al "
+                     "programa, 32 sin activarse. Pasa a ser la ventana "
                      "actual",
     "window_border_top": "El borde de arriba de la ventana actual (con la barra de título); los gadgets cuentan desde "
                          "dentro, sin él",

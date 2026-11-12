@@ -10253,7 +10253,7 @@ end
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Abre una ventana; da su número 1..16 (0: no se pudo); flags: 1 se puede cambiar de tamaño, 2 sin bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes). Pasa a ser la ventana actual |  |
+| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Abre una ventana; da su número 1..16 (0: no se pudo); flags: 1 se puede cambiar de tamaño, 2 sin bordes, 4 sin botón de cerrar, 8 w y h son el interior (sin los bordes), 16 el botón derecho al programa, 32 sin activarse. Pasa a ser la ventana actual |  |
 | [`window_border_top()`](#window_border_top) | Int | El borde de arriba de la ventana actual (con la barra de título); los gadgets cuentan desde dentro, sin él |  |
 | [`window_border_bottom()`](#window_border_bottom) | Int | El borde de abajo de la ventana actual |  |
 | [`window_border_left()`](#window_border_left) | Int | El borde izquierdo de la ventana actual |  |
@@ -10321,7 +10321,8 @@ end
 - `x`, `y`: la posición en la pantalla.
 - `w`, `h`: el tamaño, 40 x 20 como poco.
 - `flags`: se suman. 1 = se puede cambiar de tamaño; 2 = sin bordes; 4 = sin botón de cerrar; 8 = `w` y `h` son
-  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús.
+  el interior, sin los bordes; 16 = el botón derecho va al programa (`On RightClick`) en vez de a los menús;
+  32 = no se activa al abrirse: la ventana activa sigue siéndolo (para un aviso que va y viene).
 
 Abre la ventana en la pantalla del programa, si se abrió una, o en el Workbench. Devuelve su número (1 a 16) y la
 hace la ventana actual: los `gfx_*` dibujan en ella. Devuelve 0 si no se pudo abrir o si ya hay 16.

@@ -3099,7 +3099,7 @@ INTUITION_EXPANDED = {
         params=["title", "x", "y", "w", "h", "flags"],
         return_type="LONG",
         c_template="_dash_window_create(${title}, ${x}, ${y}, ${w}, ${h}, ${flags})",
-        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window"
+        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders), 16 the right button to the program, 32 not activated. It becomes the current window"
     ),
     "window_border_top": BuiltinFunc(
         name="window_border_top", params=[], return_type="LONG", c_template="_dash_window_border(0)",

@@ -10250,7 +10250,7 @@ end
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
+| [`window_create(title, x, y, w, h, flags)`](#window_create) | Int | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders), 16 the right button to the program, 32 not activated. It becomes the current window |  |
 | [`window_border_top()`](#window_border_top) | Int | The top border of the current window (title bar included); gadgets count from the inside, without it |  |
 | [`window_border_bottom()`](#window_border_bottom) | Int | The bottom border of the current window |  |
 | [`window_border_left()`](#window_border_left) | Int | The left border of the current window |  |
@@ -10318,7 +10318,8 @@ end
 - `x`, `y`: the position on the screen.
 - `w`, `h`: the size, at least 40 x 20.
 - `flags`: they add up. 1 = resizable; 2 = borderless; 4 = no close button; 8 = `w` and `h` are the inside, without
-  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus.
+  the borders; 16 = the right button goes to the program (`On RightClick`) instead of the menus; 32 = it does not
+  become active when it opens: the active window stays so (for a notice that comes and goes).
 
 Opens the window on the program's screen, if one was opened, or on the Workbench. Returns its number (1 to 16) and
 makes it the current window: the `gfx_*` functions draw in it. Returns 0 if it could not be opened or if there are
