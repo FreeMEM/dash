@@ -335,13 +335,13 @@ Closes the program's own screen. Close the windows on it first. Without a screen
         "see": ["screen_open", "window_close"],
     },
     "screen_width": {
-        "es": "Devuelve el ancho en píxeles de la pantalla propia o, si no hay, de la pantalla de la ventana actual. Sin ninguna, 640.\n",
-        "en": "Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, 640.\n",
+        "es": "Devuelve el ancho en píxeles de la pantalla propia o, si no hay, de la pantalla de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana (el Workbench, por lo general): sirve para medir una ventana antes de abrirla.\n",
+        "en": "Returns the width in pixels of the program's screen or, without one, of the current window's screen. With neither, that of the public screen where a window would open (the Workbench, as a rule): it helps to size a window before opening it.\n",
         "see": ["screen_height"],
     },
     "screen_height": {
-        "es": "Devuelve el alto en píxeles de la pantalla propia o de la de la ventana actual. Sin ninguna, 256.\n",
-        "en": "Returns the height in pixels of the program's screen or of the current window's. With neither, 256.\n",
+        "es": "Devuelve el alto en píxeles de la pantalla propia o de la de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana.\n",
+        "en": "Returns the height in pixels of the program's screen or of the current window's. With neither, that of the public screen where a window would open.\n",
         "see": ["screen_width"],
     },
     "check_lmb": {

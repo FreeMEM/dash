@@ -1,0 +1,13 @@
+# Test: screen_width and screen_height before any window give the size of the public screen where a window would
+# open (the Workbench), not 640 x 256: TrasfondoPrefs sizes its window before opening it.
+# expect-out: antes true true
+# expect-out: con ventana true true
+
+Main
+    w = screen_width()
+    h = screen_height()
+    Print "antes #{w == rtg_get_width()} #{h == rtg_get_height()}"
+    a = window_create("Medida", 20, 20, 120, 60, 0)
+    Print "con ventana #{screen_width() == w} #{screen_height() == h}"
+    window_close(a)
+end

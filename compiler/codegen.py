@@ -18044,17 +18044,20 @@ static void _dash_close_screen(void) {
     }
 }
 
-static LONG _dash_screen_width(void) {
-    if (_dash_screen) return _dash_screen->Width;
-    if (_dash_win) return _dash_win->WScreen->Width;
-    return 640;
+/* The size of the program's screen, or of the current window's; with neither, of the public screen where its first
+   window would open (the Workbench, as a rule): to size a window before opening it. 640 x 256 only if there is none */
+static LONG _dash_screen_dim(BOOL height) {
+    struct Screen *s;
+    LONG r;
+    if (_dash_screen) return height ? _dash_screen->Height : _dash_screen->Width;
+    if (_dash_win) return height ? _dash_win->WScreen->Height : _dash_win->WScreen->Width;
+    if (!(s = LockPubScreen(NULL))) return height ? 256 : 640;
+    r = height ? s->Height : s->Width;
+    UnlockPubScreen(NULL, s);
+    return r;
 }
-
-static LONG _dash_screen_height(void) {
-    if (_dash_screen) return _dash_screen->Height;
-    if (_dash_win) return _dash_win->WScreen->Height;
-    return 256;
-}
+static LONG _dash_screen_width(void) { return _dash_screen_dim(FALSE); }
+static LONG _dash_screen_height(void) { return _dash_screen_dim(TRUE); }
 
 static BOOL _dash_check_lmb(void) {
     /* Check left mouse button via CIA-A PRA bit 6 (active low) */
