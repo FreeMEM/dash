@@ -4108,7 +4108,25 @@ extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
 static struct MsgPort *_dash_cx_port = NULL;
 static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
-static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add, by n */
+static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add and cx_watch_add, by n */
+/* Where the pointer was and when, for each event of cx_key_add and cx_watch_add: written in the input handler
+   (_dash_cx_note, a CX_CUSTOM before the CX_SEND), read in the same order by cx_command (cx_event_x/y/ms). The
+   pointer is that of the screen of the broker (the default public one, the Workbench's) */
+#define _DASH_CX_EV 64
+static volatile struct { WORD x, y; ULONG ms; } _dash_cx_ev[_DASH_CX_EV];
+static volatile ULONG _dash_cx_ev_in = 0, _dash_cx_ev_out = 0;
+static struct Screen *_dash_cx_scr = NULL;
+static LONG _dash_cx_last_x = 0, _dash_cx_last_y = 0, _dash_cx_last_ms = 0;
+static void _dash_cx_note(CxMsg *msg, CxObj *co) {
+    struct InputEvent *ie = (struct InputEvent *)CxMsgData(msg);
+    ULONG i = _dash_cx_ev_in % _DASH_CX_EV;
+    (void)co;
+    if (_dash_cx_ev_in - _dash_cx_ev_out >= _DASH_CX_EV) return;   /* (full: cx_command is not reading) */
+    _dash_cx_ev[i].x = _dash_cx_scr ? _dash_cx_scr->MouseX : 0;
+    _dash_cx_ev[i].y = _dash_cx_scr ? _dash_cx_scr->MouseY : 0;
+    _dash_cx_ev[i].ms = ie ? ie->ie_TimeStamp.tv_secs * 1000 + ie->ie_TimeStamp.tv_micro / 1000 : 0;
+    _dash_cx_ev_in++;
+}
 static struct MsgPort *_dash_cx_tport = NULL;
 static struct timerequest *_dash_cx_tr = NULL;
 #define _DASH_CX_KEY_ID 1
@@ -4268,9 +4286,9 @@ static BOOL _dash_cx_hotkey(STRPTR descr) {
 }
 
 /* One more hotkey (n from 1 to 32): cx_command gives 100 + n; the event is eaten (CX_TRANSLATE to nothing).
-   They go with the broker (DeleteCxObjAll); a second one with the same n replaces the first, and "" takes it
-   away. */
-static BOOL _dash_cx_key_add(STRPTR descr, LONG n) {
+   With watch, cx_watch_add: the event goes on to the other programs as well. They go with the broker
+   (DeleteCxObjAll); a second one with the same n replaces the first, and "" takes it away. */
+static BOOL _dash_cx_filter_add(STRPTR descr, LONG n, BOOL watch) {
     IX ix;
     CxObj *filter;
     if (!_dash_cx_broker || n < 1 || n > 32) return FALSE;
@@ -4280,15 +4298,29 @@ static BOOL _dash_cx_key_add(STRPTR descr, LONG n) {
     }
     memset(&ix, 0, sizeof(ix));
     if (ParseIX((CONST_STRPTR)descr, &ix) != 0) return FALSE;
-    if (!(filter = CreateCxObj(CX_FILTER, (LONG)descr, 0))) return FALSE;
+    if (!_dash_cx_scr) {
+        _dash_cx_scr = LockPubScreen(NULL);
+        if (_dash_cx_scr) UnlockPubScreen(NULL, _dash_cx_scr);   /* (only to read its pointer: the Workbench's stays) */
+    }
+    /* the mouse buttons held do not count unless the description names them: the press of the left button already
+       carries IEQUALIFIER_LEFTBUTTON, and "rawmouse mouse_leftpress" would never come */
+    ix.ix_QualMask &= ~((IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_MIDBUTTON | IEQUALIFIER_RBUTTON | IEQUALIFIER_RELATIVEMOUSE)
+                        & ~ix.ix_Qualifier);
+    if (!(filter = CreateCxObj(CX_FILTER, 0, 0))) return FALSE;
+    ix.ix_Version = IX_VERSION;
+    SetFilterIX(filter, &ix);
+    AttachCxObj(filter, CreateCxObj(CX_CUSTOM, (LONG)_dash_cx_note, 0));
     AttachCxObj(filter, CreateCxObj(CX_SEND, (LONG)_dash_cx_port, 100 + n));
-    AttachCxObj(filter, CreateCxObj(CX_TRANSLATE, 0, 0));
+    if (!watch) AttachCxObj(filter, CreateCxObj(CX_TRANSLATE, 0, 0));
     if (CxObjError(filter)) { DeleteCxObjAll(filter); return FALSE; }
     if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); }
     AttachCxObj(_dash_cx_broker, filter);
     _dash_cx_keys[n] = filter;
     return TRUE;
 }
+static BOOL _dash_cx_key_add(STRPTR descr, LONG n) { return _dash_cx_filter_add(descr, n, FALSE); }
+static BOOL _dash_cx_watch_add(STRPTR descr, LONG n) { return _dash_cx_filter_add(descr, n, TRUE); }
+static LONG _dash_cx_event(LONG what) { return what == 0 ? _dash_cx_last_x : what == 1 ? _dash_cx_last_y : _dash_cx_last_ms; }
 
 /* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey (100 + n, the
    hotkey n of cx_key_add). Disable and
@@ -4301,7 +4333,16 @@ static LONG _dash_cx_command(void) {
         LONG r = 0;
         ReplyMsg((struct Message *)m);
         if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
-        else if (type == CXM_IEVENT && id > 100 && id <= 132) r = (LONG)id;
+        else if (type == CXM_IEVENT && id > 100 && id <= 132) {
+            r = (LONG)id;
+            if (_dash_cx_ev_out != _dash_cx_ev_in) {   /* (its CX_CUSTOM wrote where and when) */
+                ULONG i = _dash_cx_ev_out % _DASH_CX_EV;
+                _dash_cx_last_x = _dash_cx_ev[i].x;
+                _dash_cx_last_y = _dash_cx_ev[i].y;
+                _dash_cx_last_ms = (LONG)_dash_cx_ev[i].ms;
+                _dash_cx_ev_out++;
+            }
+        }
         else if (type == CXM_COMMAND) {
             switch (id) {
             case CXCMD_DISAPPEAR: r = 1; break;
@@ -4378,10 +4419,13 @@ static LONG _dash_cx_wait(LONG ms) {
    do not wait for Intuition (it does them in input.device). Nothing patched. */
 #include <graphics/layers.h>
 #include <proto/layers.h>
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#include <intuition/preferences.h>
 #define _DASH_WM_MAX 64
 static struct Window *_dash_wm_w[_DASH_WM_MAX];
 static LONG _dash_wm_n = 0;
-static WORD _dash_wm_box[_DASH_WM_MAX][8];
+static WORD _dash_wm_box[_DASH_WM_MAX][16];
 static LONG _dash_wm_fl[_DASH_WM_MAX];
 static char _dash_wm_title[_DASH_WM_MAX][80];
 static char _dash_wm_task[_DASH_WM_MAX][32];
@@ -4419,6 +4463,31 @@ static void _dash_wm_owner(struct Window *w, char *d) {
     _dash_wm_copy(d, (UBYTE *)t->tc_Node.ln_Name, -1, 32);
 }
 
+/* Its title bar: where the free part (no gadgets: to drag it) starts and ends, from the window's left edge, and the
+   middle of its close gadget (-1 without one). From its gadgets in the top border (system ones and GACT_TOPBORDER):
+   those on the left half push the start, those on the right half the end. (Under LockLayerInfo or Forbid.) */
+static void _dash_wm_title_zone(struct Window *w, WORD *x0, WORD *x1, WORD *cx, WORD *cy) {
+    struct Gadget *g;
+    LONG a = 0, b = w->Width;
+    *cx = *cy = -1;
+    for (g = w->FirstGadget; g; g = g->NextGadget) {
+        LONG gx, gy, gw, gh, type = g->GadgetType & GTYP_SYSTYPEMASK;
+        BOOL sys = (g->GadgetType & GTYP_SYSGADGET) != 0;
+        if (!sys && !(g->Activation & GACT_TOPBORDER)) continue;
+        if (sys && (type == GTYP_WDRAGGING || type == GTYP_SIZING)) continue;
+        gx = g->LeftEdge + ((g->Flags & GFLG_RELRIGHT) ? w->Width - 1 : 0);
+        gy = g->TopEdge + ((g->Flags & GFLG_RELBOTTOM) ? w->Height - 1 : 0);
+        gw = g->Width + ((g->Flags & GFLG_RELWIDTH) ? w->Width : 0);
+        gh = g->Height + ((g->Flags & GFLG_RELHEIGHT) ? w->Height : 0);
+        if (gy >= w->BorderTop || gw <= 0 || gw >= w->Width / 2) continue;   /* (not in the title bar) */
+        if (sys && type == GTYP_CLOSE) { *cx = gx + gw / 2; *cy = gy + gh / 2; }
+        if (gx + gw / 2 < w->Width / 2) { if (gx + gw > a) a = gx + gw; }
+        else if (gx < b) b = gx;
+    }
+    *x0 = a;
+    *x1 = b;
+}
+
 /* Read the windows: how many (up to 64), for wm_*(i) until the next wm_read */
 static LONG _dash_wm_read(void) {
     struct Screen *s = _dash_wm_screen();
@@ -4441,6 +4510,11 @@ static LONG _dash_wm_read(void) {
         _dash_wm_box[i][5] = w->MinHeight;
         _dash_wm_box[i][6] = w->MaxWidth;
         _dash_wm_box[i][7] = w->MaxHeight;
+        _dash_wm_box[i][8] = w->BorderLeft;
+        _dash_wm_box[i][9] = w->BorderTop;
+        _dash_wm_box[i][10] = w->BorderRight;
+        _dash_wm_box[i][11] = w->BorderBottom;
+        _dash_wm_title_zone(w, &_dash_wm_box[i][12], &_dash_wm_box[i][13], &_dash_wm_box[i][14], &_dash_wm_box[i][15]);
         if (w->Flags & WFLG_SIZEGADGET) f |= 1;
         if (w->Flags & WFLG_BACKDROP) f |= 2;
         if (w->Flags & WFLG_BORDERLESS) f |= 4;
@@ -4465,7 +4539,7 @@ static STRPTR _dash_wm_task_of(LONG i) {
     return _dash_str_dup(i >= 0 && i < _dash_wm_n ? (STRPTR)_dash_wm_task[i] : (STRPTR)"", TRUE);
 }
 static LONG _dash_wm_box_of(LONG i, LONG what) {
-    if (i < 0 || i >= _dash_wm_n || what < 0 || what > 7) return -1;
+    if (i < 0 || i >= _dash_wm_n || what < 0 || what > 15) return -1;
     return _dash_wm_box[i][what];
 }
 static LONG _dash_wm_flags(LONG i) { return i >= 0 && i < _dash_wm_n ? _dash_wm_fl[i] : 0; }
@@ -4557,6 +4631,96 @@ static BOOL _dash_wm_set_box(LONG id, LONG x, LONG y, LONG wd, LONG ht) {
     return TRUE;
 }
 
+/* What wm_box gives, of the window of that id as it is now (under Forbid, without the screen's layer lock: it does
+   not wait while Intuition drags a window); -1 if it is gone */
+static LONG _dash_wm_box_now(LONG id, LONG what) {
+    struct Window *w;
+    WORD z[4];
+    LONG r = -1;
+    Forbid();
+    if ((w = _dash_wm_find(id)) && what >= 0 && what <= 15) {
+        switch (what) {
+        case 0: r = w->LeftEdge; break;
+        case 1: r = w->TopEdge; break;
+        case 2: r = w->Width; break;
+        case 3: r = w->Height; break;
+        case 4: r = w->MinWidth; break;
+        case 5: r = w->MinHeight; break;
+        case 6: r = (UWORD)w->MaxWidth; break;
+        case 7: r = (UWORD)w->MaxHeight; break;
+        case 8: r = w->BorderLeft; break;
+        case 9: r = w->BorderTop; break;
+        case 10: r = w->BorderRight; break;
+        case 11: r = w->BorderBottom; break;
+        default:
+            _dash_wm_title_zone(w, &z[0], &z[1], &z[2], &z[3]);
+            r = z[what - 12];
+        }
+    }
+    Permit();
+    return r;
+}
+
+/* The time between two clicks that makes a double click, from Intuition's preferences (Input), in ms */
+static LONG _dash_wm_double_click_ms(void) {
+    struct Preferences p;
+    if (!GetPrefs(&p, sizeof(p))) return 500;
+    return (LONG)(p.DoubleClick.tv_secs * 1000 + p.DoubleClick.tv_micro / 1000);
+}
+
+/* Closes a window as the user would: a click on its close gadget (input.device), and the pointer back where it
+   was. Only its program can close it; this asks it to. FALSE if it is gone or has no close gadget */
+static BOOL _dash_wm_close(LONG id) {
+    struct Window *w;
+    struct Screen *sc;
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    WORD x0, x1, cx, cy, ox, oy;
+    LONG k;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    _dash_wm_title_zone(w, &x0, &x1, &cx, &cy);
+    sc = w->WScreen;
+    cx += w->LeftEdge;
+    cy += w->TopEdge;
+    ox = sc->MouseX;
+    oy = sc->MouseY;
+    Permit();
+    if (cy < 0 || cx < 0) return FALSE;
+    if (!(port = CreateMsgPort())) return FALSE;
+    if (!(io = (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)))) { DeleteMsgPort(port); return FALSE; }
+    if (OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0)) {
+        DeleteIORequest((struct IORequest *)io);
+        DeleteMsgPort(port);
+        return FALSE;
+    }
+    for (k = 0; k < 4; k++) {
+        memset(&ie, 0, sizeof(ie));
+        if (k == 0 || k == 3) {
+            pp.iepp_Screen = sc;
+            pp.iepp_Position.X = k == 0 ? cx : ox;
+            pp.iepp_Position.Y = k == 0 ? cy : oy;
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+        } else {
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = k == 1 ? IECODE_LBUTTON : IECODE_LBUTTON | IECODE_UP_PREFIX;
+            ie.ie_Qualifier = k == 1 ? IEQUALIFIER_LEFTBUTTON : 0;
+        }
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = (APTR)&ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+    }
+    CloseDevice((struct IORequest *)io);
+    DeleteIORequest((struct IORequest *)io);
+    DeleteMsgPort(port);
+    return TRUE;
+}
+
 /* 0 in front, 1 behind, 2 active, 3 zip (its other size, the one of its zoom gadget) */
 static BOOL _dash_wm_do(LONG id, LONG what) {
     struct Window *w;
@@ -4572,13 +4736,17 @@ static BOOL _dash_wm_do(LONG id, LONG what) {
     return TRUE;
 }
 
-/* The active window, if it is on the Workbench screen; 0 if not */
+/* The active window, if it is on the Workbench screen; 0 if not. Under Forbid, not LockIBase: Intuition holds that
+   lock while a window is being dragged, and this must answer at once (TrasfondoVentanas asks it on the click that
+   starts the drag) */
 static LONG _dash_wm_active(void) {
     struct Screen *s = _dash_wm_screen();
-    ULONG lock = LockIBase(0);
-    struct Window *w = IntuitionBase->ActiveWindow;
-    LONG r = w && w->WScreen == s ? (LONG)w : 0;
-    UnlockIBase(lock);
+    struct Window *w;
+    LONG r;
+    Forbid();
+    w = IntuitionBase->ActiveWindow;
+    r = w && w->WScreen == s ? (LONG)w : 0;
+    Permit();
     return r;
 }
 
@@ -16282,7 +16450,7 @@ static BOOL _dash_dir_create(STRPTR path) {
 
 /* dir_read(path): what a directory holds, sorted by name (case does not count), kept until the next dir_read;
    dir_entry_*(i) read it (Dash 2.0, for Inferencia) */
-typedef struct { LONG size, date; BOOL dir; char name[1]; } _DashDirEnt;
+typedef struct { LONG size, date, prot; BOOL dir; char *comment; char name[1]; } _DashDirEnt;
 static _DashDirEnt **_dash_dir_ents = NULL;
 static LONG _dash_dir_n = 0, _dash_dir_cap = 0;
 
@@ -16328,8 +16496,12 @@ static LONG _dash_dir_read(STRPTR path) {
             _dash_dir_ents = v;
             _dash_dir_cap = cap;
         }
-        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName), MEMF_ANY))) break;
+        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName) + 1 +
+                                          strlen(fib->fib_Comment), MEMF_ANY))) break;
         strcpy(e->name, fib->fib_FileName);
+        e->comment = e->name + strlen(e->name) + 1;          /* (after the name, in the same block) */
+        strcpy(e->comment, fib->fib_Comment);
+        e->prot = fib->fib_Protection;
         e->dir = fib->fib_DirEntryType > 0 && fib->fib_DirEntryType != ST_SOFTLINK;
         e->size = e->dir ? 0 : fib->fib_Size;
         /* (as time_unix: seconds since 1970 by the system's clock) */
@@ -16359,8 +16531,130 @@ static STRPTR _dash_dir_entry_name(LONG i) {
 static LONG _dash_dir_entry_size(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->size : -1; }
 static BOOL _dash_dir_entry_is_dir(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->dir : FALSE; }
 static LONG _dash_dir_entry_date(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->date : 0; }
+static LONG _dash_dir_entry_protection(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->prot : -1; }
+static STRPTR _dash_dir_entry_comment(LONG i) {
+    _DashDirEnt *e = _dash_dir_ent(i);
+    return _dash_str_dup(e ? (STRPTR)e->comment : (STRPTR)"", TRUE);
+}
+
+/* The protection bits, the comment and the date of a file or drawer, to read and to set (for a file manager:
+   Trasfondo's). The bits as the file system keeps them: 0-3 (d, e, w, r) set mean NOT allowed; 4 a, 5 p, 6 s, 7 h */
+static struct FileInfoBlock *_dash_file_fib(STRPTR path) {
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    if (!path || !(lock = Lock(path, SHARED_LOCK))) return NULL;
+    fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL);
+    if (fib && !Examine(lock, fib)) { FreeDosObject(DOS_FIB, fib); fib = NULL; }
+    UnLock(lock);
+    return fib;
+}
+static LONG _dash_file_protection(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    LONG r = -1;
+    if (fib) { r = fib->fib_Protection; FreeDosObject(DOS_FIB, fib); }
+    return r;
+}
+static STRPTR _dash_file_comment(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    STRPTR r = _dash_str_dup(fib ? (STRPTR)fib->fib_Comment : (STRPTR)"", TRUE);
+    if (fib) FreeDosObject(DOS_FIB, fib);
+    return r;
+}
+static LONG _dash_file_date(STRPTR path) {
+    struct FileInfoBlock *fib = _dash_file_fib(path);
+    LONG r = 0;
+    if (fib) {
+        r = 252460800L + fib->fib_Date.ds_Days * 86400L + fib->fib_Date.ds_Minute * 60L + fib->fib_Date.ds_Tick / 50;
+        FreeDosObject(DOS_FIB, fib);
+    }
+    return r;
+}
+static BOOL _dash_file_set_protection(STRPTR path, LONG bits) { return path && SetProtection(path, bits); }
+static BOOL _dash_file_set_comment(STRPTR path, STRPTR text) {
+    return path && SetComment(path, text ? text : (STRPTR)"");
+}
+static BOOL _dash_file_set_date(STRPTR path, LONG t) {
+    struct DateStamp ds;
+    t -= 252460800L;                                      /* (from 1970 to the Amiga's 1978) */
+    if (!path || t < 0) return FALSE;
+    ds.ds_Days = t / 86400L;
+    ds.ds_Minute = (t % 86400L) / 60;
+    ds.ds_Tick = (t % 60) * 50;
+    return SetFileDate(path, &ds);
+}
+/* The bits, the comment and the date of src, given to dest (after copying a file, the copy the same) */
+static BOOL _dash_file_copy_attrs(STRPTR src, STRPTR dest) {
+    struct FileInfoBlock *fib = _dash_file_fib(src);
+    BOOL ok;
+    if (!fib || !dest) { if (fib) FreeDosObject(DOS_FIB, fib); return FALSE; }
+    ok = SetProtection(dest, fib->fib_Protection);
+    ok = SetComment(dest, fib->fib_Comment) && ok;
+    ok = SetFileDate(dest, &fib->fib_Date) && ok;
+    FreeDosObject(DOS_FIB, fib);
+    return ok;
+}
+
+/* Copying a file in steps (file_copy_begin, file_copy_step, file_copy_end): a file manager shows the progress
+   between two steps and can stop. Up to 8 at once */
+#define _DASH_CP_N 8
+#define _DASH_CP_BUF 32768
+static struct { BPTR in, out; UBYTE *buf; BOOL end, bad; char *src, *dest; } _dash_cp[_DASH_CP_N];
+static LONG _dash_file_copy_begin(STRPTR src, STRPTR dest) {
+    LONG n;
+    if (!src || !dest) return 0;
+    for (n = 0; n < _DASH_CP_N && _dash_cp[n].in; n++) ;
+    if (n == _DASH_CP_N) return 0;
+    _dash_cp[n].buf = (UBYTE *)AllocVec(_DASH_CP_BUF + strlen(src) + strlen(dest) + 2, MEMF_ANY);
+    if (!_dash_cp[n].buf) return 0;
+    _dash_cp[n].src = (char *)_dash_cp[n].buf + _DASH_CP_BUF;
+    strcpy(_dash_cp[n].src, src);
+    _dash_cp[n].dest = _dash_cp[n].src + strlen(src) + 1;
+    strcpy(_dash_cp[n].dest, dest);
+    if (!(_dash_cp[n].in = Open(src, MODE_OLDFILE))) { FreeVec(_dash_cp[n].buf); return 0; }
+    if (!(_dash_cp[n].out = Open(dest, MODE_NEWFILE))) {
+        Close(_dash_cp[n].in);
+        _dash_cp[n].in = 0;
+        FreeVec(_dash_cp[n].buf);
+        return 0;
+    }
+    _dash_cp[n].end = _dash_cp[n].bad = FALSE;
+    return n + 1;
+}
+static LONG _dash_file_copy_step(LONG n, LONG most) {
+    LONG done = 0, want, got;
+    if (n < 1 || n > _DASH_CP_N || !_dash_cp[n - 1].in) return -1;
+    n--;
+    if (_dash_cp[n].bad) return -1;
+    if (_dash_cp[n].end) return 0;
+    if (most < 1) most = _DASH_CP_BUF;
+    while (done < most) {
+        want = most - done < _DASH_CP_BUF ? most - done : _DASH_CP_BUF;
+        got = Read(_dash_cp[n].in, _dash_cp[n].buf, want);
+        if (got < 0) { _dash_cp[n].bad = TRUE; return -1; }
+        if (got == 0) { _dash_cp[n].end = TRUE; break; }
+        if (Write(_dash_cp[n].out, _dash_cp[n].buf, got) != got) { _dash_cp[n].bad = TRUE; return -1; }
+        done += got;
+        if (got < want) { _dash_cp[n].end = TRUE; break; }
+    }
+    return done;
+}
+static BOOL _dash_file_copy_end(LONG n, BOOL keep) {
+    BOOL ok;
+    if (n < 1 || n > _DASH_CP_N || !_dash_cp[n - 1].in) return FALSE;
+    n--;
+    ok = keep && _dash_cp[n].end && !_dash_cp[n].bad;
+    Close(_dash_cp[n].in);
+    if (!Close(_dash_cp[n].out)) ok = FALSE;
+    _dash_cp[n].in = _dash_cp[n].out = 0;
+    if (ok) _dash_file_copy_attrs((STRPTR)_dash_cp[n].src, (STRPTR)_dash_cp[n].dest);
+    else DeleteFile((STRPTR)_dash_cp[n].dest);           /* (half a copy is not left behind) */
+    FreeVec(_dash_cp[n].buf);
+    return ok;
+}
 
 static void _dash_dir_cleanup(void) {
+    LONG n;
+    for (n = 1; n <= _DASH_CP_N; n++) _dash_file_copy_end(n, FALSE);
     if (_dash_dir_changed) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;

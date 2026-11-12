@@ -1,0 +1,73 @@
+# Test: watching clicks without taking them (cx_watch_add) and where and when they were (cx_event_x/y/ms), the
+# borders and the title bar of a window (wm_box 8-15), the double click time and closing a window as the user would
+# (wm_close: a click on its close gadget). For Trasfondo's modern window controls. A click made through input.device
+# on the program's own window comes to the commodity (press and release, at the click's place) and also to the
+# window (cx_watch_add does not eat it: the window becomes active).
+# emu-needs: commodities.library
+# expect-out: broker true true true
+# expect-out: bordes true true
+# expect-out: barra true true
+# expect-out: cerrar true
+# expect-out: doble true
+# expect-out: ahora true true
+# expect-out: eventos 101 102
+# expect-out: donde true true
+# expect-out: cuando true
+# expect-out: activa true
+# expect-out: cerrada true
+# expect-out: fin
+
+func propia(titulo: String) -> Int
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_title(i) == titulo and wm_flags(i) & 32 != 0
+            return i
+        end
+    end
+    return -1
+end
+
+Main
+    ok = cx_broker("TestWMEv", "Test", "Test", 0)
+    Print "broker #{ok} #{cx_watch_add(\"rawmouse mouse_leftpress\", 1)} #{cx_watch_add(\"rawmouse upstroke mouse_leftpress\", 2)}"
+    otra = window_create("WM otra", 300, 40, 200, 100, 0)
+    a = window_create("WM ev", 40, 40, 200, 100, 0)
+    time_delay(10)
+    i = propia("WM ev")
+    Print "bordes #{wm_box(i, 9) > wm_box(i, 11)} #{wm_box(i, 8) >= 0}"
+    Print "barra #{wm_box(i, 12) > 0} #{wm_box(i, 13) > wm_box(i, 12) and wm_box(i, 13) <= wm_box(i, 2)}"
+    Print "cerrar #{wm_box(i, 14) >= 0 and wm_box(i, 14) < wm_box(i, 12) and wm_box(i, 15) < wm_box(i, 9)}"
+    Print "doble #{wm_double_click_ms() > 0}"
+    Print "ahora #{wm_box_now(wm_id(i), 0) == wm_box(i, 0) and wm_box_now(wm_id(i), 13) == wm_box(i, 13)} #{wm_box_now(1, 0) == -1}"
+    x = wm_box(i, 0)
+    y = wm_box(i, 1)
+    # the other window in front and active: the click on "WM ev" must reach it and make it active
+    window_to_front(otra)
+    wm_activate(wm_id(propia("WM otra")))
+    time_delay(10)
+    input_click(-240, 50, 0)      # from the active window's corner ("WM otra", at 300,40): the point 60,90 of the screen
+    c1 = cx_wait(2000)
+    x1 = cx_event_x()
+    y1 = cx_event_y()
+    m1 = cx_event_ms()
+    c2 = cx_wait(2000)
+    m2 = cx_event_ms()
+    Print "eventos #{c1} #{c2}"
+    Print "donde #{x1 == 60} #{y1 == 90}"
+    Print "cuando #{m2 >= m1 and m2 - m1 < 1000}"
+    time_delay(10)
+    Print "activa #{wm_active() == wm_id(propia(\"WM ev\"))}"
+    wm_close(wm_id(propia("WM ev")))
+    n = 0
+    cerrada = false
+    while n < 50 and not cerrada
+        window_use(a)
+        cerrada = window_check_close()
+        time_delay(2)
+        n = n + 1
+    end
+    Print "cerrada #{cerrada}"
+    window_close(a)
+    window_close(otra)
+    Print "fin"
+end

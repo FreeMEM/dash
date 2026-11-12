@@ -259,6 +259,23 @@ DESC_ES = {
     "dir_entry_size": "El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón)",
     "dir_entry_is_dir": "Verdadero si la entrada i del último dir_read es un cajón",
     "dir_entry_date": "La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970",
+    "dir_entry_protection": "Los bits de protección de la entrada i del último dir_read, como los guarda el sistema de "
+                            "ficheros (0-3 d e w r puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no la hay",
+    "dir_entry_comment": "El comentario (nota) de la entrada i del último dir_read; \"\" si no tiene",
+    "file_protection": "Los bits de protección de un fichero o cajón, como los guarda el sistema de ficheros (0-3 d e w r "
+                       "puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no se puede leer",
+    "file_set_protection": "Pone los bits de protección de un fichero o cajón (como los da file_protection); false si no pudo",
+    "file_comment": "El comentario (nota) de un fichero o cajón; \"\" si no tiene o no se puede leer",
+    "file_set_comment": "Pone el comentario (nota) de un fichero o cajón (hasta 79 letras; \"\" lo quita); false si no pudo",
+    "file_date": "La fecha del último cambio de un fichero o cajón, como time_unix; 0 si no se puede leer",
+    "file_set_date": "Pone la fecha de un fichero o cajón (como time_unix); false si no pudo",
+    "file_copy_attrs": "Da a dest los bits de protección, el comentario y la fecha de src (una copia igual que el "
+                       "original); false si alguno no se pudo poner",
+    "file_copy_begin": "Empieza a copiar un fichero a trozos (file_copy_step, file_copy_end), para enseñar cómo va y "
+                       "poder parar: su número (1-8), 0 si no se puede (dest se reemplaza)",
+    "file_copy_step": "Copia hasta most bytes más de la copia n: cuántos copió, 0 cuando ha acabado, -1 si hubo un error",
+    "file_copy_end": "Acaba la copia n: con keep true y la copia entera, la copia se queda con los bits, el comentario y "
+                     "la fecha del original (true); si no, se borra lo copiado (false)",
     "console_read": "Lee de la consola",
     "console_write": "Escribe en la consola (sin búfer)",
     "file_load": "Carga un fichero entero en un búfer: los bytes leídos, o -1",
@@ -773,7 +790,9 @@ DESC_ES = {
     "icon_height": "El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_free": "Libera un icono de icon_load (los que queden, al salir)",
     "wm_box": "De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, "
-              "7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista",
+              "7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde "
+              "empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin "
+              "él), desde su esquina; -1 fuera de la lista",
     "wm_flags": "De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, "
                 "16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester",
     "wm_set_box": "Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene "
@@ -782,6 +801,11 @@ DESC_ES = {
     "wm_back": "Una ventana detrás de las demás; false si ya no está abierta",
     "wm_activate": "Hace activa una ventana (las teclas van a ella); false si ya no está abierta",
     "wm_zip": "Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta",
+    "wm_box_now": "Lo que da wm_box (0-15), de la ventana de ese id tal como está ahora, sin esperar mientras se "
+                  "arrastra una ventana; -1 si ya no está",
+    "wm_close": "Pide al programa de una ventana que la cierre: un clic en su botón de cerrar, como el usuario, y el "
+                "puntero vuelve donde estaba; false si ya no está o no tiene ese botón",
+    "wm_double_click_ms": "El tiempo máximo entre los dos clics de un doble clic, en ms (preferencias de Input)",
     "wm_active": "El id de la ventana activa, si está en la pantalla del Workbench; 0 si no",
     "wm_at": "El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna",
     "wm_pointer_x": "Dónde está el puntero en la pantalla del Workbench: la x",
@@ -792,6 +816,13 @@ DESC_ES = {
     "wm_bar_gadgets": "A qué distancia del borde derecho de la barra de título de la pantalla del Workbench empiezan sus botones del sistema (el de profundidad), preguntado a la pantalla; 0 si no lo sabe",
     "cx_hotkey": "La tecla rápida de la commodity, según su descripción (\"ctrl alt t\"): cx_command da 6 al pulsarla; "
                  "false si la descripción no vale (o no hay cx_broker); \"\" la quita",
+    "cx_watch_add": "Como cx_key_add, pero el evento sigue también a los demás programas: para mirar clics y teclas "
+                    "sin quitárselos (cx_command da 100 + n)",
+    "cx_event_x": "Dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio cx_command "
+                  "(cx_key_add, cx_watch_add)",
+    "cx_event_y": "Dónde estaba el puntero (y) en el último evento que dio cx_command",
+    "cx_event_ms": "Cuándo fue el último evento que dio cx_command, en ms (para saber si es un doble clic: la "
+                   "diferencia con el anterior)",
     "cx_command": "La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, "
                   "4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su "
                   "tecla)",

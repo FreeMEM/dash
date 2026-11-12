@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 985 functions, 985 implemented, 0 not implemented.
+Total: 1004 functions, 1004 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4051,6 +4051,18 @@ end
 | [`dir_entry_size(i)`](#dir_entry_size) | Int | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
 | [`dir_entry_is_dir(i)`](#dir_entry_is_dir) | Bool | True if entry i of the last dir_read is a directory |  |
 | [`dir_entry_date(i)`](#dir_entry_date) | Int | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
+| [`dir_entry_protection(i)`](#dir_entry_protection) | Int | Protection bits of entry i of the last dir_read, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if there is no entry i |  |
+| [`dir_entry_comment(i)`](#dir_entry_comment) | String | Comment (filenote) of entry i of the last dir_read; "" if it has none |  |
+| [`file_protection(path)`](#file_protection) | Int | Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read |  |
+| [`file_set_protection(path, bits)`](#file_set_protection) | Bool | Sets the protection bits of a file or drawer (as file_protection gives them); false if it could not |  |
+| [`file_comment(path)`](#file_comment) | String | Comment (filenote) of a file or drawer; "" if it has none or cannot be read |  |
+| [`file_set_comment(path, text)`](#file_set_comment) | Bool | Sets the comment (filenote) of a file or drawer (up to 79 characters; "" removes it); false if it could not |  |
+| [`file_date(path)`](#file_date) | Int | Date of the last change of a file or drawer, as time_unix; 0 if it cannot be read |  |
+| [`file_set_date(path, t)`](#file_set_date) | Bool | Sets the date of a file or drawer (as time_unix); false if it could not |  |
+| [`file_copy_attrs(src, dest)`](#file_copy_attrs) | Bool | Gives dest the protection bits, comment and date of src (a copy the same as the original); false if any could not be set |  |
+| [`file_copy_begin(src, dest)`](#file_copy_begin) | Int | Starts copying a file in steps (file_copy_step, file_copy_end), to show the progress and be able to stop: its number (1-8), 0 if it cannot (dest is replaced) |  |
+| [`file_copy_step(n, most)`](#file_copy_step) | Int | Copies up to most bytes more of copy n: how many it copied, 0 when it is finished, -1 on an error |  |
+| [`file_copy_end(n, keep)`](#file_copy_end) | Bool | Ends copy n: with keep true and the copy finished, the copy stays with the original's bits, comment and date (true); otherwise the half copy is deleted (false) |  |
 | [`console_read(buffer, maxlen)`](#console_read) | Int | Read from console |  |
 | [`console_write(str)`](#console_write) | — | Write to console |  |
 | [`file_load(filename, buffer, maxsize)`](#file_load) | Int | Load entire file into buffer, returns bytes read or -1 |  |
@@ -4328,6 +4340,160 @@ See also: [`dir_read`](#dir_read).
 Returns the date of its last change in seconds since 1 January 1970, like `time_unix`. 0 if there is no entry `i`.
 
 See also: [`dir_read`](#dir_read), [`time_unix`](#time_unix).
+
+<a id="dir_entry_protection"></a>
+
+### `dir_entry_protection(i)` → `Int`
+
+- `i`: the entry, from 0.
+
+Returns its protection bits as the file system keeps them: bits 0 to 3 (d delete, e execute, w write, r read) set
+mean that is **not** allowed; 4 a (archived), 5 p (pure), 6 s (script), 7 h (hidden). -1 if there is no entry `i`.
+For a file manager, like `List`.
+
+See also: [`dir_read`](#dir_read), [`file_protection`](#file_protection).
+
+<a id="dir_entry_comment"></a>
+
+### `dir_entry_comment(i)` → `String`
+
+- `i`: the entry, from 0.
+
+Returns its comment (the note of `FileNote`); `""` if it has none.
+
+See also: [`dir_read`](#dir_read), [`file_comment`](#file_comment).
+
+<a id="file_protection"></a>
+
+### `file_protection(path)` → `Int`
+
+- `path`: the file or drawer.
+
+Returns its protection bits (like `dir_entry_protection`); -1 if it does not exist or cannot be read.
+
+```dash
+p = file_protection("RAM:hello")
+if p & 4 != 0
+    Print "it cannot be written"
+    ok = file_set_protection("RAM:hello", p - 4)   # let it be
+end
+```
+
+See also: [`file_set_protection`](#file_set_protection), [`dir_entry_protection`](#dir_entry_protection).
+
+<a id="file_set_protection"></a>
+
+### `file_set_protection(path, bits)` → `Bool`
+
+- `path`: the file or drawer.
+- `bits`: the bits, as `file_protection` gives them.
+
+Sets them, like `Protect`. Returns `false` if it could not.
+
+See also: [`file_protection`](#file_protection).
+
+<a id="file_comment"></a>
+
+### `file_comment(path)` → `String`
+
+- `path`: the file or drawer.
+
+Returns its comment (the note of `FileNote`); `""` if it has none or cannot be read.
+
+See also: [`file_set_comment`](#file_set_comment), [`dir_entry_comment`](#dir_entry_comment).
+
+<a id="file_set_comment"></a>
+
+### `file_set_comment(path, text)` → `Bool`
+
+- `path`: the file or drawer.
+- `text`: the comment, up to 79 characters; `""` removes it.
+
+Sets it, like `FileNote`. Returns `false` if it could not.
+
+See also: [`file_comment`](#file_comment).
+
+<a id="file_date"></a>
+
+### `file_date(path)` → `Int`
+
+- `path`: the file or drawer.
+
+Returns the date of its last change, like `time_unix`; 0 if it cannot be read.
+
+See also: [`file_set_date`](#file_set_date), [`dir_entry_date`](#dir_entry_date).
+
+<a id="file_set_date"></a>
+
+### `file_set_date(path, t)` → `Bool`
+
+- `path`: the file or drawer.
+- `t`: the date, like `time_unix`.
+
+Sets it, like `SetDate`. Returns `false` if it could not.
+
+See also: [`file_date`](#file_date).
+
+<a id="file_copy_attrs"></a>
+
+### `file_copy_attrs(src, dest)` → `Bool`
+
+- `src`: the original.
+- `dest`: the copy.
+
+Gives `dest` the protection bits, the comment and the date of `src`, so the copy is the same as the original (like
+`Copy CLONE`). Returns `false` if any could not be set.
+
+See also: [`file_copy`](#file_copy), [`file_copy_begin`](#file_copy_begin).
+
+<a id="file_copy_begin"></a>
+
+### `file_copy_begin(src, dest)` → `Int`
+
+- `src`: the file to copy.
+- `dest`: the copy; if it existed, it is replaced.
+
+Starts copying in steps: between one step and the next the progress can be shown and the copy left half done.
+Returns the copy's number (1 to 8; 8 fit at once), or 0 if either file cannot be opened.
+
+```dash
+n = file_copy_begin("DH0:big.lha", "RAM:big.lha")
+total = file_size("DH0:big.lha")
+done = 0
+step = file_copy_step(n, 65536)
+while step > 0 and not stop
+    done = done + step
+    Print "#{done * 100 / total} %"
+    step = file_copy_step(n, 65536)
+end
+ok = file_copy_end(n, step == 0)    # whole: it stays; otherwise it is deleted
+```
+
+See also: [`file_copy_step`](#file_copy_step), [`file_copy_end`](#file_copy_end), [`file_copy`](#file_copy).
+
+<a id="file_copy_step"></a>
+
+### `file_copy_step(n, most)` → `Int`
+
+- `n`: the copy from `file_copy_begin`.
+- `most`: how many bytes at most in this step.
+
+Returns how many it copied; 0 when it is whole; -1 on an error (disk full...).
+
+See also: [`file_copy_begin`](#file_copy_begin), [`file_copy_end`](#file_copy_end).
+
+<a id="file_copy_end"></a>
+
+### `file_copy_end(n, keep)` → `Bool`
+
+- `n`: the copy from `file_copy_begin`.
+- `keep`: `true` to keep it.
+
+Closes both files. With `keep` and the copy whole, the copy gets the original's bits, comment and date and it
+returns `true`; otherwise (cancelled, half done or with an error) it deletes what was copied and returns `false`.
+Those still open when the program ends are deleted.
+
+See also: [`file_copy_begin`](#file_copy_begin), [`file_copy_step`](#file_copy_step).
 
 <a id="console_read"></a>
 
@@ -5611,6 +5777,10 @@ end
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
 | [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
+| [`cx_watch_add(description, n)`](#cx_watch_add) | Bool | Like cx_key_add, but the event also goes on to the other programs: to watch clicks and keys without taking them (cx_command gives 100 + n) |  |
+| [`cx_event_x()`](#cx_event_x) | Int | Where the pointer was (x, on the Workbench screen) at the last event cx_command gave (cx_key_add, cx_watch_add) |  |
+| [`cx_event_y()`](#cx_event_y) | Int | Where the pointer was (y) at the last event cx_command gave |  |
+| [`cx_event_ms()`](#cx_event_ms) | Int | When the last event cx_command gave happened, in ms (to tell a double click: the difference with the previous one) |  |
 | [`cx_command()`](#cx_command) | Int | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
 | [`cx_wait(ms)`](#cx_wait) | Int | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
 | [`disks_read(ms)`](#disks_read) | Int | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
@@ -5870,6 +6040,44 @@ See also: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 One more hot key: `cx_command` gives 100 + `n` when pressed, and the event does not go on to other programs.
 
 See also: [`cx_hotkey`](#cx_hotkey).
+
+<a id="cx_watch_add"></a>
+
+### `cx_watch_add(description, n)` → `Bool`
+
+- `description`: the event, as in `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
+- `n`: its number, 1 to 32 (the same numbers as `cx_key_add`).
+
+Like `cx_key_add`, but the event also goes on to the other programs: it is for watching clicks and keys without
+taking them (a double click on any window's title bar, for instance). `cx_command` gives 100 + `n`, and
+`cx_event_x`, `cx_event_y` and `cx_event_ms` tell where and when it happened. Returns `false` if the description is
+not valid.
+
+See also: [`cx_key_add`](#cx_key_add), [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_x"></a>
+
+### `cx_event_x()` → `Int`
+
+Returns where the pointer was (x, on the Workbench screen) at the last event `cx_command` gave, from `cx_key_add` or `cx_watch_add`.
+
+See also: [`cx_event_y`](#cx_event_y), [`cx_event_ms`](#cx_event_ms).
+
+<a id="cx_event_y"></a>
+
+### `cx_event_y()` → `Int`
+
+Returns where the pointer was (y) at the last event `cx_command` gave.
+
+See also: [`cx_event_x`](#cx_event_x).
+
+<a id="cx_event_ms"></a>
+
+### `cx_event_ms()` → `Int`
+
+Returns when the last event `cx_command` gave happened, in milliseconds. Only the difference between two means anything: with `wm_double_click_ms`, whether two clicks are a double click.
+
+See also: [`wm_double_click_ms`](#wm_double_click_ms).
 
 <a id="cx_command"></a>
 
@@ -9289,13 +9497,16 @@ those dropped on a window.
 | [`wm_title(i)`](#wm_title) | String | The title of window i of the last wm_read ("" if it has none) |  |
 | [`wm_task(i)`](#wm_task) | String | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
 | [`wm_path(i)`](#wm_path) | String | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
-| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| [`wm_box(i, what)`](#wm_box) | Int | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit), 8-11 its borders (left, top, right, bottom), 12 and 13 where the free part of its title bar starts and ends, 14 and 15 the middle of its close gadget (-1 without one), from its corner; -1 outside the list |  |
 | [`wm_flags(i)`](#wm_flags) | Int | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
 | [`wm_set_box(id, x, y, width, height)`](#wm_set_box) | Bool | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
 | [`wm_front(id)`](#wm_front) | Bool | A window in front of the others; false if it is not open any more |  |
 | [`wm_back(id)`](#wm_back) | Bool | A window behind the others; false if it is not open any more |  |
 | [`wm_activate(id)`](#wm_activate) | Bool | Make a window the active one (keys go to it); false if it is not open any more |  |
 | [`wm_zip(id)`](#wm_zip) | Bool | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| [`wm_box_now(id, what)`](#wm_box_now) | Int | What wm_box gives (0-15), of the window of that id as it is now, without waiting while a window is being dragged; -1 if it is gone |  |
+| [`wm_close(id)`](#wm_close) | Bool | Asks a window's program to close it: a click on its close gadget, as the user would, and the pointer back where it was; false if it is gone or has no close gadget |  |
+| [`wm_double_click_ms()`](#wm_double_click_ms) | Int | The longest time between two clicks of a double click, in ms (Input preferences) |  |
 | [`wm_active()`](#wm_active) | Int | The id of the active window, if it is on the Workbench screen; 0 if not |  |
 | [`wm_at(x, y)`](#wm_at) | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
 | [`wm_pointer_x()`](#wm_pointer_x) | Int | Where the pointer is on the Workbench screen: x |  |
@@ -9369,7 +9580,7 @@ See also: [`file_real_path`](#file_real_path).
 ### `wm_box(i, what)` → `Int`
 
 - `i`: the window, from 0, of the last `wm_read`.
-- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit).
+- `what`: 0 left, 1 top, 2 width, 3 height, 4 and 5 the minimum, 6 and 7 the maximum (0 or 65535: no limit), 8 to 11 its borders (left, top, right, bottom), 12 and 13 where the free part of its title bar starts and ends (no gadgets: the part you drag), 14 and 15 the middle of its close gadget (-1 without one); these from the window's corner.
 
 Returns that value, or -1 outside the list.
 
@@ -9435,6 +9646,35 @@ See also: [`wm_active`](#wm_active).
 Switches it to its other size, like its zoom button. Returns `false` if it is gone.
 
 See also: [`wm_set_box`](#wm_set_box).
+
+<a id="wm_box_now"></a>
+
+### `wm_box_now(id, what)` → `Int`
+
+- `id`: the window's id (`wm_id`).
+- `what`: the same as in `wm_box`, 0 to 15.
+
+Returns that value of the window as it is now, without `wm_read`. It does not wait while Intuition drags a window (`wm_read` does): it tells where a window was right when a drag starts. -1 if it is gone.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_close"></a>
+
+### `wm_close(id)` → `Bool`
+
+- `id`: the window's id (`wm_id`).
+
+Asks its program to close it: clicks its close gadget, as the user would, and leaves the pointer where it was. Only its program can close it; if it asks first, it will ask. Returns `false` if it is gone or has no close gadget.
+
+See also: [`wm_box`](#wm_box).
+
+<a id="wm_double_click_ms"></a>
+
+### `wm_double_click_ms()` → `Int`
+
+Returns the longest time between the two clicks of a double click, in milliseconds, from the Input preferences.
+
+See also: [`cx_event_ms`](#cx_event_ms).
 
 <a id="wm_active"></a>
 

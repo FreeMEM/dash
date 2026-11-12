@@ -32,6 +32,29 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.12.0 (2026-11-12)
+
+What Trasfondo's modern windows and file manager need, which the user asked for. Everything that compiled still
+compiles the same.
+
+- **New:** watching clicks and keys without taking them from anyone: `cx_watch_add` (a commodity filter that lets
+  the event go on) and `cx_event_x`, `cx_event_y` and `cx_event_ms` (where the pointer was and when it happened).
+- **New:** any window's title bar: `wm_box` 8 to 15 (borders, the free part of the bar, the close gadget),
+  `wm_box_now` (without waiting while a window is being dragged), `wm_close` (a click on its close gadget, as the
+  user would) and `wm_double_click_ms`.
+- **New:** for a file manager: a file's protection bits, comment and date, to read and set (`file_protection`,
+  `file_comment`, `file_date` and their `file_set_*`; `dir_entry_protection` and `dir_entry_comment` in
+  `dir_read`), `file_copy_attrs` (the copy the same as the original, like `Copy CLONE`) and copying in steps to show
+  the progress and be able to cancel (`file_copy_begin`, `file_copy_step`, `file_copy_end`; a cancelled copy is
+  deleted). 1004 functions.
+- **Fix:** a `"rawmouse mouse_leftpress"` filter of `cx_key_add` never arrived: the mouse buttons counted as keys
+  held down. Now they do not count unless the description names them.
+- **Fix:** `wm_active` no longer waits while a window is being dragged.
+- **Fix:** the `./dash` debugger showed the compiler's hidden variables (nameless; Forja showed them as
+  "Int = ?" after a `for`). Found by Forja's variable tree that David Martínez asked for.
+- **Fix:** a program built with `./dash` that fails with an exception now shows the message instead of hanging
+  silently (found by Tachyon on Amiberry).
+
 ### 2.11.0 (2026-11-12)
 
 Ctrl-C for programs that loop, and new functions for MUI and for backdrop windows. What compiled still compiles,

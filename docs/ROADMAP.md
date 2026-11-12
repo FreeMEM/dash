@@ -1095,6 +1095,18 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       bucles (`./dash --gcc`); también acaba las tareas de `task_start`. Peor caso con `./dash`: +16 % en A1200, +8 %
       en A500. No en los programas que atienden Ctrl-C ellos mismos ni con `DASH_NO_BREAK=1`. Dash 2.11.0.
       `tests/test_ctrl_c*.dash`, `dashc/tests/ctrl_c*.dash`
+- [x] Mirar clics y teclas sin quitárselos a nadie (2026-11-12, para las ventanas modernas de Trasfondo que pidió
+      el usuario): `cx_watch_add` (un filtro de commodity que deja seguir el evento), `cx_event_x`, `cx_event_y` y
+      `cx_event_ms` (dónde estaba el puntero y cuándo, apuntado en el input handler con un CX_CUSTOM),
+      `wm_double_click_ms`, `wm_box` 8 a 15 (bordes, parte libre de la barra de título, botón de cerrar), `wm_box_now`
+      (sin esperar mientras Intuition arrastra una ventana) y `wm_close` (un clic en su botón de cerrar). Los filtros de `cx_key_add` y `cx_watch_add` ya no miran los
+      botones del ratón pulsados si la descripción no los nombra: `"rawmouse mouse_leftpress"` no llegaba nunca.
+      `wm_active` lee bajo Forbid, sin `LockIBase` (Intuition lo tiene cogido mientras se arrastra). `tests/test_wm_eventos.dash`
+- [x] Para el explorador de ficheros de Trasfondo (2026-11-12): bits de protección, comentario y fecha de un
+      fichero, para leer y poner (`file_protection`, `file_set_protection`, `file_comment`, `file_set_comment`,
+      `file_date`, `file_set_date`, `dir_entry_protection`, `dir_entry_comment`), `file_copy_attrs` (como `Copy
+      CLONE`) y copiar a trozos con progreso y cancelar (`file_copy_begin`, `file_copy_step`, `file_copy_end`: la
+      copia entera se queda igual que el original; la cancelada se borra). 1004 funciones. Dash 2.12.0. `tests/test_file_attrs.dash`
 
 ## Notas y Decisiones
 

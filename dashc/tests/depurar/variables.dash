@@ -5,7 +5,8 @@
 # expect-out: n = 2
 # expect-out: p.hijos[0].nombre = "uno"
 # expect-out: p.hijos[0] = Punto(x: 3, nombre: "uno", hijos: nil)
-# expect-out: marco 1: Main 23, 6 variables
+# expect-out: marco 1: Main 24, 6 variables
+# expect-out: sin nombre: 0
 # expect-out: lista = [10, 20, 30] [Int]
 # expect-out: lista[1] = 20
 # expect-out: vacio = nil
@@ -28,6 +29,13 @@ Main
     Print "p.hijos[0].nombre = " + dbg_value(0, "p.hijos[0].nombre")
     Print "p.hijos[0] = " + dbg_value(0, "p.hijos[0]")
     Print "marco 1: #{dbg_frame_function(1)} #{dbg_frame_line(1)}, #{dbg_vars(1)} variables"
+    vacios = 0                       # (las variables ocultas de un for no se enseñan)
+    for k in (0..dbg_vars(1) - 1)
+        if dbg_var_name(1, k) == ""
+            vacios = vacios + 1
+        end
+    end
+    Print "sin nombre: #{vacios}"
     Print "lista = " + dbg_value(1, "lista") + " [" + dbg_value_type(1, "lista[0]") + "]"
     Print "lista[1] = " + dbg_value(1, "lista[1]")
     Print "vacio = " + dbg_value(1, "vacio")

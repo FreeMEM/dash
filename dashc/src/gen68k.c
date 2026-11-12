@@ -297,6 +297,7 @@ static void dbg_var(const char *name, int type, int slot, int line)
 {
     DbgVar d;
     if (!debug || pass != 2 || !dbg_funcs.n || slot < 0) return;
+    if (!name || !*name) return;                       /* (las ocultas del compilador: sin nombre, no se enseñan) */
     d.func = dbg_funcs.n - 1;
     d.name = (char *)name;
     d.type = type;

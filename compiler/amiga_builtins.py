@@ -2720,6 +2720,54 @@ DOS_FUNCTIONS = {
         name="dir_entry_date", params=["i"], return_type="LONG", c_template="_dash_dir_entry_date(${i})",
         needs_dos=True,
         description="Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970"),
+    "dir_entry_protection": BuiltinFunc(
+        name="dir_entry_protection", params=["i"], return_type="LONG", c_template="_dash_dir_entry_protection(${i})",
+        needs_dos=True,
+        description="Protection bits of entry i of the last dir_read, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if there is no entry i"),
+    "dir_entry_comment": BuiltinFunc(
+        name="dir_entry_comment", params=["i"], return_type="STRPTR", c_template="_dash_dir_entry_comment(${i})",
+        needs_dos=True,
+        description="Comment (filenote) of entry i of the last dir_read; \"\" if it has none"),
+    "file_protection": BuiltinFunc(
+        name="file_protection", params=["path"], return_type="LONG", c_template="_dash_file_protection(${path})",
+        needs_dos=True, reads_only=True,
+        description="Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read"),
+    "file_set_protection": BuiltinFunc(
+        name="file_set_protection", params=["path", "bits"], return_type="BOOL", c_template="_dash_file_set_protection(${path}, ${bits})",
+        needs_dos=True, reads_only=True,
+        description="Sets the protection bits of a file or drawer (as file_protection gives them); false if it could not"),
+    "file_comment": BuiltinFunc(
+        name="file_comment", params=["path"], return_type="STRPTR", c_template="_dash_file_comment(${path})",
+        needs_dos=True, reads_only=True,
+        description="Comment (filenote) of a file or drawer; \"\" if it has none or cannot be read"),
+    "file_set_comment": BuiltinFunc(
+        name="file_set_comment", params=["path", "text"], return_type="BOOL", c_template="_dash_file_set_comment(${path}, ${text})",
+        needs_dos=True, reads_only=True,
+        description="Sets the comment (filenote) of a file or drawer (up to 79 characters; \"\" removes it); false if it could not"),
+    "file_date": BuiltinFunc(
+        name="file_date", params=["path"], return_type="LONG", c_template="_dash_file_date(${path})",
+        needs_dos=True, reads_only=True,
+        description="Date of the last change of a file or drawer, as time_unix; 0 if it cannot be read"),
+    "file_set_date": BuiltinFunc(
+        name="file_set_date", params=["path", "t"], return_type="BOOL", c_template="_dash_file_set_date(${path}, ${t})",
+        needs_dos=True, reads_only=True,
+        description="Sets the date of a file or drawer (as time_unix); false if it could not"),
+    "file_copy_attrs": BuiltinFunc(
+        name="file_copy_attrs", params=["src", "dest"], return_type="BOOL", c_template="_dash_file_copy_attrs(${src}, ${dest})",
+        needs_dos=True, reads_only=True,
+        description="Gives dest the protection bits, comment and date of src (a copy the same as the original); false if any could not be set"),
+    "file_copy_begin": BuiltinFunc(
+        name="file_copy_begin", params=["src", "dest"], return_type="LONG", c_template="_dash_file_copy_begin(${src}, ${dest})",
+        needs_dos=True, reads_only=True,
+        description="Starts copying a file in steps (file_copy_step, file_copy_end), to show the progress and be able to stop: its number (1-8), 0 if it cannot (dest is replaced)"),
+    "file_copy_step": BuiltinFunc(
+        name="file_copy_step", params=["n", "most"], return_type="LONG", c_template="_dash_file_copy_step(${n}, ${most})",
+        needs_dos=True,
+        description="Copies up to most bytes more of copy n: how many it copied, 0 when it is finished, -1 on an error"),
+    "file_copy_end": BuiltinFunc(
+        name="file_copy_end", params=["n", "keep"], return_type="BOOL", c_template="_dash_file_copy_end(${n}, ${keep})",
+        needs_dos=True,
+        description="Ends copy n: with keep true and the copy finished, the copy stays with the original's bits, comment and date (true); otherwise the half copy is deleted (false)"),
 
     # Console I/O
     "console_read": BuiltinFunc(
@@ -4863,6 +4911,22 @@ TASK_FUNCTIONS = {
         description="One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: \"rawmouse "
                     "lalt mouse_leftpress\"): cx_command gives 100 + n when it is pressed, and the event goes no "
                     "further; \"\" takes hotkey n away; false if the description is not valid (or there is no cx_broker)"),
+    "cx_watch_add": BuiltinFunc(
+        name="cx_watch_add", params=["description", "n"], return_type="BOOL",
+        c_template="_dash_cx_watch_add(${description}, ${n})",
+        description="Like cx_key_add, but the event also goes on to the other programs: to watch clicks and keys "
+                    "without taking them (cx_command gives 100 + n)"),
+    "cx_event_x": BuiltinFunc(
+        name="cx_event_x", params=[], return_type="LONG", c_template="_dash_cx_event(0)",
+        description="Where the pointer was (x, on the Workbench screen) at the last event cx_command gave "
+                    "(cx_key_add, cx_watch_add)"),
+    "cx_event_y": BuiltinFunc(
+        name="cx_event_y", params=[], return_type="LONG", c_template="_dash_cx_event(1)",
+        description="Where the pointer was (y) at the last event cx_command gave"),
+    "cx_event_ms": BuiltinFunc(
+        name="cx_event_ms", params=[], return_type="LONG", c_template="_dash_cx_event(2)",
+        description="When the last event cx_command gave happened, in ms (to tell a double click: the difference "
+                    "with the previous one)"),
     "cx_command": BuiltinFunc(
         name="cx_command", params=[], return_type="LONG",
         c_template="_dash_cx_command()",
@@ -4939,7 +5003,20 @@ TASK_FUNCTIONS = {
     "wm_box": BuiltinFunc(
         name="wm_box", params=["i", "what"], return_type="LONG", c_template="_dash_wm_box_of(${i}, ${what})",
         description="Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum "
-                    "width, 7 maximum height (0 or 65535: no limit); -1 outside the list"),
+                    "width, 7 maximum height (0 or 65535: no limit), 8-11 its borders (left, top, right, bottom), "
+                    "12 and 13 where the free part of its title bar starts and ends, 14 and 15 the middle of its close "
+                    "gadget (-1 without one), from its corner; -1 outside the list"),
+    "wm_box_now": BuiltinFunc(
+        name="wm_box_now", params=["id", "what"], return_type="LONG", c_template="_dash_wm_box_now(${id}, ${what})",
+        description="What wm_box gives (0-15), of the window of that id as it is now, without waiting while a "
+                    "window is being dragged; -1 if it is gone"),
+    "wm_close": BuiltinFunc(
+        name="wm_close", params=["id"], return_type="BOOL", c_template="_dash_wm_close(${id})",
+        description="Asks a window's program to close it: a click on its close gadget, as the user would, and the "
+                    "pointer back where it was; false if it is gone or has no close gadget"),
+    "wm_double_click_ms": BuiltinFunc(
+        name="wm_double_click_ms", params=[], return_type="LONG", c_template="_dash_wm_double_click_ms()",
+        description="The longest time between two clicks of a double click, in ms (Input preferences)"),
     "wm_flags": BuiltinFunc(
         name="wm_flags", params=["i"], return_type="LONG", c_template="_dash_wm_flags(${i})",
         description="Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, "
@@ -6030,7 +6107,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])

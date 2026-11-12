@@ -33,6 +33,29 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.12.0 (2026-11-12)
+
+Lo que necesitan las ventanas modernas y el explorador de ficheros de Trasfondo, que pidió el usuario. Todo lo que
+compilaba sigue compilando igual.
+
+- **Nuevo:** mirar clics y teclas sin quitárselos a nadie: `cx_watch_add` (un filtro de commodity que deja seguir
+  el evento) y `cx_event_x`, `cx_event_y` y `cx_event_ms` (dónde estaba el puntero y cuándo pasó).
+- **Nuevo:** la barra de título de cualquier ventana: `wm_box` 8 a 15 (bordes, la parte libre de la barra, el botón
+  de cerrar), `wm_box_now` (sin esperar mientras se arrastra una ventana), `wm_close` (un clic en su botón de
+  cerrar, como haría el usuario) y `wm_double_click_ms`.
+- **Nuevo:** para un explorador de ficheros: bits de protección, comentario y fecha de un fichero, para leer y poner
+  (`file_protection`, `file_comment`, `file_date` y sus `file_set_*`; `dir_entry_protection` y
+  `dir_entry_comment` en `dir_read`), `file_copy_attrs` (la copia igual que el original, como `Copy CLONE`) y copiar
+  a trozos para enseñar el progreso y poder cancelar (`file_copy_begin`, `file_copy_step`, `file_copy_end`; la copia
+  cancelada se borra). 1004 funciones.
+- **Arreglo:** un filtro `"rawmouse mouse_leftpress"` de `cx_key_add` no llegaba nunca: los botones del ratón
+  contaban como teclas pulsadas. Ahora no cuentan si la descripción no los nombra.
+- **Arreglo:** `wm_active` ya no espera mientras se arrastra una ventana.
+- **Arreglo:** el depurador de `./dash` enseñaba como variables las ocultas del compilador (sin nombre; Forja las
+  ponía como "Int = ?" tras un `for`). Lo destapó el árbol de variables de Forja que pidió David Martínez.
+- **Arreglo:** un programa hecho con `./dash` que falla con una excepción ya da el aviso, en vez de quedarse colgado
+  sin sacar nada (lo destapó Tachyon en Amiberry).
+
 ### 2.11.0 (2026-11-12)
 
 Ctrl-C para los programas que dan vueltas, y funciones nuevas para MUI y para las ventanas de fondo. Lo que ya
