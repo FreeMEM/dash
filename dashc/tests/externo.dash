@@ -23,6 +23,7 @@
 @extern("externo") func ext_strtod(s: String) -> String
 @extern("externo") func ext_ctype(s: String) -> String
 @extern("externo") func ext_pool_basura() -> Int
+@extern("externo") func ext_pool_vueltas() -> Int
 
 # @export: el C las llama por su nombre (sin pasarlas como Func); nadie las llama desde Dash
 @export func dash_triple(x: Int) -> Int
@@ -53,6 +54,7 @@ end
 
 Main
     Print "pool: #{ext_pool_basura()} bytes pisados"   # (lo primero: un charco nuevo del malloc)
+    Print "vueltas: #{ext_pool_vueltas()} bytes pisados"
     Print ext_suma(2, 40)
     t = "Amiga"
     Print ext_largo(t + " 1200")

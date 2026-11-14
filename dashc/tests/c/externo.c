@@ -129,6 +129,33 @@ long ext_pool_basura(void)
     return mal;
 }
 
+/* Muchos malloc y free al azar (de 8 bytes a 12 KB), comprobando el contenido: con el exec 45 de 3.9, el arreglo
+   de api.c en su forma primera (el 0 en +32 sin mirar mh_Lower) le rompía el pool y esto se colgaba. Los bytes
+   pisados (0 si bien) */
+long ext_pool_vueltas(void)
+{
+    static unsigned char *v[400];
+    static unsigned long t[400];
+    unsigned long semilla = 12345, j;
+    long i, k, mal = 0;
+    for (k = 0; k < 20000; k++) {
+        semilla = semilla * 1103515245 + 12345;
+        i = (long)((semilla >> 8) % 400);
+        if (v[i]) {
+            for (j = 0; j < t[i]; j += 97) if (v[i][j] != (unsigned char)i) mal++;
+            free(v[i]);
+            v[i] = 0;
+        } else {
+            semilla = semilla * 1103515245 + 12345;
+            t[i] = ((semilla >> 8) % 7 == 0) ? 4000 + (semilla >> 12) % 8000 : 8 + (semilla >> 12) % 600;
+            if (!(v[i] = (unsigned char *)malloc(t[i]))) return -1;
+            memset(v[i], (int)i, t[i]);
+        }
+    }
+    for (i = 0; i < 400; i++) if (v[i]) { free(v[i]); v[i] = 0; }
+    return mal;
+}
+
 /* @export (Dash 2.0): C que llama por su nombre a funciones de Dash del programa */
 extern long dash_triple(long x);
 extern const char *dash_nombre(long n);
