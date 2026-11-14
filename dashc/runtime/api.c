@@ -95,11 +95,16 @@ static void dl_malloc_lock(void)
    bloques vivos, y la memoria acaba con dos dueños (Tachyon D80: QuickJS con listas en ciclo y código pisado). Un
    charco nuevo entra el primero de la lista del pool (y FreePooled pone delante el que usa): tras cada AllocPooled,
    ese long del primero a 0. Con 0 nunca se da por vacío, como pasa casi siempre (el long no es del charco: es el
-   hueco entre el MemHeader y su primer bloque) */
+   hueco entre el MemHeader y su primer bloque).
+   Solo en los charcos con esa forma (mh_Lower = MemHeader + 4: exec 40 de 3.1 y exec 47 de 3.2). El exec 45 de 3.9
+   (AmigaOS ROM Update) pone mh_Lower en +68 y guarda en +32 un puntero suyo: el 0 le rompía el pool (Recoverable
+   Alert 0100000F en una PiStorm con CaffeineOS, lo contó JaviTecH; medido en FS-UAE con exec 45.20) */
 static void dl_pool_sano(APTR pool)
 {
     struct Node *h = (struct Node *)((struct MinList *)pool)->mlh_Head;
-    if (h->ln_Succ && h->ln_Type == NT_MEMORY) *(ULONG *)((UBYTE *)h + sizeof(struct MemHeader)) = 0;
+    if (h->ln_Succ && h->ln_Type == NT_MEMORY
+        && (UBYTE *)((struct MemHeader *)h)->mh_Lower == (UBYTE *)h + sizeof(struct MemHeader) + 4)
+        *(ULONG *)((UBYTE *)h + sizeof(struct MemHeader)) = 0;
 }
 
 void *malloc(size_t n)
