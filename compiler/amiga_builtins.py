@@ -6237,7 +6237,22 @@ DASHOS_FUNCTIONS = {
 # On DashOS some builtins have another C (A7): their own runtime there is AmigaOS's (SYSINFO_RUNTIME...)
 DASHOS_TEMPLATES = {
     "program_exit": "_dash_exit((int)(${rc}))",
+    # The file requesters: DashOS's file selector (docs/DASHOS_VENTANAS_LOOP.md, phase 2; DASHOS_ASL_RUNTIME)
+    "file_open_dialog": "_dash_dos_choose(${title}, ${pattern}, FALSE, NULL, NULL)",
+    "file_save_dialog": "_dash_dos_choose(${title}, ${pattern}, TRUE, NULL, NULL)",
+    "file_get_path": "_dash_dos_get_path()",
+    "file_get_name": "_dash_dos_get_file()",
+    "file_fullpath": "_dash_dos_fullpath()",
+    "dialog_file": "_dash_dos_dialog_file(${title}, ${pattern}, ${save_mode}, NULL, NULL)",
+    "dialog_file_at": "_dash_dos_dialog_file(${title}, ${pattern}, ${save_mode}, ${drawer}, ${file})",
+    # (a buffer is an Int: in DashOS, 32 bits, below 2 GB)
+    "file_read_line": "FGets(${handle}, (STRPTR)(_DashP)(${buffer}), ${maxlen})",
+    "file_read": "Read(${handle}, (APTR)(_DashP)(${buffer}), ${length})",
+    "file_write": "Write(${handle}, (APTR)(_DashP)(${buffer}), ${length})",
 }
+# Those of DASHOS_TEMPLATES that on the Amiga need asl.library and GadTools: not on DashOS
+DASHOS_DIALOGS = {"file_open_dialog", "file_save_dialog", "file_get_path", "file_get_name", "file_fullpath",
+                  "dialog_file", "dialog_file_at"}
 
 # The MUI builtins that work on DashOS (docs/DASHOS_VENTANAS_LOOP.md): there they are windows of DashOS's kit (Material
 # 3), through kit-c (libkit_c.a of DashOS). The other mui_* are a compile error with ./dash --dashos.

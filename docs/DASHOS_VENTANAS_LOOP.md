@@ -36,9 +36,25 @@ escribir en Dash un editor de catálogos para `SYS:Utilities` de DashOS. Plan ap
   `ENV:Sys/locale.prefs` como locale.library (LCLE: 16 bytes, país en 32 y 10 idiomas de 30); sin él,
   `$DASH_LANGUAGE` (en Linux) o "español". Los textos de DashOS son UTF-8: un catálogo con CSET 106 (como AmigaOS 4)
   va tal cual; uno del Amiga (Latin-1) se pasa a UTF-8. `tools/catalogo.py catalog --utf8` hace los de DashOS.
-- Ficheros en DashOS (provisional, hasta las asignaciones de DashOS, rama `asignaciones`): por el servicio "archivos"
-  (llave 2), desde la raíz del cliente; `SYS:` es ella y `LOCALE:` su cajón `Locale`. En Linux (qemu), `LOCALE:` es
-  `$DASH_LOCALE_DIR` (de serie `Locale`), `ENV:` `$DASH_ENV_DIR` y `PROGDIR:` el cajón actual.
+- Ficheros en DashOS (fase 2): `runtime/dashos/dos.c` (incluido al final de `plat.c`) pone lo de dos.library que usa
+  el runtime (Open, Read, Write, Seek, FGetC, FGets, Lock, Examine, ExNext, CreateDir, DeleteFile, Rename,
+  SetProtection, SetComment...) sobre el servicio "archivos" (llave 2) o, en Linux (qemu), sobre sus llamadas. Así
+  valen por los dos caminos todos los `file_*` y `dir_*` menos los avisos de cambios (`file_notify`) y
+  `file_real_path`. Un fichero abierto lleva un búfer de 4 KB; su número va en memoria de búferes (por debajo de 2 GB:
+  `file_open` lo da a un Int). Nombres (provisional, hasta que el runtime lea las asignaciones de DashOS, ya en
+  `revision`): `SYS:` y `PROGDIR:` son la raíz del cliente, `LOCALE:` su cajón `Locale`, sin volumen desde el cajón
+  actual. En Linux, `X:` es `$DASH_X_DIR` (`tests/dashos_tests.py` da a cada test su cajón con `RAM`, `T` y `ENV`);
+  sin ella, `LOCALE:` es `Locale` y `SYS:`/`PROGDIR:` el cajón actual. El comentario, en Linux, en el atributo
+  `user.amiga.comment`. La fecha no se cambia en DashOS (el servicio no tiene orden).
+- El selector de ficheros (`file_open_dialog`, `file_save_dialog`, `dialog_file`, `dialog_file_at`; en DashOS,
+  `DASHOS_ASL_RUNTIME`, sin asl ni GadTools): para abrir, el usuario elige un fichero que el selector cede como asa y
+  el programa lee como `Elegido:` (el nombre no llega: el selector solo da la asa); para guardar, una carpeta, que cede
+  como raíz 3 y es `Carpeta:` (el fichero, el de `dialog_file_at` o "Sin título"). El servicio no deja ceder otra raíz
+  3: la carpeta se elige una vez por ejecución.
+- Qué es cada llave lo sabe el runtime por cuántas trae el programa (DashOS no lo dice): 3, lo de `sesiones` (1 su
+  canal, 2 archivos, 3 ventanas); 2, lo de `inicio` (1 ventanas, 2 archivos); 4, la prueba `dash-ventana` (1 ventanas,
+  2 archivos, 3 sesiones, 4 selector: `inicio` da los canales en el orden de su lista, no en el del programa).
+  `sesiones` aún no reparte el selector: un programa lanzado por él no lo tiene (el diálogo da false).
 
 ## Bitácora
 
@@ -52,3 +68,34 @@ escribir en Dash un editor de catálogos para `SYS:Utilities` de DashOS. Plan ap
   traía tres llaves, si no 1) y el runtime se la da a kit-c: el catálogo crea un canal antes de la ventana y kit-c,
   mirando entonces, tomaba la llave 3 de ese canal. En qemu, sin regresiones: por C 114 de 377 (`origin/main`: 112),
   por el directo 101 (99); los dos nuevos son los de catálogos. 68k idéntico: 2904/2904 y 484/484. Tests 636/636.
+- 2026-11-15, se para aquí (reinicio de la máquina). `make arranque-virt` de DashOS (rama `dash-ventanas`, duodécima
+  vuelta): todas las líneas de `arranque_virt.txt` salieron, también las de `dash-ventana` (catálogo en castellano,
+  ventana abierta, clic en "Añadir": "pulsado: Pulsado 1 veces; líneas: 2", fin). Solo faltó la parte del reinicio,
+  porque se paró QEMU a mano en ella. Lecciones de la prueba: el programa va al final de `inicio` (antes, su ventana
+  cambiaba la cascada y Ajustes tapaba el botón de cerrar de la ventana Amiga), espera 20 s antes de abrir la ventana
+  (si sale mientras el guion teclea en el centro de control, se lleva el teclado), el guion la trae delante con un clic
+  en su margen antes de pulsar el botón, reintenta si una pregunta de `guardian` lo tapa, y el programa acaba tras el
+  clic (delante taparía otras ventanas).
+
+- 2026-11-15, tras el reinicio: `make arranque-virt` entero (también el reinicio) y `make prueba` de DashOS, bien; solo
+  falló `captura_cambio.py` (U6): la captura de la ventana de Ana se hizo con la sesión bloqueada (carrera del guion,
+  no de Dash). Fase 2: ficheros (`runtime/dashos/dos.c`) y selector. `mui_request` probado en pantalla (captura
+  `target/dash-nativo-pregunta.ppm` de DashOS: título, texto y los dos botones de Material 3; el clic en "Guardar"
+  da 1). En QEMU, `dash-ventana` guarda su lista en su cajón, hace un cajón, la mueve, lo lista, la lee (por líneas y
+  entera) y lo borra todo, por el servicio de archivos. Lección: la ventana de la sesión de archivos se proyecta para
+  escribir (3; con 1, escribir en ella tumbaba el programa). En qemu-aarch64, `tests/dashos/test_dashos_ficheros.dash`
+  y 8 tests de ficheros más pasan: por C 123 de 377 (antes 114), por el directo 111 (antes 101), sin perder ninguno.
+  `test_inflate_auto`, por el directo, ahora enlaza y cae (antes no enlazaba: le faltaba `str_to_buffer`); lo suyo es
+  un `Pointer` de 64 bits que llega de un búfer de 32, no los ficheros. `test_utf8` queda fuera en DashOS (sus
+  literales son Latin-1; el de DashOS es `tests/dashos/test_utf8.dash`). Tests 636/636; el runtime del 68000, igual
+  (solo cambiaba la fecha de compilación).
+
+### Qué toca después
+
+1. Los menús en la barra de la pantalla (S10) cuando haya protocolo; hoy, fila dentro de la ventana (decisión del
+   usuario pendiente).
+2. Que `sesiones` reparta el selector (DashOS): sin él, el editor de catálogos lanzado desde el disco no puede abrir
+   ni guardar con diálogo. Y que el selector diga el nombre de lo elegido y deje escribir el de lo que se guarda.
+3. Las asignaciones de DashOS (ya en `revision`: `dashos::asignaciones`, la tabla que da `sesiones`): `ENV:`, `RAM:`,
+   `LOCALE:` de verdad. Solo cambia `dos_volumen` de `runtime/dashos/dos.c`.
+4. `file_notify` y `file_real_path` en DashOS.

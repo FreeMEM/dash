@@ -1,5 +1,6 @@
 # Test: UTF-8 builtins (Lorraine D5). Literals in the source are Latin-1: UTF-8 is made with
 # latin1_to_utf8 and utf8_char. An invalid byte is one character, U+FFFD (65533).
+# dashos-skip: sus literales son Latin-1, y en DashOS UTF-8 (el de DashOS es tests/dashos/test_utf8.dash)
 # expect-out: ascii: 4 2 104 3
 # expect-out: año: 4 3 241 3 1 true
 # expect-out: euro: 3 8364 226 130 172 EUR

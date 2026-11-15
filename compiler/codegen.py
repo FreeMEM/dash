@@ -20282,6 +20282,42 @@ static LONG _dash_dialog_color(STRPTR title, LONG initial) {
 """
 
     # File I/O Runtime (binary file and buffer operations)
+    # The file requesters on DashOS (docs/DASHOS_VENTANAS_LOOP.md, phase 2): DashOS's file selector, through
+    # dash_plat_choose (runtime/dashos/dos.c). The user picks a file to read, that is then "Elegido:", or, to save, a
+    # folder, "Carpeta:" (the file in it is the one given to dialog_file_at, or "Sin título"). Title, pattern and
+    # drawer are not used: the selector starts in the user's files and shows everything.
+    DASHOS_ASL_RUNTIME = """\
+/* Dash ASL Runtime (DashOS: the file selector) */
+static char _dash_dos_path[16];
+static char _dash_dos_file[256];
+
+static BOOL _dash_dos_choose(STRPTR title, STRPTR pattern, BOOL save, STRPTR drawer, STRPTR file) {
+    (void)title; (void)pattern; (void)drawer;
+    if (dash_plat_choose(save ? 1 : 0) != 1) return FALSE;
+    strcpy(_dash_dos_path, save ? "Carpeta:" : "Elegido:");
+    _dash_dos_file[0] = 0;
+    if (save) strcpy(_dash_dos_file, file && *file && strlen((char *)file) < sizeof(_dash_dos_file) ? (char *)file : "Sin t\\303\\255tulo");
+    return TRUE;
+}
+
+static STRPTR _dash_dos_get_path(void) { return (STRPTR)_dash_dos_path; }
+static STRPTR _dash_dos_get_file(void) { return (STRPTR)_dash_dos_file; }
+
+static char _dash_dos_full[288];
+static STRPTR _dash_dos_fullpath(void) {
+    strcpy(_dash_dos_full, _dash_dos_path);
+    strcat(_dash_dos_full, _dash_dos_file);
+    return (STRPTR)_dash_dos_full;
+}
+
+/* dialog_file and dialog_file_at: the full path, "" if cancelled (a temporary string) */
+static STRPTR _dash_dos_dialog_file(STRPTR title, STRPTR pattern, LONG save_mode, STRPTR drawer, STRPTR file) {
+    if (!_dash_dos_choose(title, pattern, save_mode != 0, drawer, file)) return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup(_dash_dos_fullpath(), TRUE);
+}
+
+"""
+
     FILEIO_RUNTIME = """\
 /* File I/O Runtime Functions */
 
@@ -24492,6 +24528,7 @@ _RUNTIME_FLAGS = [
     ("GADGET_RUNTIME", "uses_gadgets"),
     ("ASL_RUNTIME", "needs_asl"),
     ("FILEIO_RUNTIME", "needs_fileio"),
+    ("DASHOS_ASL_RUNTIME", "uses_dashos_dialogs"),
     ("DASHOS_RUNTIME", "needs_dashos"),
     ("REACTION_RUNTIME", "needs_reaction"),
     ("RTG_RUNTIME", "needs_rtg"),
@@ -24833,6 +24870,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_audio: bool = False
         self.needs_asl: bool = False
         self.needs_fileio: bool = False
+        self.uses_dashos_dialogs: bool = False   # file requesters on DashOS (DASHOS_ASL_RUNTIME)
         self.needs_dashos: bool = False
         self.needs_gadtools: bool = False
         self.needs_reaction: bool = False  # Track if ReAction is used
@@ -25247,6 +25285,8 @@ class CodeGenerator(ASTVisitor):
         # Add File I/O runtime if needed
         if self.needs_fileio:
             parts.append(CTemplates.FILEIO_RUNTIME)
+        if self.uses_dashos_dialogs:
+            parts.append(CTemplates.DASHOS_ASL_RUNTIME)
         if self.needs_dashos:
             parts.append(CTemplates.DASHOS_RUNTIME)
 
@@ -25564,12 +25604,9 @@ static LONG _dash_event_window_handle(void) {{
         program = program.replace("    _dash_trap_on();\n", "", 1)
         program = re.sub(r"^ *(IntuitionBase|DOSBase) = \(struct \w+ \*\)OpenLibrary\(.*\n", "", program, flags=re.M)
         program = re.sub(r"^ *if \((IntuitionBase|DOSBase)\) CloseLibrary\(.*\n", "", program, flags=re.M)
-        # Buffers (A7): FILEIO_RUNTIME without its file functions, that are AmigaOS's dos (no files in DashOS yet)
+        # Buffers (A7): in DashOS's buffer memory (below 2 GB: a buffer fits in an Int). The files go through
+        # runtime/dashos/dos.c (docs/DASHOS_VENTANAS_LOOP.md, phase 2)
         if CTemplates.FILEIO_RUNTIME in program:
-            f = CTemplates.FILEIO_RUNTIME
-            a, b = f.index("static LONG _dash_file_size("), f.index("static APTR _dash_alloc_buffer(")
-            c, d = f.index("static LONG _dash_file_load("), f.index("static UBYTE _dash_buffer_get_byte(")
-            program = program.replace(f, f[:a] + f[b:c] + f[d:], 1)
             program = program.replace("    return AllocVec(size, MEMF_ANY | MEMF_CLEAR);\n",
                                       "    return size > 0 ? dash_plat_buffer_alloc((unsigned long)size) : NULL;\n", 1)
             program = program.replace("    if (buffer) FreeVec(buffer);\n", "    dash_plat_buffer_free(buffer);\n", 1)
@@ -28474,10 +28511,12 @@ static {ret_type} {method_name}({params_str}) {{
     def _generate_builtin_call(self, builtin: BuiltinFunc, arguments: List[ASTNode]) -> str:
         """Generate C code for a builtin function call."""
         if self.target == "dashos":
-            from compiler.amiga_builtins import DASHOS_TEMPLATES
+            from compiler.amiga_builtins import DASHOS_TEMPLATES, DASHOS_DIALOGS
             if builtin.name in DASHOS_TEMPLATES:   # (its own C on DashOS)
                 from dataclasses import replace
                 builtin = replace(builtin, c_template=DASHOS_TEMPLATES[builtin.name])
+                if builtin.name in DASHOS_DIALOGS:   # (DashOS's selector: no asl.library, no GadTools)
+                    builtin = replace(builtin, needs_asl=False, needs_gadtools=False)
         # Track library requirements
         if builtin.needs_gfx:
             self.needs_gfx = True
@@ -28613,6 +28652,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_asl:
             self.needs_gfx = True
             self.uses_strings = True
+        if self.uses_dashos_dialogs:
+            self.uses_strings = True   # (dialog_file on DashOS)
         # The ReAction runtime draws with graphics.library (SetAPen, RectFill)
         if self.needs_reaction:
             self.needs_gfx = True

@@ -47,31 +47,35 @@ def one(f, tmp):
                                                                         pie=PIE, be=BE)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
+    # Cada test, en su cajón (PROGDIR:), con RAM:, T: y ENV: dentro (runtime/dashos/dos.c: $DASH_X_DIR)
+    cwd = Path(tmp) / (f.stem + ".dir")
+    vols = {}
+    for v in ("RAM", "T", "ENV"):
+        (cwd / v).mkdir(parents=True, exist_ok=True)
+        vols[f"DASH_{v}_DIR"] = str(cwd / v)
+    env = dict(vols)
     # "# emu-catalog: lib/x.ct": compilado en Catalogs/<idioma>/ de su cajón (PROGDIR:), con el idioma del sistema
     # emulado del Amiga (english)
-    cwd, env = None, None
     cts = marks(text, "# emu-catalog:")
     if cts:
         sys.path.insert(0, str(REPO / "tools"))
         import catalogo
-        cwd = Path(tmp) / (f.stem + ".dir")
         for ct in cts:
             name, language, data = catalogo.build_catalog((f.parent / ct).read_text(encoding="utf-8"))
             (cwd / "Catalogs" / language).mkdir(parents=True, exist_ok=True)
             (cwd / "Catalogs" / language / name).write_bytes(data)
-        env = {"DASH_LANGUAGE": "english", "DASH_LOCALE_DIR": str(cwd / "Locale")}
+        env = {**vols, "DASH_LANGUAGE": "english", "DASH_LOCALE_DIR": str(cwd / "Locale")}
     # "# dashos-catalog: lib/x.ct": en UTF-8 (lo de DashOS) en LOCALE:Catalogs/<idioma>/, sin idioma del usuario (el
     # castellano de serie)
     cts = marks(text, "# dashos-catalog:")
     if cts:
         sys.path.insert(0, str(REPO / "tools"))
         import catalogo
-        cwd = Path(tmp) / (f.stem + ".dir")
         for ct in cts:
             name, language, data = catalogo.build_catalog((f.parent / ct).read_text(encoding="utf-8"), utf8=True)
             (cwd / "Locale" / "Catalogs" / language).mkdir(parents=True, exist_ok=True)
             (cwd / "Locale" / "Catalogs" / language / name).write_bytes(data)
-        env = {"DASH_LANGUAGE": "", "DASH_LOCALE_DIR": str(cwd / "Locale")}
+        env = {**vols, "DASH_LANGUAGE": "", "DASH_LOCALE_DIR": str(cwd / "Locale")}
     try:
         rc, out, err = dashos_run.run(exe, timeout=30, cwd=cwd, env=env)
     except subprocess.TimeoutExpired:

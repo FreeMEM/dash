@@ -4859,7 +4859,7 @@ Hace falta `clang` (con los objetivos `aarch64-none-elf` y `aarch64_be-none-elf`
 
 - El lenguaje es el mismo: textos, listas, diccionarios, structs, interfaces, Float, Double, Fixed.
 - Los builtins que no dependen de AmigaOS, también: textos, matemáticas, UTF-8, expresiones regulares, `peek_*` y
-  `poke_*`, entre otros. Los de gráficos, ficheros o red llegarán con la API de DashOS.
+  `poke_*`, entre otros. Los de ficheros, también (ver abajo). Los de gráficos o red llegarán con la API de DashOS.
 - Los punteros son de 64 bits. Un Int sigue siendo de 32.
 - Float y Double usan la FPU del procesador.
 - Los textos van en UTF-8 (en el Amiga, en Latin-1).
@@ -4885,6 +4885,29 @@ con el aspecto de Material 3 en DashOS. De momento, estas: `mui_app_begin`/`end`
 `LOCALE:Catalogs/<idioma>/` (y en `PROGDIR:Catalogs/` en el PC). El idioma sale de `ENV:Sys/locale.prefs`, como en
 el Amiga; mientras DashOS no tenga `ENV:`, es el castellano (en el PC, con qemu, `DASH_LANGUAGE`). Los catálogos de
 DashOS van en UTF-8: `tools/catalogo.py catalog x.ct --utf8`. Uno del Amiga (Latin-1) también sirve.
+
+### Ficheros en DashOS
+
+Los builtins de ficheros y cajones funcionan en DashOS por el servicio de archivos: `file_read_text`,
+`file_write_text`, `file_open` y los de leer y escribir por partes, `file_exists`, `file_size`, `file_delete`,
+`file_rename`, `file_copy`, `dir_create`, `dir_read` y los `dir_entry_*`, la protección y el comentario. La fecha de
+un fichero no se puede cambiar (`file_set_date` da false).
+
+Los nombres son los del Amiga, de momento con pocos volúmenes: `SYS:` y `PROGDIR:` son la raíz del programa en el
+servicio de archivos, y `LOCALE:` su cajón `Locale`. Un nombre sin volumen va desde el cajón actual (`dir_change`).
+Las asignaciones de DashOS (`ENV:`, `RAM:`, `Work:`...) llegarán después.
+
+`file_open_dialog`, `file_save_dialog`, `dialog_file` y `dialog_file_at` abren el selector de ficheros de DashOS:
+
+- Para abrir, el usuario elige un fichero y el programa lo puede leer como `Elegido:`, que es lo que da
+  `file_fullpath()`. El nombre del fichero no lo sabe el programa.
+- Para guardar, el usuario elige una carpeta, que es `Carpeta:`. El fichero se llama como el que se pasa a
+  `dialog_file_at` (o "Sin título"). Se elige una sola carpeta por ejecución: las veces siguientes no se pregunta.
+- De momento el selector solo lo tiene un programa que lo traiga en su cuarta llave. `sesiones` aún no lo da a los
+  programas que lanza; sin él, el diálogo da false (o `""`).
+
+En el PC, con qemu, los ficheros son los de Linux: `X:` es el cajón de la variable `DASH_X_DIR` (`DASH_RAM_DIR`,
+`DASH_T_DIR`...) y no hay selector.
 
 ### Estructuras de Amiga: `@amiga struct`
 

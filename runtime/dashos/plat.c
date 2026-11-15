@@ -395,170 +395,6 @@ void *dash_plat_pages(unsigned long bytes)
 }
 #endif
 
-/* ---- ficheros y variables (catálogos: docs/DASHOS_VENTANAS_LOOP.md) ----
-   Un nombre del Amiga ("LOCALE:Catalogs/español/X.catalog") pasa a un camino de la plataforma. Provisional en
-   DashOS hasta que esté el espacio de nombres nativo (rama "asignaciones" de DashOS): desde la raíz del cliente en el
-   servicio de archivos, SYS: es ella y LOCALE: su cajón Locale; ENV: y lo demás, aún no. En Linux (qemu-aarch64),
-   LOCALE: es $DASH_LOCALE_DIR (de serie, Locale), ENV: $DASH_ENV_DIR y PROGDIR: el cajón actual. */
-static int dash_map_path(const char *path, char *out, unsigned long cap)
-{
-    const char *colon = strchr(path, ':'), *base = "";
-    char vol[16];
-    unsigned long n = 0, i;
-    if (colon) {
-        if ((unsigned long)(colon - path) >= sizeof vol) return 0;
-        for (i = 0; path + i < colon; i++) vol[i] = path[i] >= 'a' && path[i] <= 'z' ? path[i] - 32 : path[i];
-        vol[i] = 0;
-        path = colon + 1;
-#ifdef DASH_PLAT_LINUX
-        if (!strcmp(vol, "LOCALE")) base = (base = dash_plat_getenv("DASH_LOCALE_DIR")) ? base : "Locale";
-        else if (!strcmp(vol, "ENV")) { if (!(base = dash_plat_getenv("DASH_ENV_DIR"))) return 0; }
-        else if (!strcmp(vol, "PROGDIR")) base = ".";
-        else return 0;
-#else
-        if (!strcmp(vol, "LOCALE")) base = "Locale";
-        else if (strcmp(vol, "SYS")) return 0;
-#endif
-    }
-    for (; *base && n + 1 < cap; base++) out[n++] = *base;
-    if (n && out[n - 1] != '/' && *path && n + 1 < cap) out[n++] = '/';
-    for (; *path && n + 1 < cap; path++) out[n++] = *path;
-    if (*path) return 0;
-    out[n] = 0;
-    return 1;
-}
-
-#ifdef DASH_PLAT_LINUX
-/* Una variable del entorno, de /proc/self/environ (el programa no guarda su pila de arranque); NULL si no está */
-const char *dash_plat_getenv(const char *name)
-{
-    static char env[8192];
-    static long len = -1;
-    long i, n = (long)strlen(name);
-    if (len < 0) {
-        long fd = _svc(56, -100, (long)"/proc/self/environ", 0, 0, 0, 0), r;   /* openat(AT_FDCWD) */
-        len = 0;
-        if (fd >= 0) {
-            while (len < (long)sizeof env - 1 && (r = _svc(63, fd, (long)env + len, (long)sizeof env - 1 - len, 0, 0, 0)) > 0)
-                len += r;
-            _svc(57, fd, 0, 0, 0, 0, 0);
-        }
-        env[len] = 0;
-    }
-    for (i = 0; i < len; i += (long)strlen(env + i) + 1)
-        if (!strncmp(env + i, name, (size_t)n) && env[i + n] == '=') return env + i + n + 1;
-    return NULL;
-}
-
-void *dash_plat_file_load(const char *path, long *size)
-{
-    char real[512];
-    unsigned char *d;
-    long fd, end, got = 0, r;
-    if (!dash_map_path(path, real, sizeof real)) return NULL;
-    if ((fd = _svc(56, -100, (long)real, 0, 0, 0, 0)) < 0) return NULL;
-    end = _svc(62, fd, 0, 2, 0, 0, 0);                  /* lseek(SEEK_END) */
-    if (end < 0 || end > 0x1000000L || _svc(62, fd, 0, 0, 0, 0, 0) != 0 || !(d = AllocVec((ULONG)end + 1, MEMF_ANY))) {
-        _svc(57, fd, 0, 0, 0, 0, 0);
-        return NULL;
-    }
-    while (got < end && (r = _svc(63, fd, (long)d + got, end - got, 0, 0, 0)) > 0) got += r;
-    _svc(57, fd, 0, 0, 0, 0, 0);
-    if (got != end) { FreeVec(d); return NULL; }
-    d[end] = 0;
-    *size = end;
-    return d;
-}
-#else
-const char *dash_plat_getenv(const char *name) { (void)name; return NULL; }
-
-/* El servicio "archivos" (docs/referencia/servicios.md de DashOS), por la llave 2 (la de lo que lanza `sesiones`):
-   una sesión con su canal de respuesta y su ventana de 64 KB, y "leer por nombre" (28) desde la raíz del cliente. */
-#define ARCH_LLAVE 2
-#define ARCH_VENTANA 0x4800000000UL
-static long arch_resp = 0;                         /* el lado que lee las respuestas; < 0, no hay servicio */
-static unsigned long arch_win = 0;
-
-/* (el protocolo va en little-endian, también desde un programa big-endian) */
-static void arch_pon(unsigned char *p, unsigned long v, int n) { while (n--) { *p++ = (unsigned char)v; v >>= 8; } }
-static long arch_toma(const unsigned char *p, int n)
-{
-    unsigned long v = 0;
-    while (n--) v = v << 8 | p[n];
-    return (long)v;
-}
-
-static long arch_pedir(unsigned orden, long a, long b, const char *nombre, long resp[4], unsigned *llave)
-{
-    unsigned char m[256], r[64];
-    unsigned ll[4];
-    unsigned long n = nombre ? strlen(nombre) : 0;
-    long got, out[2];
-    if (n > 224) return -1;
-    memset(m, 0, 32);
-    arch_pon(m, orden, 4);                         /* asa 0: la raíz del cliente */
-    arch_pon(m + 8, (unsigned long)a, 8);
-    arch_pon(m + 16, (unsigned long)b, 8);
-    arch_pon(m + 24, n, 4);
-    if (n) memcpy(m + 32, nombre, n);
-    if (dash_os_call(4, ARCH_LLAVE, (long)m, 32 + (long)n, llave ? (long)llave : 0, llave ? 1 : 0, out) < 0) return -1;
-    got = dash_os_call(5, arch_resp, (long)r, sizeof r, (long)ll, 4, out);
-    if (got < 32) return -1;
-    resp[0] = arch_toma(r + 8, 8);
-    resp[1] = arch_toma(r + 16, 8);
-    resp[2] = arch_toma(r + 24, 8);
-    resp[3] = out[0] > 0 ? (long)ll[0] : 0;
-    return (long)(int)arch_toma(r, 4);
-}
-
-static int arch_abrir(void)
-{
-    long out[2], resp[4], a;
-    unsigned b;
-    if (arch_resp) return arch_resp > 0;
-    arch_resp = -1;
-    a = dash_os_call(3, 0, 0, 0, 0, 0, out);          /* canal_crear */
-    if (a <= 0) return 0;
-    b = (unsigned)out[0];
-    arch_resp = a;
-    if (arch_pedir(0, 0, 0, NULL, resp, &b) != 0 || !resp[3] || resp[0] <= 0 ||
-        dash_os_call(8, resp[3], (long)ARCH_VENTANA, 1, 0, 0, out) != 0) {
-        _svc(6, a, 0, 0, 0, 0, 0);
-        arch_resp = -1;
-        return 0;
-    }
-    arch_win = (unsigned long)resp[0];
-    return 1;
-}
-
-void *dash_plat_file_load(const char *path, long *size)
-{
-    char real[256];
-    long resp[4], desde = 0, total = -1, ventana;
-    unsigned char *d = NULL;
-    if (!dash_map_path(path, real, sizeof real) || !arch_abrir()) return NULL;
-    ventana = (long)arch_win;
-    for (;;) {
-        if (arch_pedir(28, desde, ventana, real, resp, NULL) != 0) break;
-        if (total < 0) {
-            total = resp[2];
-            if (total < 0 || total > 0x1000000L || !(d = AllocVec((ULONG)total + 1, MEMF_ANY))) break;
-        }
-        if (resp[0] <= 0 || desde + resp[0] > total) break;
-        memcpy(d + desde, (void *)ARCH_VENTANA, (unsigned long)resp[0]);
-        desde += resp[0];
-        if (desde == total) {
-            d[total] = 0;
-            *size = total;
-            return d;
-        }
-    }
-    if (d) FreeVec(d);
-    if (total == 0 && (d = AllocVec(1, MEMF_ANY))) { d[0] = 0; *size = 0; return d; }
-    return NULL;
-}
-#endif
-
 /* ---- memoria de la caja Amiga (amiga_alloc): por debajo de 4 GB, desde 1 GB. Provisional: sin devolverla (en
    DashOS la dará el exec de la caja) ---- */
 #define DASH_BOX_BASE 0x40000000UL
@@ -670,8 +506,10 @@ __asm__(".text\n.global _start\n.type _start, %function\n_start:\n"
         ".global _dash_entry\n.type _dash_entry, %function\n.weak _dashc_start\n_dash_entry:\n"
         "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    bl _dash_keys_at_start\n    b _dashc_start\n");
 
-/* Qué llaves trae el programa al nacer, antes de crear ninguna: lo que lanza `sesiones` tiene 1 su canal, 2 archivos y 3
-   ventanas; lo que lanza `inicio` con "ventanas" y "archivos", esas dos (1 y 2). El compositor es la 3 si la había. */
+/* Qué llaves trae el programa al nacer, antes de crear ninguna, y así dónde está cada una: lo que lanza `sesiones` tiene
+   3, 1 su canal, 2 archivos y 3 ventanas; lo que lanza `inicio` con "ventanas" y "archivos", esas dos (1 y 2), y con
+   "sesiones" y "selector" además (la prueba de DashOS), cuatro: 3 sesiones y 4 el selector (los canales que da `inicio`
+   van en el orden de su lista de programas, y "ventanas" es el primero). DashOS no dice qué es cada llave. */
 static long keys_at_start = 0;
 void _dash_keys_at_start(void) __attribute__((used));
 void _dash_keys_at_start(void)
@@ -682,16 +520,19 @@ void _dash_keys_at_start(void)
     while (keys_at_start < 8 && dash_os_call(27, keys_at_start + 1, 0, 0, 0, 0, out) != -2) keys_at_start++;
 #endif
 }
-long dash_plat_windows_key(void) { return keys_at_start >= 3 ? 3 : 1; }
+long dash_plat_windows_key(void) { return keys_at_start == 3 ? 3 : 1; }
 void _dash_start_c(void) __attribute__((noreturn, used));
 void _dash_start_c(void) { exit(main()); }
 
 static char out_buf[512];
 static int out_n;
 
+static LONG dos_write(BPTR fh, const void *buf, LONG len);   /* (los ficheros: dos.c, al final) */
+static LONG dos_flush(BPTR fh);
+
 LONG Flush(BPTR fh)
 {
-    (void)fh;
+    if (fh != 1) return dos_flush(fh);
     if (out_n) dash_plat_write(out_buf, out_n);
     out_n = 0;
     return 1;
@@ -858,7 +699,7 @@ LONG Write(BPTR fh, const void *buf, LONG len)
 {
     const char *s = buf;
     LONG i;
-    (void)fh;
+    if (fh != 1) return dos_write(fh, buf, len);
     for (i = 0; i < len; i++) {
         if (out_n == (int)sizeof out_buf) Flush(1);
         out_buf[out_n++] = s[i];
@@ -1041,3 +882,6 @@ char *strchr(const char *s, int c)
         if (!*s) return NULL;
     }
 }
+
+/* ---- ficheros y cajones (lo de dos.library): dos.c ---- */
+#include "dos.c"

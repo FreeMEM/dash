@@ -1,0 +1,51 @@
+# Ficheros y cajones en DashOS (docs/DASHOS_VENTANAS_LOOP.md, fase 2: runtime/dashos/dos.c): escribir, leer entero y
+# por líneas, mover a un cajón nuevo, listarlo, copiar, la protección y el comentario, y borrar. En qemu, sobre Linux
+# (RAM: es $DASH_RAM_DIR, que pone el runner); en DashOS, lo mismo va por el servicio de archivos. Sin selector, el
+# diálogo de abrir da false.
+# expect-out: escrito true, 16 bytes, existe true
+# expect-out: leído igual true
+# expect-out: cajón true, movido true, en RAM: false
+# expect-out: Listas: 1 [nota.txt 16 false]
+# expect-out: línea: uno
+# expect-out: línea: dos ñ
+# expect-out: fin del fichero true
+# expect-out: copia true, 16 bytes
+# expect-out: protección true, comentario Una nota
+# expect-out: borrado true true true, queda false
+# expect-out: selector false
+
+Main
+    t = "uno\ndos ñ\ntres\n"
+    ok = file_write_text("RAM:nota.txt", t)
+    Print "escrito #{ok}, #{file_size(\"RAM:nota.txt\")} bytes, existe #{file_exists(\"RAM:nota.txt\")}"
+    Print "leído igual #{file_read_text(\"RAM:nota.txt\") == t}"
+    hecho = dir_create("RAM:Listas")
+    movido = file_rename("RAM:nota.txt", "RAM:Listas/nota.txt")
+    Print "cajón #{hecho}, movido #{movido}, en RAM: #{file_exists(\"RAM:nota.txt\")}"
+    n = dir_read("RAM:Listas")
+    for i in (0..n - 1)
+        Print "Listas: #{n} [#{dir_entry_name(i)} #{dir_entry_size(i)} #{dir_entry_is_dir(i)}]"
+    end
+    h = file_open("RAM:Listas/nota.txt", 1005)
+    buf = buffer_alloc(64)
+    l = file_read_line(h, buf, 64)
+    Print "línea: " + str_trim(l)
+    l = file_read_line(h, buf, 64)
+    Print "línea: " + str_trim(l)
+    l = file_read_line(h, buf, 64)
+    Print "fin del fichero #{file_eof(h)}"
+    file_close(h)
+    buffer_free(buf)
+    c = file_copy("RAM:Listas/nota.txt", "RAM:copia.txt")
+    Print "copia #{c}, #{file_size(\"RAM:copia.txt\")} bytes"
+    co = file_set_comment("RAM:copia.txt", "Una nota")
+    p = file_protection("RAM:copia.txt")
+    pr = file_set_protection("RAM:copia.txt", p + 4)
+    pr = pr and file_protection("RAM:copia.txt") == p + 4
+    Print "protección #{pr}, comentario " + file_comment("RAM:copia.txt")
+    a = file_delete("RAM:copia.txt")
+    b = file_delete("RAM:Listas/nota.txt")
+    d = file_delete("RAM:Listas")
+    Print "borrado #{a} #{b} #{d}, queda #{file_exists(\"RAM:Listas\")}"
+    Print "selector #{file_open_dialog(\"Abrir\", \"#?\")}"
+end
