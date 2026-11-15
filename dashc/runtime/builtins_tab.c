@@ -1249,6 +1249,8 @@ const BuiltinInfo builtin_info[] = {
     {"palette_get", 1, 1, 1, 0, 0, 0u},
     {"palette_set", 2, 0, 1, 0, 0, 0u},
     {"palette_set", 2, 0, 1, 0, 0, 0u},
+    {"path_free_kb", 1, 1, 0, 0, 0, 1u},
+    {"path_free_kb", 1, 1, 0, 0, 0, 1u},
     {"peek_byte", 1, 1, 1, 0, 0, 0u},
     {"peek_byte", 1, 1, 1, 0, 0, 0u},
     {"peek_long", 1, 1, 1, 0, 0, 0u},
@@ -2018,7 +2020,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2016;
+const int builtin_count = 2018;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

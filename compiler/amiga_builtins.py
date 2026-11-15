@@ -2732,6 +2732,10 @@ DOS_FUNCTIONS = {
         name="file_protection", params=["path"], return_type="LONG", c_template="_dash_file_protection(${path})",
         needs_dos=True, reads_only=True,
         description="Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read"),
+    "path_free_kb": BuiltinFunc(
+        name="path_free_kb", params=["path"], return_type="LONG", c_template="_dash_path_free_kb(${path})",
+        needs_dos=True, reads_only=True,
+        description="Free space in KB of the volume a file, drawer or assign is on (SYS:, PROGDIR:, RAM:T/...); -1 if it cannot be found or read"),
     "file_set_protection": BuiltinFunc(
         name="file_set_protection", params=["path", "bits"], return_type="BOOL", c_template="_dash_file_set_protection(${path}, ${bits})",
         needs_dos=True, reads_only=True,
