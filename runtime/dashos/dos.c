@@ -247,7 +247,7 @@ const char *dash_plat_getenv(const char *name) { (void)name; return NULL; }
 #define ARCH_LLAVE 2
 #define ARCH_VENTANA 0x4800000000UL
 enum { A_SESION = 0, A_BUSCAR = 1, A_LEER = 2, A_ESCRIBIR = 3, A_LISTAR = 4, A_DATOS = 5, A_CERRAR = 6, A_CREAR = 7,
-       A_BORRAR = 8, A_RENOMBRAR = 9, A_TAMANO = 10, A_COMENTARIO = 13, A_COMENTAR = 14, A_PROTEGER = 15 };
+       A_BORRAR = 8, A_RENOMBRAR = 9, A_TAMANO = 10, A_COMENTARIO = 13, A_COMENTAR = 14, A_PROTEGER = 15, A_FECHAR = 35 };
 static long arch_resp = 0;                         /* el lado que lee las respuestas; < 0, no hay servicio */
 static unsigned long arch_win = 0;
 static long dos_elegido = 0;                       /* la asa del fichero que eligió el usuario (Elegido:) */
@@ -481,7 +481,14 @@ static long ds_comment(const DSitio *s, const char *t)
     arch_orden(A_CERRAR, h, 0, 0, NULL, 0, r);
     return e;
 }
-static long ds_setdate(const DSitio *s, long t) { (void)s; (void)t; return -1; }   /* (el servicio no tiene orden) */
+static long ds_setdate(const DSitio *s, long t)       /* (FECHAR: a, segundos desde 1970; b, nanosegundos) */
+{
+    long h, r[4], e = a_buscar(s, &h, r);
+    if (e != 0) return e;
+    e = arch_orden(A_FECHAR, h, t, 0, NULL, 0, r);
+    arch_orden(A_CERRAR, h, 0, 0, NULL, 0, r);
+    return e;
+}
 
 /* Lo que tiene un cajón: el servicio pone en la ventana las entradas desde la número "desde", y se copian aquí */
 typedef struct { long h; unsigned char *buf; long len, off, quedan, sig; int fin; } DList;
