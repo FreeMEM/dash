@@ -10,7 +10,9 @@ la esperada, como en el A1200.
     python3 tests/dashos_tests.py --pie        # enlazados como PIE
     python3 tests/dashos_tests.py --be         # en big-endian (la caja Amiga), en qemu-aarch64_be
 
-Un test con "# expect-rc: N" debe acabar con ese código. En DashOS los textos son UTF-8 (en el Amiga, Latin-1): una
+Un test con "# expect-rc: N" debe acabar con ese código. "# emu-catalog: lib/x.ct" compila ese catálogo en
+Catalogs/<idioma>/ de su cajón, con el idioma english; "# dashos-catalog: lib/x.ct", en UTF-8 en LOCALE:Catalogs/ y sin
+idioma (el castellano de serie). En DashOS los textos son UTF-8 (en el Amiga, Latin-1): una
 línea "# dashos-line N: texto" cambia la línea N de la salida esperada, y "# dashos-skip: motivo" deja fuera el test.
 Los de tests/dashos/ son solo de DashOS."""
 import argparse
@@ -45,8 +47,33 @@ def one(f, tmp):
                                                                         pie=PIE, be=BE)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
+    # "# emu-catalog: lib/x.ct": compilado en Catalogs/<idioma>/ de su cajón (PROGDIR:), con el idioma del sistema
+    # emulado del Amiga (english)
+    cwd, env = None, None
+    cts = marks(text, "# emu-catalog:")
+    if cts:
+        sys.path.insert(0, str(REPO / "tools"))
+        import catalogo
+        cwd = Path(tmp) / (f.stem + ".dir")
+        for ct in cts:
+            name, language, data = catalogo.build_catalog((f.parent / ct).read_text(encoding="utf-8"))
+            (cwd / "Catalogs" / language).mkdir(parents=True, exist_ok=True)
+            (cwd / "Catalogs" / language / name).write_bytes(data)
+        env = {"DASH_LANGUAGE": "english", "DASH_LOCALE_DIR": str(cwd / "Locale")}
+    # "# dashos-catalog: lib/x.ct": en UTF-8 (lo de DashOS) en LOCALE:Catalogs/<idioma>/, sin idioma del usuario (el
+    # castellano de serie)
+    cts = marks(text, "# dashos-catalog:")
+    if cts:
+        sys.path.insert(0, str(REPO / "tools"))
+        import catalogo
+        cwd = Path(tmp) / (f.stem + ".dir")
+        for ct in cts:
+            name, language, data = catalogo.build_catalog((f.parent / ct).read_text(encoding="utf-8"), utf8=True)
+            (cwd / "Locale" / "Catalogs" / language).mkdir(parents=True, exist_ok=True)
+            (cwd / "Locale" / "Catalogs" / language / name).write_bytes(data)
+        env = {"DASH_LANGUAGE": "", "DASH_LOCALE_DIR": str(cwd / "Locale")}
     try:
-        rc, out, err = dashos_run.run(exe, timeout=30)
+        rc, out, err = dashos_run.run(exe, timeout=30, cwd=cwd, env=env)
     except subprocess.TimeoutExpired:
         return "timeout", ""
     want = marks(text, "# expect-out:")

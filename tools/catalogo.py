@@ -4,14 +4,14 @@
     tools/catalogo.py cd programa.dash ventana.dashui ... -o Programa.cd
     tools/catalogo.py ct Programa.cd --language english --name Programa.catalog [--version 1.0] \\
                          [--update english.ct] -o english.ct
-    tools/catalogo.py catalog english.ct [-o Catalogs/english/Programa.catalog]
+    tools/catalogo.py catalog english.ct [-o Catalogs/english/Programa.catalog] [--utf8]
 
 cd: the texts of the program, from its tr(id, "text") calls (id a number or a const) and the "tr" ids of its
 .dashui files, in FlexCat's descriptor format (one MSG_x (id//) line and its text each). ct: a translation
 file for a language, the texts to translate empty with the original below as a comment (--update keeps the
 translations of an older one). catalog: an IFF CTLG file for locale.library, in Latin-1 (as the program's
-own texts): $VER, language, code set and the strings by number. Texts keep the escapes of a Dash string
-(\\n, \\t, \\", \\\\, \\e or \\033 ESC, \\xNN).
+own texts; with --utf8, in UTF-8 for DashOS): $VER, language, code set and the strings by number. Texts keep
+the escapes of a Dash string (\\n, \\t, \\", \\\\, \\e or \\033 ESC, \\xNN).
 """
 import argparse
 import datetime
@@ -240,9 +240,11 @@ def _chunk(cid: bytes, data: bytes) -> bytes:
     return cid + struct.pack(">I", len(data)) + data + (b"\0" if len(data) & 1 else b"")
 
 
-def build_catalog(ct_text: str) -> tuple:
+def build_catalog(ct_text: str, utf8: bool = False) -> tuple:
     """(catalog name, language, bytes) of a .ct: IFF FORM CTLG with FVER, LANG, CSET and STRS (each string:
-    its number, its length with the ending 0, the bytes and 0s up to a multiple of 4)"""
+    its number, its length with the ending 0, the bytes and 0s up to a multiple of 4). In Latin-1 for the Amiga;
+    with utf8, in UTF-8 with 106 in the CSET (as AmigaOS 4), for DashOS"""
+    enc = "utf-8" if utf8 else "latin-1"
     head, trans = read_ct(ct_text)
     ver = head.get("version", "")
     m = re.match(r"\$VER:\s+(\S+)\s+(\d+)\.(\d+)", ver)
@@ -258,14 +260,15 @@ def build_catalog(ct_text: str) -> tuple:
         if not re.match(r"^MSG_\d+$", name):
             raise CatalogError(f"{name}: messages are MSG_<number>")
         number = int(name[4:])
-        strings.append((number, unescape(value).encode("latin-1", errors="replace")))
+        strings.append((number, unescape(value).encode(enc, errors="replace")))
     strs = b""
     for number, data in sorted(strings):
         data += b"\0"
         strs += struct.pack(">II", number, len(data)) + data + b"\0" * (-len(data) % 4)
-    body = (b"CTLG" + _chunk(b"FVER", ver.encode("latin-1", errors="replace") + b"\0")
-            + _chunk(b"LANG", language.encode("latin-1", errors="replace") + b"\0")
-            + _chunk(b"CSET", b"\0" * 32) + _chunk(b"STRS", strs))
+    cset = struct.pack(">I", 106 if utf8 else 0) + b"\0" * 28
+    body = (b"CTLG" + _chunk(b"FVER", ver.encode(enc, errors="replace") + b"\0")
+            + _chunk(b"LANG", language.encode(enc, errors="replace") + b"\0")
+            + _chunk(b"CSET", cset) + _chunk(b"STRS", strs))
     return m.group(1), language, b"FORM" + struct.pack(">I", len(body)) + body
 
 
@@ -285,6 +288,7 @@ def main(argv=None):
     a = sub.add_parser("catalog", help="a .ct compiled for locale.library")
     a.add_argument("ct")
     a.add_argument("-o", "--output", help="default: Catalogs/<language>/<name>")
+    a.add_argument("--utf8", action="store_true", help="in UTF-8, for DashOS (the Amiga's are Latin-1)")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "cd":
@@ -297,7 +301,7 @@ def main(argv=None):
             Path(args.output).write_text(write_ct(cd, args.language, args.name, args.version, old), encoding="utf-8")
             print(f"{args.output}: {len(cd)} texts to translate")
         else:
-            name, language, data = build_catalog(Path(args.ct).read_text(encoding="utf-8"))
+            name, language, data = build_catalog(Path(args.ct).read_text(encoding="utf-8"), args.utf8)
             out = Path(args.output) if args.output else Path("Catalogs") / language / name
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(data)

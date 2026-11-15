@@ -72,6 +72,8 @@ int strcmp(const char *a, const char *b);
 int strncmp(const char *a, const char *b, size_t n);
 char *strcpy(char *d, const char *s);
 char *strchr(const char *s, int c);
+char *strcat(char *d, const char *s);
+char *strncpy(char *d, const char *s, size_t n);
 void exit(int code) __attribute__((noreturn));
 void *malloc(size_t n);
 void *calloc(size_t n, size_t size);
@@ -94,6 +96,13 @@ void dash_plat_buffer_free(void *p);
 /* memoria para estructuras de AmigaOS (@amiga struct: amiga_alloc), por debajo de 4 GB: la de la caja Amiga */
 void *dash_plat_box_alloc(unsigned long bytes);
 void dash_plat_box_free(void *p, unsigned long bytes);
+/* un fichero entero, por su nombre del Amiga ("LOCALE:Catalogs/..."), en memoria de AllocVec con un 0 detrás; NULL si
+   no está o no se sabe dónde (los catálogos: docs/DASHOS_VENTANAS_LOOP.md) */
+void *dash_plat_file_load(const char *path, long *size);
+/* una variable del entorno (en Linux; en DashOS aún no hay: NULL) */
+const char *dash_plat_getenv(const char *name);
+/* la llave del compositor ("ventanas"), según las que traía el programa al nacer: 3 si las tenía, si no 1 */
+long dash_plat_windows_key(void);
 #define _DASH_AMIGA_ALLOC(n) ((_DashP)dash_plat_box_alloc((unsigned long)(n)))
 #define _DASH_AMIGA_FREE(p, n) dash_plat_box_free((void *)(_DashP)(p), (unsigned long)(n))
 

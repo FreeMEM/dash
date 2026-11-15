@@ -1,0 +1,18 @@
+# Catálogos en DashOS (docs/DASHOS_VENTANAS_LOOP.md): sin ENV:Sys/locale.prefs (aún no hay ENV: en DashOS) ni
+# DASH_LANGUAGE, el idioma del usuario es el castellano. Los textos del programa están en inglés (sin idioma propio
+# en @catalog, "english", como locale.library), así que se busca LOCALE:Catalogs/español/PruebaDashOS.catalog: el
+# runner lo compila en UTF-8 (tools/catalogo.py --utf8), lo de DashOS. Un número sin traducir da el texto del programa.
+# dashos-catalog: ../lib/catalogo_dashos_es.ct
+# expect-out: Hola, señor
+# expect-out: Ventana de Dash
+# expect-out: Untranslated
+# expect-out: idioma: español
+
+@catalog "PruebaDashOS.catalog" 1
+
+Main
+    Print tr(1, "Hello, sir")
+    Print tr(2, "Dash window")
+    Print tr(3, "Untranslated")
+    Print "idioma: " + catalog_language()
+end

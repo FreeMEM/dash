@@ -25264,7 +25264,7 @@ class CodeGenerator(ASTVisitor):
         if self.needs_rtg:
             parts.append(CTemplates.RTG_RUNTIME)
         if self.needs_mui:
-            parts.append(CTemplates.MUI_RUNTIME)
+            parts.append(self.DASHOS_MUI_RUNTIME if self.target == "dashos" else CTemplates.MUI_RUNTIME)
         if self.uses_mui_drop:
             parts.append(CTemplates.MUI_APPDROP_RUNTIME)
         if self.uses_mui_canvas:
@@ -25573,10 +25573,142 @@ static LONG _dash_event_window_handle(void) {{
             program = program.replace("    return AllocVec(size, MEMF_ANY | MEMF_CLEAR);\n",
                                       "    return size > 0 ? dash_plat_buffer_alloc((unsigned long)size) : NULL;\n", 1)
             program = program.replace("    if (buffer) FreeVec(buffer);\n", "    dash_plat_buffer_free(buffer);\n", 1)
+        # Catalogs (tr, @catalog): the file through the platform (runtime/dashos/plat.c) and the user's languages
+        if CTemplates.CATALOG_RUNTIME in program:
+            program = program.replace(CTemplates.CATALOG_RUNTIME, self._dashos_catalog(), 1)
         # The clock (time_ms, A7): the system counter of the CPU instead of timer.device
         if CTemplates.TIME_RUNTIME in program:
             program = program.replace(CTemplates.TIME_RUNTIME, self.DASHOS_TIME_RUNTIME, 1)
         return program
+
+    @staticmethod
+    def _dashos_catalog() -> str:
+        """CATALOG_RUNTIME for DashOS (docs/DASHOS_VENTANAS_LOOP.md): the same reading of the .catalog (IFF CTLG), with
+        the file from dash_plat_file_load and the user's languages from _dash_dashos_languages instead of
+        locale.library. DashOS's texts are UTF-8: a catalog that does not say so in its CSET (106, as AmigaOS 4) is
+        an Amiga one, in Latin-1, and its texts are turned to UTF-8."""
+        text = CTemplates.CATALOG_RUNTIME
+        a = text.index("#ifndef _DASH_LOCALE_BASE")
+        b = text.index("#endif\n", a) + len("#endif\n")
+        text = text[:a] + ("#ifndef _DASH_LOCALE_BASE\n#define _DASH_LOCALE_BASE\n"
+                           "static void _dash_locale_close(void) {}\n#endif\n") + text[b:]
+        swaps = [
+            ("""    BPTR f = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG size, n = 0, i, j, ver = -1;""", """    long size_l = 0;
+    ULONG cset = 0;
+    LONG size, n = 0, i, j, ver = -1;"""),
+            ("""    if (!f) return FALSE;
+    Seek(f, 0, OFFSET_END);
+    size = Seek(f, 0, OFFSET_BEGINNING);
+    if (size < 12 || size > 0x00FFFFFFL || !(d = (UBYTE *)AllocVec(size + 1, MEMF_ANY))) { Close(f); return FALSE; }
+    ok = Read(f, d, size) == size;
+    Close(f);
+""", """    if (!(d = (UBYTE *)dash_plat_file_load((const char *)path, &size_l))) return FALSE;
+    size = (LONG)size_l;
+    ok = size >= 12;
+"""),
+            ("""        } else if (!memcmp(p, "STRS", 4)) { strs = c; strs_len = len; }""",
+             """        } else if (!memcmp(p, "CSET", 4) && len >= 4) cset = _dash_cat_be32(c);
+        else if (!memcmp(p, "STRS", 4)) { strs = c; strs_len = len; }"""),
+            ("""    _dash_catalog_cleanup();
+    _dash_cat_data = d;""", """    if (cset != 106) {          /* (an Amiga catalog, in Latin-1: its texts and language to UTF-8) */
+        ULONG need = 1;
+        LONG k;
+        UBYTE *u, *o, *t;
+        char l2[32];
+        for (k = 0; k < i; k++)
+            for (t = tab[k].text, need++; *t; t++) need += *t < 0x80 ? 1 : 2;
+        if (!(u = (UBYTE *)AllocVec(need, MEMF_ANY))) { FreeVec(tab); FreeVec(d); return FALSE; }
+        for (o = u, k = 0; k < i; k++) {
+            t = tab[k].text;
+            tab[k].text = (STRPTR)o;
+            for (; *t; t++) {
+                if (*t < 0x80) *o++ = *t;
+                else { *o++ = 0xC0 | (*t >> 6); *o++ = 0x80 | (*t & 0x3F); }
+            }
+            *o++ = 0;
+        }
+        for (k = 0, j = 0; lang[k] && j < 30; k++) {
+            UBYTE ch = (UBYTE)lang[k];
+            if (ch < 0x80) l2[j++] = (char)ch;
+            else { l2[j++] = (char)(0xC0 | (ch >> 6)); l2[j++] = (char)(0x80 | (ch & 0x3F)); }
+        }
+        l2[j] = 0;
+        strcpy(lang, l2);
+        FreeVec(d);
+        d = u;
+    }
+    _dash_catalog_cleanup();
+    _dash_cat_data = d;"""),
+            ("""    struct Locale *loc;
+""", """    char langs[10][32];
+    LONG nl;
+"""),
+            ("""    if (!_dash_locale_open() || !(loc = OpenLocale(NULL))) return FALSE;
+    for (i = 0; i < 10 && !found && loc->loc_PrefLanguages[i]; i++) {
+        STRPTR lang = loc->loc_PrefLanguages[i];
+""", """    nl = _dash_dashos_languages(langs);
+    for (i = 0; i < nl && !found; i++) {
+        STRPTR lang = (STRPTR)langs[i];
+"""),
+            ("""    CloseLocale(loc);
+    return found;""", """    return found;"""),
+            ("""/* The same language, without telling capitals apart""", r"""/* A language name to UTF-8 (the Amiga's are Latin-1; a valid UTF-8 one stays), at most 31 bytes */
+static void _dash_cat_lang_utf8(char *out, const UBYTE *s, LONG max) {
+    LONG i, j = 0;
+    BOOL utf8 = TRUE;
+    for (i = 0; i < max && s[i]; i++)
+        if (s[i] >= 0x80) {
+            LONG k, more = (s[i] & 0xE0) == 0xC0 ? 1 : (s[i] & 0xF0) == 0xE0 ? 2 : (s[i] & 0xF8) == 0xF0 ? 3 : -1;
+            for (k = 1; more > 0 && k <= more; k++) if (i + k >= max || (s[i + k] & 0xC0) != 0x80) more = -1;
+            if (more < 0) { utf8 = FALSE; break; }
+            i += more;
+        }
+    for (i = 0; i < max && s[i] && j < 30; i++) {
+        if (utf8 || s[i] < 0x80) out[j++] = (char)s[i];
+        else { out[j++] = (char)(0xC0 | (s[i] >> 6)); out[j++] = (char)(0x80 | (s[i] & 0x3F)); }
+    }
+    out[j] = 0;
+}
+
+/* The user's languages in order (DashOS): ENV:Sys/locale.prefs as locale.library reads it (IFF PREF, LCLE: 16 bytes
+   kept, the country in 32 and 10 preferred languages of 30). While DashOS has no ENV:, $DASH_LANGUAGE (one or more,
+   separated by ","; under Linux) or "español". The only place that says which languages */
+static LONG _dash_dashos_languages(char langs[10][32]) {
+    long size = 0;
+    LONG n = 0, k;
+    UBYTE *d, *p;
+    const char *e;
+    if ((d = (UBYTE *)dash_plat_file_load("ENV:Sys/locale.prefs", &size))) {
+        if (size >= 12 && !memcmp(d, "FORM", 4) && !memcmp(d + 8, "PREF", 4))
+            for (p = d + 12; p + 8 <= d + size; ) {
+                ULONG len = _dash_cat_be32(p + 4);
+                UBYTE *c = p + 8;
+                if (len > (ULONG)(d + size - c)) break;
+                if (!memcmp(p, "LCLE", 4) && len >= 48 + 300)
+                    for (k = 0; k < 10 && c[48 + 30 * k]; k++) _dash_cat_lang_utf8(langs[n++], c + 48 + 30 * k, 30);
+                p = c + len + (len & 1);
+            }
+        FreeVec(d);
+    }
+    if (!n && (e = dash_plat_getenv("DASH_LANGUAGE")))
+        while (*e && n < 10) {
+            for (k = 0; *e && *e != ',' && k < 31; e++) langs[n][k++] = *e;
+            langs[n][k] = 0;
+            if (k) n++;
+            while (*e && *e != ',') e++;
+            if (*e == ',') e++;
+        }
+    if (!n) strcpy(langs[n++], "espa\xc3\xb1ol");
+    return n;
+}
+
+/* The same language, without telling capitals apart"""),
+        ]
+        for old, new in swaps:
+            assert text.count(old) == 1, old[:60]
+            text = text.replace(old, new, 1)
+        return text
 
     # time_ms on DashOS (docs/AARCH64_LOOP.md, A7): milliseconds since the program started, from the generic timer
     # of the CPU (CNTVCT_EL0, readable from EL0 in DashOS and in Linux under qemu-aarch64)
@@ -25603,6 +25735,95 @@ static LONG _dash_time_ms(void) {
 }
 
 static void _dash_time_cleanup(void) {}
+
+"""
+
+    # MUI on DashOS (docs/DASHOS_VENTANAS_LOOP.md): the mui_* of DASHOS_MUI are windows of DashOS's kit (Material 3),
+    # through kit-c (DashOS: kit-c/include/kit_c.h, libkit_c.a; tools/dashos_run.py links it when the program uses
+    # it). Objects are numbers, as on the Amiga. The kit-c functions are weak: the runtime of the direct path has all
+    # this without kit-c, and _dash_mui_app_end runs at exit.
+    DASHOS_MUI_RUNTIME = """\
+/* Dash MUI Runtime (DashOS: kit-c) */
+#define _DASH_UI __attribute__((weak))
+extern _DASH_UI int dash_ui_app_begin(const char *, const char *);
+extern _DASH_UI void dash_ui_app_end(void);
+extern _DASH_UI int dash_ui_window_begin(const char *, int);
+extern _DASH_UI void dash_ui_window_end(void);
+extern _DASH_UI int dash_ui_window_open(int);
+extern _DASH_UI void dash_ui_window_close(int);
+extern _DASH_UI int dash_ui_group_begin(int);
+extern _DASH_UI void dash_ui_group_end(void);
+extern _DASH_UI int dash_ui_text(const char *);
+extern _DASH_UI int dash_ui_label(const char *);
+extern _DASH_UI int dash_ui_button(const char *);
+extern _DASH_UI int dash_ui_string(const char *, int);
+extern _DASH_UI int dash_ui_checkbox(int);
+extern _DASH_UI int dash_ui_cycle(const char *);
+extern _DASH_UI int dash_ui_list(void);
+extern _DASH_UI void dash_ui_list_insert(int, int, const char *);
+extern _DASH_UI void dash_ui_list_remove(int, int);
+extern _DASH_UI void dash_ui_list_clear(int);
+extern _DASH_UI int dash_ui_list_count(int);
+extern _DASH_UI const char *dash_ui_list_get(int, int);
+extern _DASH_UI int dash_ui_menu_begin(const char *);
+extern _DASH_UI int dash_ui_menu_item(const char *, const char *, int);
+extern _DASH_UI void dash_ui_menu_separator(void);
+extern _DASH_UI void dash_ui_menu_end(void);
+extern _DASH_UI void dash_ui_on(int, int, int);
+extern _DASH_UI const char *dash_ui_get_text(int);
+extern _DASH_UI void dash_ui_set_text(int, const char *);
+extern _DASH_UI int dash_ui_get_value(int);
+extern _DASH_UI void dash_ui_set_value(int, int);
+extern _DASH_UI void dash_ui_set_enabled(int, int);
+extern _DASH_UI int dash_ui_request(int, const char *, const char *, const char *);
+extern _DASH_UI int dash_ui_wait_event(void);
+#define _DASH_UI_H(h) ((int)(_DashP)(h))
+#define _DASH_UI_S(s) ((const char *)((s) ? (s) : (STRPTR)""))
+
+extern _DASH_UI void dash_ui_usar_llave(int);
+static _DashP _dash_mui_app_begin(STRPTR title, STRPTR base) {
+    if (!dash_ui_app_begin) return 0;
+    dash_ui_usar_llave((int)dash_plat_windows_key());   /* (the program's keys at birth: plat.c) */
+    return dash_ui_app_begin(_DASH_UI_S(title), _DASH_UI_S(base));
+}
+static void _dash_mui_app_end(void) { if (dash_ui_app_end) dash_ui_app_end(); }
+static _DashP _dash_mui_window_begin(STRPTR title, LONG id) { return dash_ui_window_begin(_DASH_UI_S(title), id); }
+static void _dash_mui_window_end(void) { dash_ui_window_end(); }
+static LONG _dash_mui_window_open(APTR win) { return dash_ui_window_open(_DASH_UI_H(win)); }
+static void _dash_mui_window_close(APTR win) { dash_ui_window_close(_DASH_UI_H(win)); }
+static _DashP _dash_mui_group_begin(LONG horizontal) { return dash_ui_group_begin(horizontal); }
+static void _dash_mui_group_end(void) { dash_ui_group_end(); }
+static _DashP _dash_mui_text(STRPTR text) { return dash_ui_text(_DASH_UI_S(text)); }
+static _DashP _dash_mui_label(STRPTR text) { return dash_ui_label(_DASH_UI_S(text)); }
+static _DashP _dash_mui_button(STRPTR text) { return dash_ui_button(_DASH_UI_S(text)); }
+static _DashP _dash_mui_string(STRPTR initial, LONG maxlen) { return dash_ui_string(_DASH_UI_S(initial), maxlen); }
+static _DashP _dash_mui_checkbox(LONG checked) { return dash_ui_checkbox(checked); }
+static _DashP _dash_mui_cycle(STRPTR options) { return dash_ui_cycle(_DASH_UI_S(options)); }
+static _DashP _dash_mui_list(void) { return dash_ui_list(); }
+static void _dash_mui_list_insert(APTR list, LONG pos, STRPTR text) { dash_ui_list_insert(_DASH_UI_H(list), pos, _DASH_UI_S(text)); }
+static void _dash_mui_list_remove(APTR list, LONG pos) { dash_ui_list_remove(_DASH_UI_H(list), pos); }
+static void _dash_mui_list_clear(APTR list) { dash_ui_list_clear(_DASH_UI_H(list)); }
+static LONG _dash_mui_list_count(APTR list) { return dash_ui_list_count(_DASH_UI_H(list)); }
+static STRPTR _dash_mui_list_get(APTR list, LONG pos) { return (STRPTR)dash_ui_list_get(_DASH_UI_H(list), pos); }
+static void _dash_mui_on_double(APTR list, LONG id) { dash_ui_on(_DASH_UI_H(list), 3, id); }
+static _DashP _dash_mui_menu_begin(STRPTR title) { return dash_ui_menu_begin(_DASH_UI_S(title)); }
+static _DashP _dash_mui_menu_item(STRPTR title, STRPTR key, LONG id) {
+    return dash_ui_menu_item(_DASH_UI_S(title), _DASH_UI_S(key), id);
+}
+static void _dash_mui_menu_separator(void) { dash_ui_menu_separator(); }
+static void _dash_mui_menu_end(void) { dash_ui_menu_end(); }
+static void _dash_mui_on_press(APTR obj, LONG id) { dash_ui_on(_DASH_UI_H(obj), 0, id); }
+static void _dash_mui_on_change(APTR obj, LONG id) { dash_ui_on(_DASH_UI_H(obj), 1, id); }
+static void _dash_mui_on_close(APTR win, LONG id) { dash_ui_on(_DASH_UI_H(win), 2, id); }
+static STRPTR _dash_mui_get_text(APTR obj) { return (STRPTR)dash_ui_get_text(_DASH_UI_H(obj)); }
+static void _dash_mui_set_text(APTR obj, STRPTR text) { dash_ui_set_text(_DASH_UI_H(obj), _DASH_UI_S(text)); }
+static LONG _dash_mui_get_value(APTR obj) { return dash_ui_get_value(_DASH_UI_H(obj)); }
+static void _dash_mui_set_value(APTR obj, LONG value) { dash_ui_set_value(_DASH_UI_H(obj), value); }
+static void _dash_mui_set_enabled(APTR obj, LONG enabled) { dash_ui_set_enabled(_DASH_UI_H(obj), enabled); }
+static LONG _dash_mui_request(APTR win, STRPTR title, STRPTR text, STRPTR buttons) {
+    return dash_ui_request(_DASH_UI_H(win), _DASH_UI_S(title), _DASH_UI_S(text), _DASH_UI_S(buttons));
+}
+static LONG _dash_mui_wait_event(void) { return dash_ui_wait_event ? dash_ui_wait_event() : -1; }
 
 """
 
@@ -28298,7 +28519,7 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
         if builtin.name in ("gt_string", "gt_integer", "textfield_create", "integer_create", "ra_add_string",
-                            "mui_string", "mui_combo"):
+                            "mui_string", "mui_combo") and self.target != "dashos":   # (DashOS: the kit's own)
             self.uses_editkeys = True  # its edit hook: pasting with Ctrl or Amiga + V (EDITKEYS_RUNTIME)
         if self.uses_editkeys:
             self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME

@@ -6239,6 +6239,22 @@ DASHOS_TEMPLATES = {
     "program_exit": "_dash_exit((int)(${rc}))",
 }
 
+# The MUI builtins that work on DashOS (docs/DASHOS_VENTANAS_LOOP.md): there they are windows of DashOS's kit (Material
+# 3), through kit-c (libkit_c.a of DashOS). The other mui_* are a compile error with ./dash --dashos.
+DASHOS_MUI = {
+    "mui_app_begin", "mui_app_end", "mui_window_begin", "mui_window_end", "mui_window_open", "mui_window_close",
+    "mui_vgroup_begin", "mui_hgroup_begin", "mui_group_end", "mui_text", "mui_label", "mui_button", "mui_string",
+    "mui_checkbox", "mui_cycle", "mui_list", "mui_list_add", "mui_list_insert", "mui_list_remove", "mui_list_clear",
+    "mui_list_count", "mui_list_get", "mui_on_double", "mui_menu_begin", "mui_menu_item", "mui_menu_separator",
+    "mui_menu_end", "mui_on_press", "mui_on_change", "mui_on_close", "mui_get_text", "mui_set_text", "mui_get_value",
+    "mui_set_value", "mui_set_enabled", "mui_request", "mui_wait_event",
+}
+
+
+def dashos_missing(name: str) -> bool:
+    """A builtin of the Amiga that DashOS does not have yet (./dash --dashos: a compile error)"""
+    return name.startswith("mui_") and name not in DASHOS_MUI
+
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
     **GRAPHICS_ADVANCED,

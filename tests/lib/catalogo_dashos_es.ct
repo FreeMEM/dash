@@ -1,0 +1,10 @@
+## version $VER: PruebaDashOS.catalog 1.0 (15.11.2026)
+## language español
+## codeset 106
+;
+MSG_1
+Hola, señor
+; Hello, sir
+MSG_2
+Ventana de Dash
+; Dash window
