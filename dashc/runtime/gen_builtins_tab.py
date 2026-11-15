@@ -30,7 +30,8 @@ def main():
             keeps = n not in CodeGenerator._STRING_READERS and not b.reads_only
             dmask = sum(1 << i for i in double_params(n, b))
             smask = sum(1 << i for i in builtin_string_params(b))   # los parámetros String: un carácter, str_char
-            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}, {int(b.needs_dashos)}, {smask}u}},\n')
+            dashos = 1 if b.needs_dashos else 2 if ab.dashos_missing(n) else 0   # (2: aún no en DashOS)
+            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}, {dashos}, {smask}u}},\n')
     from compiler.ast_nodes import KEY_NAMES
     keys = "".join(f'    {{"{k}", {v}}},\n' for k, v in sorted(KEY_NAMES.items()))
     out = Path(sys.argv[1])

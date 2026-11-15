@@ -12,6 +12,8 @@
 # expect-out: 30000
 # expect-out: j
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+# dashos-line 2: 25
+# dashos-line 3: 18
 
 Main
     t = "línea uno\nlínea dos\n"

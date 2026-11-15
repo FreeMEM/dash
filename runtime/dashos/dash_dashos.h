@@ -62,6 +62,56 @@ LONG Write(BPTR fh, const void *buf, LONG len);
 LONG Flush(BPTR fh);
 void Delay(LONG ticks);
 
+/* dos: ficheros y cajones (runtime/dashos/dos.c), sobre el servicio de archivos de DashOS o, en Linux, sus llamadas */
+#define MODE_OLDFILE 1005
+#define MODE_NEWFILE 1006
+#define MODE_READWRITE 1004
+#define OFFSET_BEGINNING (-1)
+#define OFFSET_CURRENT 0
+#define OFFSET_END 1
+#define SHARED_LOCK (-2)
+#define ACCESS_READ (-2)
+#define EXCLUSIVE_LOCK (-1)
+#define ACCESS_WRITE (-1)
+#define DOS_FIB 2
+#define ST_USERDIR 2
+#define ST_SOFTLINK 3
+#define ST_FILE (-3)
+struct DateStamp { LONG ds_Days, ds_Minute, ds_Tick; };
+struct FileInfoBlock {
+    LONG fib_DiskKey, fib_DirEntryType;
+    char fib_FileName[108];
+    LONG fib_Protection, fib_EntryType, fib_Size, fib_NumBlocks;
+    struct DateStamp fib_Date;
+    char fib_Comment[80];
+    UWORD fib_OwnerUID, fib_OwnerGID;
+    char fib_Reserved[32];
+};
+BPTR Open(CONST_STRPTR name, LONG mode);
+LONG Close(BPTR fh);
+LONG Read(BPTR fh, APTR buf, LONG len);
+LONG Seek(BPTR fh, LONG pos, LONG mode);
+LONG FGetC(BPTR fh);
+LONG UnGetC(BPTR fh, LONG c);
+STRPTR FGets(BPTR fh, STRPTR buf, ULONG len);
+LONG FPutC(BPTR fh, LONG c);
+LONG FPuts(BPTR fh, CONST_STRPTR s);
+BPTR Lock(CONST_STRPTR name, LONG mode);
+void UnLock(BPTR lock);
+BPTR DupLock(BPTR lock);
+BPTR CurrentDir(BPTR lock);
+APTR AllocDosObject(ULONG type, const void *tags);
+void FreeDosObject(ULONG type, APTR p);
+LONG Examine(BPTR lock, struct FileInfoBlock *fib);
+LONG ExNext(BPTR lock, struct FileInfoBlock *fib);
+LONG NameFromLock(BPTR lock, STRPTR buf, LONG len);
+BPTR CreateDir(CONST_STRPTR name);
+LONG DeleteFile(CONST_STRPTR name);
+LONG Rename(CONST_STRPTR a, CONST_STRPTR b);
+LONG SetProtection(CONST_STRPTR name, LONG bits);
+LONG SetComment(CONST_STRPTR name, CONST_STRPTR text);
+LONG SetFileDate(CONST_STRPTR name, const struct DateStamp *ds);
+
 /* la libc que usa el runtime */
 void *memcpy(void *d, const void *s, size_t n);
 void *memmove(void *d, const void *s, size_t n);
@@ -72,6 +122,8 @@ int strcmp(const char *a, const char *b);
 int strncmp(const char *a, const char *b, size_t n);
 char *strcpy(char *d, const char *s);
 char *strchr(const char *s, int c);
+char *strcat(char *d, const char *s);
+char *strncpy(char *d, const char *s, size_t n);
 void exit(int code) __attribute__((noreturn));
 void *malloc(size_t n);
 void *calloc(size_t n, size_t size);
@@ -94,6 +146,16 @@ void dash_plat_buffer_free(void *p);
 /* memoria para estructuras de AmigaOS (@amiga struct: amiga_alloc), por debajo de 4 GB: la de la caja Amiga */
 void *dash_plat_box_alloc(unsigned long bytes);
 void dash_plat_box_free(void *p, unsigned long bytes);
+/* un fichero entero, por su nombre del Amiga ("LOCALE:Catalogs/..."), en memoria de AllocVec con un 0 detrás; NULL si
+   no está o no se sabe dónde (los catálogos; los nombres, en runtime/dashos/dos.c) */
+void *dash_plat_file_load(const char *path, long *size);
+/* el selector de ficheros de DashOS: el usuario elige un fichero para leer (save 0: luego es "Elegido:") o una carpeta
+   para guardar (save 1: "Carpeta:"); 1 si eligió, 0 si no, -1 si no hay selector (en Linux, nunca) */
+long dash_plat_choose(int save);
+/* una variable del entorno (en Linux; en DashOS aún no hay: NULL) */
+const char *dash_plat_getenv(const char *name);
+/* la llave del compositor ("ventanas"), según las que traía el programa al nacer: 3 si las tenía, si no 1 */
+long dash_plat_windows_key(void);
 #define _DASH_AMIGA_ALLOC(n) ((_DashP)dash_plat_box_alloc((unsigned long)(n)))
 #define _DASH_AMIGA_FREE(p, n) dash_plat_box_free((void *)(_DashP)(p), (unsigned long)(n))
 

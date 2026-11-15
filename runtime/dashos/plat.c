@@ -502,18 +502,37 @@ void _dash_relocate(void)
 int main() __attribute__((weak));
 void _dash_atexit_run(void);
 __asm__(".text\n.global _start\n.type _start, %function\n_start:\n"
-        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    bl _dash_start_c\n    b .\n"
+        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    bl _dash_keys_at_start\n    bl _dash_start_c\n    b .\n"
         ".global _dash_entry\n.type _dash_entry, %function\n.weak _dashc_start\n_dash_entry:\n"
-        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    b _dashc_start\n");
+        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    bl _dash_keys_at_start\n    b _dashc_start\n");
+
+/* Qué llaves trae el programa al nacer, antes de crear ninguna, y así dónde está cada una: lo que lanza `sesiones` tiene
+   3, 1 su canal, 2 archivos y 3 ventanas; lo que lanza `inicio` con "ventanas" y "archivos", esas dos (1 y 2), y con
+   "sesiones" y "selector" además (la prueba de DashOS), cuatro: 3 sesiones y 4 el selector (los canales que da `inicio`
+   van en el orden de su lista de programas, y "ventanas" es el primero). DashOS no dice qué es cada llave. */
+static long keys_at_start = 0;
+void _dash_keys_at_start(void) __attribute__((used));
+void _dash_keys_at_start(void)
+{
+#ifndef DASH_PLAT_LINUX
+    long out[2];
+    /* (memoria_tamano da -2 sin esa llave) */
+    while (keys_at_start < 8 && dash_os_call(27, keys_at_start + 1, 0, 0, 0, 0, out) != -2) keys_at_start++;
+#endif
+}
+long dash_plat_windows_key(void) { return keys_at_start == 3 ? 3 : 1; }
 void _dash_start_c(void) __attribute__((noreturn, used));
 void _dash_start_c(void) { exit(main()); }
 
 static char out_buf[512];
 static int out_n;
 
+static LONG dos_write(BPTR fh, const void *buf, LONG len);   /* (los ficheros: dos.c, al final) */
+static LONG dos_flush(BPTR fh);
+
 LONG Flush(BPTR fh)
 {
-    (void)fh;
+    if (fh != 1) return dos_flush(fh);
     if (out_n) dash_plat_write(out_buf, out_n);
     out_n = 0;
     return 1;
@@ -680,13 +699,12 @@ LONG Write(BPTR fh, const void *buf, LONG len)
 {
     const char *s = buf;
     LONG i;
-    (void)fh;
+    if (fh != 1) return dos_write(fh, buf, len);
     for (i = 0; i < len; i++) {
         if (out_n == (int)sizeof out_buf) Flush(1);
         out_buf[out_n++] = s[i];
-#ifdef DASH_PLAT_LINUX
-        if (s[i] == '\n') Flush(1);                    /* (en las pruebas: lo escrito se ve aunque el programa caiga) */
-#endif
+        /* Por líneas: lo escrito se ve aunque el programa caiga, y el de un programa con ventana mientras espera */
+        if (s[i] == '\n') Flush(1);
     }
     return len;
 }
@@ -843,6 +861,20 @@ char *strcpy(char *d, const char *s)
     return r;
 }
 
+char *strcat(char *d, const char *s)
+{
+    strcpy(d + strlen(d), s);
+    return d;
+}
+
+char *strncpy(char *d, const char *s, size_t n)
+{
+    size_t i = 0;
+    for (; i < n && s[i]; i++) d[i] = s[i];
+    for (; i < n; i++) d[i] = 0;
+    return d;
+}
+
 char *strchr(const char *s, int c)
 {
     for (;; s++) {
@@ -850,3 +882,6 @@ char *strchr(const char *s, int c)
         if (!*s) return NULL;
     }
 }
+
+/* ---- ficheros y cajones (lo de dos.library): dos.c ---- */
+#include "dos.c"

@@ -34,7 +34,8 @@ SKIP = {"dl_window_open", "dl_init_area", "dl_forget", "dl_window_close", "dl_ev
 def portables():
     """Los builtins que compilan para DashOS (runtime/dashos/portables.py, que se ejecuta si hace falta)"""
     f = OUT / "portables.txt"
-    if not f.exists():
+    fuentes = [REPO / "compiler" / "codegen.py", REPO / "compiler" / "amiga_builtins.py"]
+    if not f.exists() or f.stat().st_mtime < max(x.stat().st_mtime for x in fuentes):   # (unos 30 s)
         subprocess.run([sys.executable, str(HERE / "portables.py")], check=True)
     return [n for n in f.read_text().split() if n]
 
@@ -65,6 +66,13 @@ def runtime_c(memcheck):
     text, n = re.subn(r"static const char \*const _dash_srcfiles\[\] = \{[^\n]*\};", "extern const char *_dash_srcfiles[64];", text)
     assert n == 1, "no encuentro _dash_srcfiles"
     text = text.replace("static const char *_dash_mc_where = NULL;", "const char *_dash_mc_where = NULL;")
+    # @catalog: el nombre, la versión y el idioma propio los pone el programa al arrancar (como gen_lib.py)
+    old = ("#ifndef _DASH_CATALOG_NAME\n#define _DASH_CATALOG_NAME NULL\n#define _DASH_CATALOG_VERSION 0\n"
+           "#define _DASH_CATALOG_BUILTIN NULL\n#endif\n")
+    if old in text:
+        text = text.replace(old, "char *_dash_catalog_name;\nLONG _dash_catalog_version;\nchar *_dash_catalog_builtin;\n"
+                            "#define _DASH_CATALOG_NAME _dash_catalog_name\n#define _DASH_CATALOG_VERSION _dash_catalog_version\n"
+                            "#define _DASH_CATALOG_BUILTIN _dash_catalog_builtin\n")
     # @version: program_version() da lo que pone el programa al arrancar (como gen_lib.py)
     old = "static STRPTR _dash_program_version(void) { return (STRPTR)_DASH_VERSION; }"
     if old in text:

@@ -84,6 +84,33 @@ def link_flags(entry, stack, pie):
     return ["-static", *where, "-e", entry, "-z", "separate-loadable-segments", "-z", f"stack-size={stack}"]
 
 
+def kit_c(be=False):
+    """libkit_c.a de DashOS (las ventanas de mui_*: docs/DASHOS_VENTANAS_LOOP.md): la de $DASH_KIT_C, la que deja
+    `make -C kernel kit-c` en $DASHOS_DIR/build (de serie ~/Projects/dashos) o la de cargo en kit-c/. Se copia a
+    build/dashos/ con el memcpy de la biblioteca dashos débil (manda el de plat.c). Devuelve (ruta, error)"""
+    if be:
+        return None, "las ventanas (mui_*) en DashOS son de los programas nativos, no de la caja Amiga (--be)\n"
+    dashos = Path(os.environ.get("DASHOS_DIR") or Path.home() / "Projects" / "dashos")
+    cands = [Path(os.environ["DASH_KIT_C"])] if os.environ.get("DASH_KIT_C") else []
+    cands += [dashos / "build" / "libkit_c.a", dashos / "kit-c" / "target" / "aarch64-unknown-none" / "release" / "libkit_c.a"]
+    src = next((c for c in cands if c.exists()), None)
+    if not src:
+        return None, (f"falta libkit_c.a de DashOS para las ventanas (mui_*): make -C kernel kit-c en DashOS, o "
+                      f"DASHOS_DIR / DASH_KIT_C (buscado en {', '.join(map(str, cands))})\n")
+    out = out_dir() / "libkit_c.a"
+    with _lib_lock:
+        if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            part = out.with_suffix(".part")
+            subprocess.run(["llvm-objcopy", "--weaken-symbol=memcpy", str(src), str(part)], check=True)
+            shutil.move(str(part), str(out))
+    return out, ""
+
+
+# Las ventanas piden pila: el kit dibuja letras y coloca grupos con recursión
+UI_STACK = 262144
+
+
 def build(src, exe, linux=True, memcheck=False, pie=False, be=False):
     """Transpila y enlaza; devuelve (ok, mensajes)"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +132,12 @@ def build(src, exe, linux=True, memcheck=False, pie=False, be=False):
             objs.append(str(o))
         from compiler.clibs import LIBRARIES, uses_library
         objs += [str(library(n, be)) for n in LIBRARIES if uses_library(n, text)]
+        if "dash_ui_" in text:                       # (mui_*: las ventanas de kit-c)
+            ui, err = kit_c(be)
+            if not ui:
+                return False, err
+            objs += [str(ui), "--undefined-glob=dash_ui_*"]
+            stack = max(stack, UI_STACK)
         r = subprocess.run(["ld.lld", *link_flags("_start", stack, pie), *objs, "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
@@ -137,17 +170,27 @@ def build_direct(src, exe, linux=True, memcheck=False, pie=False, be=False):
         if r.returncode:
             return False, r.stderr
         libs = [str(library(n, be)) for n in ("ryu", "fdlibm", "zlib")]
-        r = subprocess.run(["ld.lld", *link_flags("_dash_entry", 65536, pie),
+        stack = 65536
+        nm = subprocess.run(["llvm-nm", "-u", str(o)], capture_output=True, text=True).stdout
+        if "db_mui_" in nm:                          # (mui_*: las ventanas de kit-c)
+            ui, err = kit_c(be)
+            if not ui:
+                return False, err
+            libs += [str(ui), "--undefined-glob=dash_ui_*"]
+            stack = UI_STACK
+        r = subprocess.run(["ld.lld", *link_flags("_dash_entry", stack, pie),
                             str(o), str(rt), str(plat), *libs, str(rt), "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
     return True, ""
 
 
-def run(exe, timeout=30):
+def run(exe, timeout=30, cwd=None, env=None):
+    """Lo ejecuta en qemu: (código, salida, errores). env, variables de más (DASH_LANGUAGE, DASH_LOCALE_DIR...)"""
     with open(exe, "rb") as f:
         be = f.read(6)[5] == 2                         # (EI_DATA)
-    r = subprocess.run(["qemu-aarch64_be" if be else "qemu-aarch64", str(exe)], capture_output=True, timeout=timeout, preexec_fn=_no_core)
+    r = subprocess.run(["qemu-aarch64_be" if be else "qemu-aarch64", str(Path(exe).resolve())], capture_output=True,
+                       timeout=timeout, preexec_fn=_no_core, cwd=cwd, env=dict(os.environ, **(env or {})))
     return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")   # (DashOS: UTF-8)
 
 

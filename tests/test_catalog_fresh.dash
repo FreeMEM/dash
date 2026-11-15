@@ -3,6 +3,7 @@
 # keeps the catalogs it loaded and gives that one while anyone has it open. Dash reads the catalog from its
 # file, so catalog_open after the file changed gives the new texts.
 # emu-needs: locale.library
+# dashos-skip: abre el catálogo viejo con OpenCatalog de locale.library (@native del Amiga)
 # emu-catalog: lib/catalogo_english.ct
 # emu-catalog: lib/catalogo_nuevo_english.ct
 # memcheck

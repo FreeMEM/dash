@@ -4859,10 +4859,55 @@ It needs `clang` (with the `aarch64-none-elf` and `aarch64_be-none-elf` targets)
 
 - The language is the same: strings, lists, dictionaries, structs, interfaces, Float, Double, Fixed.
 - So are the builtins that do not depend on AmigaOS: strings, maths, UTF-8, regular expressions, `peek_*` and
-  `poke_*`, among others. Windows, graphics, files and network will come with the DashOS API.
+  `poke_*`, among others. Files too (see below). Graphics and network will come with the DashOS API.
 - Pointers are 64-bit. An Int is still 32-bit.
 - Float and Double use the processor's FPU.
 - Strings are UTF-8 (on the Amiga, Latin-1).
+
+### Windows and catalogs on DashOS
+
+MUI windows (`mui_*`) work on DashOS with the DashOS kit: the same program comes out with MUI on the Amiga and with
+the Material 3 look on DashOS. For now, these: `mui_app_begin`/`end`, `mui_window_begin`/`end`/`open`/`close`,
+`mui_vgroup_begin`, `mui_hgroup_begin`, `mui_group_end`, `mui_text`, `mui_label`, `mui_button`, `mui_string`,
+`mui_checkbox`, `mui_cycle`, `mui_list` (with `mui_list_add`, `_insert`, `_remove`, `_clear`, `_count`, `_get` and
+`mui_on_double`), menus (`mui_menu_begin`, `mui_menu_item`, `mui_menu_separator`, `mui_menu_end`), events
+(`mui_on_press`, `mui_on_change`, `mui_on_close`, `mui_wait_event`), `mui_get_text`, `mui_set_text`,
+`mui_get_value`, `mui_set_value`, `mui_set_enabled` and `mui_request`. The other `mui_*` are a compile error.
+
+- It needs DashOS's `libkit_c.a` (`make -C kernel kit-c` in DashOS). It is looked for in `$DASH_KIT_C`,
+  `$DASHOS_DIR/build` (by default `~/Projects/dashos/build`) and `$DASHOS_DIR/kit-c/target/`. It is only linked if
+  the program uses `mui_*`.
+- A label (`mui_label`) followed by a text field, a cycle or a checkbox becomes that control's label, as in Material
+  3. MUI's text codes and the underscore of the keys are not shown.
+- Menus go, for now, in a row at the top of the window; the lines between items are not shown.
+
+`tr`, `@catalog`, `catalog_open` and `catalog_language` work too. The catalog is looked for in
+`LOCALE:Catalogs/<language>/` (and in `PROGDIR:Catalogs/` on the PC). The language comes from `ENV:Sys/locale.prefs`,
+as on the Amiga; while DashOS has no `ENV:`, it is Spanish (on the PC, with qemu, `DASH_LANGUAGE`). DashOS catalogs
+are UTF-8: `tools/catalogo.py catalog x.ct --utf8`. An Amiga one (Latin-1) works too.
+
+### Files on DashOS
+
+The file and drawer builtins work on DashOS through the file service: `file_read_text`, `file_write_text`,
+`file_open` and the ones that read and write in parts, `file_exists`, `file_size`, `file_delete`, `file_rename`,
+`file_copy`, `dir_create`, `dir_read` and the `dir_entry_*`, protection and comment. A file's date cannot be changed
+(`file_set_date` gives false).
+
+Names are the Amiga's, for now with few volumes: `SYS:` and `PROGDIR:` are the program's root in the file service,
+and `LOCALE:` its `Locale` drawer. A name without a volume goes from the current drawer (`dir_change`). DashOS's
+assigns (`ENV:`, `RAM:`, `Work:`...) will come later.
+
+`file_open_dialog`, `file_save_dialog`, `dialog_file` and `dialog_file_at` open DashOS's file selector:
+
+- To open, the user picks a file and the program can read it as `Elegido:`, which is what `file_fullpath()` gives.
+  The program does not know the file's name.
+- To save, the user picks a folder, which is `Carpeta:`. The file is named as the one given to `dialog_file_at` (or
+  "Sin título"). Only one folder is picked per run: the next times nobody is asked.
+- For now only a program that gets the selector as its fourth key has it. `sesiones` does not give it yet to what it
+  launches; without it, the dialog gives false (or `""`).
+
+On the PC, with qemu, the files are Linux's: `X:` is the drawer in the variable `DASH_X_DIR` (`DASH_RAM_DIR`,
+`DASH_T_DIR`...) and there is no selector.
 
 ### Amiga structures: `@amiga struct`
 
