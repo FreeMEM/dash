@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1008 funciones, 1008 implementadas, 0 sin implementar.
+Total: 1009 funciones, 1009 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -4054,6 +4054,7 @@ end
 | [`dir_entry_protection(i)`](#dir_entry_protection) | Int | Los bits de protección de la entrada i del último dir_read, como los guarda el sistema de ficheros (0-3 d e w r puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no la hay |  |
 | [`dir_entry_comment(i)`](#dir_entry_comment) | String | El comentario (nota) de la entrada i del último dir_read; "" si no tiene |  |
 | [`file_protection(path)`](#file_protection) | Int | Los bits de protección de un fichero o cajón, como los guarda el sistema de ficheros (0-3 d e w r puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no se puede leer |  |
+| [`path_free_kb(path)`](#path_free_kb) | Int | El espacio libre en KB del volumen donde está un fichero, cajón o asignación (SYS:, PROGDIR:, RAM:T/...); -1 si no se encuentra o no se puede leer |  |
 | [`file_set_protection(path, bits)`](#file_set_protection) | Bool | Pone los bits de protección de un fichero o cajón (como los da file_protection); false si no pudo |  |
 | [`file_comment(path)`](#file_comment) | String | El comentario (nota) de un fichero o cajón; "" si no tiene o no se puede leer |  |
 | [`file_set_comment(path, text)`](#file_set_comment) | Bool | Pone el comentario (nota) de un fichero o cajón (hasta 79 letras; "" lo quita); false si no pudo |  |
@@ -4380,6 +4381,24 @@ end
 ```
 
 Ver también: [`file_set_protection`](#file_set_protection), [`dir_entry_protection`](#dir_entry_protection).
+
+<a id="path_free_kb"></a>
+
+### `path_free_kb(path)` → `Int`
+
+- `path`: un fichero, un cajón o una asignación (`SYS:`, `PROGDIR:`, `RAM:T/`...).
+
+Devuelve el espacio libre en KB del volumen donde está, como lo da `Info`; -1 si no existe o no se puede leer. No pide
+que se meta un disco. Sirve para no empezar a copiar o instalar algo que no cabe.
+
+```dash
+libre = path_free_kb("SYS:")
+if libre >= 0 and libre < 2048
+    Print "Hacen falta 2 MB libres en SYS:"
+end
+```
+
+Ver también: [`disk_free_kb`](#disk_free_kb), [`file_size`](#file_size).
 
 <a id="file_set_protection"></a>
 

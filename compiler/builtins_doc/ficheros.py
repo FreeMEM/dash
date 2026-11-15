@@ -397,6 +397,35 @@ end
 """,
         "see": ["file_set_protection", "dir_entry_protection"],
     },
+    "path_free_kb": {
+        "es": """\
+- `path`: un fichero, un cajón o una asignación (`SYS:`, `PROGDIR:`, `RAM:T/`...).
+
+Devuelve el espacio libre en KB del volumen donde está, como lo da `Info`; -1 si no existe o no se puede leer. No pide
+que se meta un disco. Sirve para no empezar a copiar o instalar algo que no cabe.
+
+```dash
+libre = path_free_kb("SYS:")
+if libre >= 0 and libre < 2048
+    Print "Hacen falta 2 MB libres en SYS:"
+end
+```
+""",
+        "en": """\
+- `path`: a file, a drawer or an assign (`SYS:`, `PROGDIR:`, `RAM:T/`...).
+
+Returns the free space in KB of the volume it is on, as `Info` gives it; -1 if it does not exist or cannot be read.
+It never asks for a disk to be inserted. Useful to avoid starting a copy or an install that does not fit.
+
+```dash
+free = path_free_kb("SYS:")
+if free >= 0 and free < 2048
+    Print "2 MB free are needed on SYS:"
+end
+```
+""",
+        "see": ["disk_free_kb", "file_size"],
+    },
     "file_set_protection": {
         "es": "- `path`: el fichero o cajón.\n- `bits`: los bits, como los da `file_protection`.\n\nLos pone, como `Protect`. Devuelve `false` si no pudo.\n",
         "en": "- `path`: the file or drawer.\n- `bits`: the bits, as `file_protection` gives them.\n\nSets them, like `Protect`. Returns `false` if it could not.\n",

@@ -1,0 +1,19 @@
+# Test: path_free_kb, the free space in KB of the volume of a path, also through an assign (for a package manager: not
+# starting an install that does not fit). RAM: gives some number; a volume that does not exist gives -1 with no
+# requester. In 3.1, RAM: says it is full (0 KB free).
+# expect-out: ram true
+# expect-out: cajon true
+# expect-out: asignacion true
+# expect-out: no existe -1
+# expect-out: fin
+
+Main
+    ram = path_free_kb("RAM:")
+    Print "ram #{ram >= 0}"
+    ok = file_write_text("RAM:pfk_uno", "hola")
+    Print "cajon #{path_free_kb(\"RAM:pfk_uno\") >= 0}"
+    Print "asignacion #{path_free_kb(\"SYS:\") > 0}"
+    Print "no existe #{path_free_kb(\"NoHayTal:\")}"
+    ok = file_delete("RAM:pfk_uno")
+    Print "fin"
+end

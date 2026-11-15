@@ -16634,6 +16634,29 @@ static LONG _dash_file_date(STRPTR path) {
     return r;
 }
 static BOOL _dash_file_set_protection(STRPTR path, LONG bits) { return path && SetProtection(path, bits); }
+
+/* The free space in KB of the volume a path is on, also through an assign (a package manager: not starting an install that
+   does not fit). Lock and Info, with no "insert volume" requester; -1 if it cannot be locked or read */
+static LONG _dash_path_free_kb(STRPTR path) {
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR win = me->pr_WindowPtr;
+    struct InfoData *id;
+    BPTR lock;
+    LONG kb = -1;
+    if (!path) return -1;
+    me->pr_WindowPtr = (APTR)-1;
+    lock = Lock(path, SHARED_LOCK);
+    me->pr_WindowPtr = win;
+    if (!lock) return -1;
+    if ((id = (struct InfoData *)AllocVec(sizeof(struct InfoData), MEMF_PUBLIC)) && Info(lock, id)) {
+        ULONG free = (ULONG)(id->id_NumBlocks - id->id_NumBlocksUsed), bpb = (ULONG)id->id_BytesPerBlock;
+        if (bpb >= 1024) kb = (LONG)(free * (bpb / 1024));
+        else if (bpb) kb = (LONG)(free / (1024 / bpb));
+    }
+    if (id) FreeVec(id);
+    UnLock(lock);
+    return kb;
+}
 static BOOL _dash_file_set_comment(STRPTR path, STRPTR text) {
     return path && SetComment(path, text ? text : (STRPTR)"");
 }
@@ -22707,21 +22730,59 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     return 0;
 }
 
-/* Picture file shown by datatypes.library (ILBM; PNG, JPEG, GIF with their datatypes) */
+/* A picture shown by datatypes.library (ILBM; PNG, JPEG, GIF with their datatypes), as an image (frame 0) or a
+   button (frame: MUI's image button frame and background, with that input mode). MUI 3.8 (muimaster < 20) only reads
+   MUIA_Dtpic_Name at creation (mui_set_text did not change the picture, seen in CoffinOS): there
+   the Dtpic goes inside a group of its own, with the frame and the input, and mui_set_text swaps the Dtpic in it
+   (_dash_mui_dtpic_swap). The object Dash hands out is the group: it stays the same. */
+static Object *_dash_mui_picture(STRPTR file, LONG frame, ULONG mode, LONG selected) {
+    Object *pic;
+    if (MUIMasterBase->lib_Version >= 20)
+        return frame ? _DASH_MUI_NEW(MUIC_Dtpic, MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file),
+                           MUIA_Frame, MUIV_Frame_ImageButton, MUIA_Background, MUII_ImageButtonBack,
+                           MUIA_InputMode, mode, MUIA_Selected, selected ? TRUE : FALSE, MUIA_CycleChain, 1)
+                     : _DASH_MUI_NEW(MUIC_Dtpic, MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file));
+    /* (MUI 3.8 does not give MUIA_Dtpic_Name back: the name also goes in the Dtpic's MUIA_UserData) */
+    file = _dash_mui_keep(file);
+    if (!(pic = _DASH_MUI_NEW(MUIC_Dtpic, MUIA_Dtpic_Name, (IPTR)file, MUIA_UserData, (IPTR)file))) return NULL;
+    return frame ? _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Spacing, 0,
+                       MUIA_Frame, MUIV_Frame_ImageButton, MUIA_Background, MUII_ImageButtonBack,
+                       MUIA_InputMode, mode, MUIA_Selected, selected ? TRUE : FALSE, MUIA_CycleChain, 1,
+                       MUIA_Group_Child, (IPTR)pic)
+                 : _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Spacing, 0, MUIA_InnerLeft, 0, MUIA_InnerRight, 0,
+                       MUIA_InnerTop, 0, MUIA_InnerBottom, 0, MUIA_Group_Child, (IPTR)pic);
+}
+
+/* The Dtpic of a picture: itself, or the one inside its group (MUI 3.8) */
+static Object *_dash_mui_dtpic(Object *obj) {
+    IPTR list = 0;
+    APTR state;
+    Object *child;
+    if (MUIMasterBase->lib_Version >= 20 || !GetAttr(MUIA_Group_ChildList, obj, &list) || !list) return obj;
+    state = (APTR)((struct List *)list)->lh_Head;
+    child = (Object *)NextObject((Object **)&state);
+    return child ? child : obj;
+}
+
+/* MUI 3.8: a new Dtpic with that file, in place of the old one in its group */
+static void _dash_mui_dtpic_swap(Object *obj, STRPTR file) {
+    Object *old = _dash_mui_dtpic(obj), *pic;
+    if (old == obj || !(pic = _DASH_MUI_NEW(MUIC_Dtpic, MUIA_Dtpic_Name, (IPTR)file, MUIA_UserData, (IPTR)file))) return;
+    _DASH_MUI_DO(obj, MUIM_Group_InitChange);
+    _DASH_MUI_DO(obj, OM_REMMEMBER, (IPTR)old);
+    _DASH_MUI_DO(obj, OM_ADDMEMBER, (IPTR)pic);
+    _DASH_MUI_DO(obj, MUIM_Group_ExitChange);
+    MUI_DisposeObject(old);
+}
+
 static APTR _dash_mui_image(STRPTR file) {
-    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Dtpic,
-        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file)), _DASH_MUI_IMAGE);
+    return _dash_mui_add_kind(_dash_mui_picture(file, 0, 0, 0), _DASH_MUI_IMAGE);
 }
 
 /* A button that shows a picture (toolbar icons, dashweb D38): MUI's image button frame and
    background, pressed like a button (mui_on_press); mui_set_text changes the picture */
 static APTR _dash_mui_image_button(STRPTR file) {
-    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Dtpic,
-        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file),
-        MUIA_Frame, MUIV_Frame_ImageButton,
-        MUIA_Background, MUII_ImageButtonBack,
-        MUIA_InputMode, MUIV_InputMode_RelVerify,
-        MUIA_CycleChain, 1), _DASH_MUI_IMAGE);
+    return _dash_mui_add_kind(_dash_mui_picture(file, 1, MUIV_InputMode_RelVerify, 0), _DASH_MUI_IMAGE);
 }
 
 /* Toolbar buttons that stay pressed (Lorraine D14): bold, italic... (group 0, each one on its own)
@@ -22730,13 +22791,7 @@ static APTR _dash_mui_image_button(STRPTR file) {
    gives the event of the one that gets pressed. */
 
 static APTR _dash_mui_image_toggle(STRPTR file, LONG group, LONG selected) {
-    Object *obj = _DASH_MUI_NEW(MUIC_Dtpic,
-        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file),
-        MUIA_Frame, MUIV_Frame_ImageButton,
-        MUIA_Background, MUII_ImageButtonBack,
-        MUIA_InputMode, group > 0 ? MUIV_InputMode_Immediate : MUIV_InputMode_Toggle,
-        MUIA_Selected, selected ? TRUE : FALSE,
-        MUIA_CycleChain, 1);
+    Object *obj = _dash_mui_picture(file, 1, group > 0 ? MUIV_InputMode_Immediate : MUIV_InputMode_Toggle, selected);
     LONG i;
     if (obj && group > 0) {
         if (_dash_mui_nradio == _DASH_MUI_RADIOS) _dash_mui_error("too many buttons in groups");
@@ -22979,19 +23034,60 @@ static STRPTR _dash_mui_get_text(APTR obj) {
     STRPTR text = NULL;
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
     char *pen;
-    if (attr) GetAttr(attr, _dash_mui_combo_str(obj), (IPTR *)&text);
+    if (attr == MUIA_Dtpic_Name)
+        GetAttr(MUIMasterBase->lib_Version < 20 ? MUIA_UserData : attr, _dash_mui_dtpic((Object *)obj), (IPTR *)&text);
+    else if (attr) GetAttr(attr, _dash_mui_combo_str(obj), (IPTR *)&text);
     if (text && attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj)) &&
         !strncmp((char *)text, pen, strlen(pen)))
         text += strlen(pen);
     return text ? text : (STRPTR)"";
 }
 
+static LONG _dash_mui_lines(STRPTR s);
+static void _dash_mui_set_text_now(APTR obj, STRPTR text);
+
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
-    char *pen;
     if (!attr) return;
     if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
+    if (attr == MUIA_Dtpic_Name) {
+        IPTR parent = 0;
+        if (MUIMasterBase->lib_Version < 20) { _dash_mui_dtpic_swap((Object *)obj, text); return; }
+        /* MUI 5 changes the picture but keeps the old size: its group lays it out again */
+        if (GetAttr(MUIA_Parent, obj, &parent) && parent) {
+            _DASH_MUI_DO(parent, MUIM_Group_InitChange);
+            SetAttrs(obj, attr, (IPTR)text, TAG_DONE);
+            _DASH_MUI_DO(parent, MUIM_Group_ExitChange);
+            return;
+        }
+    }
+    if (attr == MUIA_Text_Contents && MUIMasterBase->lib_Version < 20) {
+        /* MUI 3.8 does not lay out a text again when its number of lines changes: a shorter one left pieces of the
+           old one (CoffinOS with RTG). Then its group changes, as mui_set_visible does */
+        STRPTR old = NULL;
+        IPTR parent = 0;
+        GetAttr(MUIA_Text_Contents, obj, (IPTR *)&old);
+        if (_dash_mui_lines(old) != _dash_mui_lines(text) && GetAttr(MUIA_Parent, obj, &parent) && parent) {
+            _DASH_MUI_DO(parent, MUIM_Group_InitChange);
+            _dash_mui_set_text_now(obj, text);
+            _DASH_MUI_DO(parent, MUIM_Group_ExitChange);
+            return;
+        }
+    }
+    _dash_mui_set_text_now(obj, text);
+}
+
+/* Lines of a text (0 for none) */
+static LONG _dash_mui_lines(STRPTR s) {
+    LONG n = s && *s ? 1 : 0;
+    for (; s && *s; s++) if (*s == '\\n' && s[1]) n++;
+    return n;
+}
+
+static void _dash_mui_set_text_now(APTR obj, STRPTR text) {
+    ULONG attr = _dash_mui_text_attr(obj);
+    char *pen;
     if (attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj))) {
         /* (MUI copies the text: a buffer of its own for the escape in front) */
         ULONG len = text ? strlen((char *)text) : 0, plen = strlen(pen);
