@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1008 functions, 1008 implemented, 0 not implemented.
+Total: 1009 functions, 1009 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4054,6 +4054,7 @@ end
 | [`dir_entry_protection(i)`](#dir_entry_protection) | Int | Protection bits of entry i of the last dir_read, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if there is no entry i |  |
 | [`dir_entry_comment(i)`](#dir_entry_comment) | String | Comment (filenote) of entry i of the last dir_read; "" if it has none |  |
 | [`file_protection(path)`](#file_protection) | Int | Protection bits of a file or drawer, as the file system keeps them (0-3 d e w r set: not allowed; 4 a, 5 p, 6 s, 7 h); -1 if it cannot be read |  |
+| [`path_free_kb(path)`](#path_free_kb) | Int | Free space in KB of the volume a file, drawer or assign is on (SYS:, PROGDIR:, RAM:T/...); -1 if it cannot be found or read |  |
 | [`file_set_protection(path, bits)`](#file_set_protection) | Bool | Sets the protection bits of a file or drawer (as file_protection gives them); false if it could not |  |
 | [`file_comment(path)`](#file_comment) | String | Comment (filenote) of a file or drawer; "" if it has none or cannot be read |  |
 | [`file_set_comment(path, text)`](#file_set_comment) | Bool | Sets the comment (filenote) of a file or drawer (up to 79 characters; "" removes it); false if it could not |  |
@@ -4380,6 +4381,24 @@ end
 ```
 
 See also: [`file_set_protection`](#file_set_protection), [`dir_entry_protection`](#dir_entry_protection).
+
+<a id="path_free_kb"></a>
+
+### `path_free_kb(path)` → `Int`
+
+- `path`: a file, a drawer or an assign (`SYS:`, `PROGDIR:`, `RAM:T/`...).
+
+Returns the free space in KB of the volume it is on, as `Info` gives it; -1 if it does not exist or cannot be read.
+It never asks for a disk to be inserted. Useful to avoid starting a copy or an install that does not fit.
+
+```dash
+free = path_free_kb("SYS:")
+if free >= 0 and free < 2048
+    Print "2 MB free are needed on SYS:"
+end
+```
+
+See also: [`disk_free_kb`](#disk_free_kb), [`file_size`](#file_size).
 
 <a id="file_set_protection"></a>
 

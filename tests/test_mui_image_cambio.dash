@@ -1,0 +1,60 @@
+# mui_set_text on a picture changes it, also in MUI 3.8, where MUIA_Dtpic_Name is only read at creation (the
+# runtime swaps the Dtpic in a group of its own: a screenshot tab stayed empty in CoffinOS). It starts
+# with a file that does not exist and changes to an 8 x 4 ILBM: its size on screen and mui_get_text tell.
+# A text whose number of lines changes is laid out again (in MUI 3.8 a shorter one left pieces of the old one).
+# emu-needs: muimaster.library
+# expect-out: fichero escrito
+# expect-out: cambiada 8 x 4
+# expect-out: nombre T:cambio.ilbm
+# expect-out: boton T:cambio.ilbm
+# expect-out: texto Una
+# expect-out: fin
+
+@native func write_ilbm(path: String) -> Int
+"""
+    static const UBYTE ilbm[70] = {
+        70, 79, 82, 77, 0, 0, 0, 62, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 8, 0, 4,
+        0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 10, 11, 1, 64, 0, 200, 67, 77, 65, 80, 0, 0, 0, 6,
+        0, 0, 0, 255, 255, 255, 66, 79, 68, 89, 0, 0, 0, 8, 240, 0, 15, 0, 170, 0, 85, 0 };
+    BPTR f = Open(path, MODE_NEWFILE);
+    LONG n;
+    if (!f) return 0;
+    n = Write(f, (APTR)ilbm, sizeof(ilbm));
+    Close(f);
+    return n == sizeof(ilbm);
+"""
+end
+
+Main
+    if write_ilbm("T:cambio.ilbm") == 1
+        Print "fichero escrito"
+    end
+    if mui_app_begin("Imagen", "DASHIMGC") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Imagen", 0)
+            mui_vgroup_begin()
+                mui_hgroup_begin()
+                    img = mui_image("T:no_existe.ilbm")
+                    mui_space()
+                mui_group_end()
+                boton = mui_image_button("T:no_existe.ilbm")
+                txt = mui_text("Una\nDos\nTres")
+            mui_group_end()
+        mui_window_end()
+        mui_window_open(win)
+        mui_set_text(img, "T:cambio.ilbm")
+        mui_set_text(boton, "T:cambio.ilbm")
+        mui_set_text(txt, "Una")
+        for k in (1..20)                      # (the new size comes in the window's event loop)
+            e = mui_poll_event()
+            time_delay_ms(100)
+        end
+        Print "cambiada #{mui_width(img)} x #{mui_height(img)}"
+        Print "nombre " + mui_get_text(img)
+        Print "boton " + mui_get_text(boton)
+        Print "texto " + mui_get_text(txt)
+        mui_app_end()
+        Print "fin"
+    end
+end

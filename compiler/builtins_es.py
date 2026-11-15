@@ -262,6 +262,7 @@ DESC_ES = {
     "dir_entry_protection": "Los bits de protección de la entrada i del último dir_read, como los guarda el sistema de "
                             "ficheros (0-3 d e w r puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no la hay",
     "dir_entry_comment": "El comentario (nota) de la entrada i del último dir_read; \"\" si no tiene",
+    "path_free_kb": "El espacio libre en KB del volumen donde está un fichero, cajón o asignación (SYS:, PROGDIR:, RAM:T/...); -1 si no se encuentra o no se puede leer",
     "file_protection": "Los bits de protección de un fichero o cajón, como los guarda el sistema de ficheros (0-3 d e w r "
                        "puestos: no se permite; 4 a, 5 p, 6 s, 7 h); -1 si no se puede leer",
     "file_set_protection": "Pone los bits de protección de un fichero o cajón (como los da file_protection); false si no pudo",
