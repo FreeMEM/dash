@@ -1,5 +1,5 @@
 # Ficheros y cajones en DashOS (docs/DASHOS_VENTANAS_LOOP.md, fase 2: runtime/dashos/dos.c): escribir, leer entero y
-# por líneas, mover a un cajón nuevo, listarlo, copiar, la protección y el comentario, y borrar. En qemu, sobre Linux
+# por líneas, mover a un cajón nuevo, listarlo, copiar, la protección, el comentario y la fecha, y borrar. En qemu, sobre Linux
 # (RAM: es $DASH_RAM_DIR, que pone el runner); en DashOS, lo mismo va por el servicio de archivos. Sin selector, el
 # diálogo de abrir da false.
 # expect-out: escrito true, 16 bytes, existe true
@@ -11,6 +11,7 @@
 # expect-out: fin del fichero true
 # expect-out: copia true, 16 bytes
 # expect-out: protección true, comentario Una nota
+# expect-out: fecha true true
 # expect-out: borrado true true true, queda false
 # expect-out: selector false
 
@@ -43,6 +44,8 @@ Main
     pr = file_set_protection("RAM:copia.txt", p + 4)
     pr = pr and file_protection("RAM:copia.txt") == p + 4
     Print "protección #{pr}, comentario " + file_comment("RAM:copia.txt")
+    fe = file_set_date("RAM:copia.txt", 1700000000)
+    Print "fecha #{fe} #{file_date(\"RAM:copia.txt\") == 1700000000}"
     a = file_delete("RAM:copia.txt")
     b = file_delete("RAM:Listas/nota.txt")
     d = file_delete("RAM:Listas")

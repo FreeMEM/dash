@@ -4890,8 +4890,7 @@ are UTF-8: `tools/catalogo.py catalog x.ct --utf8`. An Amiga one (Latin-1) works
 
 The file and drawer builtins work on DashOS through the file service: `file_read_text`, `file_write_text`,
 `file_open` and the ones that read and write in parts, `file_exists`, `file_size`, `file_delete`, `file_rename`,
-`file_copy`, `dir_create`, `dir_read` and the `dir_entry_*`, protection and comment. A file's date cannot be changed
-(`file_set_date` gives false).
+`file_copy`, `dir_create`, `dir_read` and the `dir_entry_*`, protection, comment and date (`file_set_date`).
 
 Names are the Amiga's, for now with few volumes: `SYS:` and `PROGDIR:` are the program's root in the file service,
 and `LOCALE:` its `Locale` drawer. A name without a volume goes from the current drawer (`dir_change`). DashOS's

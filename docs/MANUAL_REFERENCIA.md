@@ -4890,8 +4890,7 @@ DashOS van en UTF-8: `tools/catalogo.py catalog x.ct --utf8`. Uno del Amiga (Lat
 
 Los builtins de ficheros y cajones funcionan en DashOS por el servicio de archivos: `file_read_text`,
 `file_write_text`, `file_open` y los de leer y escribir por partes, `file_exists`, `file_size`, `file_delete`,
-`file_rename`, `file_copy`, `dir_create`, `dir_read` y los `dir_entry_*`, la protección y el comentario. La fecha de
-un fichero no se puede cambiar (`file_set_date` da false).
+`file_rename`, `file_copy`, `dir_create`, `dir_read` y los `dir_entry_*`, la protección, el comentario y la fecha (`file_set_date`).
 
 Los nombres son los del Amiga, de momento con pocos volúmenes: `SYS:` y `PROGDIR:` son la raíz del programa en el
 servicio de archivos, y `LOCALE:` su cajón `Locale`. Un nombre sin volumen va desde el cajón actual (`dir_change`).
