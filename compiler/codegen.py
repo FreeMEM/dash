@@ -16638,6 +16638,10 @@ static BOOL _dash_file_set_protection(STRPTR path, LONG bits) { return path && S
 /* The free space in KB of the volume a path is on, also through an assign (a package manager: not starting an install that
    does not fit). Lock and Info, with no "insert volume" requester; -1 if it cannot be locked or read */
 static LONG _dash_path_free_kb(STRPTR path) {
+#ifdef _DASH_DASHOS
+    (void)path;                                           /* (DashOS: its files service does not tell the free space) */
+    return -1;
+#else
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR win = me->pr_WindowPtr;
     struct InfoData *id;
@@ -16656,6 +16660,7 @@ static LONG _dash_path_free_kb(STRPTR path) {
     if (id) FreeVec(id);
     UnLock(lock);
     return kb;
+#endif
 }
 static BOOL _dash_file_set_comment(STRPTR path, STRPTR text) {
     return path && SetComment(path, text ? text : (STRPTR)"");
