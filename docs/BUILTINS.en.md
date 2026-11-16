@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1009 functions, 1009 implemented, 0 not implemented.
+Total: 1010 functions, 1010 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -10324,6 +10324,7 @@ end
 | [`number_set(gad, value)`](#number_set) | — | Change the number shown |  |
 | [`dialog_file(title, pattern, save_mode)`](#dialog_file) | String | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
 | [`dialog_file_at(title, pattern, save_mode, drawer, file)`](#dialog_file_at) | String | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
+| [`dialog_drawer(title, initial)`](#dialog_drawer) | String | Drawer requester: full path of the chosen drawer ("Work:Games"), "" if cancelled; initial: where it opens ("": the current drawer) |  |
 | [`dialog_color(title, initial)`](#dialog_color) | Int | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
 | [`dialog_screen_mode(title)`](#dialog_screen_mode) | Bool | Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it |  |
 | [`screen_mode_id()`](#screen_mode_id) | Int | The display mode of the last dialog_screen_mode (for screen_open_mode) |  |
@@ -10893,6 +10894,18 @@ See also: [`dialog_file_at`](#dialog_file_at), [`file_open_dialog`](#file_open_d
 
 Like `dialog_file`, starting in that drawer with that name. For "Save as..." with the open file's name.
 
+See also: [`dialog_file`](#dialog_file), [`dialog_drawer`](#dialog_drawer).
+
+<a id="dialog_drawer"></a>
+
+### `dialog_drawer(title, initial)` → `String`
+
+- `title`: the requester's title.
+- `initial`: the drawer it opens in (`"Work:"`); `""` = the current one.
+
+Opens the system's drawer requester (ASL): it only shows drawers, not files. Returns the full path of the chosen
+drawer (`"Work:Games"`), or `""` if it was cancelled. To ask where to save or install something.
+
 See also: [`dialog_file`](#dialog_file).
 
 <a id="dialog_color"></a>
@@ -11375,7 +11388,7 @@ end
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | [`mui_app_begin(title, base)`](#mui_app_begin) | Int (address) | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
-| [`mui_text_editor(lines)`](#mui_text_editor) | Int (address) | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
+| [`mui_text_editor(lines)`](#mui_text_editor) | Int (address) | A text field of several lines (MUI's Textinput), that many lines high (0: as high as the window lets it), with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
 | [`mui_window_open_back(win)`](#mui_window_open_back) | Int | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
 | [`mui_window_activate(win)`](#mui_window_activate) | — | Make a window the active one, in front of the others (it opens if it is closed) |  |
 | [`mui_window_dispose(window)`](#mui_window_dispose) | — | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
@@ -11504,7 +11517,7 @@ See also: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_begin)
 
 ### `mui_text_editor(lines)` → `Int (address)`
 
-- `lines`: how many lines high.
+- `lines`: how many lines high; `0` = as high as the window lets it, growing with it.
 
 A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
 change all of it; `mui_on_ack` fires on Amiga+Return.

@@ -621,6 +621,23 @@ abierto.
 
 Like `dialog_file`, starting in that drawer with that name. For "Save as..." with the open file's name.
 """,
+        "see": ["dialog_file", "dialog_drawer"],
+    },
+    "dialog_drawer": {
+        "es": """\
+- `title`: el título de la petición.
+- `initial`: el cajón donde se abre (`"Work:"`); `""` = el actual.
+
+Abre la petición de cajones del sistema (ASL): solo enseña cajones, no ficheros. Devuelve la ruta entera del cajón
+elegido (`"Work:Juegos"`), o `""` si se canceló. Para preguntar dónde guardar o instalar algo.
+""",
+        "en": """\
+- `title`: the requester's title.
+- `initial`: the drawer it opens in (`"Work:"`); `""` = the current one.
+
+Opens the system's drawer requester (ASL): it only shows drawers, not files. Returns the full path of the chosen
+drawer (`"Work:Games"`), or `""` if it was cancelled. To ask where to save or install something.
+""",
         "see": ["dialog_file"],
     },
     "dialog_color": {

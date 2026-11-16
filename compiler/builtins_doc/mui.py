@@ -433,12 +433,12 @@ Ctrl or Amiga with V paste at the cursor; with MUI 3.8, which does not, Dash add
 text and X cuts it (reported by Alex Agauser and Ferrán García).
 """, ["mui_get_text", "mui_on_ack", "mui_text_editor"]),
     "mui_text_editor": _f("""\
-- `lines`: cuántas líneas de alto.
+- `lines`: cuántas líneas de alto; `0` = tan alto como deje la ventana, que crece con ella.
 
 Un campo de texto de varias líneas, con su barra. Return empieza otra línea. `mui_get_text` y `mui_set_text` lo
 leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return.
 """, """\
-- `lines`: how many lines high.
+- `lines`: how many lines high; `0` = as high as the window lets it, growing with it.
 
 A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
 change all of it; `mui_on_ack` fires on Amiga+Return.
