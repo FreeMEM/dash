@@ -1005,12 +1005,14 @@ const BuiltinInfo builtin_info[] = {
     {"mui_list_remove", 2, 0, 1, 0, 0, 0u},
     {"mui_menu_begin", 1, 1, 0, 0, 0, 1u},
     {"mui_menu_begin", 1, 1, 0, 0, 0, 1u},
-    {"mui_menu_check", 4, 1, 0, 0, 2, 3u},
-    {"mui_menu_check", 4, 1, 0, 0, 2, 3u},
+    {"mui_menu_check", 4, 1, 0, 0, 0, 3u},
+    {"mui_menu_check", 4, 1, 0, 0, 0, 3u},
     {"mui_menu_end", 0, 0, 1, 0, 0, 0u},
     {"mui_menu_end", 0, 0, 1, 0, 0, 0u},
     {"mui_menu_item", 3, 1, 0, 0, 0, 3u},
     {"mui_menu_item", 3, 1, 0, 0, 0, 3u},
+    {"mui_menu_radio", 4, 1, 0, 0, 0, 3u},
+    {"mui_menu_radio", 4, 1, 0, 0, 0, 3u},
     {"mui_menu_separator", 0, 0, 1, 0, 0, 0u},
     {"mui_menu_separator", 0, 0, 1, 0, 0, 0u},
     {"mui_on_ack", 2, 0, 1, 0, 2, 0u},
@@ -1069,10 +1071,10 @@ const BuiltinInfo builtin_info[] = {
     {"mui_string", 2, 1, 0, 0, 0, 1u},
     {"mui_string_pos", 1, 1, 1, 0, 2, 0u},
     {"mui_string_pos", 1, 1, 1, 0, 2, 0u},
-    {"mui_submenu_begin", 1, 1, 0, 0, 2, 1u},
-    {"mui_submenu_begin", 1, 1, 0, 0, 2, 1u},
-    {"mui_submenu_end", 0, 0, 1, 0, 2, 0u},
-    {"mui_submenu_end", 0, 0, 1, 0, 2, 0u},
+    {"mui_submenu_begin", 1, 1, 0, 0, 0, 1u},
+    {"mui_submenu_begin", 1, 1, 0, 0, 0, 1u},
+    {"mui_submenu_end", 0, 0, 1, 0, 0, 0u},
+    {"mui_submenu_end", 0, 0, 1, 0, 0, 0u},
     {"mui_text", 1, 1, 0, 0, 0, 1u},
     {"mui_text", 1, 1, 0, 0, 0, 1u},
     {"mui_text_editor", 1, 1, 1, 0, 2, 0u},
@@ -2022,7 +2024,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2020;
+const int builtin_count = 2022;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

@@ -1212,6 +1212,9 @@ DESC_ES = {
     "mui_menu_item": "Una opción de menú: key = la letra de Amiga+tecla (\"\" ninguna); mui_wait_event da id",
     "mui_menu_check": "Una opción de menú con marca: elegirla cambia la marca y mui_wait_event da id; mui_get_value / "
                       "mui_set_value leen y ponen la marca",
+    "mui_menu_radio": "Una opción de menú de un grupo: las seguidas (sin nada entre medias) son un grupo, y elegir una "
+                      "la marca y desmarca las otras; mui_wait_event da id; mui_get_value / mui_set_value leen y ponen "
+                      "la marca",
     "mui_submenu_begin": "Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta "
                          "mui_submenu_end",
     "mui_submenu_end": "Acaba el submenú",

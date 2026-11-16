@@ -47,7 +47,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1010 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1011 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3514,6 +3514,7 @@ Cada una explicada, con sus parámetros y dos ejemplos que se prueban: [BUILTINS
 | `mui_menu_item(texto, tecla, id)` | Opción de menú: `tecla` = letra para Amiga+tecla (`""` = ninguna); devuelve el objeto (para `mui_set_enabled`). |
 | `mui_menu_separator()` | Línea de separación. |
 | `mui_menu_check(texto, tecla, id, marcada)` | Opción con marca (casilla): elegirla cambia la marca y da su `id`. `mui_get_value(op)` dice si está marcada (1/0) y `mui_set_value(op, 1)` la marca desde el programa. |
+| `mui_menu_radio(texto, tecla, id, marcada)` | Opción de un grupo: las opciones seguidas, sin nada entre medias (ni una raya), son un grupo de hasta 16, y elegir una la marca y desmarca las otras. Da su `id`; `mui_get_value`/`mui_set_value` como en `mui_menu_check` (marcar una desmarca las de su grupo). |
 | `mui_submenu_begin(titulo)` ... `mui_submenu_end()` | Submenú dentro del menú (un nivel, como Intuition). |
 | `mui_context_menu_begin(titulo)` ... `mui_menu_end()` | Menú contextual (del botón derecho), dentro o fuera de una ventana: sus opciones como las de un menú. `mui_set_context_menu(obj, menu)` hace que el botón derecho sobre `obj` lo abra; cada opción da su `id`. En un lienzo, `mui_canvas_mouse_x`/`_y` dicen dónde se pulsó y `mui_canvas_button` es 2. |
 | `mui_set_enabled(op, false)`, `mui_set_text(op, texto)` | Desactiva una opción o un menú entero (el objeto de `mui_menu_begin`); cambia el texto de una opción ("Abrir recientes"). |
@@ -4871,7 +4872,8 @@ Las ventanas de MUI (`mui_*`) funcionan en DashOS con el kit de DashOS: el mismo
 con el aspecto de Material 3 en DashOS. De momento, estas: `mui_app_begin`/`end`, `mui_window_begin`/`end`/`open`/
 `close`, `mui_vgroup_begin`, `mui_hgroup_begin`, `mui_group_end`, `mui_text`, `mui_label`, `mui_button`, `mui_string`,
 `mui_checkbox`, `mui_cycle`, `mui_list` (con `mui_list_add`, `_insert`, `_remove`, `_clear`, `_count`, `_get` y
-`mui_on_double`), los menús (`mui_menu_begin`, `mui_menu_item`, `mui_menu_separator`, `mui_menu_end`), los eventos
+`mui_on_double`), los menús (`mui_menu_begin`, `mui_menu_item`, `mui_menu_check`, `mui_menu_radio`,
+`mui_menu_separator`, `mui_submenu_begin`/`end`, `mui_menu_end`), los eventos
 (`mui_on_press`, `mui_on_change`, `mui_on_close`, `mui_wait_event`), `mui_get_text`, `mui_set_text`,
 `mui_get_value`, `mui_set_value`, `mui_set_enabled` y `mui_request`. Las demás `mui_*` dan un error al compilar.
 
@@ -4880,7 +4882,11 @@ con el aspecto de Material 3 en DashOS. De momento, estas: `mui_app_begin`/`end`
   programa usa `mui_*`.
 - Una etiqueta (`mui_label`) seguida de un campo, un desplegable o una casilla pasa a ser la etiqueta de ese control,
   como en Material 3. Los códigos de texto de MUI y el subrayado de las teclas no se ven.
-- Los menús van, de momento, en una fila arriba de la ventana; las rayas entre opciones no se ven.
+- Los menús van en una fila arriba de la ventana o, si el escritorio lo tiene así, en la barra de arriba (S10:
+  `dashos_menus_v1`). Las casillas (`mui_menu_check`), las opciones (`mui_menu_radio`) y los submenús funcionan como
+  en el Amiga: `mui_get_value`/`mui_set_value` leen y ponen la marca, y `mui_set_enabled` vale también para un menú
+  entero. Necesitan un `libkit_c.a` con los menús de DashOS (de la rama `menus` en adelante); con uno anterior, las
+  casillas y las opciones salen como opciones normales y lo del submenú va en su menú.
 
 `tr`, `@catalog`, `catalog_open` y `catalog_language` también funcionan. El catálogo se busca en
 `LOCALE:Catalogs/<idioma>/` (y en `PROGDIR:Catalogs/` en el PC). El idioma sale de `ENV:Sys/locale.prefs`, como en

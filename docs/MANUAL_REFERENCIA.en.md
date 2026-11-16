@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1010 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1011 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3513,6 +3513,7 @@ Each one explained, with its parameters and two examples run by the tests: [BUIL
 | `mui_menu_item(texto, tecla, id)` | Menu item: `tecla` = letter for Amiga+key (`""` = none); returns the object (for `mui_set_enabled`). |
 | `mui_menu_separator()` | Separator line. |
 | `mui_menu_check(text, key, id, checked)` | Item with a check mark: choosing it toggles the mark and gives its `id`. `mui_get_value(item)` says whether it is checked (1/0) and `mui_set_value(item, 1)` checks it from the program. |
+| `mui_menu_radio(text, key, id, checked)` | Option of a group: the options one after another, with nothing between them (not even a bar), are a group of up to 16, and choosing one checks it and unchecks the others. It gives its `id`; `mui_get_value`/`mui_set_value` as in `mui_menu_check` (checking one unchecks the rest of its group). |
 | `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
 | `mui_context_menu_begin(title)` ... `mui_menu_end()` | Context menu (right button), inside or outside a window: its items as in a menu. `mui_set_context_menu(obj, menu)` makes the right button over `obj` open it; each item gives its `id`. On a canvas, `mui_canvas_mouse_x`/`_y` say where it was pressed and `mui_canvas_button` is 2. |
 | `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
@@ -4871,7 +4872,8 @@ MUI windows (`mui_*`) work on DashOS with the DashOS kit: the same program comes
 the Material 3 look on DashOS. For now, these: `mui_app_begin`/`end`, `mui_window_begin`/`end`/`open`/`close`,
 `mui_vgroup_begin`, `mui_hgroup_begin`, `mui_group_end`, `mui_text`, `mui_label`, `mui_button`, `mui_string`,
 `mui_checkbox`, `mui_cycle`, `mui_list` (with `mui_list_add`, `_insert`, `_remove`, `_clear`, `_count`, `_get` and
-`mui_on_double`), menus (`mui_menu_begin`, `mui_menu_item`, `mui_menu_separator`, `mui_menu_end`), events
+`mui_on_double`), menus (`mui_menu_begin`, `mui_menu_item`, `mui_menu_check`, `mui_menu_radio`,
+`mui_menu_separator`, `mui_submenu_begin`/`end`, `mui_menu_end`), events
 (`mui_on_press`, `mui_on_change`, `mui_on_close`, `mui_wait_event`), `mui_get_text`, `mui_set_text`,
 `mui_get_value`, `mui_set_value`, `mui_set_enabled` and `mui_request`. The other `mui_*` are a compile error.
 
@@ -4880,7 +4882,11 @@ the Material 3 look on DashOS. For now, these: `mui_app_begin`/`end`, `mui_windo
   the program uses `mui_*`.
 - A label (`mui_label`) followed by a text field, a cycle or a checkbox becomes that control's label, as in Material
   3. MUI's text codes and the underscore of the keys are not shown.
-- Menus go, for now, in a row at the top of the window; the lines between items are not shown.
+- Menus go in a row at the top of the window or, if the desktop is set that way, in the top bar (S10:
+  `dashos_menus_v1`). Checks (`mui_menu_check`), options (`mui_menu_radio`) and submenus work as on the Amiga:
+  `mui_get_value`/`mui_set_value` read and set the mark, and `mui_set_enabled` also works on a whole menu. They need
+  a `libkit_c.a` with DashOS's menus (from the `menus` branch on); with an older one, checks and options come out
+  as plain items and a submenu's items go in its menu.
 
 `tr`, `@catalog`, `catalog_open` and `catalog_language` work too. The catalog is looked for in
 `LOCALE:Catalogs/<language>/` (and in `PROGDIR:Catalogs/` on the PC). The language comes from `ENV:Sys/locale.prefs`,

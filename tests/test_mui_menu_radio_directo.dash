@@ -1,0 +1,37 @@
+# Options (radio items) of a MUI menu built by ./dash straight to hunk: a group in the menu and another in a
+# submenu; marking one with mui_set_value unmarks the rest of its group (test_mui_menu_radio chooses them by keys,
+# through C).
+# dash-direct:
+# emu-needs: muimaster.library
+# dashos-skip: en qemu no hay compositor (en DashOS, tests/dashos/test_dashos_menus.dash)
+# expect-out: al empezar: 1 0 0 / 0 1
+# expect-out: poner: 0 0 1 / 1 0
+# expect-out: quitar: 0 0 0 / 1 0
+# expect-out: fin
+
+Main
+    if mui_app_begin("Opciones", "DASHMENURADIOD") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Opciones", 0)
+            mui_menu_begin("Ver")
+                a = mui_menu_radio("Iconos", "I", 21, true)
+                b = mui_menu_radio("Lista", "L", 22, false)
+                c = mui_menu_radio("Columnas", "C", 23, false)
+                mui_submenu_begin("Ordenar")
+                    d = mui_menu_radio("Nombre", "N", 30, false)
+                    e = mui_menu_radio("Fecha", "F", 31, true)
+                mui_submenu_end()
+            mui_menu_end()
+            mui_text("Opciones")
+        mui_window_end()
+        Print "al empezar: #{mui_get_value(a)} #{mui_get_value(b)} #{mui_get_value(c)} / #{mui_get_value(d)} #{mui_get_value(e)}"
+        mui_set_value(c, 1)
+        mui_set_value(d, 1)
+        Print "poner: #{mui_get_value(a)} #{mui_get_value(b)} #{mui_get_value(c)} / #{mui_get_value(d)} #{mui_get_value(e)}"
+        mui_set_value(c, 0)
+        Print "quitar: #{mui_get_value(a)} #{mui_get_value(b)} #{mui_get_value(c)} / #{mui_get_value(d)} #{mui_get_value(e)}"
+        mui_app_end()
+        Print "fin"
+    end
+end
