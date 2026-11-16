@@ -1170,6 +1170,9 @@ DESC_ES = {
     "mui_on_drop": "mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron",
     "mui_on_close": "mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por "
                     "defecto: -1)",
+    "mui_on_activate": "mui_wait_event da id cuando la ventana pasa a ser la activa (un clic en ella, al abrirla, "
+                       "mui_window_activate)",
+    "mui_on_deactivate": "mui_wait_event da id cuando la ventana deja de ser la activa (un clic en otra ventana, al cerrarla)",
     "mui_press": "Envía el evento mui_on_press de un botón como si se hubiera pulsado",
     "mui_label": "La etiqueta de una fila de un formulario (alineada a la derecha)",
     "mui_string": "Un campo de texto de hasta maxlen caracteres",

@@ -106,6 +106,7 @@ The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines
 | `mui_on_ack(string, id)` | Return in a string gadget (`MUIA_String_Acknowledge`) |
 | `mui_on_double(lista, id)` | double-click on a list |
 | `mui_on_close(win, id)` | the window's close gadget. Without calling it, closing the first window = -1 (quit). |
+| `mui_on_activate(win, id)`, `mui_on_deactivate(win, id)` | the window becomes the active one (a click, opening it, `mui_window_activate`) or stops being it (another one is activated, it is closed); one event per change. |
 | `mui_on_drop(obj, id)` | icons dropped from the Workbench on the object (a window: anywhere on it); the paths, with `app_drop()` |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menu of the open window (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | item with a check mark (`mui_get_value`/`mui_set_value`) and one-level submenu |

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1011 funciones, 1011 implementadas, 0 sin implementar.
+Total: 1013 funciones, 1013 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11420,6 +11420,8 @@ end
 | [`mui_button(label)`](#mui_button) | Int (dirección) | Un botón (un guion bajo delante de una letra la hace su atajo de teclado) |  |
 | [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event da id cuando se pulsa el botón |  |
 | [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por defecto: -1) |  |
+| [`mui_on_activate(win, id)`](#mui_on_activate) | — | mui_wait_event da id cuando la ventana pasa a ser la activa (un clic en ella, al abrirla, mui_window_activate) |  |
+| [`mui_on_deactivate(win, id)`](#mui_on_deactivate) | — | mui_wait_event da id cuando la ventana deja de ser la activa (un clic en otra ventana, al cerrarla) |  |
 | [`mui_on_drop(obj, id)`](#mui_on_drop) | — | mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron |  |
 | [`mui_press(obj)`](#mui_press) | — | Envía el evento mui_on_press de un botón como si se hubiera pulsado |  |
 | [`mui_label(text)`](#mui_label) | Int (dirección) | La etiqueta de una fila de un formulario (alineada a la derecha) |  |
@@ -11788,6 +11790,31 @@ Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_press`](#mui_press).
 llamarla, cerrar la primera ventana devuelve -1 (salir) y las demás se cierran sin dar evento.
 
 Ver también: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_on_activate"></a>
+
+### `mui_on_activate(win, id)`
+
+- `win`: la ventana.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando la ventana pasa a ser la activa: un clic en ella, al abrirla o con
+`mui_window_activate`. Sirve para poner al día lo que enseña cuando el usuario vuelve a ella, sin mirarlo con un
+temporizador.
+
+Ver también: [`mui_on_deactivate`](#mui_on_deactivate), [`mui_window_active`](#mui_window_active), [`mui_window_activate`](#mui_window_activate).
+
+<a id="mui_on_deactivate"></a>
+
+### `mui_on_deactivate(win, id)`
+
+- `win`: la ventana.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando la ventana deja de ser la activa: con un clic en otra ventana o al cerrarla.
+Cada cambio da un solo evento.
+
+Ver también: [`mui_on_activate`](#mui_on_activate), [`mui_window_active`](#mui_window_active).
 
 <a id="mui_on_drop"></a>
 

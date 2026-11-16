@@ -767,6 +767,34 @@ llamarla, cerrar la primera ventana devuelve -1 (salir) y las demás se cierran 
 `mui_wait_event` returns `id` when that window's close button is pressed; the window does not close by itself.
 Without calling it, closing the first window returns -1 (quit) and the others just close, with no event.
 """, ["mui_window_close", "mui_wait_event"]),
+    "mui_on_activate": _f("""\
+- `win`: la ventana.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando la ventana pasa a ser la activa: un clic en ella, al abrirla o con
+`mui_window_activate`. Sirve para poner al día lo que enseña cuando el usuario vuelve a ella, sin mirarlo con un
+temporizador.
+""", """\
+- `win`: the window.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when the window becomes the active one: a click on it, opening it or
+`mui_window_activate`. Useful to bring what it shows up to date when the user comes back to it, without checking
+with a timer.
+""", ["mui_on_deactivate", "mui_window_active", "mui_window_activate"]),
+    "mui_on_deactivate": _f("""\
+- `win`: la ventana.
+- `id`: el número de evento.
+
+`mui_wait_event` devuelve `id` cuando la ventana deja de ser la activa: con un clic en otra ventana o al cerrarla.
+Cada cambio da un solo evento.
+""", """\
+- `win`: the window.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when the window stops being the active one: with a click on another window or when
+it is closed. Each change gives one event.
+""", ["mui_on_activate", "mui_window_active"]),
     "mui_on_drop": _f("""\
 - `obj`: el objeto, o una ventana (en cualquier sitio de ella).
 - `id`: el número de evento.

@@ -1017,10 +1017,14 @@ const BuiltinInfo builtin_info[] = {
     {"mui_menu_separator", 0, 0, 1, 0, 0, 0u},
     {"mui_on_ack", 2, 0, 1, 0, 2, 0u},
     {"mui_on_ack", 2, 0, 1, 0, 2, 0u},
+    {"mui_on_activate", 2, 0, 1, 0, 2, 0u},
+    {"mui_on_activate", 2, 0, 1, 0, 2, 0u},
     {"mui_on_change", 2, 0, 1, 0, 0, 0u},
     {"mui_on_change", 2, 0, 1, 0, 0, 0u},
     {"mui_on_close", 2, 0, 1, 0, 0, 0u},
     {"mui_on_close", 2, 0, 1, 0, 0, 0u},
+    {"mui_on_deactivate", 2, 0, 1, 0, 2, 0u},
+    {"mui_on_deactivate", 2, 0, 1, 0, 2, 0u},
     {"mui_on_double", 2, 0, 1, 0, 0, 0u},
     {"mui_on_double", 2, 0, 1, 0, 0, 0u},
     {"mui_on_drop", 2, 0, 1, 0, 2, 0u},
@@ -2024,7 +2028,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2022;
+const int builtin_count = 2026;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

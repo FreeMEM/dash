@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1011 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1013 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3487,7 +3487,9 @@ Events are numbers chosen by the program (greater than 0). `mui_on_press(boton, 
 and `mui_press(boton)` fires the button's event as if it were pressed (on a menu item, as if it were chosen).
 
 Several windows can be created (each with its own `mui_window_begin` ... `mui_window_end`). Closing a
-window that is not the first one just closes it, unless it has its own `mui_on_close`.
+window that is not the first one just closes it, unless it has its own `mui_on_close`. `mui_on_activate(window, id)`
+gives `id` when the window becomes the active one (coming back to it, to bring it up to date) and
+`mui_on_deactivate(window, id)` when it stops being it (another window is activated, it is closed).
 
 MUI windows take icons dropped from the Workbench. `mui_on_drop(object, id)` makes `mui_wait_event()` return `id`
 when one is dropped on that object (on a window: anywhere on it). Then `app_drop()` gives the path of each icon,
@@ -4646,6 +4648,7 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--debug` | A `NOP` at the start of each line and the debug information (below) |
 | `--debug-info prog` | Shows the debug information of an executable built with `--debug` |
 | `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
+| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |

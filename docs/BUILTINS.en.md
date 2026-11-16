@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1011 functions, 1011 implemented, 0 not implemented.
+Total: 1013 functions, 1013 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11415,6 +11415,8 @@ end
 | [`mui_button(label)`](#mui_button) | Int (address) | Button (an underscore before a letter makes it the keyboard shortcut) |  |
 | [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event returns id when the button is pressed |  |
 | [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
+| [`mui_on_activate(win, id)`](#mui_on_activate) | — | mui_wait_event returns id when the window becomes the active one (a click on it, opening it, mui_window_activate) |  |
+| [`mui_on_deactivate(win, id)`](#mui_on_deactivate) | — | mui_wait_event returns id when the window stops being the active one (a click on another window, closing it) |  |
 | [`mui_on_drop(obj, id)`](#mui_on_drop) | — | mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: anywhere on it); app_drop gives their paths, app_drop_x/y where they fell |  |
 | [`mui_press(obj)`](#mui_press) | — | Send the mui_on_press event of a button as if it were pressed |  |
 | [`mui_label(text)`](#mui_label) | Int (address) | Label for a form row (right-aligned) |  |
@@ -11782,6 +11784,31 @@ See also: [`mui_wait_event`](#mui_wait_event), [`mui_press`](#mui_press).
 Without calling it, closing the first window returns -1 (quit) and the others just close, with no event.
 
 See also: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_wait_event).
+
+<a id="mui_on_activate"></a>
+
+### `mui_on_activate(win, id)`
+
+- `win`: the window.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when the window becomes the active one: a click on it, opening it or
+`mui_window_activate`. Useful to bring what it shows up to date when the user comes back to it, without checking
+with a timer.
+
+See also: [`mui_on_deactivate`](#mui_on_deactivate), [`mui_window_active`](#mui_window_active), [`mui_window_activate`](#mui_window_activate).
+
+<a id="mui_on_deactivate"></a>
+
+### `mui_on_deactivate(win, id)`
+
+- `win`: the window.
+- `id`: the event number.
+
+`mui_wait_event` returns `id` when the window stops being the active one: with a click on another window or when
+it is closed. Each change gives one event.
+
+See also: [`mui_on_activate`](#mui_on_activate), [`mui_window_active`](#mui_window_active).
 
 <a id="mui_on_drop"></a>
 

@@ -4,6 +4,7 @@
     ./dash programa.dash -o programa [--fpu] [--cpu 68040] [--memcheck] [--stack N] [--debug]
     ./dash --gcc programa.dash -o programa [...]
     ./dash --dashos programa.dash -o programa [--memcheck] [--gcc] [--pie] [--be]
+    ./dash --check programa.dash [--gcc]       solo comprueba: los errores, sin hacer el ejecutable
 
 
 Sin --gcc, el compilador de Dash genera él mismo el código del Amiga (no hace falta un compilador de C).

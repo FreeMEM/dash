@@ -3892,6 +3892,22 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_on_close(${win}, ${id})",
         description="mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1)"
     ),
+    "mui_on_activate": BuiltinFunc(
+        name="mui_on_activate",
+        params=["win", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_activate(${win}, ${id})",
+        description="mui_wait_event returns id when the window becomes the active one (a click on it, opening it, "
+                    "mui_window_activate)"
+    ),
+    "mui_on_deactivate": BuiltinFunc(
+        name="mui_on_deactivate",
+        params=["win", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_deactivate(${win}, ${id})",
+        description="mui_wait_event returns id when the window stops being the active one (a click on another "
+                    "window, closing it)"
+    ),
     "mui_on_drop": BuiltinFunc(
         name="mui_on_drop",
         params=["obj", "id"],
