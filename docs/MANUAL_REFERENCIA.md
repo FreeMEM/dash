@@ -4829,6 +4829,11 @@ dash programa.dash -o programa
 Con el mismo fichero de entrada, el compilador del Amiga escribe el mismo ejecutable, byte a byte, que el del PC (el
 nombre del fichero va dentro, para los mensajes de error: tiene que ser el mismo).
 
+El paquete trae también la ayuda, en `DASH:Ayuda`: `Dash.guide` (castellano) y `Dash_en.guide` (inglés) para
+MultiView, con una página por función, por grupo y por apartado de este manual, y `Dash.ayuda` y `Dash_en.ayuda`, lo
+mismo con índices para que un programa lo lea a trozos (Forja; el formato, en `docs/AYUDA_FORMATO.md`). Salen de
+esta documentación con `tools/gen_ayuda.py`.
+
 ### Cuándo va por C (`--gcc`)
 
 | Sin `--gcc` | Qué pasa o qué hacer |

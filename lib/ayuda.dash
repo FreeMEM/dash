@@ -1,0 +1,290 @@
+# La ayuda de Dash (DASH:Ayuda/Dash.ayuda, Dash_en.ayuda) leída a trozos, sin cargarla entera: los índices se
+# miran con búsqueda binaria, un registro cada vez, y de una ficha solo se lee ella. El formato está en
+# docs/AYUDA_FORMATO.md; el fichero lo hace tools/gen_ayuda.py.
+#
+#     import "lib/ayuda.dash"
+#     a = ayuda_abrir("DASH:Ayuda/Dash.ayuda")
+#     id = ayuda_buscar(a, "file_seek")              # -1 si no está
+#     for l in ayuda_ficha(a, id)
+#         Print l                                   # cada línea, con su prefijo (@, %, #, |, *, espacio)
+#     end
+#     ids = ayuda_palabra(a, "sonido")               # las fichas donde sale, las mejores primero
+#     ayuda_cerrar(a)
+
+struct Ayuda
+    fh: Int
+    buf: Int = 0
+    idioma: String = ""
+    version: String = ""
+    f_off: Int = 0          # la tabla de fichas
+    f_n: Int = 0
+    f_rec: Int = 0
+    n_off: Int = 0          # nombres
+    n_n: Int = 0
+    n_rec: Int = 0
+    p_off: Int = 0          # palabras
+    p_n: Int = 0
+    p_rec: Int = 0
+    g_off: Int = 0          # grupos
+    g_n: Int = 0
+    s_off: Int = 0          # secciones del manual
+    s_n: Int = 0
+end
+
+const AYUDA_BUF = 512       # la cabecera cabe; los registros, también
+
+# Lee n bytes desde pos al búfer de la ayuda; cuántos leyó
+func _ay_leer(a: Ayuda, pos: Int, n: Int) -> Int
+    file_seek(a.fh, pos, -1)
+    return file_read(a.fh, a.buf, n)
+end
+
+# El número de n cifras que hay en la posición p del búfer
+func _ay_num(a: Ayuda, p: Int, n: Int) -> Int
+    v = 0
+    i = 0
+    while i < n
+        c = buffer_get_byte(a.buf, p + i)
+        if c >= 48 and c <= 57
+            v = v * 10 + c - 48
+        end
+        i = i + 1
+    end
+    return v
+end
+
+# Abre la ayuda y lee su cabecera; nil si no está o no es una ayuda de Dash
+func ayuda_abrir(ruta: String) -> Ayuda
+    fh = file_open(ruta, 1005)
+    if fh == 0
+        return nil
+    end
+    a = Ayuda(fh)
+    a.buf = buffer_alloc(AYUDA_BUF)
+    n = file_read(fh, a.buf, AYUDA_BUF)
+    if n < 12 or str_from_buffer(a.buf, 0, 12) != "DASHAYUDA 1\n"
+        ayuda_cerrar(a)
+        return nil
+    end
+    for l in str_split(str_from_buffer(a.buf, 0, n), "\n")
+        if l == "."
+            break
+        end
+        t = str_split(l, " ")
+        if t.length < 2
+            continue
+        end
+        if t[0] == "idioma"
+            a.idioma = t[1]
+        elif t[0] == "version"
+            a.version = t[1]
+        elif t[0] == "fichas"
+            a.f_off = Int(t[1])
+            a.f_n = Int(t[2])
+            a.f_rec = Int(t[3])
+        elif t[0] == "nombres"
+            a.n_off = Int(t[1])
+            a.n_n = Int(t[2])
+            a.n_rec = Int(t[3])
+        elif t[0] == "palabras"
+            a.p_off = Int(t[1])
+            a.p_n = Int(t[2])
+            a.p_rec = Int(t[3])
+        elif t[0] == "grupos"
+            a.g_off = Int(t[1])
+            a.g_n = Int(t[2])
+        elif t[0] == "secciones"
+            a.s_off = Int(t[1])
+            a.s_n = Int(t[2])
+        end
+    end
+    return a
+end
+
+func ayuda_cerrar(a: Ayuda)
+    if a.fh != 0
+        file_close(a.fh)
+        a.fh = 0
+    end
+    if a.buf != 0
+        buffer_free(a.buf)
+        a.buf = 0
+    end
+end
+
+# Cuántas fichas hay (sus números van de 0 a esto - 1)
+func ayuda_fichas(a: Ayuda) -> Int
+    return a.f_n
+end
+
+# El número de la ficha de un nombre (una función, un grupo, una palabra del lenguaje como "if"...), sin mirar
+# mayúsculas; -1 si no está
+func ayuda_buscar(a: Ayuda, nombre: String) -> Int
+    q = str_lower(nombre)
+    largo = a.n_rec - 7
+    lo = 0
+    hi = a.n_n - 1
+    while lo <= hi
+        m = (lo + hi) / 2
+        _ay_leer(a, a.n_off + m * a.n_rec, a.n_rec)
+        k = str_trim(str_from_buffer(a.buf, 0, largo))
+        if k == q
+            return _ay_num(a, largo + 1, 5)
+        elif k < q
+            lo = m + 1
+        else
+            hi = m - 1
+        end
+    end
+    return -1
+end
+
+# La clave de una ficha ("file_seek", "audio_functions", "m6_1"...)
+func ayuda_clave(a: Ayuda, id: Int) -> String
+    if id < 0 or id >= a.f_n
+        return ""
+    end
+    _ay_leer(a, a.f_off + id * a.f_rec, a.f_rec)
+    return str_trim(str_from_buffer(a.buf, 18, a.f_rec - 19))
+end
+
+# El tipo de una ficha: "F" función, "G" grupo, "M" manual, "S" sintaxis, "I" portada e índices
+func ayuda_tipo(a: Ayuda, id: Int) -> String
+    if id < 0 or id >= a.f_n
+        return ""
+    end
+    _ay_leer(a, a.f_off + id * a.f_rec, a.f_rec)
+    return str_from_buffer(a.buf, 16, 1)
+end
+
+# Las líneas de una ficha, tal cual (con su prefijo); [] si no hay esa ficha
+func ayuda_ficha(a: Ayuda, id: Int) -> [String]
+    var out: [String] = []
+    if id < 0 or id >= a.f_n
+        return out
+    end
+    _ay_leer(a, a.f_off + id * a.f_rec, a.f_rec)
+    pos = _ay_num(a, 0, 8)
+    largo = _ay_num(a, 9, 6)
+    b = buffer_alloc(largo + 1)
+    if b == 0
+        return out
+    end
+    file_seek(a.fh, pos, -1)
+    n = file_read(a.fh, b, largo)
+    ini = 0
+    while ini < n
+        fin = buffer_find_byte(b, ini, n, 10)
+        if fin < 0
+            fin = n
+        end
+        out.push(str_from_buffer(b, ini, fin - ini))
+        ini = fin + 1
+    end
+    buffer_free(b)
+    return out
+end
+
+# El título de una ficha (el de su primera línea, "@clave T título")
+func ayuda_titulo(a: Ayuda, id: Int) -> String
+    if id < 0 or id >= a.f_n
+        return ""
+    end
+    _ay_leer(a, a.f_off + id * a.f_rec, a.f_rec)
+    pos = _ay_num(a, 0, 8)
+    n = _ay_leer(a, pos, AYUDA_BUF)
+    fin = buffer_find_byte(a.buf, 0, n, 10)
+    if fin < 0
+        fin = n
+    end
+    l = str_from_buffer(a.buf, 0, fin)
+    p = str_find(l, " ")
+    return l[p + 3:]
+end
+
+# Una palabra como se guarda en el índice: en minúsculas y sin acentos (á -> a, ñ -> n, ç -> c...); lo que no es
+# letra, cifra ni "_", un espacio
+func ayuda_plegar(s: String) -> String
+    t = str_lower(s)
+    tabla = "aaaaaa ceeeeiiii nooooo  uuuuy y"
+    out = ""
+    i = 0
+    while i < t.length
+        c = str_code(t, i)
+        if (c >= 97 and c <= 122) or (c >= 48 and c <= 57) or c == 95
+            out = out + t[i]
+        elif c >= 224
+            out = out + tabla[c - 224]
+        else
+            out = out + " "
+        end
+        i = i + 1
+    end
+    return out
+end
+
+# El registro de la palabra i del índice de palabras: la deja en el búfer y devuelve la palabra
+func _ay_palabra_n(a: Ayuda, i: Int) -> String
+    _ay_leer(a, a.p_off + i * a.p_rec, a.p_rec)
+    return str_trim(str_from_buffer(a.buf, 0, a.p_rec - 15))
+end
+
+# La primera palabra del índice que es igual o va después de p (búsqueda binaria): su número, o p_n si no hay
+func _ay_primera(a: Ayuda, p: String) -> Int
+    lo = 0
+    hi = a.p_n
+    while lo < hi
+        m = (lo + hi) / 2
+        if _ay_palabra_n(a, m) < p
+            lo = m + 1
+        else
+            hi = m
+        end
+    end
+    return lo
+end
+
+# Las fichas donde sale una palabra (ya plegada o no), de más a menos puntos; [] si no está
+func ayuda_palabra(a: Ayuda, palabra: String) -> [Int]
+    var out: [Int] = []
+    p = str_trim(ayuda_plegar(palabra))
+    i = _ay_primera(a, p)
+    if i >= a.p_n or _ay_palabra_n(a, i) != p
+        return out
+    end
+    largo = a.p_rec - 15
+    pos = _ay_num(a, largo + 1, 8)
+    n = _ay_num(a, largo + 10, 4)
+    k = 0
+    while k < n
+        # (de 80 en 80: el búfer es de 512 bytes y cada número ocupa 6)
+        cuantos = n - k
+        if cuantos > 80
+            cuantos = 80
+        end
+        _ay_leer(a, pos + k * 6, cuantos * 6)
+        j = 0
+        while j < cuantos
+            out.push(_ay_num(a, j * 6, 5))
+            j = j + 1
+        end
+        k = k + cuantos
+    end
+    return out
+end
+
+# Las palabras del índice que empiezan por un prefijo (como mucho max), para completar lo que se escribe
+func ayuda_prefijo(a: Ayuda, prefijo: String, max: Int) -> [String]
+    var out: [String] = []
+    p = str_trim(ayuda_plegar(prefijo))
+    i = _ay_primera(a, p)
+    while i < a.p_n and out.length < max
+        w = _ay_palabra_n(a, i)
+        if not str_starts(w, p)
+            break
+        end
+        out.push(w)
+        i = i + 1
+    end
+    return out
+end

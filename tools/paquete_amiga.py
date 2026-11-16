@@ -103,6 +103,15 @@ def main():
     # los cajones de los ejemplos y de lib/, en la segunda fila
     (caj / "examples.info").write_bytes(situar(info(cajon(), WBDRAWER), 10, 80))
     (caj / "lib.info").write_bytes(situar(info(cajon(), WBDRAWER), 90, 80))
+    # la ayuda (tools/gen_ayuda.py, docs/AYUDA_FORMATO.md): Dash.ayuda y Dash_en.ayuda para Forja, y los AmigaGuide
+    # para MultiView, en DASH:Ayuda
+    ayuda = caj / "Ayuda"
+    subprocess.run([sys.executable, str(raiz / "tools/gen_ayuda.py"), "--salida", str(ayuda)], check=True,
+                   stdout=subprocess.DEVNULL)
+    (caj / "Ayuda.info").write_bytes(situar(info(cajon(), WBDRAWER, ventana=(80, 50, 240, 90)), 170, 80))
+    for n, guia in enumerate(("Dash.guide", "Dash_en.guide")):
+        (ayuda / f"{guia}.info").write_bytes(
+            situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 10 + 90 * n, 6))
     # (a 80 columnas, como texto llano: en el Amiga no hay que desplazarse de lado, tools/leeme.py)
     (caj / "LEEME").write_bytes(texto80((raiz / "README.es.md").read_text()).encode("latin-1", "replace"))
     (caj / "LEEME.info").write_bytes(situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 90, 6))

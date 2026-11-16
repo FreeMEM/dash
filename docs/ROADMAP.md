@@ -1133,6 +1133,11 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       y la imagen que el programa no recogió se libera. Además, `tools/emu_run.py` arranca con `FailAt 1000000`: un
       programa que sale con 127 (abort) ya no para los siguientes. Bitácora: `docs/LIMPIEZA_LOOP.md`.
       `tests/test_image_decode_salida.dash`, `tests/test_image_decode_salida_directo.dash`
+- [x] La ayuda en el Amiga (2026-11-16, lo pidió Forja, paso 3.3 de su `docs/FORJA_LOOP.md`): `tools/gen_ayuda.py`
+      saca de la documentación (builtins, `docs/SINTAXIS.md`, el manual) `Dash.ayuda` y `Dash_en.ayuda`, con índices
+      de nombres y de palabras que se leen a trozos (`docs/AYUDA_FORMATO.md`, `lib/ayuda.dash`), y `Dash.guide` y
+      `Dash_en.guide` para MultiView. El paquete los pone en `DASH:Ayuda`. `docs/SINTAXIS.en.md` nuevo.
+      `tests/unit/test_gen_ayuda.py` (con `--emu`, lee fichas en el emulador)
 
 ## Notas y Decisiones
 
