@@ -1,0 +1,84 @@
+# mui_on_activate and mui_on_deactivate (Forja: to look at git again when the user comes back to its window, instead
+# of a timer): the events of opening a window, of mui_window_activate, of a real click on the other window and of
+# closing it; one per change (MUI sets MUIA_Window_Activate twice). Each step's events in alphabetical order (the
+# order of the two windows' events changes from one machine to another).
+# emu-needs: muimaster.library
+# expect-out: A abierta: A+
+# expect-out: B abierta: A- B+
+# expect-out: A activa: A+ B-
+# expect-out: B activa: A- B+
+# expect-out: clic en A: A+ B- [Ventana A]
+# expect-out: A cerrada: A- B+
+# expect-out: A otra vez: A+ B-
+# expect-out: fin
+
+func nombre(ev: Int) -> String
+    if ev == 10
+        return "A+"
+    elif ev == 11
+        return "A-"
+    elif ev == 20
+        return "B+"
+    elif ev == 21
+        return "B-"
+    end
+    return "#{ev}"
+end
+
+# the events of the next 400 ms
+func eventos() -> String
+    var l: [String] = []
+    mui_timer(400, 7)
+    ev = mui_wait_event()
+    while ev != 7 and ev != -1
+        l.push(nombre(ev))
+        ev = mui_wait_event()
+    end
+    l.sort(fn(a, b) -> a < b)
+    r = ""
+    for x in l
+        r = r + " " + x
+    end
+    return r
+end
+
+Main
+    if mui_app_begin("Activa", "DASHACTIVA") == 0
+        Print "sin MUI"
+    else
+        a = mui_window_begin("Ventana A", 0)
+            t = mui_text("Ventana A, con algo de texto")
+            t2 = mui_text("y otra línea")
+        mui_window_end()
+        b = mui_window_begin("Ventana B", 0)
+            u = mui_text("B")
+        mui_window_end()
+        mui_on_activate(a, 10)
+        mui_on_deactivate(a, 11)
+        mui_on_activate(b, 20)
+        mui_on_deactivate(b, 21)
+        mui_window_open(a)
+        Print "A abierta:#{eventos()}"
+        input_move(30, 20)
+        mui_window_open(b)
+        Print "B abierta:#{eventos()}"
+        mui_window_activate(a)
+        Print "A activa:#{eventos()}"
+        mui_window_activate(b)
+        Print "B activa:#{eventos()}"
+        # B out of the way; the pointer stays over A, and a click there makes A the active window
+        mui_window_move(b, 320, 0)
+        eventos()
+        input_button(1, true)
+        input_button(1, false)
+        Print "clic en A:#{eventos()} [#{input_active_title()}]"
+        # (Intuition may make B the active window by itself, or not: CoffinOS; activating it again gives no event)
+        mui_window_close(a)
+        mui_window_activate(b)
+        Print "A cerrada:#{eventos()}"
+        mui_window_open(a)
+        Print "A otra vez:#{eventos()}"
+        mui_app_end()
+        Print "fin"
+    end
+end

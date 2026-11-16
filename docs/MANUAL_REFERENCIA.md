@@ -47,7 +47,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1011 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1013 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3487,7 +3487,9 @@ Los eventos son números que elige el programa (mayores que 0). `mui_on_press(bo
 y `mui_press(boton)` lanza el evento del botón como si se pulsara (en una opción de menú, como si se eligiera).
 
 Se pueden crear varias ventanas (cada una con su `mui_window_begin` ... `mui_window_end`). Cerrar una
-ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
+ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`. `mui_on_activate(ventana, id)` da
+`id` cuando la ventana pasa a ser la activa (al volver a ella, para ponerla al día) y `mui_on_deactivate(ventana, id)`
+cuando deja de serlo (otra ventana se activa o se cierra).
 
 Las ventanas MUI admiten iconos soltados desde el Workbench. `mui_on_drop(objeto, id)` hace que `mui_wait_event()`
 devuelva `id` cuando se suelta uno sobre ese objeto (sobre una ventana: en cualquier sitio de ella). Después,

@@ -22084,6 +22084,9 @@ static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press()
 static Object *_dash_mui_press_win[_DASH_MUI_PRESSES];  /* its window (mui_window_dispose) */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
+#define _DASH_MUI_ACTS 16
+static struct { Object *win; LONG on, off, last; } _dash_mui_act[_DASH_MUI_ACTS];   /* mui_on_activate */
+static LONG _dash_mui_nact = 0;
 #define _DASH_MUI_RADIOS 32                 /* buttons in exclusive groups (Lorraine D14) */
 static Object *_dash_mui_radio_obj[_DASH_MUI_RADIOS];
 static Object *_dash_mui_radio_win[_DASH_MUI_RADIOS];
@@ -22131,6 +22134,7 @@ static void _dash_mui_app_end(void) {
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
     _dash_mui_depth = 0;
     _dash_mui_npress = 0;
+    _dash_mui_nact = 0;
     _dash_mui_nradio = 0;
     if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
     if (MUIMasterBase) { CloseLibrary(MUIMasterBase); MUIMasterBase = NULL; }
@@ -23294,6 +23298,50 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
     }
 }
 
+/* mui_on_activate(win, id) / mui_on_deactivate(win, id) (Forja: to look at git again when the user comes back to
+   its window, instead of a timer): the window becomes the active one (a click on it, opening it,
+   mui_window_activate) or stops being it (another one is activated, it is closed). MUI sets MUIA_Window_Activate twice for one activation (its own SetAttrs
+   and Intuition's IDCMP_ACTIVEWINDOW after it), so a hook gives the event only when the state changes. */
+static struct Hook _dash_mui_act_hook;
+
+static ULONG _dash_mui_act_entry(struct Hook *h __asm("a0"), Object *obj __asm("a2"), IPTR *args __asm("a1")) {
+    LONG i, v = args[0] != 0, id;
+    (void)h;
+    for (i = 0; i < _dash_mui_nact; i++)
+        if (_dash_mui_act[i].win == obj) {
+            if (_dash_mui_act[i].last == v) return 0;
+            _dash_mui_act[i].last = v;
+            id = v ? _dash_mui_act[i].on : _dash_mui_act[i].off;
+            if (id && _dash_mui_app) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, id);
+        }
+    return 0;
+}
+
+static void _dash_mui_on_active(APTR win, LONG id, LONG on) {
+    LONG i;
+    IPTR active = 0;
+    if (!win || !_dash_mui_app) return;
+    for (i = 0; i < _dash_mui_nact && _dash_mui_act[i].win != (Object *)win; i++) ;
+    if (i == _dash_mui_nact) {
+        if (i == _DASH_MUI_ACTS) return;
+        _dash_mui_nact++;
+        _dash_mui_act[i].win = (Object *)win;
+        _dash_mui_act[i].on = _dash_mui_act[i].off = 0;
+        GetAttr(MUIA_Window_Activate, (Object *)win, &active);
+        _dash_mui_act[i].last = active != 0;
+        _dash_mui_act_hook.h_Entry = (ULONG (*)())_dash_mui_act_entry;
+        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_Activate, MUIV_EveryTime, MUIV_Notify_Self, 3,
+                     MUIM_CallHook, (IPTR)&_dash_mui_act_hook, MUIV_TriggerValue);
+        /* (closing it does not touch MUIA_Window_Activate: it stops being the active one there) */
+        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_Open, FALSE, MUIV_Notify_Self, 3,
+                     MUIM_CallHook, (IPTR)&_dash_mui_act_hook, FALSE);
+    }
+    if (on) _dash_mui_act[i].on = id;
+    else _dash_mui_act[i].off = id;
+}
+static void _dash_mui_on_activate(APTR win, LONG id) { _dash_mui_on_active(win, id, 1); }
+static void _dash_mui_on_deactivate(APTR win, LONG id) { _dash_mui_on_active(win, id, 0); }
+
 /* mui_window_dispose (Dash 2.0, Forja: the preview of the .dashui editor, made again on each change): close the
    window, take it out of the application and free it with all its objects; the runtime forgets what pointed into it
    (mui_press, exclusive groups, text colours) and frees the context menus made after it. Nothing for 0 or for a
@@ -23323,6 +23371,9 @@ static void _dash_mui_window_dispose(APTR win_) {
             _dash_mui_press_id[j++] = _dash_mui_press_id[i];
         }
     _dash_mui_npress = j;
+    for (i = j = 0; i < _dash_mui_nact; i++)
+        if (_dash_mui_act[i].win != win) _dash_mui_act[j++] = _dash_mui_act[i];
+    _dash_mui_nact = j;
     for (i = j = 0; i < _dash_mui_nradio; i++)
         if (_dash_mui_radio_win[i] != win && !_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
             _dash_mui_radio_obj[j] = _dash_mui_radio_obj[i];
