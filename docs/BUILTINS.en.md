@@ -8186,9 +8186,12 @@ See also: [`run_capture`](#run_capture), [`run_start`](#run_start).
 - `path`: a drawer, a program or a document.
 
 Opens it like a double click on its icon: a document opens with its program. It needs AmigaOS 3.5 or later. Returns
-`false` if it could not.
+`false` if the Workbench did not take the request. `true` does not ensure the program starts: the Workbench launches it
+later, on its own, and the caller is not told if that fails (seen on CoffinOS with a program that does start with a
+double click). To check, `window_find` with its window's title; if it does not start, `dir_change` to its drawer and
+`run_program`.
 
-See also: [`run_command`](#run_command).
+See also: [`run_command`](#run_command), [`window_find`](#window_find), [`run_program`](#run_program).
 
 <a id="program_path"></a>
 
