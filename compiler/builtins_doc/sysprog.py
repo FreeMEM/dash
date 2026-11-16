@@ -78,13 +78,19 @@ it could not start.
 - `path`: un cajón, un programa o un documento.
 
 Lo abre como un doble clic en su icono: un documento se abre con su programa. Necesita AmigaOS 3.5 o más. Devuelve
-`false` si no pudo.
+`false` si el Workbench no aceptó la orden. `true` no asegura que el programa arranque: el Workbench lo lanza después,
+por su cuenta, y si falla no se entera quien llamó (se ha visto en CoffinOS con un programa que sí arranca con doble
+clic). Para comprobarlo, `window_find` con el título de su ventana; si no arranca, `dir_change` a su cajón y
+`run_program`.
 """, """\
 - `path`: a drawer, a program or a document.
 
 Opens it like a double click on its icon: a document opens with its program. It needs AmigaOS 3.5 or later. Returns
-`false` if it could not.
-""", ["run_command"]),
+`false` if the Workbench did not take the request. `true` does not ensure the program starts: the Workbench launches it
+later, on its own, and the caller is not told if that fails (seen on CoffinOS with a program that does start with a
+double click). To check, `window_find` with its window's title; if it does not start, `dir_change` to its drawer and
+`run_program`.
+""", ["run_command", "window_find", "run_program"]),
     "program_path": _f("Devuelve la ruta entera del programa (`\"Work:Juegos/Nave\"`), arranque desde el Shell o desde el Workbench.\n",
                        "Returns the program's full path (`\"Work:Games/Ship\"`), started from the Shell or the Workbench.\n", []),
     "locale_language": _f("Devuelve el primer idioma de las preferencias de Locale del usuario (`\"español\"`), o `\"\"` si no hay.\n",
