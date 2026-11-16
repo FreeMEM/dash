@@ -3490,6 +3490,15 @@ INTUITION_EXPANDED = {
         reads_only=True,
         description="dialog_file opening in that drawer with that file name (\"\": as dialog_file does)"
     ),
+    "dialog_drawer": BuiltinFunc(
+        name="dialog_drawer",
+        params=["title", "initial"],
+        return_type="STRPTR",
+        c_template="_dash_dialog_drawer(${title}, ${initial})",
+        needs_asl=True,
+        reads_only=True,
+        description="Drawer requester: full path of the chosen drawer (\"Work:Games\"), \"\" if cancelled; initial: where it opens (\"\": the current drawer)"
+    ),
     "dialog_color": BuiltinFunc(
         name="dialog_color",
         params=["title", "initial"],
@@ -3729,7 +3738,7 @@ MUI_FUNCTIONS = {
     ),
     "mui_text_editor": BuiltinFunc(
         name="mui_text_editor", params=["lines"], return_type="APTR", c_template="_dash_mui_text_editor(${lines})",
-        description="A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return "
+        description="A text field of several lines (MUI's Textinput), that many lines high (0: as high as the window lets it), with a scroller: Return "
                     "starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of "
                     "sending it (Amiga+Return in its window)"),
     "mui_window_open_back": BuiltinFunc(
@@ -6249,6 +6258,7 @@ DASHOS_TEMPLATES = {
     "file_fullpath": "_dash_dos_fullpath()",
     "dialog_file": "_dash_dos_dialog_file(${title}, ${pattern}, ${save_mode}, NULL, NULL)",
     "dialog_file_at": "_dash_dos_dialog_file(${title}, ${pattern}, ${save_mode}, ${drawer}, ${file})",
+    "dialog_drawer": "_dash_dos_dialog_drawer(${title}, ${initial})",
     # (a buffer is an Int: in DashOS, 32 bits, below 2 GB)
     "file_read_line": "FGets(${handle}, (STRPTR)(_DashP)(${buffer}), ${maxlen})",
     "file_read": "Read(${handle}, (APTR)(_DashP)(${buffer}), ${length})",
@@ -6256,7 +6266,7 @@ DASHOS_TEMPLATES = {
 }
 # Those of DASHOS_TEMPLATES that on the Amiga need asl.library and GadTools: not on DashOS
 DASHOS_DIALOGS = {"file_open_dialog", "file_save_dialog", "file_get_path", "file_get_name", "file_fullpath",
-                  "dialog_file", "dialog_file_at"}
+                  "dialog_file", "dialog_file_at", "dialog_drawer"}
 
 # The MUI builtins that work on DashOS (docs/DASHOS_VENTANAS_LOOP.md): there they are windows of DashOS's kit (Material
 # 3), through kit-c (libkit_c.a of DashOS). The other mui_* are a compile error with ./dash --dashos.

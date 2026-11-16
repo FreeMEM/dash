@@ -371,6 +371,8 @@ const BuiltinInfo builtin_info[] = {
     {"desktop_canvas_veil_rect", 7, 2, 1, 0, 0, 0u},
     {"dialog_color", 2, 1, 1, 0, 0, 1u},
     {"dialog_color", 2, 1, 1, 0, 0, 1u},
+    {"dialog_drawer", 2, 3, 0, 0, 0, 3u},
+    {"dialog_drawer", 2, 3, 0, 0, 0, 3u},
     {"dialog_file", 3, 3, 1, 0, 0, 3u},
     {"dialog_file", 3, 3, 1, 0, 0, 3u},
     {"dialog_file_at", 5, 3, 0, 0, 0, 27u},
@@ -2020,7 +2022,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2018;
+const int builtin_count = 2020;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

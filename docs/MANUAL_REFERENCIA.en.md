@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1009 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1010 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -2859,6 +2859,7 @@ end
 
 # These return the choice directly ("" if cancelled)
 ruta = dialog_file("Abrir", "#?.iff", false)      # true: save requester
+cajon = dialog_drawer("Install in", "Work:")      # drawers only: "Work:Games"
 fuente = dialog_font("Tipo de letra")            # "topaz.font/8"
 color = dialog_color("Color de pluma", 1)        # screen color number
 ```
@@ -4565,7 +4566,7 @@ end
 
 ### Functions by Category
 
-There are 1009, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
+There are 1010, all implemented. The full list is in [docs/BUILTINS.en.md](BUILTINS.en.md), by group: each group
 starts with an introduction (what it is for, what is needed first, the usual flow) and an example run by the tests,
 goes on with the table of its functions and ends with each function explained (parameters, what it returns, what
 happens on failure and the related ones).
@@ -4901,7 +4902,8 @@ assigns (`ENV:`, `RAM:`, `Work:`...) will come later.
 - To open, the user picks a file and the program can read it as `Elegido:`, which is what `file_fullpath()` gives.
   The program does not know the file's name.
 - To save, the user picks a folder, which is `Carpeta:`. The file is named as the one given to `dialog_file_at` (or
-  "Sin título"). Only one folder is picked per run: the next times nobody is asked.
+  "Sin título"). Only one folder is picked per run: the next times nobody is asked. `dialog_drawer` picks that
+  folder too and returns `"Carpeta:"`.
 - For now only a program that gets the selector as its fourth key has it. `sesiones` does not give it yet to what it
   launches; without it, the dialog gives false (or `""`).
 

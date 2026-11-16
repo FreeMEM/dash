@@ -1,0 +1,21 @@
+# dialog_drawer (lo pidió un gestor de paquetes: dónde instalar): la petición de cajones de ASL, que se abre en el
+# cajón que se le da. El test arranca una copia de sí mismo (run_program, program_path) que espera la petición y
+# pulsa OK (abajo a la izquierda: Return en el campo del cajón solo lo relee), así que la respuesta es ese cajón.
+# emu-needs: asl.library
+# expect-out: [RAM:]
+
+Main
+    if arg_count() > 0
+        n = 0
+        while input_active_title() != "Instalar en" and n < 250
+            time_delay_ms(40)
+            n = n + 1
+        end
+        time_delay_ms(500)
+        w = window_find("Instalar en")
+        input_click(window_found_box(w, 4) + 20, window_found_box(w, 3) - 21, 0)
+    else
+        run_program("\"" + program_path() + "\" teclear")
+        Print "[" + dialog_drawer("Instalar en", "RAM:") + "]"
+    end
+end

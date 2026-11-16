@@ -1003,6 +1003,7 @@ DESC_ES = {
     "number_set": "Cambia el número que se enseña",
     "dialog_file": "Diálogo de ficheros: la ruta entera del fichero elegido, \"\" si se canceló (save_mode true: "
                    "diálogo de guardar)",
+    "dialog_drawer": "Diálogo de cajones: la ruta entera del cajón elegido (\"Work:Juegos\"), \"\" si se canceló; initial: dónde se abre (\"\": el cajón actual)",
     "dialog_file_at": "dialog_file abriéndose en ese cajón con ese nombre de fichero (\"\": como dialog_file)",
     "dialog_color": "Ventana con la paleta: da el color elegido (con un clic, o con las flechas + Return); Esc deja el "
                     "inicial",
@@ -1121,7 +1122,7 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
-    "mui_text_editor": "Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su "
+    "mui_text_editor": "Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto (0: tan alto como deje la ventana), con su "
                        "barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el "
                        "evento de mandarlo (Amiga+Return en su ventana)",
     "mui_window_open_back": "Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo "

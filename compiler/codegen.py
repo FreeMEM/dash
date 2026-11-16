@@ -20176,6 +20176,24 @@ static STRPTR _dash_dialog_file_at(STRPTR title, STRPTR pattern, LONG save_mode,
     return _dash_str_dup(_dash_file_fullpath(), TRUE);
 }
 
+/* dialog_drawer: the full path of the chosen drawer ("Work:Juegos"), "" if cancelled (a temporary string). Its own
+   requester each time: ASLFR_DrawersOnly would stay in the one of dialog_file (a package manager: where to install) */
+static STRPTR _dash_dialog_drawer(STRPTR title, STRPTR initial) {
+    struct FileRequester *fr;
+    STRPTR r = NULL;
+    if (_dash_asl_open() && (fr = (struct FileRequester *)AllocAslRequestTags(ASL_FileRequest, TAG_DONE))) {
+        if (AslRequestTags(fr,
+                ASLFR_TitleText, (ULONG)title,
+                initial && *initial ? ASLFR_InitialDrawer : TAG_IGNORE, (ULONG)initial,
+                ASLFR_DrawersOnly, TRUE,
+                _dash_win ? ASLFR_Window : TAG_IGNORE, (ULONG)_dash_win,
+                TAG_DONE) && fr->fr_Drawer && fr->fr_Drawer[0])
+            r = _dash_str_dup((STRPTR)fr->fr_Drawer, TRUE);
+        FreeAslRequest(fr);
+    }
+    return r ? r : _dash_str_dup((STRPTR)"", TRUE);
+}
+
 /* dialog_font: "name.font/size" ("topaz.font/8"), "" if cancelled */
 static STRPTR _dash_dialog_font(STRPTR title) {
     struct FontRequester *fo;
@@ -20336,6 +20354,12 @@ static STRPTR _dash_dos_fullpath(void) {
     strcpy(_dash_dos_full, _dash_dos_path);
     strcat(_dash_dos_full, _dash_dos_file);
     return (STRPTR)_dash_dos_full;
+}
+
+/* dialog_drawer: the folder the user picks, "Carpeta:" ("" if cancelled) */
+static STRPTR _dash_dos_dialog_drawer(STRPTR title, STRPTR initial) {
+    if (!_dash_dos_choose(title, (STRPTR)"", TRUE, initial, (STRPTR)"")) return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup(_dash_dos_get_path(), TRUE);
 }
 
 /* dialog_file and dialog_file_at: the full path, "" if cancelled (a temporary string) */
@@ -22582,6 +22606,11 @@ static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
 static APTR _dash_mui_text_editor(LONG lines) {
     char fix[40];
     LONG i, k = 0;
+    if (lines == 0)                                       /* (0: as high as the window lets it) */
+        return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
+            MUIA_CycleChain, 1,
+            MUIA_Textinput_Multiline, TRUE,
+            MUIA_Textinput_Contents, (IPTR)""), _DASH_MUI_EDITOR);
     if (lines < 1) lines = 1;
     if (lines > 30) lines = 30;
     for (i = 1; i < lines; i++) fix[k++] = '\\n';

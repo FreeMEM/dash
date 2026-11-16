@@ -1,0 +1,27 @@
+# mui_text_editor(0): sin alto fijo, crece con la ventana (lo pidió un gestor de paquetes: un texto largo en una
+# pestaña grande). Dos ventanas, una baja y otra alta: el de 0 es más alto en la alta y el de 3 líneas no cambia.
+# emu-needs: muimaster.library
+# expect-out: crece true, fijo igual true
+# expect-out: fin
+
+Main
+    if mui_app_begin("Alto", "DASHALTO") == 0
+        Print "sin MUI"
+    else
+        a = mui_window_begin("Baja", 0)
+            fijo_a = mui_text_editor(3)
+            libre_a = mui_text_editor(0)
+        mui_window_end()
+        b = mui_window_begin("Alta", 0)
+            fijo_b = mui_text_editor(3)
+            libre_b = mui_text_editor(0)
+        mui_window_end()
+        mui_window_size(a, 40, 45)
+        mui_window_size(b, 40, 90)
+        mui_window_open(a)
+        mui_window_open(b)
+        Print "crece #{mui_height(libre_b) > mui_height(libre_a)}, fijo igual #{mui_height(fijo_a) == mui_height(fijo_b)}"
+        mui_app_end()
+        Print "fin"
+    end
+end

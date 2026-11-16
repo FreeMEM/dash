@@ -47,7 +47,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1009 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1010 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -2859,6 +2859,7 @@ end
 
 # Devuelven directamente lo elegido ("" si se cancela)
 ruta = dialog_file("Abrir", "#?.iff", false)      # true: selector de guardar
+cajon = dialog_drawer("Instalar en", "Work:")     # solo cajones: "Work:Juegos"
 fuente = dialog_font("Tipo de letra")            # "topaz.font/8"
 color = dialog_color("Color de pluma", 1)        # numero de color de la pantalla
 ```
@@ -4565,7 +4566,7 @@ end
 
 ### Funciones por Categoria
 
-Son 1009, todas implementadas. La lista completa está en [docs/BUILTINS.md](BUILTINS.md), por grupos: cada grupo
+Son 1010, todas implementadas. La lista completa está en [docs/BUILTINS.md](BUILTINS.md), por grupos: cada grupo
 empieza con una introducción (para qué sirve, qué hace falta antes, el flujo de siempre) y un ejemplo que se prueba
 con los tests, sigue con la tabla de sus funciones y acaba con cada función explicada (parámetros, qué devuelve, qué
 pasa si falla y las relacionadas).
@@ -4902,6 +4903,7 @@ Las asignaciones de DashOS (`ENV:`, `RAM:`, `Work:`...) llegarán después.
   `file_fullpath()`. El nombre del fichero no lo sabe el programa.
 - Para guardar, el usuario elige una carpeta, que es `Carpeta:`. El fichero se llama como el que se pasa a
   `dialog_file_at` (o "Sin título"). Se elige una sola carpeta por ejecución: las veces siguientes no se pregunta.
+  `dialog_drawer` también elige esa carpeta y devuelve `"Carpeta:"`.
 - De momento el selector solo lo tiene un programa que lo traiga en su cuarta llave. `sesiones` aún no lo da a los
   programas que lanza; sin él, el diálogo da false (o `""`).
 
