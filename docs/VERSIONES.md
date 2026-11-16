@@ -33,6 +33,26 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.15.0 (2026-11-16)
+
+Programas de Dash con ventanas en DashOS, el espacio libre de un disco y elegir un cajón. Todo lo que compilaba
+sigue compilando igual.
+
+- **Nuevo:** `path_free_kb(ruta)`: los KB libres del disco donde está una ruta o una asignación (`SYS:`, `Work:`), sin
+  pedir que se meta un disco; -1 si no se puede saber.
+- **Nuevo:** `dialog_drawer(title, initial)`: la petición del sistema para elegir un cajón (solo cajones). Devuelve
+  la ruta entera (`"Work:Juegos"`) o `""` si se cancela.
+- **Nuevo:** `mui_menu_radio`: opciones de menú excluyentes en MUI; al marcar una, se desmarcan las de su grupo.
+  1011 funciones.
+- **Mejora:** `mui_text_editor(0)` no tiene alto fijo: crece con la ventana.
+- **Mejora:** `mui_set_text` cambia la imagen de `mui_image`, `mui_image_button` y `mui_image_toggle` también en MUI
+  3.8, y un texto de MUI 3.8 que cambia de número de líneas se vuelve a colocar.
+- **Arreglo:** con AmigaOS 3.9 y su ROM Update, los programas de `./dash` caían al pedir memoria (Recoverable
+  Alert 0100000F). Lo contó JaviTecH.
+- **DashOS:** con `./dash --dashos`, un programa de Dash abre ventanas (texto, campos, botones, listas, menús con
+  casillas, opciones y submenús, `mui_request`), lee y escribe ficheros y cajones, y abre el selector de ficheros
+  de DashOS. Los textos salen en el idioma del sistema.
+
 ### 2.14.0 (2026-11-12)
 
 Lo que necesitan los espacios virtuales de TrasfondoVentanas, y salir sin esperar a las imágenes. Todo lo que

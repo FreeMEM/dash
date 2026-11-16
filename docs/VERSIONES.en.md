@@ -32,6 +32,26 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.15.0 (2026-11-16)
+
+Dash programs with windows on DashOS, a disk's free space and picking a drawer. Everything that compiled still
+compiles the same.
+
+- **New:** `path_free_kb(path)`: the free KB of the disk a path or assign is on (`SYS:`, `Work:`), without asking to
+  insert a disk; -1 if it cannot be known.
+- **New:** `dialog_drawer(title, initial)`: the system requester to pick a drawer (drawers only). Returns the full
+  path (`"Work:Games"`) or `""` if cancelled.
+- **New:** `mui_menu_radio`: mutually exclusive MUI menu options; ticking one unticks the others in its group.
+  1011 functions.
+- **Improvement:** `mui_text_editor(0)` has no fixed height: it grows with the window.
+- **Improvement:** `mui_set_text` changes the picture of `mui_image`, `mui_image_button` and `mui_image_toggle` on
+  MUI 3.8 too, and a MUI 3.8 text whose number of lines changes is laid out again.
+- **Fix:** on AmigaOS 3.9 with its ROM Update, `./dash` programs crashed when asking for memory (Recoverable Alert
+  0100000F). Reported by JaviTecH.
+- **DashOS:** with `./dash --dashos`, a Dash program opens windows (text, fields, buttons, lists, menus with
+  checkmarks, options and submenus, `mui_request`), reads and writes files and drawers, and opens DashOS's file
+  selector. Texts come in the system's language.
+
 ### 2.14.0 (2026-11-12)
 
 What TrasfondoVentanas virtual spaces need, and exiting without waiting for images. Everything that compiled
