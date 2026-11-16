@@ -4648,6 +4648,7 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--debug` | A `NOP` at the start of each line and the debug information (below) |
 | `--debug-info prog` | Shows the debug information of an executable built with `--debug` |
 | `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
+| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |

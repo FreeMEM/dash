@@ -801,6 +801,8 @@ def main():
                         help="Generate multiple C files (one per module)")
     parser.add_argument("--cabecera", metavar="FILE.h",
                         help="Also write the program's structs, constants and @export prototypes for the C of @link")
+    parser.add_argument("--check", action="store_true",
+                        help="Only check: the errors, without writing the C (Forja marks them on saving)")
     args = parser.parse_args()
 
     input_filename = args.input_file
@@ -846,6 +848,8 @@ def main():
         else:
             # Single-file mode (default)
             c_output, _ = compiler.compile(source_code, filename=input_filename)
+            if args.check:
+                return
             if args.cabecera:
                 with open(args.cabecera, "w") as f:
                     f.write(compiler.generator.c_header())

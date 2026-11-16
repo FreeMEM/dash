@@ -81,6 +81,7 @@ static void usage(void)
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
             "  --perfil       al acabar, en qué funciones se fue el tiempo (también --profile)\n"
             "  --cabecera x.h los structs del programa en C, para el C de @link (sin -o, solo eso)\n"
+            "  --check        solo comprueba: da los errores sin hacer el ejecutable (sin -o)\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
             "  --tiempos      lo que lleva cada fase\n");
@@ -149,7 +150,7 @@ int main(int argc, char **argv)
     Program *prog;
     static Obj obj;
     long cli_stack = 0;
-    int i, fpu = 0;
+    int i, fpu = 0, check = 0;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
@@ -169,6 +170,7 @@ int main(int argc, char **argv)
             cpu020 = strcmp(c, "68000") != 0;          /* muls.l y divs.l */
         }
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
+        else if (!strcmp(argv[i], "--check")) check = 1;
         else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);
         else if (!strcmp(argv[i], "--version")) {
             printf("Dash %s\n", DASH_VERSION);
@@ -192,7 +194,7 @@ int main(int argc, char **argv)
         else if (!in) in = argv[i];
         else usage();
     }
-    if (!in || (!out && !header)) usage();
+    if (!in || (!out && !header && !check)) usage();
     tiempo("cargar");
 
     rt = rt_normal;
@@ -254,6 +256,7 @@ int main(int argc, char **argv)
     tiempo("leer");
     gen_program(prog, &obj);
     tiempo("generar");
+    if (check) return 0;   /* --check: los errores salen al generar; sin ejecutable */
 #ifdef DASH_A64
     write_elf_obj(&obj, out);   /* (se enlaza aparte con el runtime para ARM: docs/AARCH64_LOOP.md) */
 #else
