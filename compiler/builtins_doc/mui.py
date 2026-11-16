@@ -923,8 +923,54 @@ Empieza un submenú dentro del menú abierto; sus opciones van hasta `mui_submen
 Starts a submenu inside the open menu; its items go up to `mui_submenu_end`. One level only.
 """, ["mui_submenu_end"]),
     "mui_submenu_end": _f("Acaba el submenú.\n", "Ends the submenu.\n", ["mui_submenu_begin"]),
-    "mui_menu_end": _f("Acaba el menú abierto, o el menú contextual.\n", "Ends the open menu, or the context menu.\n",
-                       ["mui_menu_begin", "mui_context_menu_begin"]),
+    "mui_menu_end": _f("Acaba el menú abierto, o el menú contextual (también los de `mui_menu_add` y `mui_menu_extend`).\n",
+                       "Ends the open menu, or the context menu (also those of `mui_menu_add` and `mui_menu_extend`).\n",
+                       ["mui_menu_begin", "mui_context_menu_begin", "mui_menu_add"]),
+    "mui_menu_add": _f("""\
+- `win`: la ventana, ya hecha (abierta o no).
+- `title`: el título del menú.
+
+Empieza un menú nuevo al final de la barra de menús de la ventana; sus opciones como en `mui_menu_begin`, hasta
+`mui_menu_end`. Sirve para menús que aparecen con el programa en marcha (el menú de una extensión). Devuelve el menú,
+para `mui_menu_extend` o `mui_menu_remove`.
+
+Con la ventana abierta, MUI 4 y 5 cambian los menús sin más; MUI 3.8 hace los menús al abrir la ventana, y Dash la
+cierra y la vuelve a abrir en `mui_menu_end`.
+""", """\
+- `win`: the window, already made (open or not).
+- `title`: the menu's title.
+
+Starts a new menu at the end of the window's menu bar; its items as in `mui_menu_begin`, up to `mui_menu_end`. For
+menus that appear while the program runs (an extension's menu). Returns the menu, for `mui_menu_extend` or
+`mui_menu_remove`.
+
+With the window open, MUI 4 and 5 just change the menus; MUI 3.8 makes its menus when the window opens, and Dash
+closes it and opens it again at `mui_menu_end`.
+""", ["mui_menu_extend", "mui_menu_remove", "mui_menu_item"]),
+    "mui_menu_extend": _f("""\
+- `menu`: un menú (de `mui_menu_begin`, `mui_menu_add` o `mui_context_menu_begin`) o un submenú (de
+  `mui_submenu_begin`).
+
+Lo abre otra vez para añadir opciones al final, como al hacerlo, hasta `mui_menu_end`. También con la ventana abierta.
+Dentro de un submenú no se puede empezar otro.
+""", """\
+- `menu`: a menu (from `mui_menu_begin`, `mui_menu_add` or `mui_context_menu_begin`) or a submenu (from
+  `mui_submenu_begin`).
+
+Opens it again to add items at its end, as when it was made, up to `mui_menu_end`. Also with the window open. A
+submenu cannot be started inside a submenu.
+""", ["mui_menu_add", "mui_menu_remove"]),
+    "mui_menu_remove": _f("""\
+- `obj`: una opción, un submenú o un menú entero.
+
+Lo quita de su ventana (con sus opciones) y lo libera: su número deja de valer. También con la ventana abierta. Si
+ya no está, no hace nada.
+""", """\
+- `obj`: an item, a submenu or a whole menu.
+
+Takes it away from its window (with its items) and frees it: its number is no longer valid. Also with the window
+open. If it is gone already, it does nothing.
+""", ["mui_menu_add", "mui_menu_extend"]),
     "mui_context_menu_begin": _f("""\
 - `title`: el título del menú.
 

@@ -47,7 +47,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1013 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1017 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -2682,6 +2682,9 @@ A Dash program can send ARexx commands to others and have its own port to receiv
 r = rexx_send("MULTIVIEW.1", "QUIT")    # its RESULT ("" if none)
 rc = rexx_rc()                          # 0 fine; -1 no such port; -2 no rexxsyslib.library
 
+# without hanging if the other one does not answer: 2 s at most (0: it does not wait)
+r = rexx_send_wait("FORJA.1", "ESTADO", 2000)    # "" and rexx_rc() -3 if it did not answer in time
+
 # receive: a port of its own ("ADDRESS MYPROGRAM" from ARexx)
 if rexx_port("MYPROGRAM")               # false if there is one with that name already
     ...
@@ -3518,6 +3521,9 @@ Each one explained, with its parameters and two examples run by the tests: [BUIL
 | `mui_menu_radio(text, key, id, checked)` | Option of a group: the options one after another, with nothing between them (not even a bar), are a group of up to 16, and choosing one checks it and unchecks the others. It gives its `id`; `mui_get_value`/`mui_set_value` as in `mui_menu_check` (checking one unchecks the rest of its group). |
 | `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
 | `mui_context_menu_begin(title)` ... `mui_menu_end()` | Context menu (right button), inside or outside a window: its items as in a menu. `mui_set_context_menu(obj, menu)` makes the right button over `obj` open it; each item gives its `id`. On a canvas, `mui_canvas_mouse_x`/`_y` say where it was pressed and `mui_canvas_button` is 2. |
+| `mui_menu_add(window, title)` ... `mui_menu_end()` | A new menu at the end of the bar of a window already made, also open (an extension's menu). Returns the menu. |
+| `mui_menu_extend(menu)` ... `mui_menu_end()` | More items at the end of a menu or submenu already made, also with the window open. |
+| `mui_menu_remove(obj)` | Takes away an item, a submenu or a whole menu, and frees it. With the window open, MUI 4 and 5 just change the menus; with MUI 3.8, Dash closes the window and opens it again. |
 | `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing area; grows with the window. |
 | `mui_canvas_on_draw(zona, funcion)` | Function `f(x, y, ancho, alto)` that paints it with the `gfx_` functions. MUI calls it when needed (on opening, on resizing...). You can only paint inside it. Fills work too (`gfx_circle_fill`, `gfx_poly_*`...). |

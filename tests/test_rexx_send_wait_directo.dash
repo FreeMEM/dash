@@ -1,0 +1,62 @@
+# The same as test_rexx_send_wait.dash, built by ./dash straight to hunk.
+# dash-direct:
+# rexx_send_wait (Forja: an extension that hangs must not hang the program that asks it): the program is the server
+# (rexx_port) and, started again as "cliente", the client. LENTO takes 3 s to answer: with 500 ms the client gets ""
+# and rexx_rc() -3 at once; the late answer is taken by Dash at the next command. With 0 it does not wait, and the
+# client ends with that command still at the server, which answers later into memory that is still there.
+# emu-needs: rexxsyslib.library
+# expect-out: rápido: [rápido] 0
+# expect-out: lento: [] -3 a tiempo: true
+# expect-out: tras el lento: [rápido] 0
+# expect-out: sin puerto: [] -1
+# expect-out: rexx_send: [rápido] 0
+# expect-out: sin esperar: [] -3
+# expect-out: órdenes: 5
+# expect-out: fin
+
+const P = "PRUEBAESPERA"
+
+func cliente()
+    r = rexx_send_wait(P, "RAPIDO", 2000)
+    Print "rápido: [#{r}] #{rexx_rc()}"
+    t0 = time_ms()
+    r = rexx_send_wait(P, "LENTO", 500)
+    dt = time_ms() - t0
+    Print "lento: [#{r}] #{rexx_rc()} a tiempo: #{dt >= 400 and dt < 1500}"
+    r = rexx_send_wait(P, "RAPIDO", 8000)
+    Print "tras el lento: [#{r}] #{rexx_rc()}"
+    r = rexx_send_wait("NOESTAPUERTO", "X", 100)
+    Print "sin puerto: [#{r}] #{rexx_rc()}"
+    r = rexx_send(P, "RAPIDO")
+    Print "rexx_send: [#{r}] #{rexx_rc()}"
+    r = rexx_send_wait(P, "LENTO", 0)
+    Print "sin esperar: [#{r}] #{rexx_rc()}"
+end
+
+Main
+    if arg(0) == "cliente"
+        cliente()
+    elif rexx_port(P)
+        h = run_start("\"" + program_path() + "\" cliente", 60000)
+        n = 0
+        while not (run_ready(h) and n >= 5)
+            c = rexx_get()
+            if c == ""
+                time_delay(1)
+            else
+                n = n + 1
+                if c == "LENTO"
+                    time_delay_ms(3000)
+                    rexx_reply(0, "lento")
+                else
+                    rexx_reply(0, "rápido")
+                end
+            end
+        end
+        Print str_trim(run_finish(h))
+        Print "órdenes: #{n}"
+        Print "fin"
+    else
+        Print "sin puerto ARexx"
+    end
+end

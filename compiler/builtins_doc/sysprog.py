@@ -201,10 +201,29 @@ programa: se esperaría a sí mismo.
 
 Sends it and waits for the reply. Returns its RESULT (`""` if none); the RC goes to `rexx_rc()`. Not to the
 program's own port: it would wait for itself.
-""", ["rexx_rc", "ports_read"]),
-    "rexx_rc": _f("Devuelve el RC del último `rexx_send`: 0 bien, 5, 10, 20 los del programa; -1 si no existe el puerto, -2 sin `rexxsyslib.library`.\n",
-                  "Returns the RC of the last `rexx_send`: 0 fine, 5, 10, 20 the program's; -1 if the port does not exist, -2 without `rexxsyslib.library`.\n",
-                  ["rexx_send"]),
+""", ["rexx_rc", "rexx_send_wait", "ports_read"]),
+    "rexx_send_wait": _f("""\
+- `port`: el puerto ARexx de otro programa.
+- `command`: la orden.
+- `ms`: cuántos milisegundos espera la respuesta como mucho; 0 = no espera.
+
+Como `rexx_send`, pero sin quedarse colgado si el otro programa no contesta: pasado ese tiempo devuelve `""` y
+`rexx_rc()` da -3. La orden sigue en el otro programa: cuando conteste, Dash recoge y libera su respuesta (en el
+siguiente `rexx_send` o `rexx_send_wait`, o al acabar). Si el programa acaba antes, el mensaje se queda en memoria
+para que la respuesta tardía no escriba en memoria liberada.
+""", """\
+- `port`: another program's ARexx port.
+- `command`: the command.
+- `ms`: how many milliseconds it waits for the reply at most; 0 = it does not wait.
+
+As `rexx_send`, but it does not hang if the other program does not answer: after that time it returns `""` and
+`rexx_rc()` gives -3. The command stays at the other program: when it answers, Dash takes and frees its reply (at the
+next `rexx_send` or `rexx_send_wait`, or at exit). If the program ends first, the message stays in memory so the
+late reply does not write to freed memory.
+""", ["rexx_send", "rexx_rc"]),
+    "rexx_rc": _f("Devuelve el RC del último `rexx_send` o `rexx_send_wait`: 0 bien, 5, 10, 20 los del programa; -1 si no existe el puerto, -2 sin `rexxsyslib.library`, -3 si no contestó a tiempo.\n",
+                  "Returns the RC of the last `rexx_send` or `rexx_send_wait`: 0 fine, 5, 10, 20 the program's; -1 if the port does not exist, -2 without `rexxsyslib.library`, -3 if it did not answer in time.\n",
+                  ["rexx_send", "rexx_send_wait"]),
     "rexx_port": _f("""\
 - `name`: el nombre del puerto, en mayúsculas.
 

@@ -7150,42 +7150,158 @@ static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
 #include <rexx/errors.h>
 #include <proto/rexxsyslib.h>
 #include <dos/dosextens.h>
+#include <devices/timer.h>
 static struct Library *_dash_rexx_base = NULL;
 static LONG _dash_rexx_rc_last = 0;
 
-static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) {
-    struct MsgPort *reply, *to = NULL;
+/* rexx_send_wait(port, command, ms): waiting ms at most. The message must stay alive until it comes back, also
+   after the time is up (the other program writes its answer in it and replies to its port): each command has its own
+   port and message, in memory of exec (not the pool, freed at exit); a late one stays in _dash_rexx_late with its
+   port changed to PA_IGNORE (it signals no one) and is freed when it comes back, at the next rexx_send* or at exit.
+   One that has not come back at exit stays in memory for good, so the late answer writes where it may. */
+struct _DashRexxOut {
+    struct MsgPort port;             /* where the answer comes back (not public) */
+    struct RexxMsg *rm;
+    struct _DashRexxOut *next;
+};
+static struct _DashRexxOut *_dash_rexx_late = NULL;
+static struct MsgPort *_dash_rexx_tport = NULL;
+static struct timerequest *_dash_rexx_tr = NULL;
+
+#define _DASH_PORT_EMPTY(p) ((p)->mp_MsgList.lh_TailPred == (struct Node *)&(p)->mp_MsgList)
+
+static void _dash_rexx_free(struct _DashRexxOut *o) {
+    struct RexxMsg *rm = o->rm;
+    if (rm) {
+        if (rm->rm_Result1 == 0 && rm->rm_Result2) DeleteArgstring((UBYTE *)rm->rm_Result2);
+        if (rm->rm_Args[0]) DeleteArgstring((UBYTE *)rm->rm_Args[0]);
+        DeleteRexxMsg(rm);
+    }
+    FreeMem(o, sizeof(*o));
+}
+
+/* The late answers that came back: freed */
+static void _dash_rexx_collect(void) {
+    struct _DashRexxOut **pp = &_dash_rexx_late, *o;
+    while ((o = *pp)) {
+        if (GetMsg(&o->port)) {
+            *pp = o->next;
+            _dash_rexx_free(o);
+        } else pp = &o->next;
+    }
+}
+
+static void _dash_rexx_send_cleanup(void) {
+    _dash_rexx_collect();            /* (the others stay: their program still has them) */
+    _dash_rexx_late = NULL;
+    if (_dash_rexx_tr) {
+        CloseDevice((struct IORequest *)_dash_rexx_tr);
+        DeleteIORequest((struct IORequest *)_dash_rexx_tr);
+        _dash_rexx_tr = NULL;
+    }
+    if (_dash_rexx_tport) { DeleteMsgPort(_dash_rexx_tport); _dash_rexx_tport = NULL; }
+}
+
+/* Until something comes to p or ms pass (timer.device; without it, ticks): TRUE if it came */
+static BOOL _dash_rexx_wait(struct MsgPort *p, LONG ms) {
+    ULONG tsig;
+    LONG ticks;
+    if (!_DASH_PORT_EMPTY(p) || ms <= 0) return !_DASH_PORT_EMPTY(p);
+    if (!_dash_rexx_tr) {
+        if ((_dash_rexx_tport = CreateMsgPort()))
+            _dash_rexx_tr = (struct timerequest *)CreateIORequest(_dash_rexx_tport, sizeof(struct timerequest));
+        if (_dash_rexx_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)_dash_rexx_tr, 0)) {
+            DeleteIORequest((struct IORequest *)_dash_rexx_tr);
+            _dash_rexx_tr = NULL;
+        }
+    }
+    if (!_dash_rexx_tr) {
+        for (ticks = (ms + 19) / 20; ticks > 0 && _DASH_PORT_EMPTY(p); ticks--) Delay(1);
+        return !_DASH_PORT_EMPTY(p);
+    }
+    tsig = 1UL << _dash_rexx_tport->mp_SigBit;
+    _dash_rexx_tr->tr_node.io_Command = TR_ADDREQUEST;
+    _dash_rexx_tr->tr_time.tv_secs = ms / 1000;
+    _dash_rexx_tr->tr_time.tv_micro = (ms % 1000) * 1000;
+    SetSignal(0, tsig);
+    SendIO((struct IORequest *)_dash_rexx_tr);
+    for (;;) {
+        if (!_DASH_PORT_EMPTY(p)) {
+            if (!CheckIO((struct IORequest *)_dash_rexx_tr)) AbortIO((struct IORequest *)_dash_rexx_tr);
+            WaitIO((struct IORequest *)_dash_rexx_tr);
+            return TRUE;
+        }
+        if (CheckIO((struct IORequest *)_dash_rexx_tr)) {
+            WaitIO((struct IORequest *)_dash_rexx_tr);
+            return !_DASH_PORT_EMPTY(p);
+        }
+        Wait((1UL << p->mp_SigBit) | tsig);
+    }
+}
+
+/* ms < 0: no time limit (rexx_send) */
+static STRPTR _dash_rexx_send_ms(STRPTR port, STRPTR command, LONG ms) {
+    struct _DashRexxOut *o;
+    struct MsgPort *to = NULL;
     struct RexxMsg *rm;
     STRPTR res = NULL;
+    BYTE sig;
+    BOOL back = FALSE;
     _dash_rexx_rc_last = -1;
     if (!port || !command) return _dash_str_dup((STRPTR)"", TRUE);
     if (!_dash_rexx_base && !(_dash_rexx_base = OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36))) {
         _dash_rexx_rc_last = -2;
         return _dash_str_dup((STRPTR)"", TRUE);
     }
-    if (!(reply = CreateMsgPort())) return _dash_str_dup((STRPTR)"", TRUE);
-    if ((rm = CreateRexxMsg(reply, NULL, NULL))) {
-        if ((rm->rm_Args[0] = (STRPTR)CreateArgstring(command, strlen((char *)command)))) {
-            rm->rm_Action = RXCOMM | RXFF_RESULT;
-            Forbid();
-            if ((to = FindPort(port))) PutMsg(to, &rm->rm_Node);
-            Permit();
-            if (to) {
-                /* (it must come back before the message can be freed: no time limit) */
-                WaitPort(reply);
-                GetMsg(reply);
-                _dash_rexx_rc_last = rm->rm_Result1;
-                if (rm->rm_Result1 == 0 && rm->rm_Result2) {
-                    res = _dash_str_dup((STRPTR)rm->rm_Result2, TRUE);
-                    DeleteArgstring((UBYTE *)rm->rm_Result2);
-                }
-            }
-            DeleteArgstring((UBYTE *)rm->rm_Args[0]);
-        }
-        DeleteRexxMsg(rm);
+    _dash_rexx_collect();
+    if ((sig = AllocSignal(-1)) < 0) return _dash_str_dup((STRPTR)"", TRUE);
+    if (!(o = (struct _DashRexxOut *)AllocMem(sizeof(*o), MEMF_PUBLIC | MEMF_CLEAR))) {
+        FreeSignal(sig);
+        return _dash_str_dup((STRPTR)"", TRUE);
     }
-    DeleteMsgPort(reply);
+    o->port.mp_Node.ln_Type = NT_MSGPORT;
+    o->port.mp_Flags = PA_SIGNAL;
+    o->port.mp_SigBit = sig;
+    o->port.mp_SigTask = FindTask(NULL);
+    o->port.mp_MsgList.lh_Head = (struct Node *)&o->port.mp_MsgList.lh_Tail;
+    o->port.mp_MsgList.lh_TailPred = (struct Node *)&o->port.mp_MsgList.lh_Head;
+    if ((rm = o->rm = CreateRexxMsg(&o->port, NULL, NULL))
+        && (rm->rm_Args[0] = (STRPTR)CreateArgstring(command, strlen((char *)command)))) {
+        rm->rm_Action = RXCOMM | RXFF_RESULT;
+        Forbid();
+        if ((to = FindPort(port))) PutMsg(to, &rm->rm_Node);
+        Permit();
+        if (to) {
+            if (ms < 0) {
+                WaitPort(&o->port);
+                back = TRUE;
+            } else {
+                back = _dash_rexx_wait(&o->port, ms);
+                Forbid();
+                if (!(back = !_DASH_PORT_EMPTY(&o->port))) o->port.mp_Flags = PA_IGNORE;   /* (late: no signal) */
+                Permit();
+            }
+            if (back) {
+                GetMsg(&o->port);
+                _dash_rexx_rc_last = rm->rm_Result1;
+                if (rm->rm_Result1 == 0 && rm->rm_Result2) res = _dash_str_dup((STRPTR)rm->rm_Result2, TRUE);
+            } else {
+                _dash_rexx_rc_last = -3;
+                o->next = _dash_rexx_late;
+                _dash_rexx_late = o;
+            }
+        }
+    }
+    SetSignal(0, 1UL << sig);
+    FreeSignal(sig);
+    if (!to || back) _dash_rexx_free(o);
     return res ? res : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) { return _dash_rexx_send_ms(port, command, -1); }
+
+static STRPTR _dash_rexx_send_wait(STRPTR port, STRPTR command, LONG ms) {
+    return _dash_rexx_send_ms(port, command, ms < 0 ? 0 : ms);
 }
 
 static LONG _dash_rexx_rc(void) { return _dash_rexx_rc_last; }
@@ -7515,6 +7631,7 @@ static void _dash_syslist_cleanup(void) {
     _dash_systab_free(&_dash_ports_tab);
     _dash_systab_free(&_dash_tasks_tab);
     _dash_systab_free(&_dash_assigns_tab);
+    _dash_rexx_send_cleanup();
     if (_dash_rexx_base) { CloseLibrary(_dash_rexx_base); _dash_rexx_base = NULL; }
 }
 
@@ -12367,45 +12484,96 @@ static void _dash_input_move_screen(LONG x, LONG y, LONG buttons) {
     }
 }
 
-/* Item item (from 0, separators too) of menu menu (from 0) of the active window, chosen with the mouse: the right
-   button on the menu's title, steps of a pixel to the item, held hold ticks, let go. False if there is no such
-   item */
-static BOOL _dash_input_menu(LONG menu, LONG item, LONG hold) {
-    struct Window *w = IntuitionBase->ActiveWindow;
-    struct Menu *m;
-    struct MenuItem *it;
-    struct Screen *sc;
+static void _dash_input_rbutton(BOOL down) {
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = down ? IECODE_RBUTTON : IECODE_RBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = (down ? IEQUALIFIER_RBUTTON : 0) | IEQUALIFIER_RELATIVEMOUSE;
+    _dash_input_send(&ie);
+}
+
+/* The pointer straight to (x, y) of the screen */
+static void _dash_input_jump(struct Screen *sc, LONG x, LONG y) {
     struct InputEvent ie;
     struct IEPointerPixel pp;
-    LONG k;
-    if (!w || !(m = w->MenuStrip)) return FALSE;
-    for (k = 0; k < menu && m; k++) m = m->NextMenu;
-    it = m ? m->FirstItem : NULL;
-    for (k = 0; k < item && it; k++) it = it->NextItem;
-    if (!it) return FALSE;
-    sc = w->WScreen;
     memset(&ie, 0, sizeof(ie));
     pp.iepp_Screen = sc;
-    pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
-    pp.iepp_Position.Y = sc->BarHeight / 2;
+    pp.iepp_Position.X = x;
+    pp.iepp_Position.Y = y;
     ie.ie_Class = IECLASS_NEWPOINTERPOS;
     ie.ie_SubClass = IESUBCLASS_PIXEL;
     ie.ie_EventAddress = (APTR)&pp;
     _dash_input_send(&ie);
     Delay(4);
-    memset(&ie, 0, sizeof(ie));
-    ie.ie_Class = IECLASS_RAWMOUSE;
-    ie.ie_Code = IECODE_RBUTTON;
-    ie.ie_Qualifier = IEQUALIFIER_RBUTTON | IEQUALIFIER_RELATIVEMOUSE;
-    _dash_input_send(&ie);
+}
+
+/* The right button down on the bar and, once the menus are open (2 s at most), menu menu of the strip; NULL if they
+   did not open or there is no such menu */
+static struct Menu *_dash_input_menu_open(struct Window *w, LONG menu) {
+    struct Menu *m;
+    LONG k;
+    _dash_input_rbutton(TRUE);
+    for (k = 0; k < 100 && !(w->MenuStrip && (w->Flags & WFLG_MENUSTATE)); k++) Delay(1);
+    m = (w->Flags & WFLG_MENUSTATE) ? w->MenuStrip : NULL;
+    for (k = 0; k < menu && m; k++) m = m->NextMenu;
+    return m;
+}
+
+/* Item item (from 0, separators too) of menu menu (from 0) of the active window, chosen with the mouse: the right
+   button on the menu's title, steps of a pixel to the item, held hold ticks, let go. False if there is no such item
+   (let go on the bar: nothing chosen). The menus are looked for once open: MUI 4/5 make their Intuition menus when
+   the right button is pressed, the first time (until then the window has RMBTRAP: a first press opens and closes
+   them) and after they change. */
+static BOOL _dash_input_menu(LONG menu, LONG item, LONG hold) {
+    struct Window *w = IntuitionBase->ActiveWindow;
+    struct Menu *m;
+    struct MenuItem *it;
+    struct Screen *sc;
+    LONG k;
+    if (!w || (!w->MenuStrip && !(w->Flags & WFLG_RMBTRAP))) return FALSE;
+    sc = w->WScreen;
+    if (!w->MenuStrip) {
+        _dash_input_jump(sc, 1, sc->BarHeight / 2);      /* (on the bar, before the first title) */
+        _dash_input_menu_open(w, 0);
+        _dash_input_rbutton(FALSE);
+        Delay(5);
+    }
+    /* where its title was the last time (a jump: crossing the others with the button down is slow) */
+    m = w->MenuStrip;
+    for (k = 0; k < menu && m; k++) m = m->NextMenu;
+    _dash_input_jump(sc, m ? m->LeftEdge + m->Width / 2 : 1, sc->BarHeight / 2);
+    m = _dash_input_menu_open(w, menu);
+    it = m ? m->FirstItem : NULL;
+    for (k = 0; k < item && it; k++) it = it->NextItem;
+    if (!it) {
+        _dash_input_rbutton(FALSE);                     /* (on the bar: nothing chosen) */
+        for (k = 0; k < 15 && (w->Flags & WFLG_MENUSTATE); k++) Delay(1);
+        if (w->Flags & WFLG_MENUSTATE) {                /* (sticky menus: a click closes them) */
+            _dash_input_rbutton(TRUE);
+            Delay(5);
+            _dash_input_rbutton(FALSE);
+        }
+        return FALSE;
+    }
+    _dash_input_move_screen(m->LeftEdge + m->Width / 2, sc->BarHeight / 2, 2);
     Delay(9);
     _dash_input_move_screen(m->LeftEdge + it->LeftEdge + it->Width / 2, sc->BarHeight + 1 + it->TopEdge + it->Height / 2, 2);
     Delay(hold > 10 ? hold : 10);
-    memset(&ie, 0, sizeof(ie));
-    ie.ie_Class = IECLASS_RAWMOUSE;
-    ie.ie_Code = IECODE_RBUTTON | IECODE_UP_PREFIX;
-    ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
-    _dash_input_send(&ie);
+    _dash_input_rbutton(FALSE);
+    /* sticky menus (MagicMenu and the like, as in CoffinOS: open after letting go) take the item with a click */
+    for (k = 0; k < 15 && (w->Flags & WFLG_MENUSTATE); k++) Delay(1);
+    if (w->Flags & WFLG_MENUSTATE) {
+        _dash_input_rbutton(TRUE);
+        Delay(5);
+        _dash_input_rbutton(FALSE);
+        for (k = 0; k < 25 && (w->Flags & WFLG_MENUSTATE); k++) Delay(1);
+    }
+    if (w->Flags & WFLG_MENUSTATE) {
+        _dash_input_button(TRUE, 0);
+        Delay(5);
+        _dash_input_button(FALSE, 0);
+    }
     return TRUE;
 }
 
@@ -22554,9 +22722,14 @@ static APTR _dash_mui_menu_radio(STRPTR title, STRPTR key, LONG id, LONG checked
 }
 
 /* A submenu (one level, as Intuition has): its items go in until mui_submenu_end */
+static BOOL _dash_mui_ext_sub = FALSE;   /* mui_menu_extend of a submenu: no submenu inside it */
+
 static APTR _dash_mui_submenu_begin(STRPTR title) {
     Object *item;
-    if (_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_begin inside another submenu"); return NULL; }
+    if (_dash_mui_sub_parent || _dash_mui_ext_sub) {
+        _dash_mui_error("mui_submenu_begin inside another submenu");
+        return NULL;
+    }
     if (!(item = _dash_mui_menu_add(title, NULL))) return NULL;
     _dash_mui_sub_parent = _dash_mui_cur_menu;
     _dash_mui_cur_menu = item;
@@ -22573,12 +22746,40 @@ static void _dash_mui_submenu_end(void) {
     _dash_mui_nmradio = 0;
 }
 
+/* Menus changed with the window open (mui_menu_add, mui_menu_extend, mui_menu_remove): MUI 4 and 5 (muimaster V20+)
+   between MUIM_Menustrip_InitChange and ExitChange; MUI 3.8 makes its menus when the window opens, so the window is
+   closed for the change and opened again after it */
+static Object *_dash_mui_chg_strip = NULL;   /* the strip being changed (InitChange done) */
+static Object *_dash_mui_chg_win = NULL;     /* MUI 3.8: the window closed for the change */
+
+static void _dash_mui_menu_change(Object *win, Object *strip) {
+    IPTR open = 0;
+    if (!win || !strip) return;
+    GetAttr(MUIA_Window_Open, win, &open);
+    if (!open) return;
+    if (MUIMasterBase->lib_Version >= 20) {
+        _DASH_MUI_DO(strip, MUIM_Menustrip_InitChange);
+        _dash_mui_chg_strip = strip;
+    } else {
+        SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+        _dash_mui_chg_win = win;
+    }
+}
+
+static void _dash_mui_menu_changed(void) {
+    if (_dash_mui_chg_strip) _DASH_MUI_DO(_dash_mui_chg_strip, MUIM_Menustrip_ExitChange);
+    if (_dash_mui_chg_win) SetAttrs(_dash_mui_chg_win, MUIA_Window_Open, TRUE, TAG_DONE);
+    _dash_mui_chg_strip = _dash_mui_chg_win = NULL;
+}
+
 static void _dash_mui_menu_end(void) {
     if (!_dash_mui_cur_menu) _dash_mui_error("mui_menu_end without mui_menu_begin");
     if (_dash_mui_sub_parent) _dash_mui_error("mui_menu_end with a submenu still open");
     _dash_mui_cur_menu = NULL;
     _dash_mui_sub_parent = NULL;
     _dash_mui_nmradio = 0;
+    _dash_mui_ext_sub = FALSE;
+    _dash_mui_menu_changed();
 }
 
 /* Context menus (Lorraine D15): mui_context_menu_begin("Celdas"), its items as in a window's menu (mui_menu_item,
@@ -22614,6 +22815,132 @@ static APTR _dash_mui_context_menu_begin(STRPTR title) {
 
 static void _dash_mui_set_context_menu(APTR obj, APTR menu) {
     if (obj) SetAttrs(obj, MUIA_ContextMenu, (IPTR)menu, TAG_DONE);
+}
+
+/* Menus changed after the window is made (Forja: the menu of an extension). mui_menu_add(win, title): a menu at the
+   end of the window's bar; mui_menu_extend(menu): items at the end of a menu or submenu made before; both until
+   mui_menu_end(). mui_menu_remove(obj): an item, a submenu or a menu goes away (and is disposed). The window and
+   the parent of a menu object are looked for in the menu strips of the windows alive and of the context menus. */
+
+/* The family (strip, menu or submenu) under fam that has obj among its children, and obj's place in it; NULL if
+   none */
+static Object *_dash_mui_menu_parent(Object *fam, Object *obj, LONG *pos) {
+    struct MinList *l = NULL;
+    struct MinNode *n;
+    Object *r;
+    LONG i = 0;
+    if (!fam || !GetAttr(MUIA_Family_List, fam, (IPTR *)&l) || !l) return NULL;
+    for (n = l->mlh_Head; n->mln_Succ; n = n->mln_Succ, i++)
+        if (BASEOBJECT(n) == obj) { *pos = i; return fam; }
+    for (n = l->mlh_Head; n->mln_Succ; n = n->mln_Succ)
+        if ((r = _dash_mui_menu_parent(BASEOBJECT(n), obj, pos))) return r;
+    return NULL;
+}
+
+/* Its parent and place, and the window and strip it is in (win NULL: a context menu); FALSE if not found */
+static BOOL _dash_mui_menu_where(Object *obj, Object **parent, LONG *pos, Object **win, Object **strip) {
+    LONG i;
+    IPTR st;
+    if (!obj) return FALSE;
+    for (i = 0; i < _dash_mui_nwins; i++) {
+        st = 0;
+        GetAttr(MUIA_Window_Menustrip, _dash_mui_wins[i], &st);
+        if (st && (*parent = _dash_mui_menu_parent((Object *)st, obj, pos))) {
+            *win = _dash_mui_wins[i];
+            *strip = (Object *)st;
+            return TRUE;
+        }
+    }
+    for (i = 0; i < _dash_mui_nctx; i++)
+        if ((*parent = _dash_mui_menu_parent(_dash_mui_ctx[i], obj, pos))) {
+            *win = NULL;
+            *strip = _dash_mui_ctx[i];
+            return TRUE;
+        }
+    return FALSE;
+}
+
+static LONG _dash_mui_menu_count(Object *fam) {
+    struct MinList *l = NULL;
+    struct MinNode *n;
+    LONG k = 0;
+    if (GetAttr(MUIA_Family_List, fam, (IPTR *)&l) && l)
+        for (n = l->mlh_Head; n->mln_Succ; n = n->mln_Succ) k++;
+    return k;
+}
+
+static APTR _dash_mui_menu_add_to(APTR win, STRPTR title) {
+    IPTR strip = 0;
+    Object *menu;
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_menu_add inside another menu"); return NULL; }
+    if (!win || _dash_mui_kind((Object *)win) != _DASH_MUI_WINDOW) { _dash_mui_error("mui_menu_add: not a window"); return NULL; }
+    GetAttr(MUIA_Window_Menustrip, (Object *)win, &strip);
+    if (!strip) return NULL;
+    if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
+    _dash_mui_menu_change((Object *)win, (Object *)strip);
+    _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_cur_menu = menu;
+    _dash_mui_sub_parent = NULL;
+    _dash_mui_menu_pos = _dash_mui_nmradio = 0;
+    return menu;
+}
+
+static void _dash_mui_menu_extend(APTR menu) {
+    Object *parent, *win, *strip;
+    LONG pos;
+    LONG i;
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_menu_extend inside another menu"); return; }
+    for (i = 0; i < _dash_mui_nctx; i++)          /* a context menu: its menu */
+        if (_dash_mui_ctx[i] == (Object *)menu) {
+            struct MinList *l = NULL;
+            if (GetAttr(MUIA_Family_List, (Object *)menu, (IPTR *)&l) && l && l->mlh_Head->mln_Succ)
+                menu = BASEOBJECT(l->mlh_Head);
+        }
+    if (!_dash_mui_menu_where((Object *)menu, &parent, &pos, &win, &strip)) {
+        _dash_mui_error("mui_menu_extend: not a menu of a window");
+        return;
+    }
+    /* (an item of a menu is a submenu, or becomes one; an item of a submenu cannot: one level, as Intuition) */
+    if (parent != strip && _dash_mui_menu_parent(strip, parent, &pos) != strip) {
+        _dash_mui_error("mui_menu_extend: an item of a submenu");
+        return;
+    }
+    _dash_mui_ext_sub = parent != strip;
+    _dash_mui_menu_change(win, strip);
+    _dash_mui_cur_menu = (Object *)menu;
+    _dash_mui_sub_parent = NULL;
+    _dash_mui_menu_pos = _dash_mui_menu_count((Object *)menu);
+    _dash_mui_nmradio = 0;
+}
+
+/* With obj out of the family at place pos: the other options of the family no longer exclude it (their
+   notifications and MUIA_Menuitem_Exclude, which counts places: the ones after it go one down) */
+static void _dash_mui_menu_unlink(Object *fam, Object *obj, LONG pos) {
+    struct MinList *l = NULL;
+    struct MinNode *n;
+    IPTR ex;
+    if (!GetAttr(MUIA_Family_List, fam, (IPTR *)&l) || !l) return;
+    for (n = l->mlh_Head; n->mln_Succ; n = n->mln_Succ) {
+        Object *o = BASEOBJECT(n);
+        ex = 0;
+        if (o == obj || !GetAttr(MUIA_Menuitem_Exclude, o, &ex) || !ex) continue;
+        _DASH_MUI_DO(o, MUIM_KillNotifyObj, MUIA_Menuitem_Checked, (IPTR)obj);
+        if (pos < 32)
+            ex = (ex & ((1UL << pos) - 1)) | ((ex >> (pos + 1)) << pos);
+        SetAttrs(o, MUIA_Menuitem_Exclude, ex, TAG_DONE);
+    }
+}
+
+static void _dash_mui_menu_remove(APTR obj) {
+    Object *parent, *win, *strip;
+    LONG pos;
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_menu_remove while a menu is being built"); return; }
+    if (!_dash_mui_menu_where((Object *)obj, &parent, &pos, &win, &strip)) return;   /* (gone already) */
+    _dash_mui_menu_change(win, strip);
+    _DASH_MUI_DO(parent, OM_REMMEMBER, (IPTR)obj);
+    _dash_mui_menu_unlink(parent, (Object *)obj, pos);
+    _dash_mui_menu_changed();
+    MUI_DisposeObject((Object *)obj);
 }
 
 static void _dash_mui_group_end(void) {

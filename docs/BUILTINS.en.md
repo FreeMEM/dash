@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1013 functions, 1013 implemented, 0 not implemented.
+Total: 1017 functions, 1017 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -7843,7 +7843,7 @@ end
 | [`input_button(button, down)`](#input_button) | — | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | [`input_drag(x1, y1, x2, y2)`](#input_drag) | — | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
 | [`input_qualifiers()`](#input_qualifiers) | Int | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
-| [`input_menu(menu, item, hold)`](#input_menu) | Bool | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
+| [`input_menu(menu, item, hold)`](#input_menu) | Bool | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item. Also with MUI |  |
 | [`input_move_screen(x, y, buttons)`](#input_move_screen) | — | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
 | [`input_active_title()`](#input_active_title) | String | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
@@ -7928,7 +7928,7 @@ See also: [`input_key`](#input_key).
 - `hold`: how many ticks (1/50 s) it stays pressed before releasing.
 
 Chooses that item from the active window's menu with the mouse, like a user. Returns `false` if there is no such
-item.
+item. Also with MUI: it looks for the menus once open (MUI 4 and 5 make them when the right button is pressed).
 
 See also: [`input_button`](#input_button).
 
@@ -8117,7 +8117,8 @@ end
 | [`env_get(name)`](#env_get) | String | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
 | [`env_set(name, value, save)`](#env_set) | Bool | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
 | [`rexx_send(port, command)`](#rexx_send) | String | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
-| [`rexx_rc()`](#rexx_rc) | Int | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| [`rexx_send_wait(port, command, ms)`](#rexx_send_wait) | String | As rexx_send, but waiting ms milliseconds at most (0: it does not wait): if there is no answer by then, "" and rexx_rc() -3. The late answer is taken and freed by Dash |  |
+| [`rexx_rc()`](#rexx_rc) | Int | RC of the last rexx_send or rexx_send_wait: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library, -3 no answer in time |  |
 | [`rexx_port(name)`](#rexx_port) | Bool | Opens the program's own ARexx port with that name ("ADDRESS NAME" from ARexx): false if there is one already, or without rexxsyslib.library. Its commands, with rexx_get |  |
 | [`rexx_get()`](#rexx_get) | String | The next command that came to the rexx_port ("" if none): it waits for rexx_reply (the next rexx_get answers it with RC 0) |  |
 | [`rexx_signal()`](#rexx_signal) | Int | Signal mask of the rexx_port port (0 without one): mui_wait_event_signals(rexx_signal()) wakes up when an ARexx command arrives (Tachyon D84) |  |
@@ -8388,15 +8389,30 @@ See also: [`env_get`](#env_get).
 Sends it and waits for the reply. Returns its RESULT (`""` if none); the RC goes to `rexx_rc()`. Not to the
 program's own port: it would wait for itself.
 
-See also: [`rexx_rc`](#rexx_rc), [`ports_read`](#ports_read).
+See also: [`rexx_rc`](#rexx_rc), [`rexx_send_wait`](#rexx_send_wait), [`ports_read`](#ports_read).
+
+<a id="rexx_send_wait"></a>
+
+### `rexx_send_wait(port, command, ms)` → `String`
+
+- `port`: another program's ARexx port.
+- `command`: the command.
+- `ms`: how many milliseconds it waits for the reply at most; 0 = it does not wait.
+
+As `rexx_send`, but it does not hang if the other program does not answer: after that time it returns `""` and
+`rexx_rc()` gives -3. The command stays at the other program: when it answers, Dash takes and frees its reply (at the
+next `rexx_send` or `rexx_send_wait`, or at exit). If the program ends first, the message stays in memory so the
+late reply does not write to freed memory.
+
+See also: [`rexx_send`](#rexx_send), [`rexx_rc`](#rexx_rc).
 
 <a id="rexx_rc"></a>
 
 ### `rexx_rc()` → `Int`
 
-Returns the RC of the last `rexx_send`: 0 fine, 5, 10, 20 the program's; -1 if the port does not exist, -2 without `rexxsyslib.library`.
+Returns the RC of the last `rexx_send` or `rexx_send_wait`: 0 fine, 5, 10, 20 the program's; -1 if the port does not exist, -2 without `rexxsyslib.library`, -3 if it did not answer in time.
 
-See also: [`rexx_send`](#rexx_send).
+See also: [`rexx_send`](#rexx_send), [`rexx_send_wait`](#rexx_send_wait).
 
 <a id="rexx_port"></a>
 
@@ -11462,6 +11478,9 @@ end
 | [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (address) | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
 | [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
 | [`mui_menu_end()`](#mui_menu_end) | — | End the menu |  |
+| [`mui_menu_add(win, title)`](#mui_menu_add) | Int (address) | Start a new menu at the end of the menu bar of a window already made (open or not): its items as in mui_menu_begin, until mui_menu_end |  |
+| [`mui_menu_extend(menu)`](#mui_menu_extend) | — | Open again a menu or submenu already made (also a context menu) to add items at its end, until mui_menu_end |  |
+| [`mui_menu_remove(obj)`](#mui_menu_remove) | — | Take away a menu item, a submenu or a whole menu (with its items) from its window, also with the window open; it is freed and its handle is no longer valid |  |
 | [`mui_canvas(min_width, min_height)`](#mui_canvas) | Int (address) | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
 | [`mui_canvas_on_draw(canvas, func)`](#mui_canvas_on_draw) | — | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |
 | [`mui_canvas_on_input(canvas, id)`](#mui_canvas_on_input) | — | mui_wait_event returns id on a click, wheel or key over the area (call before opening the window) |  |
@@ -12281,9 +12300,48 @@ See also: [`mui_context_menu_begin`](#mui_context_menu_begin).
 
 ### `mui_menu_end()`
 
-Ends the open menu, or the context menu.
+Ends the open menu, or the context menu (also those of `mui_menu_add` and `mui_menu_extend`).
 
-See also: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#mui_context_menu_begin).
+See also: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#mui_context_menu_begin), [`mui_menu_add`](#mui_menu_add).
+
+<a id="mui_menu_add"></a>
+
+### `mui_menu_add(win, title)` → `Int (address)`
+
+- `win`: the window, already made (open or not).
+- `title`: the menu's title.
+
+Starts a new menu at the end of the window's menu bar; its items as in `mui_menu_begin`, up to `mui_menu_end`. For
+menus that appear while the program runs (an extension's menu). Returns the menu, for `mui_menu_extend` or
+`mui_menu_remove`.
+
+With the window open, MUI 4 and 5 just change the menus; MUI 3.8 makes its menus when the window opens, and Dash
+closes it and opens it again at `mui_menu_end`.
+
+See also: [`mui_menu_extend`](#mui_menu_extend), [`mui_menu_remove`](#mui_menu_remove), [`mui_menu_item`](#mui_menu_item).
+
+<a id="mui_menu_extend"></a>
+
+### `mui_menu_extend(menu)`
+
+- `menu`: a menu (from `mui_menu_begin`, `mui_menu_add` or `mui_context_menu_begin`) or a submenu (from
+  `mui_submenu_begin`).
+
+Opens it again to add items at its end, as when it was made, up to `mui_menu_end`. Also with the window open. A
+submenu cannot be started inside a submenu.
+
+See also: [`mui_menu_add`](#mui_menu_add), [`mui_menu_remove`](#mui_menu_remove).
+
+<a id="mui_menu_remove"></a>
+
+### `mui_menu_remove(obj)`
+
+- `obj`: an item, a submenu or a whole menu.
+
+Takes it away from its window (with its items) and frees it: its number is no longer valid. Also with the window
+open. If it is gone already, it does nothing.
+
+See also: [`mui_menu_add`](#mui_menu_add), [`mui_menu_extend`](#mui_menu_extend).
 
 <a id="mui_canvas"></a>
 
