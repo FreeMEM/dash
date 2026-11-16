@@ -310,6 +310,24 @@ extern const int builtin_count;
 typedef struct { const char *name; int code; } KeyName;
 extern const KeyName key_names[];
 
+/* ---- ensamblador en línea (asm68k.c, docs/ASM_DISEÑO.md) ---- */
+typedef struct { uint32_t *v; int n, cap; } U32Vec;
+typedef struct {
+    char *body;            /* las líneas del cuerpo */
+    int line, file;        /* la línea de la primera y el fichero (src_files) */
+    int nin, nout;
+    signed char in_reg[16], out_reg[16];   /* 0-7 d0-d7, 8-15 a0-a7 */
+    unsigned uses;         /* bit r: el registro r */
+} AsmBlock;
+extern struct AsmBlocks { AsmBlock *v; int n, cap; } asm_blocks;
+/* el fuente con cada asm ... end cambiado por __dash_asm(n, entradas) var = __dash_asm_out(n, j)...; NULL si no hay */
+char *asm_extract(const char *src);
+/* una constante de Dash por su nombre (del fichero file), para las expresiones del bloque */
+typedef int (*AsmConstFn)(const char *name, int file, long *val);
+/* los bytes del bloque al final de code; relocs: pares (sitio, destino) desde el principio del bloque, de cada long
+   que apunta a una etiqueta suya */
+void asm_assemble(AsmBlock *bk, Buf *code, int cpu020, AsmConstFn cfn, U32Vec *relocs);
+
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);
 void write_elf_obj(Obj *obj, const char *out);   /* dashc para DashOS (-DDASH_A64): el objeto ELF (elf.c) */

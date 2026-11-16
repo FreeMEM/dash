@@ -16,7 +16,7 @@ from compiler.ast_nodes import (AmigaCast, InExpr, InRangeExpr,
     ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess, NilLiteral,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral, GlobalVarDecl
+    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral, GlobalVarDecl, SourceLocation
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -923,6 +923,9 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_FunctionCall(self, node: FunctionCall):
         """Visit a function call."""
+        if node.name in ("__dash_asm", "__dash_asm_out"):
+            self._visit_asm(node)
+            return
         # sizeof(S), offsetof(S, campo) of an @amiga struct (A6): constants
         if node.name in ("sizeof", "offsetof") and node.arguments and isinstance(node.arguments[0], VarRef) \
                 and node.arguments[0].name in getattr(self, "amiga", {}):
@@ -1816,8 +1819,32 @@ class SemanticAnalyzer(ASTVisitor):
 
     # === Helper Methods ===
 
+    def _visit_asm(self, node: FunctionCall):
+        """An asm block (docs/ASM_DISEÑO.md): __dash_asm(N, inputs...) and var = __dash_asm_out(N, j), put there by
+        compiler/asm68k.extract. The inputs go in registers (not a Float or a Double); the block's names (labels,
+        its equ and the program's const) are checked here."""
+        from compiler import asm68k
+        if node.name == "__dash_asm_out":
+            return
+        if os.environ.get("DASH_TARGET") == "dashos":
+            self.error("asm: el ensamblador en línea es de 68000: no vale en DashOS", node)
+            return
+        for arg in node.arguments[1:]:
+            self.visit(arg)
+            if self._infer_type(arg) in (DashType.FLOAT, DashType.DOUBLE):
+                self.error("asm: un Float o un Double no va en un registro (pasa Int(x) o Fixed(x))", arg)
+        block = asm68k.BLOCKS.get(node.arguments[0].value) if node.arguments else None
+        if block is None:
+            return
+        try:
+            asm68k.check(block, asm_consts(self.program))
+        except asm68k.AsmError as e:
+            self.error(e.message, Comment(text="", location=SourceLocation(e.line, e.col, block.filename)))
+
     def _infer_type(self, node: ASTNode) -> DashType:
         """Infer the type of an expression."""
+        if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":
+            return DashType.INT
         self._dict_get(node)                     # d.get(k, default) is d[k] (D65)
         if isinstance(node, StringLiteral):
             return DashType.STRING
@@ -2009,3 +2036,14 @@ def analyze(program: Program) -> AnalysisResult:
     """Convenience function to analyze a program."""
     analyzer = SemanticAnalyzer()
     return analyzer.analyze(program)
+
+
+def asm_consts(program) -> dict:
+    """The program's integer constants, by name (asm blocks use them: docs/ASM_DISEÑO.md)."""
+    consts = {}
+    for c in getattr(program, "constants", None) or []:
+        if isinstance(c.value, NumberLiteral):
+            consts[c.name] = int(c.value.value)
+        elif isinstance(c.value, BoolLiteral):
+            consts[c.name] = 1 if c.value.value else 0
+    return consts

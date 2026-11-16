@@ -48,6 +48,12 @@ def _indent(line):
     return len(line.expandtabs(4)) - len(line.expandtabs(4).lstrip())
 
 
+def is_asm_header(line):
+    """Does an asm block start in this line (compiler/asm68k.py)?"""
+    from compiler.asm68k import is_header
+    return is_header(line)
+
+
 def format_text(text, step="    "):
     if "\r\n" in text:           # a file with Windows line ends keeps them (else it always looks changed)
         return format_text(text.replace("\r\n", "\n"), step).replace("\n", "\r\n")
@@ -55,11 +61,19 @@ def format_text(text, step="    "):
     out = []
     stack = []                     # "block" (closed by end) or "tree" (closed by its _end call)
     in_native = False
+    in_asm = None                  # inside an asm block: the indentation of its asm line
     depth = 0                      # open brackets carried from the lines above
     previous = ""                  # the last line with code (for "@extern" + "func" without a body)
     hanging = False                # the line above ended with a comment: aligned comments under it stay
     for n, raw in enumerate(lines):
         stripped = raw.strip()
+        if in_asm is not None:
+            if stripped == "end":                        # the end of an asm block: as an end of the block's level
+                out.append(in_asm + "end")
+                in_asm = None
+            else:
+                out.append(raw.rstrip())                 # assembler: exactly as it is (labels, # immediates)
+            continue
         if in_native:
             out.append(raw.rstrip())                     # C: exactly as it is (only end spaces)
             if '"""' in stripped:
@@ -68,6 +82,11 @@ def format_text(text, step="    "):
         if stripped.startswith('"""'):
             out.append(raw.rstrip())
             in_native = stripped.count('"""') == 1       # """ ... """ on one line: done
+            continue
+        if depth == 0 and is_asm_header(raw):           # asm ... end (docs/ASM_DISEÑO.md)
+            in_asm = step * len(stack)
+            out.append(in_asm + stripped)
+            hanging = False
             continue
         if depth > 0:                                    # continues an open bracket: its own indentation
             out.append(raw.rstrip())

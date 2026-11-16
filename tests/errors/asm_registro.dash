@@ -1,0 +1,8 @@
+# Test: a5 es el marco de las funciones de Dash: no vale en un bloque asm
+# expect: asm: el registro a5 no se puede usar en un bloque asm
+# expect-dash: asm: el registro a5 no se puede usar en un bloque asm
+Main
+    asm uses d2/a5
+        nop
+    end
+end

@@ -10,6 +10,7 @@ import re
 import argparse
 from dataclasses import dataclass, field
 from lark import Lark
+from compiler import asm68k
 from lark.exceptions import UnexpectedInput, UnexpectedCharacters, VisitError
 from typing import Optional, Set, List, Dict, Tuple
 
@@ -68,6 +69,11 @@ class DashCompiler:
         change the tree."""
         if source.startswith("\ufeff"):          # a BOM (Windows editors): not part of the program
             source = source[1:]
+        try:
+            source = asm68k.extract(source, filename)   # asm ... end blocks (docs/ASM_DISEÑO.md)
+        except asm68k.AsmError as e:
+            raise CompilationError(f"{filename or '<input>'}:{e.line}:{e.col}: Error: {e.message}",
+                                   stage="parse") from None
         cache = getattr(self, "tree_cache", None)
         cached = cache.get(filename) if cache is not None and filename else None
         if cached is not None and cached[0] == source:

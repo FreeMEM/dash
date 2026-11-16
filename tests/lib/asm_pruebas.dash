@@ -1,0 +1,145 @@
+# Ensamblador en línea (docs/ASM_DISEÑO.md): lo prueban test_asm.dash (./dash --gcc) y test_asm_directo.dash
+# (./dash directo a hunk), con la misma salida.
+
+const DESP = 4
+
+func suma(a: Int, b: Int) -> Int
+    asm in d0 = a, d1 = b out r = d0
+        add.l   d1,d0
+    end
+    return r
+end
+
+# un bucle con dbra y una etiqueta local (la misma en otro bloque)
+func factorial(n: Int) -> Int
+    asm in d1 = n - 1 out f = d0 uses d2
+        moveq   #1,d0
+        moveq   #1,d2
+    .bucle:
+        mulu.w  d2,d0
+        addq.w  #1,d2
+        dbra    d1,.bucle
+    end
+    return f
+end
+
+func suma_lista(l: [Int]) -> Int
+    total = 0
+    asm in a0 = l, d0 = l.length - 1 out total = d1
+        moveq   #0,d1
+    .bucle:
+        add.l   (a0)+,d1
+        dbra    d0,.bucle
+    end
+    return total
+end
+
+# las variables de Dash siguen bien aunque el bloque pise d2-d7, a2-a4 y a6
+func pisa_todo(n: Int) -> Int
+    a = 1
+    b = 2
+    c = 3
+    d = 4
+    e = 5
+    g = 6
+    t = 0
+    for i in (1..n)
+        asm uses d2-d7/a2-a4/a6
+            moveq   #-1,d2
+            move.l  d2,d3
+            move.l  d2,d4
+            move.l  d2,d5
+            move.l  d2,d6
+            move.l  d2,d7
+            move.l  d2,a2
+            move.l  d2,a3
+            move.l  d2,a4
+            move.l  d2,a6
+        end
+        t = t + a + b + c + d + e + g + i
+    end
+    return t
+end
+
+func pruebas()
+    Print suma(40, 2)
+    # división: cociente y resto
+    x = 17
+    asm in d0 = x, d2 = 5 out q = d1, r = d0 uses d2
+        divu.w  d2,d0           ; resto:cociente
+        moveq   #0,d1
+        move.w  d0,d1
+        swap    d0
+        ext.l   d0
+    end
+    Print "#{q} #{r}"
+    Print factorial(5)
+    nums = [1, 2, 3, 4, 5]
+    Print suma_lista(nums)
+    # escribir en los elementos de una lista
+    asm in a0 = nums
+        move.l  #99,(a0)
+        addq.l  #1,8(a0)
+    end
+    Print "#{nums[0]} #{nums[2]}"
+    # un texto: la dirección de sus caracteres
+    s = "Hola"
+    asm in a1 = s out c0 = d0, c3 = d1
+        moveq   #0,d0
+        move.b  (a1),d0
+        moveq   #0,d1
+        move.b  3(a1),d1
+    end
+    Print "#{c0} #{c3}"
+    # un búfer: lo llena el bloque, lo lee Dash
+    buf = amiga_alloc(40)
+    asm in a0 = buf uses d0-d1
+        moveq   #9,d0
+        moveq   #0,d1
+    .llena:
+        move.l  d1,(a0)+
+        addq.l  #3,d1
+        dbra    d0,.llena
+    end
+    Print "#{peek_long(buf)} #{peek_long(buf + 36)}"
+    amiga_free(buf, 40)
+    # datos en el bloque, etiquetas, equ, una const de Dash, dc.l reubicado
+    asm out total = d0, misma = d1 uses a0-a1/d2
+        lea     tabla(pc),a0
+        moveq   #0,d0
+        moveq   #N-1,d2
+    sigue:
+        add.w   (a0)+,d0
+        dbra    d2,sigue
+        add.l   #DESP*10,d0
+        lea     tabla(pc),a0
+        move.l  dir(pc),a1
+        cmpa.l  a0,a1
+        seq     d1
+        and.l   #1,d1
+        bra.s   fin
+    N = 4
+    tabla:  dc.w    10,20,30,40
+    dir:    dc.l    tabla
+            dc.b    "x"
+    fin:
+    end
+    Print "#{total} #{misma}"
+    # incbin: los 4 bytes de lib/asm_datos.bin ("DASH")
+    asm out v = d0
+        move.l  datos(pc),d0
+        bra.s   .fin
+    datos:
+        incbin  "asm_datos.bin"
+    .fin:
+    end
+    Print v == 0x44415348
+    # bits, desplazamientos, Bool y negativos
+    flag = true
+    asm in d0 = flag, d1 = -6 out m = d0, h = d1
+        lsl.l   #4,d0
+        asr.l   #1,d1
+    end
+    Print "#{m} #{h}"
+    Print pisa_todo(10)
+end

@@ -1,0 +1,19 @@
+# Ensamblador en línea por ./dash directo a hunk (docs/ASM_DISEÑO.md; lo pidió el usuario, para demos). El mismo
+# programa por ./dash --gcc: test_asm.dash.
+# dash-direct:
+# expect-out: 42
+# expect-out: 3 2
+# expect-out: 120
+# expect-out: 15
+# expect-out: 99 4
+# expect-out: 72 97
+# expect-out: 0 27
+# expect-out: 140 1
+# expect-out: true
+# expect-out: 16 -3
+# expect-out: 265
+import "lib/asm_pruebas.dash"
+
+Main
+    pruebas()
+end

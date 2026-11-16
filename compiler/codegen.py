@@ -27612,6 +27612,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
+        if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":
+            return "LONG"
         target = self._amiga_of(node)
         if target is not None:
             return self._amiga_c(target)
@@ -28571,6 +28573,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_FunctionCall(self, node: FunctionCall):
         """Generate code for function call (as statement)."""
+        if node.name == "__dash_asm":
+            self._gen_asm_block(node)
+            return
         # Check if it's a builtin function
         builtin = get_builtin(node.name)
         if builtin:
@@ -28582,6 +28587,49 @@ static {ret_type} {method_name}({params_str}) {{
             return
 
         self.emit(f"{self.context.indent}{self._callee(node)}({self._call_args(node)});\n")
+
+    def _gen_asm_block(self, node: FunctionCall):
+        """An asm block (docs/ASM_DISEÑO.md, compiler/asm68k.py): the inputs in volatile temporaries (GCC 6 and
+        libgcc calls with register asm, AGENTS.md), then in their registers; the block as a GCC __asm__ for
+        binutils' as; the outputs in _dasmN_oJ, which the var = __dash_asm_out(N, J) after it read."""
+        from compiler import asm68k
+        from compiler.analyzer import asm_consts
+        n = node.arguments[0].value
+        block = asm68k.BLOCKS[n]
+        text, needs_020 = asm68k.translate(block, asm_consts(self.analysis.program))
+        ind = self.context.indent
+        if needs_020:
+            what, line = needs_020[0]
+            what = what.replace("\\", "").replace('"', "'")
+            self.emit("#if !(defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || "
+                      "defined(__mc68060__))\n")
+            self.emit(f'#error "{block.filename}:{line}: asm: {what} necesita --cpu 68020"\n#endif\n')
+        if block.outs:
+            self.emit(f"{ind}LONG " + ", ".join(f"_dasm{n}_o{j}" for j in range(len(block.outs))) + ";\n")
+        self.emit(f"{ind}{{\n")
+        inner = ind + "    "
+        for k, ((reg, _), arg) in enumerate(zip(block.ins, node.arguments[1:])):
+            ctype = self._infer_c_type(arg)
+            code = self._generate_expression(arg)
+            if ctype == "DashArrayLong *":
+                self.emit(f"{inner}DashArrayLong *_dasm{n}_l{k} = {code};\n")
+                code = f"_dasm{n}_l{k} ? (LONG)_dasm{n}_l{k}->data : 0"
+            self.emit(f"{inner}volatile LONG _dasm{n}_i{k} = (LONG)({code});\n")
+        in_regs = {reg for reg, _ in block.ins}
+        regs = [reg for reg, _ in block.ins] + [r for _, r in block.outs if r not in in_regs]
+        regs = list(dict.fromkeys(regs))
+        for reg in regs:
+            init = ""
+            if reg in in_regs:
+                init = f" = _dasm{n}_i{[r for r, _ in block.ins].index(reg)}"
+            self.emit(f'{inner}register LONG _dasm{n}_{reg} __asm__("{reg}"){init};\n')
+        outputs = ", ".join(f'"{"+" if reg in in_regs else "="}r"(_dasm{n}_{reg})' for reg in regs)
+        clobbers = ", ".join([f'"{r}"' for r in block.clobbers()] + ['"cc"', '"memory"'])
+        self.emit(f"{inner}__asm__ volatile ({asm68k.c_string(chr(9) + text + chr(10))}\n"
+                  f"{inner}    : {outputs} : : {clobbers});\n")
+        for j, (_, reg) in enumerate(block.outs):
+            self.emit(f"{inner}_dasm{n}_o{j} = _dasm{n}_{reg};\n")
+        self.emit(f"{ind}}}\n")
 
     def _call_args(self, node: FunctionCall) -> str:
         """Arguments of a call; pointers passed to untyped (LONG) parameters are cast."""
@@ -28798,6 +28846,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_expression(self, node: ASTNode) -> str:
         """Generate code for an expression."""
+        if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":
+            return f"_dasm{node.arguments[0].value}_o{node.arguments[1].value}"
         amiga = self._amiga_expr(node)
         if amiga is not None:
             return amiga

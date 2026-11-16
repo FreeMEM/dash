@@ -745,6 +745,7 @@ static int expr_type(Node *n)
         return var_type(n->name);
     case E_CALL:
         if (amiga_const(n, (long[]){0})) return TY_INT;
+        if (!strncmp(n->name, "__dash_asm", 10)) return n->name[10] ? TY_INT : TY_VOID;   /* asm (asm68k.c) */
         if (find_func(n->name, &idx)) return func_ret(idx);
         if (!strcmp(n->name, "Float")) return TY_FLOAT;
         if (!strcmp(n->name, "Double")) return TY_DOUBLE;
@@ -3085,10 +3086,133 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     return f->ret;
 }
 
+/* ---- el ensamblador en línea (asm68k.c, docs/ASM_DISEÑO.md): asm ... end llega como __dash_asm(n, entradas...) y,
+   por cada salida, var = __dash_asm_out(n, j). En la pila, tantos huecos como el mayor de entradas y salidas: las
+   entradas van ahí, se guardan con movem los registros de d2-d7/a2-a6 que el bloque toca, se cargan las entradas,
+   va el bloque, cada salida a su hueco, se recuperan los registros y cada __dash_asm_out saca la suya (la última
+   suelta los huecos que sobran). */
+#ifndef DASH_A64
+static int asm_const(const char *name, int file, long *val)
+{
+    int i;
+    char priv[160];
+    snprintf(priv, sizeof priv, "%s__m%d", name, file);
+    for (i = 0; i < prog->consts.n; i++) {
+        Const *c = &prog->consts.v[i];
+        if (!strcmp(c->name, name) || (name[0] == '_' && !strcmp(c->name, priv)))
+            return c->value->kind != E_STR && fold(c->value, val);
+    }
+    return 0;
+}
+#endif
+
+static int gen_asm(Node *n)
+{
+    AsmBlock *bk;
+    int k, m, rs, i, ns = 0;
+    if (n->args.n < 1 || n->args.v[0]->kind != E_INT || n->args.v[0]->val < 0 || n->args.v[0]->val >= asm_blocks.n)
+        fatal_node(n, "%s es interna de los bloques asm", n->name);
+    bk = &asm_blocks.v[n->args.v[0]->val];
+#ifdef DASH_A64
+    (void)bk; (void)k; (void)m; (void)rs; (void)i; (void)ns;
+    fatal_node(n, "asm: el ensamblador en línea es de 68000: no vale en DashOS");
+    return TY_VOID;
+#else
+    k = bk->nin;
+    m = bk->nout;
+    rs = k > m ? k : m;
+    if (!strcmp(n->name, "__dash_asm_out")) {
+        int j = (int)n->args.v[1]->val;
+        pop_d0();
+        forget_d0();
+        if (j == m - 1 && rs > m) pop_args(rs - m);
+        return TY_INT;
+    }
+    if (strcmp(n->name, "__dash_asm") || n->args.n != k + 1) fatal_node(n, "%s es interna de los bloques asm", n->name);
+    {
+        unsigned touched = bk->uses, save, rmask = 0;
+        U32Vec rl = {0};
+        uint32_t base;
+        if (rs > k) {
+            w(0x4FEF);                                 /* lea -4n(sp),sp: los huecos de las salidas */
+            w(-4 * (rs - k));
+            sp_depth += 4 * (rs - k);
+        }
+        for (i = 0; i < k; i++) {
+            Node *a = n->args.v[i + 1];
+            int t = expr_type(a);
+            touched |= 1u << bk->in_reg[i];
+            if (t == TY_FLOAT || t == TY_DOUBLE)
+                fatal_node(a, "asm: un Float o un Double no va a un registro: pasa Int(x) o Fixed(x)");
+            if (IS_ARR(t)) {
+                value(a);
+                w(0x4A80);                             /* tst.l d0 */
+                w(0x6704);                             /* beq.s +4: nil da 0 */
+                w(0x2040);                             /* movea.l d0,a0 */
+                w(0x2010);                             /* move.l (a0),d0: sus elementos */
+                push_d0();
+            } else {
+                push_value(a);
+            }
+        }
+        for (i = 0; i < m; i++) touched |= 1u << bk->out_reg[i];
+        save = touched & 0x7CFC;                       /* d2-d7, a2-a6 */
+        for (i = 0; i < 16; i++)
+            if (save & 1u << i) {
+                ns++;
+                rmask |= 1u << (15 - i);
+            }
+        if (save) {
+            w(0x48E7);                                 /* movem.l ...,-(sp) */
+            w((int)rmask);
+            sp_depth += 4 * ns;
+        }
+        for (i = 0; i < k; i++) {
+            int r = bk->in_reg[i];
+            w((r < 8 ? 0x202F : 0x206F) | (r & 7) << 9);   /* move.l off(sp),dN / movea.l off(sp),aN */
+            w(4 * ns + 4 * (k - 1 - i));
+        }
+        base = (uint32_t)obj->code.n;
+        asm_assemble(bk, &obj->code, cpu020, asm_const, &rl);
+        /* lo que apunta a una etiqueta del bloque: con una etiqueta de dashc, que se mueve si el código de antes
+           cambia de tamaño (relax_branches) */
+        for (i = 0; i + 1 < rl.n; i += 2) {
+            Fixup f;
+            int lab = new_label();
+            labels.v[lab] = (long)(base + rl.v[i + 1]);
+            f.at = base + rl.v[i];
+            f.label = lab;
+            f.abs = 1;
+            f.size = 2;
+            VEC_PUSH(fixups, f);
+            add_reloc(f.at, HK_CODE, NULL);
+        }
+        free(rl.v);
+        for (i = 0; i < m; i++) {
+            int r = bk->out_reg[i];
+            w(0x2F40 | (r < 8 ? r : 8 | (r & 7)));     /* move.l rN,off(sp) */
+            w(4 * ns + 4 * i);
+        }
+        if (save) {
+            w(0x4CDF);                                 /* movem.l (sp)+,... */
+            w((int)save);
+            sp_depth -= 4 * ns;
+        }
+        if (!m) pop_args(rs);
+        forget_d0();
+        d0_stored = (uint32_t)-1;
+        flags_at = (uint32_t)-1;
+    }
+    return TY_VOID;
+#endif
+}
+
 static int gen_call(Node *n)
 {
     int i, idx;
-    Func *f = find_func(n->name, &idx);
+    Func *f;
+    if (!strncmp(n->name, "__dash_asm", 10)) return gen_asm(n);
+    f = find_func(n->name, &idx);
     if (!f && (idx = find_struct(n->name)) >= 0) return gen_new(n, idx, 0);
     if (!f && lookup(n->name).kind != V_NONE) {
         /* g(4) con g una variable Func: la función a la que apunta, como una de C (Int) */
