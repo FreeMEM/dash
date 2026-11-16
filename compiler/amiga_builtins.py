@@ -4162,6 +4162,16 @@ MUI_FUNCTIONS = {
         description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
                     "mui_get_value / mui_set_value read and set the mark"
     ),
+    "mui_menu_radio": BuiltinFunc(
+        name="mui_menu_radio",
+        params=["title", "key", "id", "checked"],
+        return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
+        c_template="_dash_mui_menu_radio(${title}, ${key}, ${id}, ${checked})",
+        description="Menu option: the options one after another (nothing between them) are a group, and choosing one "
+                    "marks it and unmarks the others; mui_wait_event returns id; mui_get_value / mui_set_value read "
+                    "and set the mark"
+    ),
     "mui_submenu_begin": BuiltinFunc(
         name="mui_submenu_begin",
         params=["title"],
@@ -6275,8 +6285,8 @@ DASHOS_MUI = {
     "mui_vgroup_begin", "mui_hgroup_begin", "mui_group_end", "mui_text", "mui_label", "mui_button", "mui_string",
     "mui_checkbox", "mui_cycle", "mui_list", "mui_list_add", "mui_list_insert", "mui_list_remove", "mui_list_clear",
     "mui_list_count", "mui_list_get", "mui_on_double", "mui_menu_begin", "mui_menu_item", "mui_menu_separator",
-    "mui_menu_end", "mui_on_press", "mui_on_change", "mui_on_close", "mui_get_text", "mui_set_text", "mui_get_value",
-    "mui_set_value", "mui_set_enabled", "mui_request", "mui_wait_event",
+    "mui_menu_end", "mui_menu_check", "mui_menu_radio", "mui_submenu_begin", "mui_submenu_end", "mui_on_press",
+    "mui_on_change", "mui_on_close", "mui_get_text", "mui_set_text", "mui_get_value", "mui_set_value", "mui_set_enabled", "mui_request", "mui_wait_event",
 }
 
 

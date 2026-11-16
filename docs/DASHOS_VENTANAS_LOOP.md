@@ -27,10 +27,17 @@ escribir en Dash un editor de catálogos para `SYS:Utilities` de DashOS. Plan ap
   - Los códigos de MUI (`\33c`, `\33b`...) y el subrayado de la tecla (`_Guardar`) no se ven.
   - Ventana con 24 de margen y esquinas de 8, como un diálogo; mide lo que pide su contenido (al menos 280 de ancho).
   - `mui_request`: un diálogo de Material 3 (título, texto, botones al final de la fila; el primero relleno).
-  - **Los menús, provisionales**: una fila arriba con un botón de texto por menú, que abre su menú (el de los
-    desplegables del kit). S10 y S11 quieren los menús en la barra de la pantalla con el botón derecho, y aún no hay
-    protocolo para eso. Las rayas (`mui_menu_separator`) no se ven; una opción desactivada se ve igual y no hace nada.
-    Las teclas de los menús (Amiga+tecla) aún no.
+  - **Los menús** (S10, `dashos_menus_v1`, rama `menus` de DashOS): kit-c los pinta en una fila dentro de la ventana
+    o, con el ajuste del escritorio (`ENV:Escritorio/menus`), los da al compositor para la barra de arriba; el
+    programa no cambia. `mui_menu_check` (casilla), `mui_menu_radio` (opción) y `mui_submenu_begin`/`_end` llaman a
+    `dash_ui_menu_check`, `_radio`, `_sub_begin` y `_sub_end`; `mui_get_value`/`mui_set_value` sobre la entrada leen y
+    ponen la marca. Con un kit-c de antes (sin esas funciones; son débiles), casillas y opciones salen como entradas
+    normales y lo del submenú va en su menú. Lo que se ve (separadores, Ctrl+tecla) es de kit-c.
+  - `mui_menu_radio` es nuevo también en el Amiga (no había forma de hacer opciones excluyentes en un menú): las
+    opciones seguidas, sin nada entre medias, son un grupo (la misma regla que el formato de `wayland::menus`), de
+    hasta 16. En MUI, `MUIA_Menuitem_Exclude` con su sitio en el menú (Intuition) y notificaciones entre ellas (para
+    `mui_get_value`); elegir la marcada la deja marcada (el MUI del A1200 la desmarcaba: una notificación de
+    `Trigger` la vuelve a marcar).
 - Catálogos (`tr`, `@catalog`, `catalog_open`, `catalog_language`) en DashOS: el mismo lector del IFF CTLG, con el
   fichero por `dash_plat_file_load` (`runtime/dashos/plat.c`) y los idiomas por `_dash_dashos_languages`: lee
   `ENV:Sys/locale.prefs` como locale.library (LCLE: 16 bytes, país en 32 y 10 idiomas de 30); sin él,
@@ -90,10 +97,23 @@ escribir en Dash un editor de catálogos para `SYS:Utilities` de DashOS. Plan ap
   literales son Latin-1; el de DashOS es `tests/dashos/test_utf8.dash`). Tests 636/636; el runtime del 68000, igual
   (solo cambiaba la fecha de compilación).
 
+- 2026-11-16, menús de DashOS (S10; lo pidió la sesión de DashOS, rama `menus` con `dashos_menus_v1` en kit-c; rama
+  `menus-dashos` de Dash): `mui_menu_check`, `mui_menu_radio` (nuevo, también en el Amiga) y `mui_submenu_begin`/`_end`
+  en DashOS, por los dos caminos. `tests/dashos/test_dashos_menus.dash` construye la ventana sin abrirla (en qemu no
+  hay compositor: kit-c guarda los menús como datos) y lee y pone marcas: bien por C y por el directo con el kit-c de
+  la rama `menus`; con uno sin esas funciones, no cae (salen entradas normales). En el Amiga,
+  `tests/test_mui_menu_radio.dash` (Amiga+tecla con input.device, por C) y `test_mui_menu_radio_directo.dash` (por el
+  directo) en A1200, 3.2 y CoffinOS. `tests/dashos_tests.py`: sin `libkit_c.a`, los de ventanas salen "sin-kit-c" y
+  no cuentan como fallo. qemu: por C 124 de 383, por el directo 112 (el nuevo; sin perder ninguno). Lo que mira la
+  prueba de arranque (`dash-ventana`) solo usa menús sencillos. `make arranque-virt` de la rama `menus` con este Dash,
+  dos vueltas con otras dos pruebas de DashOS a la vez: `dash-ventana` se compila, abre su ventana con la fila de
+  menús y dice dónde está "Añadir"; el clic no llegó a darse porque antes se paró lo de DashOS (la primera, el
+  maximizado de Ajustes; la segunda, `guardian` con la sesión bloqueada), y el guion espera a eso.
+
 ### Qué toca después
 
-1. Los menús en la barra de la pantalla (S10) cuando haya protocolo; hoy, fila dentro de la ventana (decisión del
-   usuario pendiente).
+1. Menús: probar casillas, opciones y submenús de un programa de Dash en la pantalla de DashOS (`arranque-virt-menus`
+   usa `dash-ventana`, que solo tiene menús sencillos).
 2. Que `sesiones` reparta el selector (DashOS): sin él, el editor de catálogos lanzado desde el disco no puede abrir
    ni guardar con diálogo. Y que el selector diga el nombre de lo elegido y deje escribir el de lo que se guarda.
 3. Las asignaciones de DashOS (ya en `revision`: `dashos::asignaciones`, la tabla que da `sesiones`): `ENV:`, `RAM:`,

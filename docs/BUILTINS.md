@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1010 funciones, 1010 implementadas, 0 sin implementar.
+Total: 1011 funciones, 1011 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11458,6 +11458,7 @@ end
 | [`mui_menu_begin(title)`](#mui_menu_begin) | Int (dirección) | Empieza un menú de la ventana que se está haciendo |  |
 | [`mui_menu_item(title, key, id)`](#mui_menu_item) | Int (dirección) | Una opción de menú: key = la letra de Amiga+tecla ("" ninguna); mui_wait_event da id |  |
 | [`mui_menu_check(title, key, id, checked)`](#mui_menu_check) | Int (dirección) | Una opción de menú con marca: elegirla cambia la marca y mui_wait_event da id; mui_get_value / mui_set_value leen y ponen la marca |  |
+| [`mui_menu_radio(title, key, id, checked)`](#mui_menu_radio) | Int (dirección) | Una opción de menú de un grupo: las seguidas (sin nada entre medias) son un grupo, y elegir una la marca y desmarca las otras; mui_wait_event da id; mui_get_value / mui_set_value leen y ponen la marca |  |
 | [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (dirección) | Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta mui_submenu_end |  |
 | [`mui_submenu_end()`](#mui_submenu_end) | — | Acaba el submenú |  |
 | [`mui_menu_separator()`](#mui_menu_separator) | — | Una raya de separación en el menú |  |
@@ -12193,7 +12194,21 @@ Ver también: [`mui_menu_check`](#mui_menu_check), [`mui_menu_separator`](#mui_m
 
 Una opción con marca: elegirla cambia la marca y da `id`. `mui_get_value` y `mui_set_value` leen y ponen la marca.
 
-Ver también: [`mui_menu_item`](#mui_menu_item).
+Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_radio`](#mui_menu_radio).
+
+<a id="mui_menu_radio"></a>
+
+### `mui_menu_radio(title, key, id, checked)` → `Int (dirección)`
+
+- `title`, `key`, `id`: como en `mui_menu_item`.
+- `checked`: si empieza marcada.
+
+Una opción de un grupo: las opciones seguidas, sin nada entre medias (ni una raya), son un grupo de hasta 16. Elegir
+una la marca, desmarca las otras y da `id`. `mui_get_value` dice si está marcada; `mui_set_value(opcion, 1)` la marca
+y desmarca las de su grupo. En el Amiga es la exclusión de Intuition (`MUIA_Menuitem_Exclude`); en DashOS, las
+opciones de su menú.
+
+Ver también: [`mui_menu_check`](#mui_menu_check), [`mui_menu_item`](#mui_menu_item).
 
 <a id="mui_submenu_begin"></a>
 

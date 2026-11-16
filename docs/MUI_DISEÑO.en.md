@@ -109,6 +109,7 @@ The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines
 | `mui_on_drop(obj, id)` | icons dropped from the Workbench on the object (a window: anywhere on it); the paths, with `app_drop()` |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menu of the open window (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | item with a check mark (`mui_get_value`/`mui_set_value`) and one-level submenu |
+| `mui_menu_radio(texto, tecla, id, marcada)` | option of a group (the ones in a row): checking one unchecks the others |
 | `mui_context_menu_begin(titulo)` ... `mui_menu_end()`, `mui_set_context_menu(obj, menu)` | context menu (right button over `obj`): its items give their events; MUI does not free it with the object, Dash does at the end |
 | `mui_wait_event() -> Int` | Waits and returns the number of an event, or -1 to quit. |
 | `mui_poll_event() -> Int` | The same without waiting: 0 if there is nothing. |

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1010 functions, 1010 implemented, 0 not implemented.
+Total: 1011 functions, 1011 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11453,6 +11453,7 @@ end
 | [`mui_menu_begin(title)`](#mui_menu_begin) | Int (address) | Start a menu of the window being built |  |
 | [`mui_menu_item(title, key, id)`](#mui_menu_item) | Int (address) | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
 | [`mui_menu_check(title, key, id, checked)`](#mui_menu_check) | Int (address) | Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
+| [`mui_menu_radio(title, key, id, checked)`](#mui_menu_radio) | Int (address) | Menu option: the options one after another (nothing between them) are a group, and choosing one marks it and unmarks the others; mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
 | [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (address) | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
 | [`mui_submenu_end()`](#mui_submenu_end) | — | End the submenu |  |
 | [`mui_menu_separator()`](#mui_menu_separator) | — | Separator line in the menu |  |
@@ -12184,7 +12185,21 @@ See also: [`mui_menu_check`](#mui_menu_check), [`mui_menu_separator`](#mui_menu_
 An item with a check mark: choosing it toggles the mark and gives `id`. `mui_get_value` and `mui_set_value` read
 and set the mark.
 
-See also: [`mui_menu_item`](#mui_menu_item).
+See also: [`mui_menu_item`](#mui_menu_item), [`mui_menu_radio`](#mui_menu_radio).
+
+<a id="mui_menu_radio"></a>
+
+### `mui_menu_radio(title, key, id, checked)` → `Int (address)`
+
+- `title`, `key`, `id`: as in `mui_menu_item`.
+- `checked`: whether it starts checked.
+
+An option of a group: the options one after another, with nothing between them (not even a bar), are a group of up
+to 16. Choosing one checks it, unchecks the others and gives `id`. `mui_get_value` says whether it is checked;
+`mui_set_value(option, 1)` checks it and unchecks the rest of its group. On the Amiga it is Intuition's mutual
+exclusion (`MUIA_Menuitem_Exclude`); on DashOS, the options of its menu.
+
+See also: [`mui_menu_check`](#mui_menu_check), [`mui_menu_item`](#mui_menu_item).
 
 <a id="mui_submenu_begin"></a>
 

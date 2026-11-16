@@ -865,7 +865,24 @@ Una opción con marca: elegirla cambia la marca y da `id`. `mui_get_value` y `mu
 
 An item with a check mark: choosing it toggles the mark and gives `id`. `mui_get_value` and `mui_set_value` read
 and set the mark.
-""", ["mui_menu_item"]),
+""", ["mui_menu_item", "mui_menu_radio"]),
+    "mui_menu_radio": _f("""\
+- `title`, `key`, `id`: como en `mui_menu_item`.
+- `checked`: si empieza marcada.
+
+Una opción de un grupo: las opciones seguidas, sin nada entre medias (ni una raya), son un grupo de hasta 16. Elegir
+una la marca, desmarca las otras y da `id`. `mui_get_value` dice si está marcada; `mui_set_value(opcion, 1)` la marca
+y desmarca las de su grupo. En el Amiga es la exclusión de Intuition (`MUIA_Menuitem_Exclude`); en DashOS, las
+opciones de su menú.
+""", """\
+- `title`, `key`, `id`: as in `mui_menu_item`.
+- `checked`: whether it starts checked.
+
+An option of a group: the options one after another, with nothing between them (not even a bar), are a group of up
+to 16. Choosing one checks it, unchecks the others and gives `id`. `mui_get_value` says whether it is checked;
+`mui_set_value(option, 1)` checks it and unchecks the rest of its group. On the Amiga it is Intuition's mutual
+exclusion (`MUIA_Menuitem_Exclude`); on DashOS, the options of its menu.
+""", ["mui_menu_check", "mui_menu_item"]),
     "mui_menu_separator": _f("Una raya entre opciones del menú.\n", "A line between menu items.\n",
                              ["mui_menu_item"]),
     "mui_submenu_begin": _f("""\

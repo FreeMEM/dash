@@ -14,7 +14,8 @@ Un test con "# expect-rc: N" debe acabar con ese código. "# emu-catalog: lib/x.
 Catalogs/<idioma>/ de su cajón, con el idioma english; "# dashos-catalog: lib/x.ct", en UTF-8 en LOCALE:Catalogs/ y sin
 idioma (el castellano de serie). En DashOS los textos son UTF-8 (en el Amiga, Latin-1): una
 línea "# dashos-line N: texto" cambia la línea N de la salida esperada, y "# dashos-skip: motivo" deja fuera el test.
-Los de tests/dashos/ son solo de DashOS."""
+Los de tests/dashos/ son solo de DashOS. Los que usan ventanas (mui_*) necesitan libkit_c.a de DashOS
+(tools/dashos_run.py: $DASH_KIT_C o $DASHOS_DIR); sin ella salen como "sin-kit-c" y no cuentan como fallo."""
 import argparse
 import collections
 import concurrent.futures as cf
@@ -46,6 +47,8 @@ def one(f, tmp):
     ok, msg = (dashos_run.build_direct if DIRECT else dashos_run.build)(f.relative_to(REPO), exe, memcheck=memcheck,
                                                                         pie=PIE, be=BE)   # (relativo: como en los errores del A1200)
     if not ok:
+        if msg.startswith("falta libkit_c.a"):
+            return "sin-kit-c", msg                  # (no cuenta como fallo: lo dice el recuento)
         return "build", msg
     # Cada test, en su cajón (PROGDIR:), con RAM:, T: y ENV: dentro (runtime/dashos/dos.c: $DASH_X_DIR)
     cwd = Path(tmp) / (f.stem + ".dir")
@@ -129,7 +132,7 @@ def main():
             print(f"{n:5} {e}")
     c = collections.Counter(k for k, m in res.values())
     print(" ".join(f"{k}={n}" for k, n in c.most_common()), f"de {len(fs)}")
-    sys.exit(0 if c["ok"] == len(fs) else 1)
+    sys.exit(0 if c["ok"] + c["sin-kit-c"] == len(fs) else 1)
 
 
 if __name__ == "__main__":

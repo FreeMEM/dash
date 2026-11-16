@@ -22059,6 +22059,13 @@ static LONG _dash_mui_nsleep = 0;
    mui_window_end) */
 #define _DASH_MUI_OWNER (_dash_mui_cur_win ? _dash_mui_cur_win : _dash_mui_last_win)
 static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
+/* mui_menu_radio: the options just added to the menu being built (one after another: a group), their place in it
+   (MUIA_Menuitem_Exclude counts the items of a menu or submenu from 0, bars too) and where the next item goes */
+#define _DASH_MUI_MRADIOS 16
+static Object *_dash_mui_mradio[_DASH_MUI_MRADIOS];
+static UBYTE _dash_mui_mradio_pos[_DASH_MUI_MRADIOS];
+static LONG _dash_mui_nmradio = 0;
+static LONG _dash_mui_menu_pos = 0, _dash_mui_menu_pos_up = 0;   /* (_up: the menu's while a submenu is built) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
 static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
@@ -22467,6 +22474,7 @@ static APTR _dash_mui_menu_begin(STRPTR title) {
     if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
     _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
     _dash_mui_cur_menu = menu;
+    _dash_mui_menu_pos = _dash_mui_nmradio = 0;
     return menu;
 }
 
@@ -22476,7 +22484,11 @@ static Object *_dash_mui_menu_add(STRPTR title, STRPTR key) {
     item = _DASH_MUI_NEW(MUIC_Menuitem,
         MUIA_Menuitem_Title, (IPTR)(title == NM_BARLABEL ? title : _dash_mui_keep(title)),
         MUIA_Menuitem_Shortcut, (IPTR)(key && *key ? _dash_mui_keep(key) : NULL));
-    if (item) _DASH_MUI_DO(_dash_mui_cur_menu, OM_ADDMEMBER, (IPTR)item);
+    if (item) {
+        _DASH_MUI_DO(_dash_mui_cur_menu, OM_ADDMEMBER, (IPTR)item);
+        _dash_mui_menu_pos++;
+    }
+    _dash_mui_nmradio = 0;   /* (anything else ends a group of options; mui_menu_radio puts it back) */
     return item;
 }
 
@@ -22502,6 +22514,41 @@ static APTR _dash_mui_menu_check(STRPTR title, STRPTR key, LONG id, LONG checked
     return item;
 }
 
+/* An option (a radio item): the options one after another (nothing between them, not even a bar) are a group of up
+   to 16, and choosing one marks it and unmarks the others; mui_wait_event returns id, mui_get_value / mui_set_value
+   read and set the mark (setting one unmarks the rest of its group). For DashOS's menus (S10); Intuition's
+   MutualExclude (MUIA_Menuitem_Exclude) does it in the open menu, and the notifications in MUI's objects. */
+static APTR _dash_mui_menu_radio(STRPTR title, STRPTR key, LONG id, LONG checked) {
+    LONG n = _dash_mui_nmradio, i, pos;
+    Object *item = (Object *)_dash_mui_menu_item(title, key, id);
+    if (!item) return NULL;
+    pos = _dash_mui_menu_pos - 1;
+    if (n == _DASH_MUI_MRADIOS) n = 0;   /* (a 17th starts another group) */
+    SetAttrs(item, MUIA_Menuitem_Checkit, TRUE, MUIA_Menuitem_Checked, checked ? TRUE : FALSE, TAG_DONE);
+    /* choosing a marked one leaves it marked (MUI of an A1200 unmarked it, as a check without Toggle) */
+    _DASH_MUI_DO(item, MUIM_Notify, MUIA_Menuitem_Trigger, MUIV_EveryTime,
+                 (IPTR)item, 3, MUIM_Set, MUIA_Menuitem_Checked, TRUE);
+    for (i = 0; i < n; i++) {
+        Object *other = _dash_mui_mradio[i];
+        if (checked) SetAttrs(other, MUIA_Menuitem_Checked, FALSE, TAG_DONE);   /* (the last marked one wins) */
+        _DASH_MUI_DO(item, MUIM_Notify, MUIA_Menuitem_Checked, TRUE,
+                     (IPTR)other, 3, MUIM_Set, MUIA_Menuitem_Checked, FALSE);
+        _DASH_MUI_DO(other, MUIM_Notify, MUIA_Menuitem_Checked, TRUE,
+                     (IPTR)item, 3, MUIM_Set, MUIA_Menuitem_Checked, FALSE);
+    }
+    _dash_mui_mradio[n] = item;
+    _dash_mui_mradio_pos[n] = (UBYTE)(pos < 32 ? pos : 255);
+    _dash_mui_nmradio = n + 1;
+    for (i = 0; i <= n; i++) {          /* each one excludes the others */
+        ULONG mask = 0;
+        LONG j;
+        for (j = 0; j <= n; j++)
+            if (j != i && _dash_mui_mradio_pos[j] < 32) mask |= 1UL << _dash_mui_mradio_pos[j];
+        SetAttrs(_dash_mui_mradio[i], MUIA_Menuitem_Exclude, mask, TAG_DONE);
+    }
+    return item;
+}
+
 /* A submenu (one level, as Intuition has): its items go in until mui_submenu_end */
 static APTR _dash_mui_submenu_begin(STRPTR title) {
     Object *item;
@@ -22509,6 +22556,8 @@ static APTR _dash_mui_submenu_begin(STRPTR title) {
     if (!(item = _dash_mui_menu_add(title, NULL))) return NULL;
     _dash_mui_sub_parent = _dash_mui_cur_menu;
     _dash_mui_cur_menu = item;
+    _dash_mui_menu_pos_up = _dash_mui_menu_pos;
+    _dash_mui_menu_pos = 0;
     return item;
 }
 
@@ -22516,6 +22565,8 @@ static void _dash_mui_submenu_end(void) {
     if (!_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_end without mui_submenu_begin"); return; }
     _dash_mui_cur_menu = _dash_mui_sub_parent;
     _dash_mui_sub_parent = NULL;
+    _dash_mui_menu_pos = _dash_mui_menu_pos_up;
+    _dash_mui_nmradio = 0;
 }
 
 static void _dash_mui_menu_end(void) {
@@ -22523,6 +22574,7 @@ static void _dash_mui_menu_end(void) {
     if (_dash_mui_sub_parent) _dash_mui_error("mui_menu_end with a submenu still open");
     _dash_mui_cur_menu = NULL;
     _dash_mui_sub_parent = NULL;
+    _dash_mui_nmradio = 0;
 }
 
 /* Context menus (Lorraine D15): mui_context_menu_begin("Celdas"), its items as in a window's menu (mui_menu_item,
@@ -22552,6 +22604,7 @@ static APTR _dash_mui_context_menu_begin(STRPTR title) {
     _dash_mui_ctx[_dash_mui_nctx++] = strip;
     _dash_mui_on_end(_dash_mui_ctx_cleanup);
     _dash_mui_cur_menu = menu;
+    _dash_mui_menu_pos = _dash_mui_nmradio = 0;
     return strip;
 }
 
@@ -25936,6 +25989,10 @@ extern _DASH_UI int dash_ui_menu_begin(const char *);
 extern _DASH_UI int dash_ui_menu_item(const char *, const char *, int);
 extern _DASH_UI void dash_ui_menu_separator(void);
 extern _DASH_UI void dash_ui_menu_end(void);
+extern _DASH_UI int dash_ui_menu_check(const char *, const char *, int, int);
+extern _DASH_UI int dash_ui_menu_radio(const char *, const char *, int, int);
+extern _DASH_UI int dash_ui_menu_sub_begin(const char *);
+extern _DASH_UI void dash_ui_menu_sub_end(void);
 extern _DASH_UI void dash_ui_on(int, int, int);
 extern _DASH_UI const char *dash_ui_get_text(int);
 extern _DASH_UI void dash_ui_set_text(int, const char *);
@@ -25979,6 +26036,20 @@ static _DashP _dash_mui_menu_item(STRPTR title, STRPTR key, LONG id) {
 }
 static void _dash_mui_menu_separator(void) { dash_ui_menu_separator(); }
 static void _dash_mui_menu_end(void) { dash_ui_menu_end(); }
+/* (S10, dashos_menus_v1 of DashOS: a check, an option, a submenu; mui_get_value / mui_set_value on them, the mark.
+   A kit-c from before them: plain items, and the submenu's items in its menu) */
+static _DashP _dash_mui_menu_check(STRPTR title, STRPTR key, LONG id, LONG checked) {
+    if (!dash_ui_menu_check) return _dash_mui_menu_item(title, key, id);
+    return dash_ui_menu_check(_DASH_UI_S(title), _DASH_UI_S(key), id, checked != 0);
+}
+static _DashP _dash_mui_menu_radio(STRPTR title, STRPTR key, LONG id, LONG checked) {
+    if (!dash_ui_menu_radio) return _dash_mui_menu_item(title, key, id);
+    return dash_ui_menu_radio(_DASH_UI_S(title), _DASH_UI_S(key), id, checked != 0);
+}
+static _DashP _dash_mui_submenu_begin(STRPTR title) {
+    return dash_ui_menu_sub_begin ? dash_ui_menu_sub_begin(_DASH_UI_S(title)) : 0;
+}
+static void _dash_mui_submenu_end(void) { if (dash_ui_menu_sub_end) dash_ui_menu_sub_end(); }
 static void _dash_mui_on_press(APTR obj, LONG id) { dash_ui_on(_DASH_UI_H(obj), 0, id); }
 static void _dash_mui_on_change(APTR obj, LONG id) { dash_ui_on(_DASH_UI_H(obj), 1, id); }
 static void _dash_mui_on_close(APTR win, LONG id) { dash_ui_on(_DASH_UI_H(win), 2, id); }
