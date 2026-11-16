@@ -506,7 +506,7 @@ DESC_ES = {
                         "Alt; 64, 128 Amiga; 0 si no se puede abrir input.device",
     "input_menu": "Elige con el ratón, como un usuario, la opción item (desde 0, separadores incluidos) del menú menu "
                   "(desde 0) de la ventana activa: el botón derecho en su título, hasta la opción, hold tics (1/50 s) "
-                  "pulsado, y suelta; false si no hay esa opción",
+                  "pulsado, y suelta; false si no hay esa opción. También con MUI",
     "input_move_screen": "Lleva el puntero a (x, y) de la pantalla de píxel en píxel con botones pulsados (1 izquierdo, "
                          "2 derecho, 0 ninguno): los menús de MUI lo siguen",
     "input_active_title": "El título de la ventana activa (\"\" si no hay): para esperar a la del programa que se "
@@ -573,8 +573,10 @@ DESC_ES = {
     "rexx_send": "Manda una orden ARexx al puerto público de otro programa (\"MULTIVIEW.1\"; \"REXX\": ejecutar un "
                  "script) y espera la respuesta: su RESULT (\"\" si no hay), el RC en rexx_rc(). No al puerto del "
                  "propio programa: se esperaría a sí mismo",
-    "rexx_rc": "El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin "
-               "rexxsyslib.library",
+    "rexx_send_wait": "Como rexx_send, pero espera ms milisegundos como mucho (0: no espera): si no contesta a tiempo, "
+                      "\"\" y rexx_rc() -3. Dash recoge y libera la respuesta tardía",
+    "rexx_rc": "El RC del último rexx_send o rexx_send_wait: 0 bien, 5, 10, 20... los del programa; -1 si no existe el "
+               "puerto, -2 sin rexxsyslib.library, -3 si no contestó a tiempo",
     "rexx_port": "Abre el puerto ARexx propio del programa con ese nombre (\"ADDRESS NOMBRE\" desde ARexx): false si ya "
                  "hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get",
     "rexx_get": "La siguiente orden que llegó al puerto de rexx_port (\"\" si ninguna): espera su rexx_reply (el siguiente "
@@ -1229,6 +1231,12 @@ DESC_ES = {
                             "sus eventos; en un lienzo, mui_canvas_mouse_x/_y dicen dónde se pulsó y mui_canvas_button "
                             "es 2",
     "mui_menu_end": "Acaba el menú",
+    "mui_menu_add": "Empieza un menú nuevo al final de la barra de una ventana ya hecha (abierta o no): sus opciones como "
+                    "en mui_menu_begin, hasta mui_menu_end",
+    "mui_menu_extend": "Abre otra vez un menú o submenú ya hecho (también uno contextual) para añadir opciones al final, "
+                       "hasta mui_menu_end",
+    "mui_menu_remove": "Quita una opción, un submenú o un menú entero (con sus opciones) de su ventana, también abierta; "
+                       "se libera y su número deja de valer",
     "mui_canvas": "Una zona de dibujo (crece con la ventana); se dibuja desde mui_canvas_on_draw",
     "mui_canvas_on_draw": "La función f(x, y, ancho, alto) que dibuja la zona con gfx_ (MUI la llama cuando hace falta)",
     "mui_canvas_on_input": "mui_wait_event da id con un clic, la rueda o una tecla sobre la zona (llamarla antes de "

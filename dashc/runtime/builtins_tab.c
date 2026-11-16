@@ -1003,16 +1003,22 @@ const BuiltinInfo builtin_info[] = {
     {"mui_list_quiet", 2, 0, 1, 0, 2, 0u},
     {"mui_list_remove", 2, 0, 1, 0, 0, 0u},
     {"mui_list_remove", 2, 0, 1, 0, 0, 0u},
+    {"mui_menu_add", 2, 1, 0, 0, 2, 2u},
+    {"mui_menu_add", 2, 1, 0, 0, 2, 2u},
     {"mui_menu_begin", 1, 1, 0, 0, 0, 1u},
     {"mui_menu_begin", 1, 1, 0, 0, 0, 1u},
     {"mui_menu_check", 4, 1, 0, 0, 0, 3u},
     {"mui_menu_check", 4, 1, 0, 0, 0, 3u},
     {"mui_menu_end", 0, 0, 1, 0, 0, 0u},
     {"mui_menu_end", 0, 0, 1, 0, 0, 0u},
+    {"mui_menu_extend", 1, 0, 1, 0, 2, 0u},
+    {"mui_menu_extend", 1, 0, 1, 0, 2, 0u},
     {"mui_menu_item", 3, 1, 0, 0, 0, 3u},
     {"mui_menu_item", 3, 1, 0, 0, 0, 3u},
     {"mui_menu_radio", 4, 1, 0, 0, 0, 3u},
     {"mui_menu_radio", 4, 1, 0, 0, 0, 3u},
+    {"mui_menu_remove", 1, 0, 1, 0, 2, 0u},
+    {"mui_menu_remove", 1, 0, 1, 0, 2, 0u},
     {"mui_menu_separator", 0, 0, 1, 0, 0, 0u},
     {"mui_menu_separator", 0, 0, 1, 0, 0, 0u},
     {"mui_on_ack", 2, 0, 1, 0, 2, 0u},
@@ -1503,6 +1509,8 @@ const BuiltinInfo builtin_info[] = {
     {"rexx_reply", 2, 0, 0, 0, 0, 2u},
     {"rexx_send", 2, 3, 0, 0, 0, 3u},
     {"rexx_send", 2, 3, 0, 0, 0, 3u},
+    {"rexx_send_wait", 3, 3, 0, 0, 0, 3u},
+    {"rexx_send_wait", 3, 3, 0, 0, 0, 3u},
     {"rexx_signal", 0, 1, 1, 0, 0, 0u},
     {"rexx_signal", 0, 1, 1, 0, 0, 0u},
     {"round", 1, 5, 0, 1, 0, 0u},
@@ -2028,7 +2036,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2026;
+const int builtin_count = 2034;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

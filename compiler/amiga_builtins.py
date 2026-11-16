@@ -4235,6 +4235,31 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_menu_end()",
         description="End the menu"
     ),
+    "mui_menu_add": BuiltinFunc(
+        name="mui_menu_add",
+        params=["win", "title"],
+        return_type="APTR",
+        reads_only=True,   # (_dash_mui_keep copies the title)
+        c_template="_dash_mui_menu_add_to(${win}, ${title})",
+        description="Start a new menu at the end of the menu bar of a window already made (open or not): its items "
+                    "as in mui_menu_begin, until mui_menu_end"
+    ),
+    "mui_menu_extend": BuiltinFunc(
+        name="mui_menu_extend",
+        params=["menu"],
+        return_type="void",
+        c_template="_dash_mui_menu_extend(${menu})",
+        description="Open again a menu or submenu already made (also a context menu) to add items at its end, until "
+                    "mui_menu_end"
+    ),
+    "mui_menu_remove": BuiltinFunc(
+        name="mui_menu_remove",
+        params=["obj"],
+        return_type="void",
+        c_template="_dash_mui_menu_remove(${obj})",
+        description="Take away a menu item, a submenu or a whole menu (with its items) from its window, also with "
+                    "the window open; it is freed and its handle is no longer valid"
+    ),
     "mui_canvas": BuiltinFunc(
         name="mui_canvas",
         params=["min_width", "min_height"],
@@ -5439,10 +5464,15 @@ TASK_FUNCTIONS = {
         description="Send an ARexx command to a public port (\"MULTIVIEW.1\"; \"REXX\": run a script) and wait "
                     "for the answer: its RESULT (\"\" without one), the RC in rexx_rc(). Not to the program's own "
                     "port: it would wait for itself"),
+    "rexx_send_wait": BuiltinFunc(
+        name="rexx_send_wait", params=["port", "command", "ms"], return_type="STRPTR",
+        c_template="_dash_rexx_send_wait(${port}, ${command}, ${ms})", reads_only=True,
+        description="As rexx_send, but waiting ms milliseconds at most (0: it does not wait): if there is no answer "
+                    "by then, \"\" and rexx_rc() -3. The late answer is taken and freed by Dash"),
     "rexx_rc": BuiltinFunc(
         name="rexx_rc", params=[], return_type="LONG", c_template="_dash_rexx_rc()",
-        description="RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no "
-                    "rexxsyslib.library"),
+        description="RC of the last rexx_send or rexx_send_wait: 0 fine, 5, 10, 20... from the program; -1 no such "
+                    "port, -2 no rexxsyslib.library, -3 no answer in time"),
     "rexx_port": BuiltinFunc(
         name="rexx_port", params=["name"], return_type="BOOL", c_template="_dash_rexx_port(${name})",
         description="Opens the program's own ARexx port with that name (\"ADDRESS NAME\" from ARexx): false if "
@@ -5953,7 +5983,7 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_input_menu(${menu}, ${item}, ${hold})",
         description="Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as "
                     "a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if "
-                    "there is no such item"),
+                    "there is no such item. Also with MUI"),
     "input_move_screen": BuiltinFunc(
         name="input_move_screen", params=["x", "y", "buttons"], return_type="void",
         c_template="_dash_input_move_screen(${x}, ${y}, ${buttons})",
@@ -6156,7 +6186,7 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "chipset_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
-    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_send_wait", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
     "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
     "assigns_read", "assign_name", "assign_path"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [

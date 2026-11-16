@@ -1,0 +1,120 @@
+# Menus of a MUI window changed while it is open (Forja: the menu of an extension), chosen with real clicks by
+# input_menu (which did not reach MUI 4/5's menus: their window has no Intuition menus until the right button is
+# pressed on it). mui_menu_add puts a menu "Git" at the end of the bar, mui_menu_extend adds an item to "Proyecto"
+# and to a submenu, mui_menu_remove takes away an item and then the whole "Git"; a helper (the program started again)
+# chooses with input_menu, and each choice gives its event.
+# emu-needs: muimaster.library
+# expect-out: Proyecto/Abrir: 11
+# expect-out: Git/Estado: 31
+# expect-out: Git/Subir: 32
+# expect-out: Ramas/dev: 36 dev
+# expect-out: Proyecto/Nueva: 13
+# expect-out: Proyecto/Salir tras quitar Abrir: 12
+# expect-out: sin Git: false
+# expect-out: menús: true true true true true false
+# expect-out: fin
+
+const ID_HECHO = 99
+
+var paso: Int = 0
+
+func clics(que: String)
+    t = 0
+    while input_active_title() != "Menús en marcha" and t < 200
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(10)
+    # (menú, opción): uno por paso; el programa espera el evento y cambia los menús antes del siguiente
+    r = false
+    if que == "0"
+        r = input_menu(0, 0, 10)
+    elif que == "1"
+        r = input_menu(2, 0, 10)
+    elif que == "2"
+        r = input_menu(2, 2, 10)
+    elif que == "3"
+        r = input_menu(0, 2, 10)
+    elif que == "4"
+        r = input_menu(0, 0, 10)
+    else
+        r = input_menu(2, 0, 10)
+    end
+    Print "#{r}"
+end
+
+func elegir(n: Int) -> Int
+    h = run_start("\"" + program_path() + "\" " + n, 30000)
+    # (MUI da el evento de un menú un segundo después de soltar el botón: hasta 3 s tras acabar el ayudante)
+    ev = 0
+    vueltas = 0
+    while vueltas < 30 and ev == 0
+        mui_timer(100, ID_HECHO)
+        e = mui_wait_event()
+        if e != ID_HECHO and e > 0
+            ev = e
+        end
+        if run_ready(h)
+            vueltas = vueltas + 1
+        end
+    end
+    mui_timer(0, ID_HECHO)
+    salida = str_trim(run_finish(h))
+    if salida == "true"
+        ok = ok + " true"
+    else
+        ok = ok + " " + salida
+    end
+    return ev
+end
+
+var ok: String = ""
+
+Main
+    if arg(0) != ""
+        clics(arg(0))
+    elif mui_app_begin("Menús", "DASHMENUVIVO") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Menús en marcha", 0)
+            proyecto = mui_menu_begin("Proyecto")
+                abrir = mui_menu_item("Abrir", "O", 11)
+                mui_menu_item("Salir", "Q", 12)
+            mui_menu_end()
+            mui_menu_begin("Editar")
+                mui_menu_item("Copiar", "", 21)
+            mui_menu_end()
+            t = mui_text("Menús que cambian")
+        mui_window_end()
+        mui_window_open(w)
+        Print "Proyecto/Abrir: #{elegir(0)}"
+        git = mui_menu_add(w, "Git")
+            mui_menu_item("Estado", "", 31)
+            sub = mui_submenu_begin("Ramas")
+                mui_menu_item("main", "", 35)
+            mui_submenu_end()
+        mui_menu_end()
+        Print "Git/Estado: #{elegir(1)}"
+        mui_menu_extend(git)
+            mui_menu_item("Subir", "", 32)
+        mui_menu_end()
+        mui_menu_extend(sub)
+            dev = mui_menu_item("dev", "", 36)
+        mui_menu_end()
+        Print "Git/Subir: #{elegir(2)}"
+        mui_press(dev)
+        Print "Ramas/dev: #{mui_wait_event()} #{mui_get_text(dev)}"
+        mui_menu_extend(proyecto)
+            mui_menu_item("Nueva", "N", 13)
+        mui_menu_end()
+        Print "Proyecto/Nueva: #{elegir(3)}"
+        mui_menu_remove(abrir)
+        Print "Proyecto/Salir tras quitar Abrir: #{elegir(4)}"
+        mui_menu_remove(git)
+        e = elegir(5)
+        Print "sin Git: #{e == 31}"
+        Print "menús:#{ok}"
+        mui_app_end()
+        Print "fin"
+    end
+end

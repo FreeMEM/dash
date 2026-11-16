@@ -113,13 +113,14 @@ Wherever the pointer is. To hold a menu open while the pointer moves.
 - `hold`: cuántos tics (1/50 s) se queda pulsado antes de soltar.
 
 Elige esa opción del menú de la ventana activa con el ratón, como un usuario. Devuelve `false` si no hay esa opción.
+Vale también con MUI: busca los menús ya abiertos (MUI 4 y 5 los hacen al pulsar el botón derecho).
 """, """\
 - `menu`: the menu, from 0.
 - `item`: the item, from 0, counting separators.
 - `hold`: how many ticks (1/50 s) it stays pressed before releasing.
 
 Chooses that item from the active window's menu with the mouse, like a user. Returns `false` if there is no such
-item.
+item. Also with MUI: it looks for the menus once open (MUI 4 and 5 make them when the right button is pressed).
 """, ["input_button"]),
     "input_move_screen": _f("""\
 - `x`, `y`: el punto en la pantalla.
