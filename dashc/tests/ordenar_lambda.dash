@@ -1,0 +1,43 @@
+# Test: l.sort(fn(a, b) -> a < b) with parameters without a type: they are elements of the list (Forja: with
+# texts it compared their addresses and did not sort). Texts, structs, Double, Float, Int and a typed one.
+
+struct Fila
+    nombre: String
+    nota: Int
+end
+
+Main
+    l = ["pera", "manzana", "uva", "kiwi"]
+    l.sort(fn(a, b) -> a < b)
+    Print "str: #{l[0]} #{l[1]} #{l[2]} #{l[3]}"
+    l.sort(fn(a, b) -> a > b)
+    Print "desc: #{l[0]} #{l[1]} #{l[2]} #{l[3]}"
+
+    var filas: [Fila] = []
+    filas.push(Fila("bea", 2))
+    filas.push(Fila("ana", 1))
+    filas.push(Fila("cris", 3))
+    filas.push(Fila("eva", 1))
+    filas.sort(fn(a, b) -> a.nota < b.nota)
+    r = ""
+    for x in filas
+        r = r + " #{x.nombre}/#{x.nota}"
+    end
+    Print "struct:#{r}"
+    filas.sort(fn(a, b) -> a.nombre < b.nombre)
+    Print "nombre: #{filas[0].nombre} #{filas[1].nombre} #{filas[2].nombre} #{filas[3].nombre}"
+
+    d = [Double(3.25), 0.1, -2.5]
+    d.sort(fn(a, b) -> a < b)
+    Print "dbl: #{d[0]} #{d[1]} #{d[2]}"
+    f = [2.0, -1.5, 0.25]
+    f.sort(fn(a, b) -> a < b)
+    Print "flt: #{f[0]} #{f[1]} #{f[2]}"
+    n = [5, 9, 1, 3]
+    n.sort(fn(a, b) -> a < b)
+    Print "int: #{n[0]} #{n[1]} #{n[2]} #{n[3]}"
+
+    m = ["uva", "kiwi", "pera", "manzana"]
+    m.sort(fn(a: String, b: String) -> a < b)
+    Print "tipos: #{m[0]} #{m[1]} #{m[2]} #{m[3]}"
+end

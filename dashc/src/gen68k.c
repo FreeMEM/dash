@@ -860,6 +860,20 @@ static void infer_calls(Node *e)
     infer_calls(e->b);
     infer_calls(e->c);
     for (i = 0; i < e->args.n; i++) infer_calls(e->args.v[i]);
+    if (e->kind == E_MCALL && !strcmp(e->name, "sort") && e->args.n == 1 &&
+        (e->args.v[0]->kind == E_VAR || e->args.v[0]->kind == E_FUNCREF) &&
+        (f = find_func(e->args.v[0]->name, &idx)) != NULL) {
+        /* l.sort(fn(a, b) -> a < b): los parámetros sin tipo son elementos de la lista (con textos, a < b
+           compara los textos, no sus direcciones) */
+        int t = expr_type(e->a);
+        if (!IS_ARR(t) || t == TY_ARR + TY_VOID) return;
+        for (i = 0; i < f->params.n && i < 2; i++)
+            if (f->params.v[i].untyped && t - TY_ARR != TY_INT) {
+                f->params.v[i].type = t - TY_ARR;
+                f->params.v[i].untyped = 0;
+            }
+        return;
+    }
     if (e->kind != E_CALL || !(f = find_func(e->name, &idx)) || e->args.n != f->params.n) return;
     for (i = 0; i < f->params.n; i++)
         if (f->params.v[i].untyped) {

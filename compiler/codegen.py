@@ -29149,6 +29149,14 @@ static {ret_type} {method_name}({params_str}) {{
             ret = self._function_c_type(func)
             boolean = func.return_type == "Bool"
         elif isinstance(f, LambdaFunc):
+            # fn(a, b) -> a < b: the parameters without a type are elements of the list (with texts, a < b
+            # compares the texts, not their addresses)
+            dtype = ({"Double": "Double", "Float": "Float"}.get(num) or ("String" if elem == "string" else
+                     elem[7:] if elem.startswith("struct:") else None))
+            if dtype:
+                f.params = [FunctionParam(p, dtype) if isinstance(p, str) else
+                            FunctionParam(p.name, dtype, p.location) if not p.param_type else p
+                            for p in f.params[:2]] + list(f.params[2:])
             params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
                       for p in f.params][:2]
             ret = "_DashP"
