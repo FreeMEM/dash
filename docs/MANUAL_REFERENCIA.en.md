@@ -4829,6 +4829,11 @@ dash programa.dash -o programa
 From the same input file, the Amiga compiler writes the same executable, byte for byte, as the PC one (the file
 name goes inside, for error messages: it has to be the same).
 
+The package also brings the help, in `DASH:Ayuda`: `Dash.guide` (Spanish) and `Dash_en.guide` (English) for
+MultiView, with a page for each function, group and section of this manual, and `Dash.ayuda` and `Dash_en.ayuda`,
+the same with indexes for a program to read in pieces (Forja; the format, in `docs/AYUDA_FORMATO.en.md`). They come
+from this documentation with `tools/gen_ayuda.py`.
+
 ### When it goes through C (`--gcc`)
 
 | Without `--gcc` | What happens or what to do |

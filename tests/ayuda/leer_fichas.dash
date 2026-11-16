@@ -1,0 +1,48 @@
+# Lee unas fichas de la ayuda (Dash.ayuda, en el cajón donde corre) por su índice, con lib/ayuda.dash: lo que
+# haría Forja. tests/unit/test_gen_ayuda.py lo corre en el emulador y compara la salida con la del fichero.
+import "lib/ayuda.dash"
+
+func mostrar(a: Ayuda, nombre: String)
+    id = ayuda_buscar(a, nombre)
+    if id < 0
+        Print "#{nombre}: no esta"
+        return
+    end
+    lineas = ayuda_ficha(a, id)
+    Print "#{nombre}: ficha #{id} #{ayuda_tipo(a, id)} #{ayuda_clave(a, id)}, #{lineas.length} lineas"
+    Print "  titulo: " + ayuda_titulo(a, id)
+    Print "  " + lineas[0]
+    Print "  " + lineas[1]
+    # el primer enlace de la ficha, seguido
+    for l in lineas
+        if str_starts(l, "*")
+            destino = l[1:str_find(l, " ")]
+            Print "  enlace: #{destino} -> " + ayuda_titulo(a, ayuda_buscar(a, destino))
+            break
+        end
+    end
+end
+
+Main
+    a = ayuda_abrir("Dash.ayuda")
+    if a == nil
+        Print "sin ayuda"
+        return
+    end
+    Print "ayuda #{a.idioma} #{a.version}, #{ayuda_fichas(a)} fichas"
+    mostrar(a, "file_seek")
+    mostrar(a, "EventLoop")
+    mostrar(a, "RA_EVENT_CLOSE")
+    mostrar(a, "no_existe")
+    ids = ayuda_palabra(a, "Música")
+    if ids.length > 0
+        Print "musica: #{ids.length} fichas, la primera #{ayuda_clave(a, ids[0])}"
+    end
+    t = "sound*:"
+    for w in ayuda_prefijo(a, "sound", 4)
+        t = t + " " + w
+    end
+    Print t
+    ayuda_cerrar(a)
+    Print "fin"
+end

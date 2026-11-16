@@ -1121,8 +1121,10 @@ def main():
             continue
         print(f"Testing: {group}/{lsp_file.stem}...", end=" ", flush=True)
         start_time = time.time()
+        # (con --emu, DASH_TEST_EMU=1: los que también prueban en el emulador, como tests/unit/test_gen_ayuda.py)
         run = subprocess.run([sys.executable, "-m", "unittest", "-v", str(lsp_file.relative_to(PROJECT_ROOT))],
-                             cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600)
+                             cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600,
+                             env=dict(os.environ, DASH_TEST_EMU="1") if args.emu else None)
         cases = re.findall(r"^(test_\w+) \(.*?\)(?:\n.*?)? ?\.\.\. (ok|FAIL|ERROR)$", run.stderr, re.M)
         for name, status in cases:
             detail = None
