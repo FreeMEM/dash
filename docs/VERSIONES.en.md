@@ -32,6 +32,32 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.16.0 (2026-11-17)
+
+Inline assembler, 3D with MiniGL, the help inside the Amiga and twice-as-fast compiling. Everything that compiled
+still compiles the same.
+
+- **New:** inline 68k assembler: `asm ... end` blocks in Devpac and ASM-One syntax, with `in`, `out` and `uses` to
+  pass variables; the whole 68000 and the common 68020, `incbin` and `dc`. Both ways. Manual, section 26.
+- **New:** 3D with MiniGL: 41 `gl_*` functions (window or screen, matrices, shapes, textures, lights, fog).
+  Constants in `lib/amiga/gl.dash`. `gl_open` returns false without the library or an FPU.
+- **New:** Dash's help for the Amiga, in the package (`Dash/Ayuda/`): `Dash.guide` for MultiView and `Dash.ayuda`
+  for Forja, in Spanish and English, with all 1277 entries.
+- **New:** `./dash --check` checks without compiling and gives every error (up to 20); `--texto path=file` reads
+  a module's unsaved text.
+- **New:** `mui_on_activate` and `mui_on_deactivate`; MUI menus that change while the window is open
+  (`mui_menu_add`, `mui_menu_extend`, `mui_menu_remove`); `mui_list_add_lines` (300 lines in 0.6 s on an A1200,
+  10.6 s before); `mui_request_text`; `rexx_send_wait` (ARexx with a time limit); `str_join`; `l.has(x)`.
+  1061 functions.
+- **Improvement:** the `dash` command compiles in half the time or less on the Amiga, with the same bytes.
+- **Improvement:** `input_menu` picks MUI menus; `mui_text_editor` without Textinput gives a one-line field.
+- **Fix:** with `./dash`, a function that changed a parameter (inside an `if`, say) could leave it with its old
+  value and overwrite a program datum. Recompile what you built with `./dash`.
+- **Fix:** `l.sort(fn(a, b) -> a < b)` with texts sorts; `--profile` sees every function; names that are C words
+  (`int`, `main`...) work with `--gcc`.
+- **VS Code extension 0.6.0** (in the repository, not in the store yet): run on DashOS, Dash's help and errors
+  with `--check`.
+
 ### 2.15.0 (2026-11-16)
 
 Dash programs with windows on DashOS, a disk's free space and picking a drawer. Everything that compiled still
