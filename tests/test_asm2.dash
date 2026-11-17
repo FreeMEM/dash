@@ -1,0 +1,23 @@
+# Ensamblador en línea, segunda parte, por ./dash --gcc (docs/ASM_DISEÑO.md; lo pidió el usuario, para demos).
+# El mismo programa directo a hunk: test_asm2_directo.dash.
+# expect-out: 1234 21930 1 0
+# expect-out: 1234 21930 2 0
+# expect-out: true
+# expect-out: 42 47
+# expect-out: 1 19
+# expect-out: true
+# expect-out: 0 0
+# expect-out: 1069547520 -1073741824
+# expect-out: 42
+# expect-out: 10
+# expect-out: 77
+# expect-out: 8
+# expect-out: true
+# expect-out: true
+# expect-out: true
+# expect-out: true
+import "lib/asm_pruebas2.dash"
+
+Main
+    pruebas2()
+end

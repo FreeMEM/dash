@@ -135,6 +135,19 @@ async function grammarTests() {
         assert.match(scopeOf(ta, '; comentario'), /^comment\.line\.semicolon/);
         assert.match(scopeOf(ta, 'return'), /^keyword\.control/);        // after end, Dash again
     });
+    await check('grammar: asm func (a whole function in assembler)', () => {
+        const tf = tokenize(g, [
+            'asm func raiz(x: Int) -> Int uses fp0',
+            '    fmove.l d0,fp0',
+            '    section datos,data_c',
+            'end',
+            'Main',
+            'end'].join('\n'));
+        assert.match(scopeOf(tf, 'asm'), /^keyword\.control/);
+        assert.match(scopeOf(tf, 'fmove.l'), /^keyword\.other\.instruction/);
+        assert.match(scopeOf(tf, 'section'), /^keyword\.other\.instruction/);
+        assert.match(scopeOf(tf, 'Main'), /^keyword/);                   // after end, Dash again
+    });
     // generated from the compiler (tools/gen_tmgrammar.py): every builtin, directives, blocks...
     const t2 = tokenize(g, SAMPLE2);
     await check('grammar: directives', () => {

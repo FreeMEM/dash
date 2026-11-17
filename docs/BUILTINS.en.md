@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1063 functions, 1063 implemented, 0 not implemented.
+Total: 1066 functions, 1066 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -8150,6 +8150,9 @@ end
 | [`assigns_read()`](#assigns_read) | Int | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
 | [`assign_name(i)`](#assign_name) | String | Name of assign i of the last assigns_read, without the colon |  |
 | [`assign_path(i)`](#assign_path) | String | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+| `int_server_add(intb, func, data)` | Int | Puts f(data) on an interrupt chain of exec (AddIntServer): 5 VBlank, 4 copper, 3 CIA-A, 13 CIA-B. f runs in the interrupt: an asm func, or Dash code that only does sums and peek/poke (no Print, no texts or lists). It comes off by itself at exit. The server, or 0 |  |
+| `int_server_remove(server)` | — | Takes a server of int_server_add off its chain |  |
+| `vblank_server(func, data)` | Int | int_server_add on the VBlank (50 times a second in PAL): f(data) in each frame |  |
 
 <a id="time_unix"></a>
 

@@ -50,7 +50,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1063 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1066 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -5009,7 +5009,8 @@ La línea de `asm` dice qué entra y qué sale:
   32 bits; un texto, la dirección de su primer carácter; una lista, la de su primer elemento (4 bytes cada uno; 0 si
   es `nil`). Un Float o un Double no valen: `Int(x)` o `Fixed(x)`.
 - `out variable = r, ...`: después, la variable recibe el registro como Int (si es nueva, queda declarada).
-- `uses r, ...`: los demás registros que el bloque cambia, también como en `movem`: `uses d2-d4/a1`.
+- `uses r, ...`: los demás registros que el bloque cambia, también como en `movem`: `uses d2-d4/a1`. Con `--fpu`,
+  también los de la FPU: `uses fp0-fp3` (no van en `in` ni en `out`: un valor pasa por un registro de datos).
 
 Se pueden usar d0-d7, a0-a4 y a6. a5 no (es el marco de las funciones de Dash) ni a7 (sp). Todo registro que el
 bloque cambie va en `in`, `out` o `uses`; los demás tienen que quedar como estaban. La pila tiene que quedar igual
@@ -5021,25 +5022,71 @@ El cuerpo:
   `*` es un comentario. Las etiquetas son del bloque (`.bucle` o `bucle`); otro bloque puede usar el mismo nombre.
 - Números `123`, `$1F`, `0x1F`, `%1010`, `0b1010`, `'A'`; expresiones con `+ - * / << >> & | ^ ~` y paréntesis. Un
   nombre puede ser una etiqueta, una constante del bloque (`ANCHO equ 320` o `ANCHO = 320`) o una `const` de Dash.
-- Datos: `dc.b 1,2,"hola",0`, `dc.w`, `dc.l` (también `dc.l etiqueta`), `ds.b`/`ds.w`/`ds.l n` (ceros), `even` e
-  `incbin "fichero"[,desde[,cuántos]]` (la ruta, desde el `.dash`). Los datos van entre el código: el bloque salta
-  por encima (`bra.s .fin`). No van en memoria chip.
+- Datos: `dc.b 1,2,"hola",0`, `dc.w`, `dc.l` (también `dc.l etiqueta`), `dc.s 1.5` y `dc.d 2.0` (coma flotante),
+  `ds.b`/`ds.w`/`ds.l n` (ceros), `even`, `cnop 0,4` (alinea a 2, 4 u 8) e `incbin "fichero"[,desde[,cuántos]]` (la
+  ruta, desde el `.dash`). Los datos del código van entre las instrucciones: el bloque salta por encima
+  (`bra.s .fin`).
+- Secciones: `section nombre,tipo` o solo el tipo. `data` y `bss` sacan los datos del código; `data_c` y `bss_c`
+  los ponen en memoria chip (listas del copper, sprites, planos, sonido); `code` vuelve al código. Lo de una sección
+  se guarda entre llamadas. En ellas solo van datos (en `bss` y `bss_c`, `ds`). Desde el código se llega a sus
+  etiquetas por su dirección: `lea tabla,a0`, `move.l #tabla,d0`.
 - Todas las instrucciones del 68000 con todos sus modos (`4(a0)` o `(4,a0)`, `8(a0,d1.w)`, `tabla(pc)`, `$dff180`,
   `4.w`...) y los alias de siempre (`dbra`, `bhs`, `blo`...). Un salto sin tamaño elige solo el corto o el largo.
 - Del 68020, con `--cpu 68020` o más (o `--fpu`): `muls.l`/`mulu.l` (también de 64 bits, `d1:d2`), `divs.l`,
   `divu.l`, `divsl.l`, `divul.l`, `extb.l`, los campos de bits (`bfextu d0{4:8},d1`...), `bra.l`, `link.l`, `rtd`,
-  `chk.l` y el índice con escala (`(a0,d0.l*4)`). Sin la opción, el error lo dice.
-- No están: la FPU, la MMU, la indirección de memoria del 68020, `cnop` y las secciones (`section data_c`).
+  `chk.l`, el índice con escala (`(a0,d0.l*4)`), la indirección de memoria (`([4,a0,d0.l*4],8)`), `cas`, `cas2`,
+  `cmp2`, `chk2`, `pack`, `unpk`, `trapcc`, `bkpt` y `movec`. Sin la opción, el error lo dice.
+- De la FPU, con `--fpu`: `fmove` (`.b .w .l .s .d .x`, y `fpcr`, `fpsr`, `fpiar`), `fmovem`, `fadd`, `fsub`,
+  `fmul`, `fdiv`, `fcmp`, `ftst`, `fsqrt`, `fsin`, `fcos`, `fetox`, `flogn` y las demás de la 68881, `fsincos`,
+  `fmovecr`, `fbcc` (`fbeq`, `fblt`...), `fdbcc`, `fscc`, `ftrapcc`, `fnop`, `fsave` y `frestore`. Un inmediato
+  `.s`/`.d`/`.x` es un número: `fmul.s #2.5,fp1`.
+- No están: la MMU, `callm`, `moves`, `move16`, las del 68040 (`fsadd`...) y el formato `.p` (BCD).
+
+Desde un bloque se llama a una función de Dash con `jsr nombre`, como la llama Dash: los argumentos en la pila, de
+derecha a izquierda (4 bytes cada uno), lo que devuelve en d0; el bloque quita los argumentos. La función cambia
+d0, d1, a0 y a1 (el compilador ya lo sabe) y deja los demás como estaban. Del runtime se usan las bases de las
+librerías: `SysBase`, `DOSBase`, `GfxBase`, `IntuitionBase`.
+
+```ruby
+asm in d2 = 21 out r = d0
+    move.l  d2,-(sp)
+    jsr     doble               ; una función de Dash: doble(21)
+    addq.l  #4,sp
+    move.l  GfxBase,a6
+    jsr     -270(a6)            ; WaitTOF
+end
+```
+
+Una función entera en ensamblador es una `asm func`. Sin `in`, los parámetros van en d0, d1... por orden; sin
+`out`, lo que devuelve sale de d0 (`out d1`: de d1). Devuelve Int, Bool o Pointer, o nada. Se llama como cualquier
+otra, también con `jsr` y como valor:
+
+```ruby
+asm func suma(a: Int, b: Int) -> Int
+    add.l   d1,d0
+end
+
+asm func cuenta(p: Pointer) in a0 = p        # para el VBlank: suma 1 en *p
+    addq.l  #1,(a0)
+end
+```
+
+Interrupciones: `vblank_server(f, datos)` pone `f(datos)` en el VBlank (50 veces por segundo en PAL);
+`int_server_add(intb, f, datos)`, en otra cadena de exec (4 copper, 3 CIA-A, 13 CIA-B). Devuelven el servidor;
+`int_server_remove(s)` lo quita, y al salir del programa (también tras un error) se quitan todos. `f` corre en la
+interrupción: lo normal es una `asm func` (de Dash, solo cuentas y peek/poke).
 
 Un error del bloque sale con la línea del `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida: movx`. En
 DashOS (AArch64) un bloque `asm` es un error.
 
-`asm` no es una palabra reservada: abre un bloque solo al principio de una línea, solo o seguido de `in`, `out` o
-`uses`. En cualquier otro sitio es un nombre más: una función o una variable pueden llamarse `asm`. Lo mismo con
+`asm` no es una palabra reservada: abre un bloque solo al principio de una línea, solo o seguido de `in`, `out`,
+`uses` o `func`. En cualquier otro sitio es un nombre más: una función o una variable pueden llamarse `asm`. Lo mismo con
 las palabras de C (`int`, `default`, `long`, `static`...) y `main`: por C se renombran (`asm__kw`) y los errores
 dicen el nombre de Dash (lo encontró Forja).
 
-Ejemplo de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador).
+Ejemplos de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador) y
+`examples/asm_copper.dash` (una barra de copper con la lista en memoria chip y un servidor de VBlank en asm que la
+mueve; quita la pantalla del sistema y la deja como estaba al acabar).
 
 ---
 

@@ -34,13 +34,18 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ### 2.17.0 (2026-11-17)
 
-The Amiga `dash` command uses less than half the memory, and Forja 0.8. Everything that compiled still compiles the
-same, to the same bytes.
+The inline assembler, complete for demos; the Amiga `dash` command uses less than half the memory, and Forja 0.8.
+Everything that compiled still compiles the same.
+
+- **New:** `asm func`, whole functions in assembler; `jsr` to Dash functions from a block; sections (`data`, `bss`
+  and in chip memory `data_c`, `bss_c`); `cnop`; the FPU (`--fpu`) and the rest of the 68020; and interrupts with
+  `vblank_server`, `int_server_add` and `int_server_remove`, removed on exit by themselves. Example
+  `examples/asm_copper.dash`. 1066 functions.
 
 - **Improvement:** compiling the whole of Forja drops from 18 MB to 7.6 MB of memory: it now fits on an A1200 with
   8 MB of fast. The generated code does not change.
 - **New:** `dbg_set(i, expr, value)` changes a variable while debugging (Int, Char, Bool, Fixed or Float); also the
-  debug server's `set` command. 1063 functions.
+  debug server's `set` command.
 - **New:** `icon_save(path, base, type, tool, tooltypes)` writes a `.info` icon with icon.library.
 - **Fix:** a text made of many concatenated pieces exhausted the stack of the Amiga `dash` command (Software
   Failure).

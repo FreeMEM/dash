@@ -1144,6 +1144,13 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       de binutils (`compiler/asm68k.py`), con los mismos errores. Diseño: `docs/ASM_DISEÑO.md`; manual, sección 26.
       `tests/test_asm*.dash` (A1200, A500 y 68040), `tests/errors/asm_*.dash`, `tests/unit/test_asm68k.py`,
       `examples/asm_barras.dash`
+- [x] Ensamblador en línea, segunda parte (2026-11-17, lo pidió el usuario, para demos): `asm func` (una función
+      entera en ensamblador), `jsr` a funciones de Dash y las bases de librería (`GfxBase`...), secciones (`data`,
+      `bss` y, en memoria chip, `data_c` y `bss_c`: el directo escribe hunks con MEMF_CHIP; por `--gcc`,
+      `fix_chip_hunks` se lo pone tras enlazar), `cnop`, `dc.s`/`dc.d`, la FPU con `--fpu` y lo demás del 68020
+      (indirección de memoria, `cas`, `cmp2`, `pack`...), comprobados contra el `as` de binutils; servidores de
+      interrupción `vblank_server`, `int_server_add` e `int_server_remove` (se quitan solos al salir). 1066 funciones.
+      `tests/test_asm2*.dash` (A1200 y A500), `tests/test_asm_fpu*.dash` (68040), `examples/asm_copper.dash`
 - [x] 3D con MiniGL (2026-11-17, lo pidió el usuario; paso 5.3 de Forja): 41 funciones `gl_*` (contexto, estado,
       matrices, figuras, texturas desde `image_decode`, luces, niebla, mezcla, `gl_read_pixel`) sobre
       `minigl.library` 29+, sin su SDK (su tabla de funciones, ABI 5), por los dos caminos y con o sin `--fpu`;

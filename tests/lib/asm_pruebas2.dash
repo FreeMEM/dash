@@ -1,0 +1,205 @@
+# Ensamblador en línea, segunda parte (docs/ASM_DISEÑO.md): secciones y memoria chip, cnop, llamadas a funciones
+# de Dash, bases de librería, asm func y un servidor de VBlank. Lo prueban test_asm2.dash (./dash --gcc) y
+# test_asm2_directo.dash (directo a hunk), con la misma salida.
+
+const ARRIBA = 2
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+func suma3(a: Int, b: Int, c: Int) -> Int
+    return a + b + c
+end
+
+# una función que usa textos y listas (el runtime): llamada desde asm, deja d2-d7 y a2-a6 como estaban
+func lio(x: Int) -> Int
+    s = "a" + "#{x}"
+    l = [1, 2, 3]
+    l.push(x)
+    t = 0
+    for v in l
+        t = t + v
+    end
+    return t + s.length
+end
+
+# una función entera en ensamblador: los parámetros en d0 y d1, lo que devuelve en d0
+asm func suma_asm(a: Int, b: Int) -> Int
+    add.l   d1,d0
+end
+
+# con in, out y uses
+asm func suma_lista(datos: [Int], n: Int) -> Int in a0 = datos, d0 = n - 1 out d1
+    moveq   #0,d1
+.bucle:
+    add.l   (a0)+,d1
+    dbra    d0,.bucle
+end
+
+asm func pon(p: Pointer, v: Int) in a0 = p, d0 = v
+    move.l  d0,(a0)
+end
+
+asm func bits(x: Int) -> Int uses d2
+    moveq   #0,d1
+    moveq   #31,d2
+.b: lsr.l   #1,d0
+    bcc.s   .n
+    addq.l  #1,d1
+.n: dbra    d2,.b
+    move.l  d1,d0
+end
+
+# el servidor de VBlank: suma 1 en cada imagen
+asm func al_vblank(datos: Pointer) in a0 = datos
+    addq.l  #1,(a0)
+end
+
+# los datos de un section se guardan entre llamadas: un contador en bss y una tabla en memoria chip
+func secciones() -> Int
+    asm out a = d0, b = d1, c = d2, d = d3 uses d2-d3/a0
+        lea     tabla,a0
+        move.l  (a0),d0
+        move.l  4(a0),a0
+        move.l  (a0),d1
+        lea     cuenta,a0
+        addq.l  #1,(a0)
+        move.l  (a0),d2
+        move.l  #trozo,d3
+        and.l   #7,d3
+        section datos,data_c
+    tabla:
+        dc.l    1234,otra
+    otra:
+        dc.l    $55AA
+        cnop    0,8
+    trozo:
+        ds.b    16
+        bss
+    cuenta:
+        ds.l    1
+        code
+    end
+    Print "#{a} #{b} #{c} #{d}"
+    return c
+end
+
+func pruebas2()
+    secciones()
+    secciones()
+    # memoria chip: por debajo de 2 MB en las máquinas emuladas
+    asm out p = d0, q = d1
+        lea     dato,a0
+        move.l  a0,d0
+        lea     hueco,a0
+        move.l  a0,d1
+        data_c
+    dato:
+        dc.w    1
+        bss_c
+    hueco:
+        ds.l    10
+        code
+    end
+    Print p < 0x200000 and q < 0x200000
+    # llamar a funciones de Dash: los argumentos en la pila, lo que devuelven en d0
+    asm in d2 = 21 out r = d0, s = d3 uses d3
+        move.l  d2,-(sp)
+        jsr     doble
+        addq.l  #4,sp
+        move.l  d0,d3
+        pea     ARRIBA+1
+        pea     ARRIBA
+        move.l  d3,-(sp)
+        jsr     suma3
+        lea     12(sp),sp
+        exg     d0,d3
+    end
+    Print "#{r} #{s}"
+    asm out ok = d0, t = d1 uses d2-d7/a2-a4/a6
+        moveq   #2,d2
+        moveq   #7,d7
+        move.l  #$a2a2,a2
+        move.l  #$a4a4,a4
+        move.l  #$a6a6,a6
+        pea     10
+        jsr     lio
+        addq.l  #4,sp
+        move.l  d0,d1
+        moveq   #0,d0
+        cmp.l   #2,d2
+        bne.s   .mal
+        cmp.l   #7,d7
+        bne.s   .mal
+        cmp.l   #$a2a2,a2
+        bne.s   .mal
+        cmp.l   #$a4a4,a4
+        bne.s   .mal
+        cmp.l   #$a6a6,a6
+        bne.s   .mal
+        moveq   #1,d0
+    .mal:
+    end
+    Print "#{ok} #{t}"
+    # una base de librería: la versión de graphics.library (lib_Version)
+    asm out v = d0
+        move.l  GfxBase,a0
+        moveq   #0,d0
+        move.w  20(a0),d0
+    end
+    Print v >= 37
+    # cnop: alineado a 4 y a 8 en el código
+    asm out x = d0, y = d1
+        lea     aqui,a0
+        move.l  a0,d0
+        and.l   #3,d0
+        lea     alli,a0
+        move.l  a0,d1
+        and.l   #7,d1
+        bra.s   fin
+        cnop    0,4
+    aqui:
+        nop
+        cnop    0,8
+    alli:
+        nop
+    fin:
+    end
+    Print "#{x} #{y}"
+    # dc.s y dc.d: los bits de 1.5 y de -2.0
+    asm out f = d0, g = d1
+        move.l  uno(pc),d0
+        move.l  dos(pc),d1
+        bra.s   .f
+    uno:
+        dc.s    1.5
+    dos:
+        dc.d    -2.0
+    .f:
+    end
+    Print "#{f} #{g}"
+    # asm func
+    Print suma_asm(40, 2)
+    Print suma_lista([1, 2, 3, 4], 4)
+    m = amiga_alloc(4)
+    pon(m, 77)
+    Print peek_long(m)
+    Print bits(0xF0F0)
+    # un servidor de VBlank en ensamblador: cuenta las imágenes y se quita
+    poke_long(m, 0)
+    sv = vblank_server(al_vblank, m)
+    Print sv != 0
+    time_delay(50)
+    n = peek_long(m)
+    Print n > 25 and n < 75
+    int_server_remove(sv)
+    time_delay(5)
+    k = peek_long(m)
+    time_delay(5)
+    Print peek_long(m) == k
+    # el que no se quita, al salir (la memoria de m sigue: se libera con el programa)
+    vblank_server(al_vblank, m)
+    time_delay(3)
+    Print peek_long(m) > k
+end

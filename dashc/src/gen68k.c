@@ -29,6 +29,7 @@ int memcheck;
 int elf_be;
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
 int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
+int fpu881;           /* --fpu: las instrucciones de la FPU en los bloques asm */
 /* --debug (el depurador, docs/DEPURADOR_LOOP.md): un NOP al principio de cada línea, que el depurador cambia por
    un TRAP; sin copiar funciones en línea, sin variables en registros ni como constantes; y la información para el
    depurador en debug_info (el texto del HUNK_DEBUG, que escribe hunk.c) */
@@ -3038,6 +3039,33 @@ static unsigned char **param_set;   /* la función asigna a ese parámetro */
 
 static struct { int *v; int n, cap; } sub_stack;  /* funciones de una línea puestas como expresión */
 
+/* ¿hay en el cuerpo un bloque asm con section (data_c...)? */
+static int asm_sections_node(Node *e)
+{
+    int i;
+    if (!e) return 0;
+    if (e->kind == E_CALL && !strcmp(e->name, "__dash_asm") && e->args.n >= 1 && e->args.v[0]->kind == E_INT &&
+        e->args.v[0]->val >= 0 && e->args.v[0]->val < asm_blocks.n && asm_blocks.v[e->args.v[0]->val].sections)
+        return 1;
+    if (asm_sections_node(e->a) || asm_sections_node(e->b) || asm_sections_node(e->x->c)) return 1;
+    for (i = 0; i < e->args.n; i++)
+        if (asm_sections_node(e->args.v[i])) return 1;
+    for (i = 0; i < e->x->body.n; i++)
+        if (asm_sections_node(e->x->body.v[i])) return 1;
+    for (i = 0; i < e->x->els.n; i++)
+        if (asm_sections_node(e->x->els.v[i])) return 1;
+    return 0;
+}
+
+static int asm_sections_in(NodeList *body)
+{
+    int i;
+    if (!asm_blocks.n) return 0;
+    for (i = 0; i < body->n; i++)
+        if (asm_sections_node(body->v[i])) return 1;
+    return 0;
+}
+
 static int can_inline(int idx)
 {
     int i;
@@ -3058,6 +3086,7 @@ static int can_inline(int idx)
         }
     }
     if (inl_stack.n + sub_stack.n >= INLINE_DEPTH || prog->funcs.v[idx].native) return 0;
+    if (asm_sections_in(&prog->funcs.v[idx].body)) return 0;   /* (los datos de un section: de un solo sitio) */
     for (i = 0; i < inl_stack.n; i++)
         if (inl_stack.v[i] == idx) return 0;
     for (i = 0; i < sub_stack.n; i++)
@@ -3302,6 +3331,66 @@ static int asm_const(const char *name, int file, long *val)
     }
     return 0;
 }
+
+/* un nombre de fuera del bloque: una función de Dash (su número + 1) o una base de librería (ASM_BASE + k) */
+#define ASM_BASE 0x40000000
+static const char *const asm_bases[] = {"SysBase", "DOSBase", "GfxBase", "IntuitionBase", NULL};
+
+static int asm_sym(const char *name, int file)
+{
+    int idx, k;
+    Func *f;
+    (void)file;
+    for (k = 0; asm_bases[k]; k++)
+        if (!strcmp(name, asm_bases[k])) return ASM_BASE + k;
+    f = find_func(name, &idx);
+    if (f && !f->native) return idx + 1;
+    return 0;
+}
+
+/* lo de los bloques asm que se escribe al acabar (resolve_fixups ya ha puesto el código en su sitio): un long de los
+   datos que apunta a una etiqueta del código; y los bloques con cnop en el código, que tienen que empezar alineados
+   (delante llevan nops de sobra, que se quitan hasta que lo están) */
+typedef struct { int hunk; uint32_t off; int label; } SecFix;
+static struct { SecFix *v; int n, cap; } sec_fix;
+typedef struct { int label, align; } AsmAlign;
+static struct { AsmAlign *v; int n, cap; } asm_aligns;
+
+static void put_sec_long(int hunk, uint32_t off, uint32_t v)
+{
+    put_long((hunk == HK_CHIP ? obj->chip.p : obj->data.p) + off, v);
+}
+
+/* los bloques con cnop en el código empiezan alineados: se quitan los nops de delante que sobran (resolve_fixups,
+   con los saltos ya en su tamaño; quitar solo acerca los destinos) */
+static void asm_align_code(void)
+{
+    int i;
+    for (i = 0; i < asm_aligns.n; i++) {
+        long pos = labels.v[asm_aligns.v[i].label];
+        int k;
+        if (pos < 0) continue;
+        k = (int)(pos & (asm_aligns.v[i].align - 1));
+        if (k) cut_code((uint32_t)(pos - k), k);
+    }
+}
+
+/* al acabar: los longs de los datos de los bloques asm que apuntan al código */
+static void asm_resolve(void)
+{
+    int i;
+    for (i = 0; i < sec_fix.n; i++) {
+        long v = labels.v[sec_fix.v[i].label];
+        if (v < 0) fatal("asm: etiqueta sin poner (fallo de dashc)");
+        put_sec_long(sec_fix.v[i].hunk, sec_fix.v[i].off, (uint32_t)v);
+    }
+}
+
+static int asm_hunk(int sec)
+{
+    return sec == S_DATA ? HK_DATA : sec == S_CHIP ? HK_CHIP : sec == S_BSS ? HK_BSS : sec == S_CHIPBSS ? HK_CHIPBSS
+         : HK_CODE;
+}
 #endif
 
 static int gen_asm(Node *n)
@@ -3328,9 +3417,9 @@ static int gen_asm(Node *n)
     }
     if (strcmp(n->name, "__dash_asm") || n->args.n != k + 1) fatal_node(n, "%s es interna de los bloques asm", n->name);
     {
-        unsigned touched = bk->uses, save, rmask = 0;
-        U32Vec rl = {0};
+        unsigned touched = bk->uses, save, rmask = 0, fsave = bk->fuses & 0xFC;   /* (fp0 y fp1 son de trabajo) */
         uint32_t base;
+        if (bk->fuses && !fpu881) fatal_node(n, "asm: los registros de la FPU (uses fp...) necesitan --fpu");
         if (rs > k) {
             w(0x4FEF);                                 /* lea -4n(sp),sp: los huecos de las salidas */
             w(-4 * (rs - k));
@@ -3365,31 +3454,134 @@ static int gen_asm(Node *n)
             w((int)rmask);
             sp_depth += 4 * ns;
         }
+        if (fsave) {
+            int nf = 0;
+            for (i = 0; i < 8; i++) nf += (fsave >> i) & 1;
+            w(0xF227);                                 /* fmovem.x ...,-(sp) */
+            w(0xE000 | (int)fsave);
+            sp_depth += 12 * nf;
+            ns += 3 * nf;                              /* (los huecos de las entradas, más arriba) */
+        }
         for (i = 0; i < k; i++) {
             int r = bk->in_reg[i];
             w((r < 8 ? 0x202F : 0x206F) | (r & 7) << 9);   /* move.l off(sp),dN / movea.l off(sp),aN */
             w(4 * ns + 4 * (k - 1 - i));
         }
-        base = (uint32_t)obj->code.n;
-        asm_assemble(bk, &obj->code, cpu020, asm_const, &rl);
-        /* lo que apunta a una etiqueta del bloque: con una etiqueta de dashc, que se mueve si el código de antes
-           cambia de tamaño (relax_branches) */
-        for (i = 0; i + 1 < rl.n; i += 2) {
-            Fixup f;
-            int lab = new_label();
-            label_put(lab, (long)(base + rl.v[i + 1]));
-            f.at = base + rl.v[i];
-            f.label = lab;
-            f.abs = 1;
-            f.size = 2;
-            FIXUP_PUSH(f);
-            add_reloc(f.at, HK_CODE, NULL);
+        {
+            AsmOut ao;
+            uint32_t sbase[S_NSEC];
+            int sct;
+            memset(&ao, 0, sizeof ao);
+            ao.base[S_DATA] = sbase[S_DATA] = ((uint32_t)obj->data.n + 3) & ~3u;
+            ao.base[S_CHIP] = sbase[S_CHIP] = ((uint32_t)obj->chip.n + 3) & ~3u;
+            ao.base[S_BSS] = sbase[S_BSS] = (obj->bss + 3) & ~3u;
+            ao.base[S_CHIPBSS] = sbase[S_CHIPBSS] = (obj->chipbss + 3) & ~3u;
+            asm_assemble(bk, &ao, cpu020, fpu881, asm_const, asm_sym);
+            if (ao.calign > 2) {
+                /* cnop en el código: nops delante, que resolve_fixups quita hasta que el bloque empieza alineado */
+                AsmAlign al;
+                for (i = 0; i < ao.calign - 2; i += 2) w(0x4E71);
+                al.label = new_label();
+                al.align = ao.calign;
+                def_label(al.label);
+                VEC_PUSH(asm_aligns, al);
+            }
+            base = (uint32_t)obj->code.n;
+            buf_bytes(&obj->code, ao.sec[S_CODE].p, ao.sec[S_CODE].n);
+            /* las secciones de datos, a los hunks del programa (alineadas a 4) */
+            for (sct = S_DATA; sct < S_NSEC; sct++) {
+                uint32_t n = (uint32_t)ao.sec[sct].n;
+                if (!n) continue;
+                if (sct == S_DATA || sct == S_CHIP) {
+                    Buf *d = sct == S_DATA ? &obj->data : &obj->chip;
+                    while (d->n < sbase[sct]) buf_byte(d, 0);
+                    buf_bytes(d, ao.sec[sct].p, n);
+                } else if (sct == S_BSS) {
+                    obj->bss = sbase[sct] + n;
+                } else {
+                    obj->chipbss = sbase[sct] + n;
+                }
+            }
+            for (i = 0; i < ao.relocs.n; i++) {
+                AsmReloc *r = &ao.relocs.v[i];
+                int to = asm_hunk(r->to), fidx = -1, lab = -1;
+                const char *sym = NULL;
+                if (r->to == S_EXT) {
+                    if (r->ext >= ASM_BASE) {
+                        static char *bsym[8];
+                        int k = r->ext - ASM_BASE;
+                        if (!bsym[k]) {
+                            bsym[k] = xmalloc(strlen(asm_bases[k]) + 2);
+                            bsym[k][0] = '_';
+                            strcpy(bsym[k] + 1, asm_bases[k]);
+                        }
+                        sym = bsym[k];
+                    } else {
+                        fidx = r->ext - 1;
+                        if (!needed[fidx]) needed[fidx] = 1;
+                        lab = func_label[fidx];
+                    }
+                } else if (r->to == S_CODE) {
+                    lab = new_label();
+                    label_put(lab, (long)(base + r->off));
+                }
+                if (r->from == S_CODE) {
+                    uint32_t at = base + r->at;
+                    if (lab >= 0) {
+                        /* al código: con una etiqueta de dashc, que se mueve si el código de antes cambia de tamaño
+                           (relax_branches) */
+                        Fixup f;
+                        f.at = at;
+                        f.label = lab;
+                        f.abs = 1;
+                        f.size = 2;
+                        FIXUP_PUSH(f);
+                        add_reloc(at, HK_CODE, NULL);
+                    } else if (sym) {
+                        add_reloc(at, -1, sym);
+                    } else {
+                        put_long(obj->code.p + at, sbase[r->to] + r->off);
+                        add_reloc(at, to, NULL);
+                    }
+                } else {
+                    int from = asm_hunk(r->from);
+                    uint32_t at = sbase[r->from] + r->at;
+                    SecReloc sr;
+                    sr.from = from;
+                    sr.off = at;
+                    sr.hunk = sym ? -1 : lab >= 0 ? HK_CODE : to;
+                    sr.sym = sym;
+                    VEC_PUSH(obj->srelocs, sr);
+                    if (lab >= 0) {
+                        SecFix sf;
+                        sf.hunk = from;
+                        sf.off = at;
+                        sf.label = lab;
+                        VEC_PUSH(sec_fix, sf);
+                    } else if (!sym) {
+                        put_sec_long(from, at, sbase[r->to] + r->off);
+                    }
+                }
+            }
+            for (sct = 0; sct < S_NSEC; sct++) xfree(ao.sec[sct].p);
+            xfree(ao.relocs.v);
         }
-        xfree(rl.v);
         for (i = 0; i < m; i++) {
             int r = bk->out_reg[i];
             w(0x2F40 | (r < 8 ? r : 8 | (r & 7)));     /* move.l rN,off(sp) */
             w(4 * ns + 4 * i);
+        }
+        if (fsave) {
+            int nf = 0, rev = 0;
+            for (i = 0; i < 8; i++)
+                if (fsave & 1u << i) {
+                    nf++;
+                    rev |= 1 << (7 - i);
+                }
+            w(0xF21F);                                 /* fmovem.x (sp)+,... */
+            w(0xD000 | rev);
+            sp_depth -= 12 * nf;
+            ns -= 3 * nf;
         }
         if (save) {
             w(0x4CDF);                                 /* movem.l (sp)+,... */
@@ -6405,7 +6597,12 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 /* lo generado hasta un punto, para deshacer lo que venga después */
 /* (también lo de la depuración: una función generada y tirada no debe dejar líneas que apunten a código que ya no
    está; el depurador ponía su NOP encima de otro código. Lo vio Forja) */
-typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n, brk_n; long sink; } Mark;
+typedef struct {
+    size_t code_n, data_n, chip_n;
+    int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n, brk_n, srelocs_n, secfix_n, aligns_n;
+    uint32_t bss, chipbss;
+    long sink;
+} Mark;
 
 static Mark mark(void)
 {
@@ -6420,6 +6617,14 @@ static Mark mark(void)
     m.dvars_n = dbg_vars.n;
     m.brk_n = brk_sites.n;
     m.sink = sink_off;
+#ifndef DASH_A64
+    m.chip_n = obj->chip.n;
+    m.bss = obj->bss;
+    m.chipbss = obj->chipbss;
+    m.srelocs_n = obj->srelocs.n;
+    m.secfix_n = sec_fix.n;
+    m.aligns_n = asm_aligns.n;
+#endif
     return m;
 }
 
@@ -6437,6 +6642,14 @@ static void undo(Mark *m)
     dbg_vars.n = m->dvars_n;
     brk_sites.n = m->brk_n;
     sink_off = m->sink;
+#ifndef DASH_A64
+    obj->chip.n = m->chip_n;
+    obj->bss = m->bss;
+    obj->chipbss = m->chipbss;
+    obj->srelocs.n = m->srelocs_n;
+    sec_fix.n = m->secfix_n;
+    asm_aligns.n = m->aligns_n;
+#endif
 }
 
 static int gen_discarding;   /* gen_program: una función que no va en el ejecutable (solo sus errores) */
@@ -7164,6 +7377,9 @@ void gen_program(Program *p, Obj *o)
     rel_flatten();
 #endif
     resolve_fixups();
+#ifndef DASH_A64
+    asm_resolve();
+#endif
     {
         /* el NodeExt de los nodos que no tienen el suyo, compartido: nadie puede haber escrito en él */
         static const NodeExt zero;

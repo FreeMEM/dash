@@ -35,13 +35,18 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ### 2.17.0 (2026-11-17)
 
-La orden `dash` del Amiga gasta menos de la mitad de memoria, y Forja 0.8. Todo lo que compilaba sigue compilando
-igual, con los mismos bytes.
+El ensamblador en línea, completo para demos; la orden `dash` del Amiga gasta menos de la mitad de memoria, y
+Forja 0.8. Todo lo que compilaba sigue compilando igual.
+
+- **Nuevo:** `asm func`, funciones enteras en ensamblador; `jsr` a funciones de Dash desde un bloque; secciones
+  (`data`, `bss` y en memoria chip `data_c`, `bss_c`); `cnop`; la FPU (`--fpu`) y el resto del 68020; e
+  interrupciones con `vblank_server`, `int_server_add` e `int_server_remove`, que se quitan solas al salir.
+  Ejemplo `examples/asm_copper.dash`. 1066 funciones.
 
 - **Mejora:** compilar Forja entera pasa de 18 MB a 7,6 MB de memoria: ya cabe en un A1200 con 8 MB de fast. El
   código generado no cambia.
 - **Nuevo:** `dbg_set(i, expr, valor)` cambia una variable al depurar (Int, Char, Bool, Fixed o Float); también la
-  orden `set` del servidor de depuración. 1063 funciones.
+  orden `set` del servidor de depuración.
 - **Nuevo:** `icon_save(ruta, base, tipo, herramienta, tooltypes)` escribe un icono `.info` con icon.library.
 - **Arreglo:** un texto hecho de muchos trozos sumados agotaba la pila de la orden `dash` del Amiga (Software
   Failure).

@@ -156,3 +156,26 @@ def debug_link_flags(ld: str, build_dir: str) -> list:
     with open(path, "w") as f:
         f.write(script + "\n")
     return ["-Wl,-T," + path]
+
+
+def fix_chip_hunks(c_texts, exe_path) -> None:
+    """After gcc's link: the hunks of .datachip and .bsschip (asm blocks with section data_c, bss_c) in chip memory.
+    This ld keeps them apart, last (after .text, .data and .bss, as its script orders them), but drops their
+    MEMF_CHIP: it is set here in the table of the HUNK_HEADER (bit 30 of each size), as dashc writes it."""
+    import struct
+    texts = list(c_texts)
+    want = [k for k in (".datachip", ".bsschip") if any(f".section {k}" in t for t in texts)]
+    if not want:
+        return
+    with open(exe_path, "rb") as f:
+        data = bytearray(f.read())
+    if len(data) < 20 or struct.unpack(">I", data[:4])[0] != 0x3F3 or struct.unpack(">I", data[4:8])[0] != 0:
+        return
+    first, last = struct.unpack(">II", data[12:20])
+    count = last - first + 1
+    for k in range(count - len(want), count):
+        at = 20 + 4 * k
+        size = struct.unpack(">I", data[at:at + 4])[0]
+        data[at:at + 4] = struct.pack(">I", (size & 0x3FFFFFFF) | 0x40000000)
+    with open(exe_path, "wb") as f:
+        f.write(data)

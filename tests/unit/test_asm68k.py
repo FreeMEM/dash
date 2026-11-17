@@ -15,7 +15,7 @@ from compiler.lsp_format import format_text           # noqa: E402
 AS = os.path.join(os.environ.get("DASH_TOOLCHAIN", "/opt/amiga"), "bin", "m68k-amigaos-as")
 
 
-def block_of(body, header="", consts=None, filename=""):
+def block_of(body, header="", consts=None, filename=""):  # noqa: E302
     src = "Main\n    asm" + header + "\n" + body + "\n    end\nend\n"
     new = asm68k.extract(src, filename)
     n = max(asm68k.BLOCKS)
@@ -115,7 +115,7 @@ class Translate(unittest.TestCase):
                  ("  nop d0", "asm: nop pide 0 operandos", 3),
                  ("  moveq #200,d0", "asm: moveq va de -128 a 127", 3),
                  ("  move.l d0,#1", "asm: operando no válido: #1", 3),
-                 ("  cnop 0,4", "asm: instrucción desconocida: cnop", 3),
+                 ("  cnop 2,4", "asm: cnop: solo cnop 0,n (el desplazamiento, 0)", 3),
                  ("  bra.s x\nx: nop", "asm: un salto .s no puede ir a la instrucción siguiente", 3),
                  ("x: nop\nx: nop", "asm: x ya está definido", 4)]
         for body, msg, line in cases:
@@ -182,6 +182,100 @@ class Translate(unittest.TestCase):
                 f.write("\t" + text.replace("%=", "1") + "\n")
             r = subprocess.run([AS, "-m68000", "-o", os.path.join(d, "a.o"), src], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stderr)
+
+
+def _read(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
+class SecondPart(unittest.TestCase):
+    """asm func, sections, jsr to functions, the FPU and the rest of the 68020 (the second part, for demos)."""
+
+    def test_asm_func_becomes_a_function(self):
+        src = ("asm func suma(a: Int, b: Int) -> Int uses d2  # comentario\n    add.l d1,d0\n    moveq #0,d2\nend\n"
+               "Main\n    Print suma(1, 2)\nend\n")
+        new = asm68k.extract(src, "x.dash")
+        lines = new.split("\n")
+        self.assertEqual(len(lines), len(src.split("\n")))       # the lines do not move
+        n = max(asm68k.BLOCKS)
+        self.assertEqual(lines[0], "func suma(a: Int, b: Int) -> Int")
+        self.assertEqual(lines[1], f"    __dash_asm({n}, a, b) __dash_asm_r = __dash_asm_out({n}, 0) return __dash_asm_r")
+        self.assertEqual(lines[2:4], ["", "end"])
+        b = asm68k.BLOCKS[n]
+        self.assertEqual(b.ins, [("d0", "a"), ("d1", "b")])
+        self.assertEqual(b.outs, [("__dash_asm_r", "d0")])
+        self.assertEqual(b.uses, ["d2"])
+
+    def test_asm_func_with_in_and_out(self):
+        new = asm68k.extract("asm func f(l: [Int], n: Int) -> Pointer in a0 = l, d0 = n - 1 out a0\n  nop\nend\n", "")
+        n = max(asm68k.BLOCKS)
+        self.assertIn(f"__dash_asm({n}, l, n - 1) __dash_asm_r = __dash_asm_out({n}, 0)", new)
+        self.assertEqual(asm68k.BLOCKS[n].outs, [("__dash_asm_r", "a0")])
+        new = asm68k.extract("asm func g(p: Pointer) in a0 = p\n  clr.l (a0)\nend\n", "")
+        self.assertIn("func g(p: Pointer)\n", new)
+        self.assertNotIn("return", new)
+
+    def test_asm_func_errors(self):
+        cases = [("asm func f() -> String\n  nop\nend\n", "asm func: devuelve Int, Bool o Pointer"),
+                 ("asm func f()\nend\n", "asm func: el cuerpo está vacío"),
+                 ("asm func f(a) out d0\n  nop\nend\n", "asm func: sin -> Tipo no devuelve nada (quita el out)"),
+                 ("asm func f(a) -> Int out r = d0\n  nop\nend\n", "asm func: out lleva solo el registro"),
+                 ("asm func f\n  nop\nend\n", "asm func: se esperaba nombre(parámetros)")]
+        for src, msg in cases:
+            with self.assertRaises(asm68k.AsmError, msg=src) as e:
+                asm68k.extract(src, "")
+            self.assertTrue(e.exception.message.startswith(msg), e.exception.message)
+
+    def test_sections_for_as(self):
+        _, b = block_of("        lea tabla,a0\n        data_c\n    tabla:\n        dc.w 1\n        bss\n"
+                        "    cuenta: ds.l 1\n        code\n        nop")
+        self.assertTrue(b.sections)
+        self.assertEqual(b.label_sec, {"tabla": "data_c", "cuenta": "bss"})
+        text = asm68k.translator(b, {}).text.split("\n\t")
+        self.assertEqual(text, ["lea .Ld%=Ntabla,a0", ".section .datachip", ".balign 4", ".Ld%=Ntabla:", ".word 1",
+                                ".text", ".section .bss", ".balign 4", ".Ld%=Ncuenta:", ".skip 4", ".text", "nop"])
+
+    def test_cnop_and_float_data(self):
+        text = asm68k.translator(block_of("  nop\n  cnop 0,8\n.a: dc.s 1.5\n  dc.d -2")[1], {}).text
+        self.assertEqual(text.split("\n\t"), ["nop", ".balignw 8,0x4e71", ".Ld%=La:", ".long 1069547520",
+                                               ".long 3221225472,0"])
+
+    def test_jsr_to_a_function_and_a_base(self):
+        _, b = block_of("  jsr doble\n  move.l GfxBase,a6\n  lea doble,a0")
+        tr = asm68k.translator(b, {}, {"doble": "doble"})
+        self.assertEqual(tr.func_refs, ["doble"])
+        self.assertEqual(tr.text.split("\n\t"), ["jsr \x01F0\x01", "move.l _GfxBase,a6", "lea \x01F0\x01,a0"])
+        self.assertEqual(b.clobbers(True), ["d0", "d1", "a0", "a1"])
+
+    def test_fpu_text(self):
+        tr = asm68k.translator(block_of("  fmove.l d0,fp0\n  fmul.s #2.5,fp0\n  fadd.d #3,fp0\n"
+                                        "  fmove.x #0.5,fp1\n  fbeq .x\n.x: fmovem.x fp2-fp7,-(sp)", " uses fp2-fp7")[1], {})
+        self.assertEqual(tr.text.split("\n\t"),
+                         ["fmove.l d0,fp0", "fmul.s #0r2.5,fp0", "fadd.d #0r3.0,fp0",
+                          ".word 62012,18560,16382,0,32768,0,0,0", "fbeq .Ld%=Lx", ".Ld%=Lx:",
+                          "fmovem.x fp2-fp7,-(a7)"])
+        self.assertEqual([w for w, _ in tr.needs_fpu][:2], ["fmove.l", "fmul.s"])
+
+    def test_more_020(self):
+        tr = asm68k.translator(block_of("  move.l ([4,a0,d0.l*4],8),d1\n  cas2.l d0:d1,d2:d3,(a0):(a1)\n"
+                                        "  cmp2.w (a0),d0\n  pack d0,d1,#0\n  trapeq\n  movec vbr,d0")[1], {})
+        self.assertEqual(tr.text.split("\n\t"),
+                         ["move.l ([4,a0,d0.l*4],8),d1", "cas2.l d0:d1,d2:d3,(a0):(a1)", "cmp2.w (a0),d0",
+                          "pack d0,d1,#0", "trapeq", "movec vbr,d0"])
+        self.assertEqual(len({line for _, line in tr.needs_020}), 6)
+
+    def test_fix_chip_hunks(self):
+        import struct
+        from compiler.cflags import fix_chip_hunks
+        with tempfile.TemporaryDirectory() as d:
+            exe = os.path.join(d, "a")
+            with open(exe, "wb") as f:
+                f.write(struct.pack(">9I", 0x3F3, 0, 4, 0, 3, 10, 2, 5, 1))
+            fix_chip_hunks(["x"], exe)                                   # no chip section: as it was
+            self.assertEqual(struct.unpack(">4I", _read(exe)[20:36]), (10, 2, 5, 1))
+            fix_chip_hunks(['__asm__("\t.section .datachip")'], exe)   # the last hunk, in chip memory
+            self.assertEqual(struct.unpack(">4I", _read(exe)[20:36]), (10, 2, 5, 0x40000001))
 
 
 class Format(unittest.TestCase):

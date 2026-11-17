@@ -2250,6 +2250,63 @@ static void _dash_font_cleanup(void) {
     # High/true colour RTG screens mix each pixel (cybergraphics.library, or Picasso96API.library's
     # p96ReadPixel/p96WritePixel); palette screens (AGA/ECS, 8-bit RTG) get an ordered 4x4 Bayer
     # dither of the closest pen, drawn by RectFill with an area pattern (the blitter does it).
+    IRQ_RUNTIME = """\
+/* Interrupt servers (docs/ASM_DISEÑO.md, asm en línea): a function of the program, usually an asm func, on an
+   interrupt chain of exec (AddIntServer): VBlank (5), copper (4), CIA-A (3) or CIA-B (13). It is called in the
+   interrupt with its data; at exit (also after an error) every server comes off its chain */
+#include <hardware/intbits.h>
+#include <exec/interrupts.h>
+struct _DashIrq {
+    struct Interrupt is;
+    LONG (*fn)(LONG);
+    LONG data;
+    LONG intb;
+    struct _DashIrq *next;
+};
+static struct _DashIrq *_dash_irqs = NULL;
+
+/* exec calls it with a1 = is_Data; it returns with d0 = 0 and Z set (the chain goes on: the VBlank of the system
+   too). (gcc ends it with moveq #0,d0 and addq.l #4,sp, which leaves the flags as they are) */
+static ULONG _dash_irq_server(struct _DashIrq *n __asm("a1")) {
+    n->fn(n->data);
+    return 0;
+}
+
+static LONG _dash_irq_add(LONG intb, APTR fn, LONG data) {
+    struct _DashIrq *n;
+    if (!fn || !(intb == INTB_VERTB || intb == INTB_COPER || intb == INTB_PORTS || intb == INTB_EXTER)) return 0;
+    n = (struct _DashIrq *)AllocMem(sizeof(struct _DashIrq), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!n) return 0;
+    n->is.is_Node.ln_Type = NT_INTERRUPT;
+    n->is.is_Node.ln_Name = (char *)"dash";
+    n->is.is_Data = (APTR)n;
+    n->is.is_Code = (void (*)(void))_dash_irq_server;
+    n->fn = (LONG (*)(LONG))fn;
+    n->data = data;
+    n->intb = intb;
+    n->next = _dash_irqs;
+    _dash_irqs = n;
+    AddIntServer(intb, &n->is);
+    return (LONG)n;
+}
+
+static void _dash_irq_remove(LONG h) {
+    struct _DashIrq **p;
+    for (p = &_dash_irqs; *p; p = &(*p)->next)
+        if ((LONG)*p == h) {
+            struct _DashIrq *n = *p;
+            *p = n->next;
+            RemIntServer(n->intb, &n->is);
+            FreeMem(n, sizeof(struct _DashIrq));
+            return;
+        }
+}
+
+static void _dash_irq_cleanup(void) {
+    while (_dash_irqs) _dash_irq_remove((LONG)_dash_irqs);
+}
+"""
+
     TASK_RUNTIME = """\
 /* task_start (dashweb D47): a C function f(arg) -> result in another AmigaOS process, so the
    program goes on (its MUI loop, say) while f works. Only C runs there: an @native function,
@@ -25690,6 +25747,7 @@ _RUNTIME_FLAGS = [
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
     ("BLEND_RUNTIME", "uses_blend"),
     ("TASK_RUNTIME", "uses_tasks"),         # dashweb D47
+    ("IRQ_RUNTIME", "uses_irq"),            # int_server_add (asm en línea)
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
@@ -26053,6 +26111,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_blend: bool = False    # gfx_blend_rect, gfx_gradient_rect, gfx_pixel_rgb (BLEND_RUNTIME)
         self.uses_tasks: bool = False    # task_start... (TASK_RUNTIME, dashweb D47)
+        self.uses_irq: bool = False      # int_server_add... (IRQ_RUNTIME)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
         self.uses_inactive: bool = False  # On Inactive: windows ask for IDCMP_INACTIVEWINDOW
@@ -26426,6 +26485,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BLEND_RUNTIME)
         if self.uses_tasks:
             parts.append(CTemplates.TASK_RUNTIME)
+        if self.uses_irq:
+            parts.append(CTemplates.IRQ_RUNTIME)
         if self.uses_images:
             parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
@@ -26726,6 +26787,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_irq:
+            cleanup.insert(0, "    _dash_irq_cleanup();\n")    # before anything: the servers run the program's code
         if self.uses_runcap:
             cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
         if self.uses_syslist:
@@ -29140,6 +29203,9 @@ static {ret_type} {method_name}({params_str}) {{
         if node.exported:
             # @export (Dash 2.0): an external name for the C of @link
             proto = proto.replace("static ", "", 1).replace("__attribute__((unused))", "__attribute__((used))")
+        if self._asm_sections_in(node.body):
+            # an asm block with section (data_c...): its data are of one place, so gcc must not copy the function
+            proto = proto.replace("__attribute__((unused))", "__attribute__((unused, noinline, noclone))")
         self.prototypes.append(proto)
 
         # Generate function definition
@@ -29222,6 +29288,8 @@ static {ret_type} {method_name}({params_str}) {{
             ret_c = self._dash_type_to_c(ret, "") if ret and not getattr(self, "_lambda_depth", 0) else ""
             if ret_c.startswith("_Dash_") and isinstance(node.value, ArrayAccess) and self._infer_c_type(node.value) == "LONG":
                 value = f"(({ret_c}){value})"
+            if ret == "Pointer" and isinstance(node.value, VarRef) and node.value.name == "__dash_asm_r":
+                value = f"((APTR){value})"            # asm func -> Pointer: the register is a LONG
             head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")
@@ -29303,15 +29371,38 @@ static {ret_type} {method_name}({params_str}) {{
 
         self.emit(f"{self.context.indent}{self._callee(node)}({self._call_args(node)});\n")
 
+    @staticmethod
+    def _asm_sections_in(body) -> bool:
+        """Is there an asm block with section (data_c, bss...) in these statements?"""
+        from compiler import asm68k
+        import dataclasses
+        if not any(b.sections for b in asm68k.BLOCKS.values()):
+            return False
+        seen = set()
+
+        def walk(x) -> bool:
+            if isinstance(x, list):
+                return any(walk(i) for i in x)
+            if not dataclasses.is_dataclass(x) or id(x) in seen:
+                return False
+            seen.add(id(x))
+            if isinstance(x, FunctionCall) and x.name == "__dash_asm" and x.arguments:
+                b = asm68k.BLOCKS.get(getattr(x.arguments[0], "value", None))
+                if b is not None and b.sections:
+                    return True
+            return any(walk(getattr(x, f.name)) for f in dataclasses.fields(x) if f.name != "location")
+        return walk(body)
+
     def _gen_asm_block(self, node: FunctionCall):
         """An asm block (docs/ASM_DISEÑO.md, compiler/asm68k.py): the inputs in volatile temporaries (GCC 6 and
         libgcc calls with register asm, AGENTS.md), then in their registers; the block as a GCC __asm__ for
         binutils' as; the outputs in _dasmN_oJ, which the var = __dash_asm_out(N, J) after it read."""
         from compiler import asm68k
-        from compiler.analyzer import asm_consts
+        from compiler.analyzer import asm_consts, asm_funcs
         n = node.arguments[0].value
         block = asm68k.BLOCKS[n]
-        text, needs_020 = asm68k.translate(block, asm_consts(self.analysis.program))
+        tr = asm68k.translator(block, asm_consts(self.analysis.program), asm_funcs(self.analysis.program))
+        text, needs_020 = tr.text, tr.needs_020
         ind = self.context.indent
         if needs_020:
             what, line = needs_020[0]
@@ -29319,6 +29410,11 @@ static {ret_type} {method_name}({params_str}) {{
             self.emit("#if !(defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || "
                       "defined(__mc68060__))\n")
             self.emit(f'#error "{block.filename}:{line}: asm: {what} necesita --cpu 68020"\n#endif\n')
+        if tr.needs_fpu or block.fuses:
+            what, line = tr.needs_fpu[0] if tr.needs_fpu else ("los registros de la FPU (uses fp...)", block.line)
+            what = what.replace("\\", "").replace('"', "'")
+            self.emit("#ifndef __HAVE_68881__\n")
+            self.emit(f'#error "{block.filename}:{line}: asm: {what} necesita --fpu"\n#endif\n')
         if block.outs:
             self.emit(f"{ind}LONG " + ", ".join(f"_dasm{n}_o{j}" for j in range(len(block.outs))) + ";\n")
         self.emit(f"{ind}{{\n")
@@ -29339,9 +29435,15 @@ static {ret_type} {method_name}({params_str}) {{
                 init = f" = _dasm{n}_i{[r for r, _ in block.ins].index(reg)}"
             self.emit(f'{inner}register LONG _dasm{n}_{reg} __asm__("{reg}"){init};\n')
         outputs = ", ".join(f'"{"+" if reg in in_regs else "="}r"(_dasm{n}_{reg})' for reg in regs)
-        clobbers = ", ".join([f'"{r}"' for r in block.clobbers()] + ['"cc"', '"memory"'])
-        self.emit(f"{inner}__asm__ volatile ({asm68k.c_string(chr(9) + text + chr(10))}\n"
-                  f"{inner}    : {outputs} : : {clobbers});\n")
+        # jsr nombre: the function as an "i" operand (%cN prints its symbol), so gcc keeps it and knows it is
+        # called; a call changes d0, d1, a0 and a1
+        inputs = ", ".join(f'"i"({c})' for c in tr.func_refs)
+        clobbers = ", ".join([f'"{r}"' for r in block.clobbers(bool(tr.func_refs))] + ['"cc"', '"memory"'])
+        body = asm68k.c_string(chr(9) + text + chr(10))
+        for k in range(len(tr.func_refs)):
+            body = body.replace(f"\x01F{k}\x01", f"%c{len(regs) + k}")
+        self.emit(f"{inner}__asm__ volatile ({body}\n"
+                  f"{inner}    : {outputs} : {inputs} : {clobbers});\n")
         for j, (_, reg) in enumerate(block.outs):
             self.emit(f"{inner}_dasm{n}_o{j} = _dasm{n}_{reg};\n")
         self.emit(f"{ind}}}\n")

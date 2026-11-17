@@ -1,0 +1,12 @@
+# Test: en una sección de datos (section data_c...) no van instrucciones
+# expect: asm: en una sección de datos solo van datos (dc, ds, incbin...): move
+# expect-dash: asm: en una sección de datos solo van datos (dc, ds, incbin...): move
+Main
+    asm
+        data_c
+    tabla:
+        dc.w    1
+        move.l  d0,d1
+        code
+    end
+end

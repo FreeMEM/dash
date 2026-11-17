@@ -837,6 +837,10 @@ const BuiltinInfo builtin_info[] = {
     {"input_qualifiers", 0, 1, 1, 0, 0, 0u, 0u},
     {"input_text", 1, 0, 0, 0, 0, 1u, 0u},
     {"input_text", 1, 0, 0, 0, 0, 1u, 0u},
+    {"int_server_add", 3, 1, 1, 0, 0, 0u, 0u},
+    {"int_server_add", 3, 1, 1, 0, 0, 0u, 0u},
+    {"int_server_remove", 1, 0, 1, 0, 0, 0u, 0u},
+    {"int_server_remove", 1, 0, 1, 0, 0, 0u, 0u},
     {"integer_create", 6, 1, 1, 0, 0, 0u, 0u},
     {"integer_create", 6, 1, 1, 0, 0, 0u, 0u},
     {"integer_get", 1, 1, 1, 0, 0, 0u, 0u},
@@ -2023,6 +2027,8 @@ const BuiltinInfo builtin_info[] = {
     {"utf8_prev", 2, 1, 0, 0, 0, 1u, 0u},
     {"utf8_to_latin1", 1, 3, 0, 0, 0, 1u, 0u},
     {"utf8_to_latin1", 1, 3, 0, 0, 0, 1u, 0u},
+    {"vblank_server", 2, 1, 1, 0, 0, 0u, 0u},
+    {"vblank_server", 2, 1, 1, 0, 0, 0u, 0u},
     {"wait_blit", 0, 0, 1, 0, 0, 0u, 0u},
     {"wait_blit", 0, 0, 1, 0, 0, 0u, 0u},
     {"wait_click", 0, 1, 1, 0, 0, 0u, 0u},
@@ -2128,7 +2134,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2126;
+const int builtin_count = 2132;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

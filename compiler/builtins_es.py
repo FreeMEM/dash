@@ -738,6 +738,11 @@ DESC_ES = {
     "task_start_with": "task_start con su pila en bytes (0: 128 KB) y su prioridad respecto a la del programa (-1: solo "
                        "corre cuando el programa espera)",
     "task_done": "True cuando la función ha acabado (no espera)",
+    "int_server_add": "Pone f(datos) en una cadena de interrupciones de exec (AddIntServer): 5 VBlank, 4 copper, "
+                      "3 CIA-A, 13 CIA-B. f corre en la interrupción: una asm func, o código de Dash que solo hace "
+                      "cuentas y peek/poke (ni Print, ni textos ni listas). Se quita sola al salir. El servidor, o 0",
+    "int_server_remove": "Quita de su cadena un servidor de int_server_add",
+    "vblank_server": "int_server_add en el VBlank (50 veces por segundo en PAL): f(datos) en cada imagen",
     "desktop_canvas": "Una zona del escritorio del Workbench (debajo de la barra de título de la pantalla), detrás de "
                       "los iconos y sin clics, en modo fondo o no, planar o RTG; x o y negativas: desde el borde derecho "
                       "o el de abajo (-1 lo toca). 0 si no se puede",

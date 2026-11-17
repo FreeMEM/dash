@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1063 funciones, 1063 implementadas, 0 sin implementar.
+Total: 1066 funciones, 1066 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -8148,6 +8148,9 @@ end
 | [`assigns_read()`](#assigns_read) | Int | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
 | [`assign_name(i)`](#assign_name) | String | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
 | [`assign_path(i)`](#assign_path) | String | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+| `int_server_add(intb, func, data)` | Int | Pone f(datos) en una cadena de interrupciones de exec (AddIntServer): 5 VBlank, 4 copper, 3 CIA-A, 13 CIA-B. f corre en la interrupción: una asm func, o código de Dash que solo hace cuentas y peek/poke (ni Print, ni textos ni listas). Se quita sola al salir. El servidor, o 0 |  |
+| `int_server_remove(server)` | — | Quita de su cadena un servidor de int_server_add |  |
+| `vblank_server(func, data)` | Int | int_server_add en el VBlank (50 veces por segundo en PAL): f(datos) en cada imagen |  |
 
 <a id="time_unix"></a>
 
