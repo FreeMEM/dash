@@ -243,7 +243,10 @@ int main(int argc, char **argv)
     rt_blob_len = rtlen;
     tiempo("inicio");
     parse_module_ok = header && !out;
-    prog = parse(lex((const char *)src));
+    {
+        char *sin_asm = asm_extract((const char *)src);   /* los bloques asm ... end (asm68k.c) */
+        prog = parse(lex(sin_asm ? sin_asm : (const char *)src));
+    }
     if (cli_stack > prog->stack_min) prog->stack_min = cli_stack;   /* --stack N: como @stack N */
     if (header) {
         /* los structs del programa para el C de un módulo de @link */

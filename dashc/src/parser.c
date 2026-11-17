@@ -816,6 +816,10 @@ static void import_file(Program *p, Token *at, const char *path)
         const char **saved_priv = lex_priv;
         int saved_npriv = lex_npriv, n = 0;
         lex_npriv = 0;
+        {
+            char *sin_asm = asm_extract(text);         /* los bloques asm ... end (asm68k.c) */
+            if (sin_asm) text = sin_asm;
+        }
         tk = lex(text);
         lex_priv = NULL;
         for (i = 1; tk[i - 1].kind != T_EOF && tk[i].kind != T_EOF; i++) {

@@ -1,0 +1,10 @@
+# Test: un salto a una etiqueta que no está en el bloque
+# expect: asm: nombre desconocido: .fuera
+# expect-dash: asm: nombre desconocido: .fuera
+Main
+    asm uses d0
+        moveq   #3,d0
+    .dentro:
+        dbra    d0,.fuera
+    end
+end

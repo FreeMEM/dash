@@ -4,7 +4,7 @@
 // of the document (tested without VS Code) and the command bound to Enter in .dash files.
 
 // a line that opens a block closed by "end"; elif/else only go on one
-const OPENER = /^\s*(?:(?:@native(?:\s*\(\s*borrow\s*\))?\s+)?func\b|if\b|while\b|for\b|struct\b|enum\b|Window\b|Main\b|EventLoop\b|On\b|@c\b)/;
+const OPENER = /^\s*(?:(?:@native(?:\s*\(\s*borrow\s*\))?\s+)?func\b|if\b|while\b|for\b|struct\b|enum\b|Window\b|Main\b|EventLoop\b|On\b|@c\b|asm(?=\s*(?:$|#|in\b|out\b|uses\b)))/;
 const CONTINUES = /^\s*(?:elif|else)\b/;
 const END = /^\s*end\b/;
 

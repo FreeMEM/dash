@@ -111,6 +111,20 @@ func MyFunc(x: Int) -> Int
 end
 ```
 
+## Inline assembler (68000, Motorola syntax; docs/ASM_DISEÑO.md)
+```ruby
+func add(a: Int, b: Int) -> Int
+    asm in d0 = a, d1 = b out r = d0 uses d2     # in: register = value; out: variable = register
+        move.l  d1,d2                           ; ; starts a comment; labels .x: or x:
+        add.l   d2,d0                           ; registers: d0-d7, a0-a4, a6 (not a5 nor sp)
+    end                                          # ends at the line that only says end
+    return r
+end
+```
+A string goes in as the address of its characters and a list as the address of its first element. Data:
+`dc.b/w/l`, `ds`, `even`, `incbin "f"`; constants `X equ 5` and Dash's `const`. 68020 instructions (`muls.l`,
+`bfextu`...), with `--cpu 68020`.
+
 ## Windows and events
 ```ruby
 MyWindow.open

@@ -1,0 +1,99 @@
+# Barras de raster con la parte caliente en ensamblador en línea (docs/ASM_DISEÑO.md; lo pidió el usuario, para
+# demos). Dash prepara una tabla de seno; en cada imagen, el bloque asm espera a cada línea de la pantalla
+# (VHPOSR, $DFF006) y cambia el color de fondo (COLOR00, $DFF180): tres barras, roja, verde y azul, que suben y
+# bajan. Dura 10 segundos, o hasta pulsar el botón izquierdo del ratón.
+# Va igual por los dos caminos: ./dash examples/asm_barras.dash y ./dash --gcc examples/asm_barras.dash.
+
+const ARRIBA = 0x40     # la primera línea con barras
+const ABAJO = 0xF0      # y la de después de la última
+
+Main
+    # la tabla de seno: 256 bytes de 4 a 124
+    tabla = amiga_alloc(256)
+    for i in (0..255)
+        v = Int(fx_sin(Fixed(i * 360 / 256)) * 60) + 64
+        poke_byte(tabla + i, v)
+    end
+    fase = 0
+    for cuadro in (1..500)
+        wait_vblank()
+        asm in a1 = tabla, d4 = fase out salir = d0 uses d1-d7/a0
+            lea     $dff000,a0
+            ; los centros de las tres barras (d5, d6, d7), de la tabla
+            move.w  d4,d0
+            add.w   d0,d0
+            and.w   #255,d0
+            moveq   #0,d5
+            move.b  (a1,d0.w),d5
+            add.w   #85,d0
+            and.w   #255,d0
+            moveq   #0,d6
+            move.b  (a1,d0.w),d6
+            add.w   #85,d0
+            and.w   #255,d0
+            moveq   #0,d7
+            move.b  (a1,d0.w),d7
+            add.w   #ARRIBA+8,d5
+            add.w   #ARRIBA+8,d6
+            add.w   #ARRIBA+8,d7
+            move.w  #ARRIBA,d1          ; la línea que toca
+        .linea:
+            move.b  6(a0),d0            ; VHPOSR: la línea, en el byte alto
+            cmp.b   d1,d0
+            bne.s   .linea
+            moveq   #0,d2               ; el color de la línea: 15 - 2 * distancia al centro
+            move.w  d1,d3
+            sub.w   d5,d3
+            bpl.s   .r
+            neg.w   d3
+        .r: cmp.w   #8,d3
+            bge.s   .verde
+            add.w   d3,d3
+            neg.w   d3
+            add.w   #15,d3
+            lsl.w   #8,d3
+            or.w    d3,d2
+        .verde:
+            move.w  d1,d3
+            sub.w   d6,d3
+            bpl.s   .v
+            neg.w   d3
+        .v: cmp.w   #8,d3
+            bge.s   .azul
+            add.w   d3,d3
+            neg.w   d3
+            add.w   #15,d3
+            lsl.w   #4,d3
+            or.w    d3,d2
+        .azul:
+            move.w  d1,d3
+            sub.w   d7,d3
+            bpl.s   .a
+            neg.w   d3
+        .a: cmp.w   #8,d3
+            bge.s   .pon
+            add.w   d3,d3
+            neg.w   d3
+            add.w   #15,d3
+            or.w    d3,d2
+        .pon:
+            move.w  d2,$180(a0)         ; COLOR00
+            addq.w  #1,d1
+            cmp.w   #ABAJO,d1
+            bne.s   .linea
+            clr.w   $180(a0)
+            ; el botón izquierdo del ratón (CIA-A, bit 6 a 0) acaba
+            moveq   #0,d0
+            btst    #6,$bfe001
+            bne.s   .sigue
+            moveq   #1,d0
+        .sigue:
+        end
+        if salir == 1
+            break
+        end
+        fase = fase + 1
+    end
+    amiga_free(tabla, 256)
+    Print "Fin de las barras"
+end

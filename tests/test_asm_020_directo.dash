@@ -1,0 +1,42 @@
+# Instrucciones del 68020 en un bloque asm por ./dash directo a hunk (--fpu: 68020 + FPU; lo pidió el usuario,
+# para demos). El mismo programa por ./dash --gcc: test_asm_020.dash.
+# fpu
+# dash-direct: --fpu
+# expect-out: -300000 1
+# expect-out: -142 -6
+# expect-out: 35 -128 -128
+# expect-out: 70
+# (sin import: con --multifile el runner no compila para el 68020)
+func pruebas_020()
+    a = 100000
+    b = -3
+    asm in d0 = a, d1 = b out p = d1, alto = d2 uses d2-d3
+        muls.l  d0,d1               ; 32 x 32 -> 32
+        move.l  #$10000,d2
+        move.l  d2,d3
+        mulu.l  d2,d2:d3            ; 64 bits: d2 = parte alta
+    end
+    Print "#{p} #{alto}"
+    asm in d0 = -1000, d1 = 7 out c = d0, r = d2 uses d2
+        divsl.l d1,d2:d0            ; cociente en d0, resto en d2
+    end
+    Print "#{c} #{r}"
+    asm in d0 = 0x12345678 out x = d1, y = d2, z = d0 uses d2
+        bfextu  d0{4:8},d1          ; los 8 bits desde el 4 (desde arriba)
+        moveq   #-128,d2
+        extb.l  d2
+        move.b  #$80,d0
+        extb.l  d0
+    end
+    Print "#{x} #{y} #{z}"
+    l = [10, 20, 30, 40]
+    asm in a0 = l, d0 = 3 out v = d1
+        move.l  (a0,d0.l*4),d1
+        add.l   -4(a0,d0.w*4),d1
+    end
+    Print v
+end
+
+Main
+    pruebas_020()
+end

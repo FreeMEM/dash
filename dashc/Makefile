@@ -14,7 +14,7 @@ RYU = -I../runtime/ryu ../runtime/ryu/dash_ryu.c
 # zlib para descomprimir el runtime de --memcheck (build/rt_blob.c): la de runtime/zlib, solo lo de inflate
 Z = ../runtime/zlib
 ZLIB = -DZ_PREFIX -DNO_GZIP -I$(Z) $(Z)/inflate.c $(Z)/inftrees.c $(Z)/inffast.c $(Z)/zutil.c $(Z)/adler32.c $(Z)/crc32.c
-SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src/dashui.c
+SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src/dashui.c src/asm68k.c
 
 dashc: $(SRC) src/dashc.h src/t68k_base.c src/t68k_ops.c src/t68k_arith.c src/t68k_opt.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
 	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c $(RYU) $(ZLIB)

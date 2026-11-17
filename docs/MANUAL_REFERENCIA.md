@@ -35,6 +35,8 @@
 22. [Ejemplos Completos](#22-ejemplos-completos)
 23. [Referencia Rapida](#23-referencia-rapida)
 24. [Dash 2.0: el compilador directo](#24-dash-20-el-compilador-directo)
+25. [DashOS (AArch64)](#25-dashos-aarch64)
+26. [Ensamblador en línea](#26-ensamblador-en-línea)
 
 ---
 
@@ -4973,6 +4975,60 @@ end
 - La memoria del Amiga es big-endian. En un programa little-endian, los campos `Word` y `Long` se leen y escriben
   dando la vuelta a los bytes, así que valen lo mismo que en el Amiga. `peek_*` y `poke_*` usan el orden del
   procesador.
+
+---
+
+## 26. Ensamblador en línea
+
+Un bloque `asm ... end` mete código 68000 en una función o en `Main`, con la sintaxis de Motorola (la de Devpac,
+ASM-One y vasm). Es para demos y para lo que tiene que ir lo más rápido posible. Va igual por los dos caminos:
+`./dash` lo ensambla él mismo y `./dash --gcc` se lo pasa al ensamblador de GCC. Diseño completo:
+`docs/ASM_DISEÑO.md`. Lo pidió el usuario, para demos.
+
+```ruby
+func suma_lista(datos: [Int]) -> Int
+    asm in a0 = datos, d0 = datos.length - 1 out total = d1
+        moveq   #0,d1
+    .bucle:
+        add.l   (a0)+,d1        ; comentario
+        dbra    d0,.bucle
+    end
+    return total
+end
+```
+
+La línea de `asm` dice qué entra y qué sale:
+
+- `in r = expresión, ...`: antes del bloque, el registro recibe el valor. Un Int o un Bool, su número; un Fixed, sus
+  32 bits; un texto, la dirección de su primer carácter; una lista, la de su primer elemento (4 bytes cada uno; 0 si
+  es `nil`). Un Float o un Double no valen: `Int(x)` o `Fixed(x)`.
+- `out variable = r, ...`: después, la variable recibe el registro como Int (si es nueva, queda declarada).
+- `uses r, ...`: los demás registros que el bloque cambia, también como en `movem`: `uses d2-d4/a1`.
+
+Se pueden usar d0-d7, a0-a4 y a6. a5 no (es el marco de las funciones de Dash) ni a7 (sp). Todo registro que el
+bloque cambie va en `in`, `out` o `uses`; los demás tienen que quedar como estaban. La pila tiene que quedar igual
+y el bloque acaba por abajo: ni `rts` ni saltos fuera de él.
+
+El cuerpo:
+
+- Una instrucción por línea, `[etiqueta:] instrucción[.tamaño] operandos ; comentario`. Una línea que empieza por
+  `*` es un comentario. Las etiquetas son del bloque (`.bucle` o `bucle`); otro bloque puede usar el mismo nombre.
+- Números `123`, `$1F`, `0x1F`, `%1010`, `0b1010`, `'A'`; expresiones con `+ - * / << >> & | ^ ~` y paréntesis. Un
+  nombre puede ser una etiqueta, una constante del bloque (`ANCHO equ 320` o `ANCHO = 320`) o una `const` de Dash.
+- Datos: `dc.b 1,2,"hola",0`, `dc.w`, `dc.l` (también `dc.l etiqueta`), `ds.b`/`ds.w`/`ds.l n` (ceros), `even` e
+  `incbin "fichero"[,desde[,cuántos]]` (la ruta, desde el `.dash`). Los datos van entre el código: el bloque salta
+  por encima (`bra.s .fin`). No van en memoria chip.
+- Todas las instrucciones del 68000 con todos sus modos (`4(a0)` o `(4,a0)`, `8(a0,d1.w)`, `tabla(pc)`, `$dff180`,
+  `4.w`...) y los alias de siempre (`dbra`, `bhs`, `blo`...). Un salto sin tamaño elige solo el corto o el largo.
+- Del 68020, con `--cpu 68020` o más (o `--fpu`): `muls.l`/`mulu.l` (también de 64 bits, `d1:d2`), `divs.l`,
+  `divu.l`, `divsl.l`, `divul.l`, `extb.l`, los campos de bits (`bfextu d0{4:8},d1`...), `bra.l`, `link.l`, `rtd`,
+  `chk.l` y el índice con escala (`(a0,d0.l*4)`). Sin la opción, el error lo dice.
+- No están: la FPU, la MMU, la indirección de memoria del 68020, `cnop` y las secciones (`section data_c`).
+
+Un error del bloque sale con la línea del `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida: movx`. En
+DashOS (AArch64) un bloque `asm` es un error.
+
+Ejemplo de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador).
 
 ---
 

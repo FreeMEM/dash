@@ -111,6 +111,20 @@ func MyFunc(x: Int) -> Int
 end
 ```
 
+## Ensamblador en línea (68000, sintaxis de Motorola; docs/ASM_DISEÑO.md)
+```ruby
+func suma(a: Int, b: Int) -> Int
+    asm in d0 = a, d1 = b out r = d0 uses d2     # in: registro = valor; out: variable = registro
+        move.l  d1,d2                           ; ; es comentario; etiquetas .x: o x:
+        add.l   d2,d0                           ; registros: d0-d7, a0-a4, a6 (no a5 ni sp)
+    end                                          # acaba en la línea que solo dice end
+    return r
+end
+```
+Un texto entra como la dirección de sus caracteres y una lista como la de su primer elemento. Datos: `dc.b/w/l`,
+`ds`, `even`, `incbin "f"`; constantes `X equ 5` y las `const` de Dash. Del 68020 (`muls.l`, `bfextu`...), con
+`--cpu 68020`.
+
 ## Ventanas y eventos
 ```ruby
 MiVentana.open
