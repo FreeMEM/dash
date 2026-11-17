@@ -2,7 +2,7 @@
 """El depurador por la red (tools/amiga/dbgserver.dash, el de la extensión de VS Code): en el A1200 emulado,
 dbgserver con depurar/depurado_datos.dash compilado con --debug, y este test conectado por TCP como lo hace la
 extensión (el bsdsocket de FS-UAE usa los sockets del PC). Comprueba un punto de parada en una línea, la pila, las
-variables y las globales, pasar, salir de una función, la salida y el código del final; y en otro programa que no
+variables y las globales, cambiar valores, pasar, salir de una función, la salida y el código del final; y en otro programa que no
 acaba, su salida mientras corre, pausa y acabarlo.
 
     flock /run/user/1000/dash-emu-red.lock python3 tests/depurar_vscode.py [--a500]
@@ -142,6 +142,14 @@ def main():
                   and glob == [["val", "Int", "7"], ["val", "", "? no existe: p"]], (vals, vals0, glob))
             _, gs = c.orden("globals")
             check("globales", gs == [["var", "cuenta", "Int", "7"], ["var", "saludo", "String", '"hola"']], gs)
+            # cambiar valores (dbg_set): n pasa a 10, así que r será 4 + 10
+            s1, _ = c.orden("set", 0, "n", "10")
+            s2, _ = c.orden("set", -1, "cuenta", "9")
+            s3, _ = c.orden("set", 0, "saludo", "adiós")
+            s4, _ = c.orden("set", 1, "ok", "talvez")
+            check("cambiar valores", s1 == ["ok", "10"] and s2 == ["ok", "9"]
+                  and s3 == ["error", "solo se cambian Int, Char, Bool, Fixed y Float (es String)"]
+                  and s4 == ["error", "un Bool es true o false"], (s1, s2, s3, s4))
             c.orden("next")
             a = c.aviso("stopped")
             check("pasar", a[1:] == ["step", fuente, "13", "mira"], a)
@@ -149,12 +157,12 @@ def main():
             a = c.aviso("stopped")
             check("salir", a[1:] == ["step", fuente, "24", "Main"], a)
             _, vals = c.orden("values", 0, "r")
-            check("r tras la llamada", vals == [["val", "Int", "6"]], vals)
+            check("r tras la llamada", vals == [["val", "Int", "14"]], vals)
             c.orden("unbreak", fuente, 12)
             c.orden("continue")
             a = c.aviso("ended")
             check("acabado con su código", a == ["*ended", "0"], a)
-            check("su salida", c.salida == "r: 6\n", repr(c.salida))
+            check("su salida", c.salida == "r: 14\n", repr(c.salida))
 
             c.salida = ""
             r, _ = c.orden("start", "DH0:depurado", "bucle")

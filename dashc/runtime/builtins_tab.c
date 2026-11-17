@@ -327,6 +327,8 @@ const BuiltinInfo builtin_info[] = {
     {"dbg_rc", 0, 1, 0, 0, 0, 0u, 0u},
     {"dbg_reg", 1, 1, 0, 0, 0, 0u, 0u},
     {"dbg_reg", 1, 1, 0, 0, 0, 0u, 0u},
+    {"dbg_set", 3, 3, 0, 0, 0, 0u, 0u},
+    {"dbg_set", 3, 3, 0, 0, 0, 0u, 0u},
     {"dbg_signal", 0, 1, 0, 0, 0, 0u, 0u},
     {"dbg_signal", 0, 1, 0, 0, 0, 0u, 0u},
     {"dbg_start", 2, 2, 0, 0, 0, 0u, 0u},
@@ -767,6 +769,8 @@ const BuiltinInfo builtin_info[] = {
     {"icon_height", 1, 1, 1, 0, 0, 0u, 0u},
     {"icon_load", 1, 1, 0, 0, 0, 1u, 0u},
     {"icon_load", 1, 1, 0, 0, 0, 1u, 0u},
+    {"icon_save", 5, 2, 0, 0, 0, 27u, 0u},
+    {"icon_save", 5, 2, 0, 0, 0, 27u, 0u},
     {"icon_width", 1, 1, 1, 0, 0, 0u, 0u},
     {"icon_width", 1, 1, 1, 0, 0, 0u, 0u},
     {"image_decode", 3, 1, 0, 0, 0, 1u, 0u},
@@ -2124,7 +2128,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2122;
+const int builtin_count = 2126;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

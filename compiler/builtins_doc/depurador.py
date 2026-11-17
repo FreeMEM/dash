@@ -13,7 +13,7 @@ puntos de parada, ir línea a línea y mirar sus variables.
 3. `dbg_continue()`, `dbg_step()`, `dbg_next()` o `dbg_out()`: lo ponen en marcha, y `dbg_wait` espera a que pare
    o acabe (con MUI, `dbg_signal` con `mui_wait_event_signals`).
 4. Parado: `dbg_file`, `dbg_line` y `dbg_function` dicen dónde; `dbg_frames` y `dbg_frame_*`, la pila de llamadas;
-   `dbg_vars`, `dbg_var_*` y `dbg_value`, las variables.
+   `dbg_vars`, `dbg_var_*` y `dbg_value`, las variables, y `dbg_set` las cambia.
 5. Al acabar (`dbg_state()` 4), `dbg_rc` y `dbg_output`.
 
 Solo hay un programa depurado a la vez. Las llamadas se numeran desde la de la parada: 0 donde paró, 1 la que la
@@ -30,7 +30,7 @@ it, go line by line and look at its variables.
 3. `dbg_continue()`, `dbg_step()`, `dbg_next()` or `dbg_out()`: set it going, and `dbg_wait` waits for it to stop
    or end (with MUI, `dbg_signal` with `mui_wait_event_signals`).
 4. Stopped: `dbg_file`, `dbg_line` and `dbg_function` say where; `dbg_frames` and `dbg_frame_*`, the call stack;
-   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables.
+   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables, and `dbg_set` changes them.
 5. When it ends (`dbg_state()` 4), `dbg_rc` and `dbg_output`.
 
 There is one debugged program at a time. Calls are numbered from the stopping point: 0 where it stopped, 1 its
@@ -137,6 +137,23 @@ Returns its value as a text: `3`, `"hello"`, `Point(x: 3, y: 4)`, `[1, 2]`, `nil
 """, ["dbg_value_type", "dbg_vars"]),
     "dbg_value_type": _f(_FR_ES + "- `expr`: como en `dbg_value`.\n\nDevuelve su tipo; `\"\"` si no se puede.\n",
                          _FR_EN + "- `expr`: as in `dbg_value`.\n\nReturns its type; `\"\"` if it cannot.\n", ["dbg_value"]),
+    "dbg_set": _f(_FR_ES + """\
+- `expr`: como en `dbg_value`: una variable de esa llamada o una global, con `.campo` y `[n]` detrás.
+- `value`: el valor nuevo, como texto: un `Int` o `Char` (`"3"`, `"-1"`, `"$FF"`, `"0x10"`), un `Bool` (`"true"`,
+  `"false"`), un `Fixed` o un `Float` (`"1.5"`).
+
+Cambia ese valor en el programa parado; al seguir, el programa usa el nuevo. Devuelve `""` si lo cambió y, si no, el
+porqué. Un `String`, un `Double` o un objeto no se cambian: son memoria del programa y el depurador no puede darle
+una suya.
+""", _FR_EN + """\
+- `expr`: as in `dbg_value`: a variable of that call or a global, with `.field` and `[n]` after it.
+- `value`: the new value, as a text: an `Int` or `Char` (`"3"`, `"-1"`, `"$FF"`, `"0x10"`), a `Bool` (`"true"`,
+  `"false"`), a `Fixed` or a `Float` (`"1.5"`).
+
+Changes that value in the stopped program; when it goes on, the program uses the new one. Returns `""` if it changed
+it and, if not, why. A `String`, a `Double` or an object cannot be changed: they are the program's memory and the
+debugger cannot give it one of its own.
+""", ["dbg_value"]),
     "dbg_reg": _f("- `n`: 0 a 7 los registros d0 a d7, 8 a 15 a0 a a7, 16 el contador de programa.\n\nDevuelve ese registro del programa parado.\n",
                   "- `n`: 0 to 7 registers d0 to d7, 8 to 15 a0 to a7, 16 the program counter.\n\nReturns that register of the stopped program.\n",
                   ["dbg_peek"]),

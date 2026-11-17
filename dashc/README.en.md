@@ -65,6 +65,7 @@ dbg_end(5000)                           # ends it (its usual cleanup); dbg_rc() 
 | `dbg_frames()`, `dbg_frame_function/line/file(i)` | The call stack (0, where it is) |
 | `dbg_vars(i)`, `dbg_var_name/type(i, k)`, `dbg_globals()`, `dbg_global_name(g)` | The variables of each call and the globals |
 | `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | The value as text (`"p.hijos[0].x"`) and its type |
+| `dbg_set(i, expr, value)` | Changes an `Int`, `Char`, `Bool`, `Fixed` or `Float` (`"3"`, `"true"`, `"1.5"`): `""` or why not |
 | `dbg_reg(n)`, `dbg_peek(addr, size)` | Registers (0-7 d0-d7, 8-15 a0-a7, 16 the PC) and memory |
 
 How it works (`DEBUGGER_RUNTIME` in `compiler/codegen.py`, plan in `docs/DEPURADOR_LOOP.md`): the program runs in a child process with its

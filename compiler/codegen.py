@@ -5796,6 +5796,80 @@ static void _dash_meter_cleanup(void) {
     # A mouse acceleration curve for each mouse (Ratonera): Poseidon's HID devices, a patch on input.device's
     # BeginIO for the USB ones (hid.class tasks) and an input handler for the Amiga one, and the system's
     # acceleration in Preferences
+    # icon_save (asked by Forja): an icon (.info) written with icon.library
+    ICONSAVE_RUNTIME = r"""
+/* icon_save: the icon (.info) of path, from that of another file (base, with or without ".info") or, with base "",
+   the default one of its type in icon.library; type 0 keeps the base's (1 disk, 2 drawer, 3 tool, 4 project, 5 trash
+   can); tool, its default tool, and tooltypes, its tooltypes one per line: "" keeps those of the base. Workbench
+   places it (NO_ICON_POSITION). TRUE if it was written. */
+#include <workbench/workbench.h>
+#include <workbench/icon.h>
+#include <proto/icon.h>
+
+static BOOL _dash_icon_save(STRPTR path, STRPTR base, LONG type, STRPTR tool, STRPTR tooltypes) {
+    struct Library *IconBase;
+    struct DiskObject *d;
+    STRPTR old_tool, *old_tt = NULL, *tt = NULL, text = NULL;
+    LONG old_x, old_y, n, k;
+    UBYTE old_type;
+    BOOL ok = FALSE;
+    char name[256];
+    if (!path || !*path || type < 0 || type > 5) return FALSE;
+    if (!(IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36))) return FALSE;
+    if (base && *base) {
+        n = strlen(base);
+        if (n > 5 && base[n - 5] == '.' && (base[n - 4] | 0x20) == 'i' && (base[n - 3] | 0x20) == 'n' &&
+            (base[n - 2] | 0x20) == 'f' && (base[n - 1] | 0x20) == 'o')
+            n -= 5;                                  /* (the name without its ".info", as icon.library wants it) */
+        if (n > 255) n = 255;
+        CopyMem(base, name, n);
+        name[n] = 0;
+        d = GetDiskObject((CONST_STRPTR)name);
+    } else {
+        d = GetDefDiskObject(type ? type : WBPROJECT);
+    }
+    if (!d) { CloseLibrary(IconBase); return FALSE; }
+    old_type = d->do_Type;
+    old_tool = d->do_DefaultTool;
+    old_tt = d->do_ToolTypes;
+    old_x = d->do_CurrentX;
+    old_y = d->do_CurrentY;
+    /* a disk, drawer or trash can needs the data of its window: only from an icon that has it */
+    if (type && (type == WBDISK || type == WBDRAWER || type == WBGARBAGE) && !d->do_DrawerData) goto done;
+    if (type) d->do_Type = type;
+    if (tool && *tool) d->do_DefaultTool = tool;
+    if (tooltypes && *tooltypes) {
+        LONG len = strlen(tooltypes);
+        for (n = 1, k = 0; k < len; k++) n += tooltypes[k] == '\n';
+        tt = (STRPTR *)AllocVec((n + 1) * sizeof(STRPTR) + len + 1, MEMF_ANY);
+        if (!tt) goto done;
+        text = (STRPTR)(tt + n + 1);
+        CopyMem(tooltypes, text, len + 1);
+        for (n = 0, tt[n++] = text, k = 0; k < len; k++)
+            if (text[k] == '\n') {
+                text[k] = 0;
+                if (k + 1 < len) tt[n++] = text + k + 1;   /* (a last line break adds no empty tooltype) */
+            }
+        tt[n] = NULL;
+        d->do_ToolTypes = tt;
+    }
+    d->do_CurrentX = NO_ICON_POSITION;
+    d->do_CurrentY = NO_ICON_POSITION;
+    ok = PutDiskObject((CONST_STRPTR)path, d) != 0;
+done:
+    /* (what icon.library allocated, as it gave it: FreeDiskObject frees that) */
+    d->do_Type = old_type;
+    d->do_DefaultTool = old_tool;
+    d->do_ToolTypes = old_tt;
+    d->do_CurrentX = old_x;
+    d->do_CurrentY = old_y;
+    FreeDiskObject(d);
+    if (tt) FreeVec(tt);
+    CloseLibrary(IconBase);
+    return ok;
+}
+"""
+
     MOUSE_RUNTIME = """\
 /* Dash mouse runtime (Ratonera). usb_hid_read(): the interfaces hid.class handles (poseidon.library 4), each
    with its "emitter", the number in the name of the task that sends its moves (hid.class<%08lx>, Poseidon's
@@ -8722,8 +8796,8 @@ static _DbgVar *_dbg_global(const char *name) {
 }
 
 /* Lo que vale expr en el marco i: un nombre (local o global) seguido de .campo y [n] ("p.hijos[0].x"); FALSE con
-   el porqué en o */
-static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut *o) {
+   el porqué en o. En addr (si no es NULL), dónde está ese valor (para dbg_set) */
+static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut *o, ULONG **addr) {
     LONG vis[128], n, k;
     ULONG a5 = 0;
     char name[64];
@@ -8737,6 +8811,7 @@ static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut 
     if (v) *val = *(ULONG *)(a5 + v->off);
     else if ((v = _dbg_global(name)) && _dbg.data) *val = *(ULONG *)(_dbg.data + v->off);
     else { _dbg_put(o, "no existe: "); _dbg_put(o, name); return FALSE; }
+    if (addr) *addr = (ULONG *)((_dbg_global(name) == v ? _dbg.data : a5) + v->off);
     strcpy(type, v->type);
     while (*p) {
         if (*p == '.') {
@@ -8748,6 +8823,7 @@ static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut 
                 if (!strcmp(_dbg.fields[k].strct, type) && !strcmp(_dbg.fields[k].name, field)) fd = &_dbg.fields[k];
             if (!fd) { _dbg_put(o, type); _dbg_put(o, " no tiene "); _dbg_put(o, field); return FALSE; }
             if (!*val || !_dbg_ptr_ok(*val)) { _dbg_put(o, "nil"); return FALSE; }
+            if (addr) *addr = (ULONG *)(*val + fd->off);
             *val = *(ULONG *)(*val + fd->off);
             strcpy(type, fd->type);
         } else if (*p == '[') {
@@ -8758,6 +8834,7 @@ static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut 
             while (*p == ' ') p++;
             if (*p++ != ']' || type[0] != '[') { _dbg_put(o, "no es una lista"); return FALSE; }
             if (neg || !*val || idx >= DashArray_length((DashArrayLong *)*val)) { _dbg_put(o, "fuera de la lista"); return FALSE; }
+            if (addr) *addr = (ULONG *)&((DashArrayLong *)*val)->data[idx];
             *val = (ULONG)DashArray_get((DashArrayLong *)*val, idx);
             memmove(type, type + 1, l - 2);
             type[l - 2] = 0;
@@ -8813,7 +8890,7 @@ static LONG _dash_dbg_value(LONG i, LONG expr) {
     o.n = 0;
     o.t[0] = 0;
     if (_dbg.state != DBG_STOPPED) _dbg_put(&o, "? no está parado");
-    else if (!expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) {
+    else if (!expr || !_dbg_eval(i, (const char *)expr, type, &v, &o, NULL)) {
         char why[200];
         strcpy(why, o.t);
         o.n = 0;
@@ -8829,8 +8906,86 @@ static LONG _dash_dbg_value_type(LONG i, LONG expr) {
     char type[64];
     ULONG v;
     o.n = 0;
-    if (_dbg.state != DBG_STOPPED || !expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) type[0] = 0;
+    if (_dbg.state != DBG_STOPPED || !expr || !_dbg_eval(i, (const char *)expr, type, &v, &o, NULL)) type[0] = 0;
     return (LONG)_dash_str_dup((STRPTR)type, TRUE);
+}
+
+/* Un número de texto: entero (con signo, en decimal, $hex o 0x) en *ip; con decimales, en *fp (y *frac, *den la
+   parte de después del punto, hasta 4 cifras, para Fixed). FALSE si no es un número */
+static BOOL _dbg_parse_num(const char *s, LONG *ip, LONG *frac, LONG *den, float *fp, BOOL *has_dot) {
+    LONG neg = 0, v = 0, d = 0, k = 1, digits = 0;
+    float f, fk = 1;
+    while (*s == ' ') s++;
+    if (*s == '-' || *s == '+') neg = *s++ == '-';
+    *has_dot = FALSE;
+    if (*s == '$' || (s[0] == '0' && (s[1] == 'x' || s[1] == 'X'))) {
+        s += *s == '$' ? 1 : 2;
+        for (; (*s >= '0' && *s <= '9') || (*s >= 'a' && *s <= 'f') || (*s >= 'A' && *s <= 'F'); s++, digits++)
+            v = v * 16 + (*s <= '9' ? *s - '0' : (*s | 0x20) - 'a' + 10);
+        f = (float)v;
+    } else {
+        for (; *s >= '0' && *s <= '9'; s++, digits++) v = v * 10 + (*s - '0');
+        f = (float)v;
+        if (*s == '.') {
+            *has_dot = TRUE;
+            for (s++; *s >= '0' && *s <= '9'; s++, digits++) {
+                fk = fk / 10;
+                f = f + (float)(*s - '0') * fk;
+                if (k < 10000) { d = d * 10 + (*s - '0'); k *= 10; }
+            }
+        }
+    }
+    while (*s == ' ') s++;
+    if (*s || !digits) return FALSE;
+    *ip = neg ? -v : v;
+    *frac = neg ? -d : d;
+    *den = k;
+    *fp = neg ? -f : f;
+    return TRUE;
+}
+
+/* Cambia el valor de expr en el marco i (como dbg_value: una variable o global, con .campo y [n] detrás) por el de
+   value, un texto: un Int o Char (3, -1, $FF, 0x10), un Bool (true, false), un Fixed o un Float (1.5). "" si se
+   cambió; si no, el porqué. Un texto, un Double o un objeto no se cambian (son memoria del programa: el depurador no
+   puede darle uno suyo) */
+static LONG _dash_dbg_set(LONG i, LONG expr, LONG value) {
+    _DbgOut o;
+    char type[64];
+    ULONG v, *at = NULL;
+    LONG ip, frac, den;
+    float fp;
+    BOOL dot;
+    const char *val = (const char *)value;
+    o.n = 0;
+    o.t[0] = 0;
+    if (_dbg.state != DBG_STOPPED) _dbg_put(&o, "no está parado");
+    else if (!expr || !val || !_dbg_eval(i, (const char *)expr, type, &v, &o, &at)) ;
+    else if (!strcmp(type, "Bool")) {
+        char w[8];
+        LONG k = 0;
+        while (*val == ' ') val++;
+        while (*val && *val != ' ' && k < 7) w[k++] = *val++;
+        w[k] = 0;
+        while (*val == ' ') val++;
+        if (!*val && !strcmp(w, "true")) *at = 1;
+        else if (!*val && !strcmp(w, "false")) *at = 0;
+        else _dbg_put(&o, "un Bool es true o false");
+    } else if (!strcmp(type, "Int") || !strcmp(type, "Char")) {
+        if (val[0] == '\'' && val[1] && val[2] == '\'' && !val[3] && !strcmp(type, "Char")) *at = (UBYTE)val[1];
+        else if (!_dbg_parse_num(val, &ip, &frac, &den, &fp, &dot) || dot) _dbg_put(&o, "no es un número entero");
+        else *at = (ULONG)ip;
+    } else if (!strcmp(type, "Fixed")) {
+        if (!_dbg_parse_num(val, &ip, &frac, &den, &fp, &dot)) _dbg_put(&o, "no es un número");
+        else *at = (ULONG)((ip << 16) + (frac * 65536 + (frac < 0 ? -den / 2 : den / 2)) / den);
+    } else if (!strcmp(type, "Float")) {
+        if (!_dbg_parse_num(val, &ip, &frac, &den, &fp, &dot)) _dbg_put(&o, "no es un número");
+        else *at = (ULONG)_dash_f2l(fp);
+    } else {
+        _dbg_put(&o, "solo se cambian Int, Char, Bool, Fixed y Float (es ");
+        _dbg_put(&o, type);
+        _dbg_put(&o, ")");
+    }
+    return (LONG)_dash_str_dup((STRPTR)o.t, TRUE);
 }
 """
 
@@ -25547,6 +25702,7 @@ _RUNTIME_FLAGS = [
     ("SHA1_RUNTIME", "uses_sha1"),          # dashgit: SHA-1
     ("CRYPTO_RUNTIME", "uses_crypto"),      # SHA-256 and Ed25519
     ("ICON_RUNTIME", "uses_icons"),         # Trasfondo 2.0: icons drawn by icon.library (the dock)
+    ("ICONSAVE_RUNTIME", "uses_iconsave"),  # icon_save (Forja)
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
@@ -25927,6 +26083,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_json: bool = False     # json_scan (JSON_RUNTIME, Dash 2.0: lib/json.dash)
         self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
         self.uses_gl: bool = False  # gl_* (GL_RUNTIME, MiniGL)
+        self.uses_iconsave: bool = False  # icon_save (ICONSAVE_RUNTIME, Forja)
         self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
@@ -26297,6 +26454,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CRYPTO_RUNTIME)
         if self.uses_icons:
             parts.append(CTemplates.ICON_RUNTIME)
+        if self.uses_iconsave:
+            parts.append(CTemplates.ICONSAVE_RUNTIME)
         if self.uses_mouse:
             parts.append(CTemplates.MOUSE_RUNTIME)
         if self.uses_catalog:
@@ -29509,6 +29668,10 @@ static {ret_type} {method_name}({params_str}) {{
             return f"({left} {op} {right})"
         elif isinstance(node, UnaryOp):
             operand = self._generate_expression(node.operand)
+            # an operand that is not one piece (a builtin whose C is "f(...) != NULL", like screen_open_custom) goes
+            # in parentheses: "!f(...) != NULL" would be "(!f(...)) != NULL", a pointer compared with an integer
+            if not self._c_is_atom(operand):
+                operand = f"({operand})"
             if node.operator == "not":
                 return f"(!{operand})"
             return f"({node.operator}{operand})"
@@ -31402,6 +31565,35 @@ static {return_type} {lambda_name}({param_str}) {{
 
         # Return function pointer
         return f"(APTR){lambda_name}"
+
+    @staticmethod
+    def _c_is_atom(c: str) -> bool:
+        """Is this C expression one piece (a name, a number, a call, a cast-free index or something in parentheses
+        that close at its end), so that a unary operator in front of it applies to all of it?"""
+        c = c.strip()
+        if re.fullmatch(r"[A-Za-z_]\w*|\d[\w.]*|'(\\.|[^'])*'", c):
+            return True
+        # name(...), name[...], (...) and chains of them (a->b, a.b), with the brackets closing where they should
+        depth, i, in_str = 0, 0, None
+        while i < len(c):
+            ch = c[i]
+            if in_str:
+                if ch == "\\":
+                    i += 2
+                    continue
+                if ch == in_str:
+                    in_str = None
+            elif ch in "\"'":
+                in_str = ch
+            elif ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            elif depth == 0 and not (ch.isalnum() or ch in "_.") and not (ch == "-" and c[i + 1:i + 2] == ">") \
+                    and not (ch == ">" and c[i - 1:i] == "-"):
+                return False
+            i += 1
+        return depth == 0
 
     def _translate_operator(self, op: str) -> str:
         """Translate Dash operators to C operators."""

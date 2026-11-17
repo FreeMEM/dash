@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1061 funciones, 1061 implementadas, 0 sin implementar.
+Total: 1063 funciones, 1063 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -8670,7 +8670,7 @@ puntos de parada, ir línea a línea y mirar sus variables.
 3. `dbg_continue()`, `dbg_step()`, `dbg_next()` o `dbg_out()`: lo ponen en marcha, y `dbg_wait` espera a que pare
    o acabe (con MUI, `dbg_signal` con `mui_wait_event_signals`).
 4. Parado: `dbg_file`, `dbg_line` y `dbg_function` dicen dónde; `dbg_frames` y `dbg_frame_*`, la pila de llamadas;
-   `dbg_vars`, `dbg_var_*` y `dbg_value`, las variables.
+   `dbg_vars`, `dbg_var_*` y `dbg_value`, las variables, y `dbg_set` las cambia.
 5. Al acabar (`dbg_state()` 4), `dbg_rc` y `dbg_output`.
 
 Solo hay un programa depurado a la vez. Las llamadas se numeran desde la de la parada: 0 donde paró, 1 la que la
@@ -8741,6 +8741,7 @@ end
 | [`dbg_global_name(g)`](#dbg_global_name) | String | El nombre de la global g (desde 0) |  |
 | [`dbg_value(i, expr)`](#dbg_value) | String | El valor de expr en la llamada i, como texto: una variable de esa llamada o una global, con .campo y [n] detrás ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " y el porqué si no se puede |  |
 | [`dbg_value_type(i, expr)`](#dbg_value_type) | String | El tipo de expr en la llamada i ("" si no se puede) |  |
+| [`dbg_set(i, expr, value)`](#dbg_set) | String | Cambia el valor de expr en la llamada i (como en dbg_value: una variable o global, con .campo y [n] detrás) por value, un texto: un Int o Char (3, -1, $FF), un Bool (true, false), un Fixed o un Float (1.5); "" si se cambió, y si no, el porqué (un String, un Double o un objeto no se cambian) |  |
 | [`dbg_reg(n)`](#dbg_reg) | Int | Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC |  |
 | [`dbg_peek(addr, size)`](#dbg_peek) | Int | 1, 2 o 4 bytes de memoria en addr, sin signo |  |
 | [`dbg_output()`](#dbg_output) | String | Lo que ha escrito el programa hasta ahora (salida y salida de errores) |  |
@@ -9003,6 +9004,21 @@ Ver también: [`dbg_value_type`](#dbg_value_type), [`dbg_vars`](#dbg_vars).
 - `expr`: como en `dbg_value`.
 
 Devuelve su tipo; `""` si no se puede.
+
+Ver también: [`dbg_value`](#dbg_value).
+
+<a id="dbg_set"></a>
+
+### `dbg_set(i, expr, value)` → `String`
+
+- `i`: la llamada: 0 donde paró, 1 la que la llamó...
+- `expr`: como en `dbg_value`: una variable de esa llamada o una global, con `.campo` y `[n]` detrás.
+- `value`: el valor nuevo, como texto: un `Int` o `Char` (`"3"`, `"-1"`, `"$FF"`, `"0x10"`), un `Bool` (`"true"`,
+  `"false"`), un `Fixed` o un `Float` (`"1.5"`).
+
+Cambia ese valor en el programa parado; al seguir, el programa usa el nuevo. Devuelve `""` si lo cambió y, si no, el
+porqué. Un `String`, un `Double` o un objeto no se cambian: son memoria del programa y el depurador no puede darle
+una suya.
 
 Ver también: [`dbg_value`](#dbg_value).
 
@@ -9584,6 +9600,7 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`icon_width(icon)`](#icon_width) | Int | El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
 | [`icon_height(icon)`](#icon_height) | Int | El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
 | [`icon_free(icon)`](#icon_free) | — | Libera un icono de icon_load (los que queden, al salir) |  |
+| [`icon_save(path, base, type, tool, tooltypes)`](#icon_save) | Bool | Escribe el icono (.info) de path (sin ".info") con icon.library: una copia del icono de base (otro fichero, con o sin ".info") o, con base "", el de su tipo; type 0 deja el de la base (1 disco, 2 cajón, 3 herramienta, 4 proyecto, 5 papelera); tool, su herramienta por defecto, y tooltypes, sus tooltypes uno por línea ("" deja los de la base). El Workbench lo coloca. true si se escribió |  |
 
 <a id="wm_read"></a>
 
@@ -9940,6 +9957,24 @@ Ver también: [`icon_width`](#icon_width).
 Lo libera. Los que queden, al acabar.
 
 Ver también: [`icon_load`](#icon_load).
+
+<a id="icon_save"></a>
+
+### `icon_save(path, base, type, tool, tooltypes)` → `Bool`
+
+- `path`: el fichero cuyo icono se escribe, sin `.info`.
+- `base`: otro fichero (con o sin `.info`) cuyo icono se copia; con `""`, el de su tipo que trae icon.library.
+- `type`: 0 el de la base; 1 disco, 2 cajón, 3 herramienta, 4 proyecto, 5 papelera. Un cajón, un disco o una
+  papelera solo salen de una base que lo sea.
+- `tool`: su herramienta por defecto (con la que un proyecto se abre); `""` deja la de la base.
+- `tooltypes`: sus tooltypes, uno por línea (`"PUBSCREEN=Workbench\nDONOTWAIT"`); `""` deja los de la base.
+
+Escribe `path.info` con icon.library (`PutDiskObject`), sin posición: el Workbench lo coloca. Devuelve `true` si lo
+escribió. Así, el icono de un proyecto que se abre con un programa:
+`icon_save("RAM:notas.txt", "", 4, "SYS:Utilities/MultiView", "")`; y la copia de uno, cambiando su herramienta:
+`icon_save("Trabajo:juego", "Trabajo:juego_viejo", 0, "Trabajo:Juego", "")`.
+
+Ver también: [`icon_load`](#icon_load), [`tooltype`](#tooltype).
 
 <a id="audio_functions"></a>
 

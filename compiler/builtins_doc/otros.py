@@ -318,4 +318,29 @@ type's icon if it has none). Returns a number for `icon_draw`, or 0.
     "icon_width": _f(_IC_ES + "\nDevuelve su ancho tal como lo dibuja `icon_draw`; 0 si no está.\n", _IC_EN + "\nReturns its width as `icon_draw` draws it; 0 if missing.\n", ["icon_height"]),
     "icon_height": _f(_IC_ES + "\nDevuelve su alto tal como lo dibuja `icon_draw`; 0 si no está.\n", _IC_EN + "\nReturns its height as `icon_draw` draws it; 0 if missing.\n", ["icon_width"]),
     "icon_free": _f(_IC_ES + "\nLo libera. Los que queden, al acabar.\n", _IC_EN + "\nFrees it. Those left, at the end.\n", ["icon_load"]),
+    "icon_save": _f("""\
+- `path`: el fichero cuyo icono se escribe, sin `.info`.
+- `base`: otro fichero (con o sin `.info`) cuyo icono se copia; con `""`, el de su tipo que trae icon.library.
+- `type`: 0 el de la base; 1 disco, 2 cajón, 3 herramienta, 4 proyecto, 5 papelera. Un cajón, un disco o una
+  papelera solo salen de una base que lo sea.
+- `tool`: su herramienta por defecto (con la que un proyecto se abre); `""` deja la de la base.
+- `tooltypes`: sus tooltypes, uno por línea (`"PUBSCREEN=Workbench\\nDONOTWAIT"`); `""` deja los de la base.
+
+Escribe `path.info` con icon.library (`PutDiskObject`), sin posición: el Workbench lo coloca. Devuelve `true` si lo
+escribió. Así, el icono de un proyecto que se abre con un programa:
+`icon_save("RAM:notas.txt", "", 4, "SYS:Utilities/MultiView", "")`; y la copia de uno, cambiando su herramienta:
+`icon_save("Trabajo:juego", "Trabajo:juego_viejo", 0, "Trabajo:Juego", "")`.
+""", """\
+- `path`: the file whose icon is written, without `.info`.
+- `base`: another file (with or without `.info`) whose icon is copied; with `""`, icon.library's one for its type.
+- `type`: 0 the base's; 1 disk, 2 drawer, 3 tool, 4 project, 5 trash can. A drawer, disk or trash can only comes from
+  a base that is one.
+- `tool`: its default tool (the program a project opens with); `""` keeps the base's.
+- `tooltypes`: its tooltypes, one per line (`"PUBSCREEN=Workbench\\nDONOTWAIT"`); `""` keeps the base's.
+
+Writes `path.info` with icon.library (`PutDiskObject`), with no position: the Workbench places it. Returns `true` if it
+wrote it. So, the icon of a project that opens with a program:
+`icon_save("RAM:notes.txt", "", 4, "SYS:Utilities/MultiView", "")`; and the copy of one, changing its tool:
+`icon_save("Work:game", "Work:old_game", 0, "Work:Game", "")`.
+""", ["icon_load", "tooltype"]),
 }

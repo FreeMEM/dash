@@ -569,6 +569,7 @@ DESC_ES = {
     "dbg_global_name": "El nombre de la global g (desde 0)",
     "dbg_value": "El valor de expr en la llamada i, como texto: una variable de esa llamada o una global, con .campo y [n] detrás (\"p.hijos[0].x\"): 3, \"hola\", Punto(x: 3, y: 4), [1, 2], nil; \"? \" y el porqué si no se puede",
     "dbg_value_type": "El tipo de expr en la llamada i (\"\" si no se puede)",
+    "dbg_set": "Cambia el valor de expr en la llamada i (como en dbg_value: una variable o global, con .campo y [n] detrás) por value, un texto: un Int o Char (3, -1, $FF), un Bool (true, false), un Fixed o un Float (1.5); \"\" si se cambió, y si no, el porqué (un String, un Double o un objeto no se cambian)",
     "dbg_reg": "Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC",
     "dbg_peek": "1, 2 o 4 bytes de memoria en addr, sin signo",
     "dbg_output": "Lo que ha escrito el programa hasta ahora (salida y salida de errores)",
@@ -794,6 +795,10 @@ DESC_ES = {
     "icon_width": "El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_height": "El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_free": "Libera un icono de icon_load (los que queden, al salir)",
+    "icon_save": "Escribe el icono (.info) de path (sin \".info\") con icon.library: una copia del icono de base (otro "
+                 "fichero, con o sin \".info\") o, con base \"\", el de su tipo; type 0 deja el de la base (1 disco, 2 "
+                 "cajón, 3 herramienta, 4 proyecto, 5 papelera); tool, su herramienta por defecto, y tooltypes, sus "
+                 "tooltypes uno por línea (\"\" deja los de la base). El Workbench lo coloca. true si se escribió",
     "wm_box": "De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, "
               "7 alto máximo (0 o 65535: sin límite), 8-11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde "
               "empieza y acaba la parte libre de su barra de título, 14 y 15 el centro de su botón de cerrar (-1 sin "
