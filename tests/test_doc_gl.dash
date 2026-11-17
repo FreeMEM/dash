@@ -1,0 +1,36 @@
+# 3D con MiniGL: un triángulo de colores que gira medio segundo en una ventana de 160 x 120. Sin minigl.library o
+# sin FPU, gl_open da false y el programa lo dice.
+# emu-needs: minigl.library
+# expect-out: dibujado: rojo en el centro
+# expect-out: fin
+import "lib/amiga/gl.dash"
+
+Main
+    if not gl_open(160, 120)
+        Print "Hace falta minigl.library y una FPU"
+        program_exit(5)
+    end
+    angulo = 0.0
+    for i in (1..25)
+        gl_clear_color(0, 0, 0.3)
+        gl_clear()
+        gl_load_identity()
+        gl_translate(0, 0, -3)              # tres unidades hacia el fondo
+        gl_rotate(angulo, 0, 0, 1)          # girado en el plano de la pantalla
+        gl_begin(GL_TRIANGLES)
+        gl_color(1, 0, 0)
+        gl_vertex(0, 1, 0)
+        gl_color(0, 1, 0)
+        gl_vertex(-1, -1, 0)
+        gl_color(0, 0, 1)
+        gl_vertex(1, -1, 0)
+        gl_end()
+        if i == 1 and (gl_read_pixel(80, 60) >> 16) > 128
+            Print "dibujado: rojo en el centro"
+        end
+        gl_swap()                           # se ve, y se espera al refresco de la pantalla
+        angulo = angulo + 4.0
+    end
+    gl_close()
+    Print "fin"
+end

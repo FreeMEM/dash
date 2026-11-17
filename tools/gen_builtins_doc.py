@@ -63,6 +63,7 @@ GROUPS = [
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),
     ("MUI_FUNCTIONS", "MUI", "MUI"),
+    ("GL_FUNCTIONS", "3D con MiniGL", "3D with MiniGL"),
     ("DASHOS_FUNCTIONS", "DashOS (solo con ./dash --dashos)", "DashOS (only with ./dash --dashos)"),   # A7
 ]
 

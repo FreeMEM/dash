@@ -1,0 +1,51 @@
+# ========================================
+# OpenGL constants for the gl_* builtins (MiniGL): import "lib/amiga/gl.dash"
+# They are OpenGL's own numbers (gl.h): the plain numbers work as well.
+# ========================================
+
+# Shapes (gl_begin)
+const GL_POINTS = 0
+const GL_LINES = 1
+const GL_LINE_LOOP = 2
+const GL_LINE_STRIP = 3
+const GL_TRIANGLES = 4
+const GL_TRIANGLE_STRIP = 5
+const GL_TRIANGLE_FAN = 6
+const GL_QUADS = 7
+const GL_QUAD_STRIP = 8
+const GL_POLYGON = 9
+
+# States (gl_enable, gl_disable)
+const GL_CULL_FACE = 0x0B44
+const GL_LIGHTING = 0x0B50
+const GL_COLOR_MATERIAL = 0x0B57
+const GL_FOG = 0x0B60
+const GL_DEPTH_TEST = 0x0B71
+const GL_NORMALIZE = 0x0BA1
+const GL_ALPHA_TEST = 0x0BC0
+const GL_BLEND = 0x0BE2
+const GL_TEXTURE_2D = 0x0DE1
+const GL_LIGHT0 = 0x4000
+const GL_LIGHT1 = 0x4001
+
+# Matrices (gl_matrix_mode)
+const GL_MODELVIEW = 0x1700
+const GL_PROJECTION = 0x1701
+
+# Shading (gl_shade_model) and faces (gl_cull_face)
+const GL_FLAT = 0x1D00
+const GL_SMOOTH = 0x1D01
+const GL_FRONT = 0x0404
+const GL_BACK = 0x0405
+
+# Blending (gl_blend_func)
+const GL_ZERO = 0
+const GL_ONE = 1
+const GL_SRC_COLOR = 0x0300
+const GL_ONE_MINUS_SRC_COLOR = 0x0301
+const GL_SRC_ALPHA = 0x0302
+const GL_ONE_MINUS_SRC_ALPHA = 0x0303
+const GL_DST_ALPHA = 0x0304
+const GL_ONE_MINUS_DST_ALPHA = 0x0305
+const GL_DST_COLOR = 0x0306
+const GL_ONE_MINUS_DST_COLOR = 0x0307

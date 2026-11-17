@@ -33,6 +33,8 @@ its method, path, Content-Type, X-Prueba header and body (lib/red/http.dash). Te
 the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
+Tests with "# emu-needs: minigl.library" (gl_*) run on --emu-coffin with $DASH_EMU_MINIGL, a minigl.library 29 or
+newer that goes to LIBS: of the disk's copy (MiniGL Classic over its Wazp3D); the other machines skip them.
 "# emu-catalog: lib/x.ct" (repeatable) compiles that .ct with tools/catalogo.py into DH0:Catalogs/<language>/ (the
 test's PROGDIR:) before the boot (dashweb D71).
 "# emu-shot: SECONDS X Y RRGGBB" (repeatable) runs a test in its own boot with a screenshot that many
@@ -871,6 +873,8 @@ COFFIN_SKIP = {
     **{t: "MUI 3.8, not MUI 5" for t in ("test_mui_open", "test_mui_fullscreen")},
     **{t: "Poseidon is installed" for t in ("test_usb_hid", "test_mouse_curve")},
     "test_sysinfo": "a 68040, not a 68020",
+    **{t: "minigl.library is there for the gl_* tests when $DASH_EMU_MINIGL is set" for t in
+       ("test_gl_sin", "test_gl_sin_directo")},
     "test_task": "with the JIT the task ends before the main loop turns twice",
     "test_meter_disks": "its bsdsocket.library counts as a running network stack",
     **{t: "its Workbench keeps the backdrop window when it leaves backdrop mode; the test does not find it again"
@@ -879,6 +883,13 @@ COFFIN_SKIP = {
     "test_desktop_canvas_rtg": "after the other canvas tests of the boot its last update repaints more than it "
                                "expects (alone it passes)",
 }
+
+
+def minigl_library() -> Optional[Path]:
+    """$DASH_EMU_MINIGL: a minigl.library for the tests of gl_* (MiniGL Classic, over the Wazp3D of the CoffinOS
+    disk), if it is there"""
+    f = os.environ.get("DASH_EMU_MINIGL")
+    return Path(f) if f and Path(f).is_file() else None
 
 
 def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memcheck: bool) -> List[TestResult]:
@@ -901,6 +912,11 @@ def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memc
     for t in [t for t in runnable if unfit(t)]:
         print(f"  {prefix}/{t.stem}: SKIP ({unfit(t)})")
     runnable = [t for t in runnable if not unfit(t)]
+    # MiniGL is not on the disk: $DASH_EMU_MINIGL, a minigl.library (29+), goes to LIBS: of the copy (run_emu_boot)
+    if not minigl_library():
+        for t in [t for t in runnable if "minigl.library" in emu_needs(t)]:
+            print(f"  {prefix}/{t.stem}: SKIP (needs $DASH_EMU_MINIGL, a minigl.library 29 or newer)")
+        runnable = [t for t in runnable if "minigl.library" not in emu_needs(t)]
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import COFFIN_CONFIG
     machine = dict(machine, config=COFFIN_CONFIG)
@@ -952,6 +968,10 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
                 out = Path(hd) / "Catalogs" / language / name
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_bytes(data)
+        if disk and minigl_library() and any("minigl.library" in emu_needs(t) for t, _ in selected):
+            (Path(hd) / "Libs").mkdir(exist_ok=True)   # (emu_run: DASHRUN:Libs goes to LIBS:)
+            import shutil
+            shutil.copy(minigl_library(), Path(hd) / "Libs" / "minigl.library")
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
                             args=[emu_args(t) for t, _ in selected],

@@ -453,7 +453,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         (hd / "S" / "Startup-Sequence").write_text("\n".join(["FailAt 1000000"] + lines) + "\n")
         if disk:
             # the system on the disk runs DASHRUN:Run-Sequence (its own C: has no dash_shot or dbgserver)
-            text = "\n".join(["FailAt 1000000"] + lines) + "\n"
+            # libraries put in DASHRUN:Libs (--lib, or the runner's on_disk: minigl.library) go to LIBS: of the copy
+            text = "\n".join(["FailAt 1000000", "If EXISTS DASHRUN:Libs", "Copy DASHRUN:Libs/#? LIBS: QUIET",
+                              "EndIf"] + lines) + "\n"
             for tool in ("dash_shot", "bgdbserver", "dbgserver"):
                 text = text.replace(f"C:{tool} ", f"DH0:C/{tool} ")
             (hd / "Run-Sequence").write_text(text.replace("DH0:", "DASHRUN:"), encoding="latin-1")
@@ -588,6 +590,16 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         return results
 
 
+def _put_files(hd, files, libs):
+    """--file: next to the programs; --lib: in DASHRUN:Libs, which a disk's Run-Sequence copies to LIBS:"""
+    for f in files:
+        shutil.copy(f, Path(hd) / Path(f).name)
+    if libs:
+        (Path(hd) / "Libs").mkdir(exist_ok=True)
+        for f in libs:
+            shutil.copy(f, Path(hd) / "Libs" / Path(f).name)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Dash programs in FS-UAE (AROS ROM)")
     parser.add_argument("programs", nargs="+")
@@ -604,6 +616,9 @@ def main():
     parser.add_argument("--file", action="append", default=[], metavar="PATH",
                         help="copy a file to the emulated disk, where the programs run (repeatable): the sprites "
                              "and maps a program loads by their name (the VS Code extension's Ver en Amiga)")
+    parser.add_argument("--lib", action="append", default=[], metavar="PATH",
+                        help="with --machine coffin: a library copied to LIBS: of the disk's copy before the programs "
+                             "(repeatable), e.g. minigl.library")
     parser.add_argument("--cd", metavar="DIR",
                         help="mount DIR as Proyecto: and run the programs there, so they find their files with a "
                              "relative path (the VS Code extension: the folder of the .dash)")
@@ -668,8 +683,8 @@ def main():
                                gdbserver=args.gdbserver or 0, relay=not args.no_relay,
                                dbgserver=args.dbgserver or 0, disk=disk,
                                amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None, cd=args.cd,
-                               on_disk=(lambda hd: [shutil.copy(f, Path(hd) / Path(f).name) for f in args.file])
-                               if args.file else None)
+                               on_disk=(lambda hd: _put_files(hd, args.file, args.lib))
+                               if args.file or args.lib else None)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

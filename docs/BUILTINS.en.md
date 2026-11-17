@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1020 functions, 1020 implemented, 0 not implemented.
+Total: 1061 functions, 1061 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -12875,6 +12875,195 @@ Like `mui_wait_event` without waiting: returns 0 if there is no event. For a loo
 time; if it only waits, `mui_wait_event` or `mui_timer` use less.
 
 See also: [`mui_wait_event`](#mui_wait_event).
+
+<a id="gl_functions"></a>
+
+## 3D with MiniGL
+
+3D with MiniGL, the Amiga's part of OpenGL 1.x, through `minigl.library` 29 or newer: MiniGL Classic over Warp3D
+(classic 3D cards, QuarkTex in WinUAE or Wazp3D, in software), PiStorm3D on a PiStorm32 with a Pi 4, or RadeonGL. The
+library needs a FPU; programs also work without `--fpu`, but with `--fpu` their maths are much faster.
+
+`gl_open(width, height)` opens a double-buffered window with a Z buffer, and gives `false` if the library or the FPU
+are missing. Each frame: `gl_clear`, the matrices (`gl_load_identity`, `gl_translate`, `gl_rotate`...), the shapes
+between `gl_begin` and `gl_end` with `gl_color` and `gl_vertex`, and `gl_swap` to show it. The numbers of the states
+and shapes (`GL_TRIANGLES`, `GL_DEPTH_TEST`...) are in `lib/amiga/gl.dash`. Details, speed and what is missing in
+[MINIGL.en.md](MINIGL.en.md).
+
+**Example** (`tests/test_doc_gl.dash`, which is also a test: it runs with the others):
+
+```dash
+# 3D con MiniGL: un triángulo de colores que gira medio segundo en una ventana de 160 x 120. Sin minigl.library o
+# sin FPU, gl_open da false y el programa lo dice.
+import "lib/amiga/gl.dash"
+
+Main
+    if not gl_open(160, 120)
+        Print "Hace falta minigl.library y una FPU"
+        program_exit(5)
+    end
+    angulo = 0.0
+    for i in (1..25)
+        gl_clear_color(0, 0, 0.3)
+        gl_clear()
+        gl_load_identity()
+        gl_translate(0, 0, -3)              # tres unidades hacia el fondo
+        gl_rotate(angulo, 0, 0, 1)          # girado en el plano de la pantalla
+        gl_begin(GL_TRIANGLES)
+        gl_color(1, 0, 0)
+        gl_vertex(0, 1, 0)
+        gl_color(0, 1, 0)
+        gl_vertex(-1, -1, 0)
+        gl_color(0, 0, 1)
+        gl_vertex(1, -1, 0)
+        gl_end()
+        if i == 1 and (gl_read_pixel(80, 60) >> 16) > 128
+            Print "dibujado: rojo en el centro"
+        end
+        gl_swap()                           # se ve, y se espera al refresco de la pantalla
+        angulo = angulo + 4.0
+    end
+    gl_close()
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| [`gl_open(width, height)`](#gl_open) | Bool | Opens a MiniGL window of width x height on the Workbench (double buffered, a 16-bit Z buffer, a 60 degree perspective and the modelview matrix current): false without minigl.library 29+, without a FPU or if it cannot open |  |
+| `gl_open_screen(width, height)` | Bool | As gl_open, but on a screen of its own of width x height (16 bits) |  |
+| `gl_close()` | — | Closes the MiniGL window or screen (at the end of the program, too); its textures go with it |  |
+| [`gl_swap()`](#gl_swap) | — | Shows what was drawn (the other buffer is drawn next) |  |
+| `gl_vsync(on)` | — | With true (the default), gl_swap waits for the screen's refresh: no tearing, at most its rate (50 to 60 a second); false draws as fast as it can |  |
+| [`gl_closed()`](#gl_closed) | Bool | True once the close gadget of the MiniGL window was clicked |  |
+| `gl_key()` | Int | The next key typed in the MiniGL window (its character code), 0 if none |  |
+| `gl_enable(cap)` | — | Turns on a GL state (glEnable): GL_DEPTH_TEST, GL_CULL_FACE, GL_BLEND, GL_FOG, GL_LIGHTING... (their names with import "lib/amiga/gl.dash") |  |
+| `gl_disable(cap)` | — | Turns off a GL state (glDisable) |  |
+| `gl_clear_color(r, g, b)` | — | The color gl_clear paints with, each part from 0.0 to 1.0 |  |
+| `gl_clear()` | — | Clears the picture (with gl_clear_color) and the Z buffer |  |
+| `gl_viewport(x, y, width, height)` | — | The part of the window drawn on (gl_open sets the whole window) |  |
+| `gl_blend_func(src, dst)` | — | How a pixel mixes with the one below with GL_BLEND on (glBlendFunc): GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE... |  |
+| `gl_shade_model(mode)` | — | GL_SMOOTH (colors blended between the corners, the default) or GL_FLAT |  |
+| `gl_cull_face(mode)` | — | Which faces GL_CULL_FACE leaves out: GL_BACK (the default) or GL_FRONT |  |
+| `gl_matrix_mode(mode)` | — | The matrix the next calls change: GL_PROJECTION or GL_MODELVIEW |  |
+| `gl_load_identity()` | — | Resets the current matrix |  |
+| `gl_push_matrix()` | — | Keeps a copy of the current matrix |  |
+| `gl_pop_matrix()` | — | Gets back the matrix of the last gl_push_matrix |  |
+| `gl_translate(x, y, z)` | — | Moves what is drawn next by x, y, z |  |
+| `gl_rotate(angle, x, y, z)` | — | Turns what is drawn next by angle degrees around the axis (x, y, z) |  |
+| `gl_scale(x, y, z)` | — | Scales what is drawn next |  |
+| `gl_perspective(fovy, aspect, near, far)` | — | Multiplies the current matrix by a perspective (gluPerspective): fovy degrees high, aspect = width / height, near and far > 0 |  |
+| `gl_ortho(left, right, bottom, top, near, far)` | — | Multiplies the current matrix by a parallel projection (glOrtho) |  |
+| `gl_look_at(ex, ey, ez, cx, cy, cz, ux, uy, uz)` | — | A camera at (ex, ey, ez) looking at (cx, cy, cz), with (ux, uy, uz) up (gluLookAt) |  |
+| [`gl_begin(mode)`](#gl_begin) | — | Starts a shape: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, GL_POLYGON...; its corners with gl_vertex until gl_end |  |
+| `gl_end()` | — | Ends the shape of gl_begin |  |
+| `gl_vertex(x, y, z)` | — | A corner, with the color, normal and texture point set last |  |
+| `gl_color(r, g, b)` | — | The color of the next corners, each part from 0.0 to 1.0 |  |
+| `gl_color_alpha(r, g, b, a)` | — | As gl_color, with the opacity a (0.0 to 1.0; with GL_BLEND) |  |
+| `gl_normal(x, y, z)` | — | The direction the next corners face, for the lights (of length 1) |  |
+| `gl_tex_coord(s, t)` | — | The point of the texture (0.0 to 1.0 across and down) of the next corner |  |
+| [`gl_texture(d)`](#gl_texture) | Int | A texture from an image decoded with image_decode (scaled to powers of two, up to 256 x 256): its number, or 0. The decoded image can be freed afterwards |  |
+| `gl_texture_bind(texture)` | — | Draws the next shapes with that texture (0: without one) |  |
+| `gl_texture_free(texture)` | — | Frees a texture |  |
+| [`gl_light(n, x, y, z)`](#gl_light) | — | Turns on light n (0 to 7) shining from the direction (x, y, z), and the lighting: the shapes need gl_normal; gl_color gives their material |  |
+| `gl_light_color(n, r, g, b)` | — | The color of light n (white by default) |  |
+| `gl_ambient(r, g, b)` | — | The light that reaches every face (dim grey by default) |  |
+| [`gl_fog(start, end, r, g, b)`](#gl_fog) | — | Linear fog of that color, from start to end (distances from the eye); gl_disable(GL_FOG) takes it away |  |
+| [`gl_read_pixel(x, y)`](#gl_read_pixel) | Int | The color of a pixel of the picture being drawn (before gl_swap), 0xRRGGBB, y from the top; -1 without gl_open |  |
+| `gl_error()` | Int | The last GL error (glGetError), 0 if none |  |
+
+<a id="gl_open"></a>
+
+### `gl_open(width, height)` → `Bool`
+
+- `width`, `height`: the size of the picture in pixels.
+
+Opens a MiniGL window on the Workbench, double buffered and with a 16-bit Z buffer. It leaves a 60 degree perspective
+(what is between 0.5 and 100 units in front of the camera, which looks towards -z) and the modelview matrix current,
+so `gl_translate(0, 0, -5)` already shows what is drawn at the origin. If one was open, it is closed first.
+
+Returns `false` if `minigl.library` 29 or newer is not there, if the machine has no FPU (the library uses it) or if it
+could not open. The other `gl_*` do nothing without an open window.
+
+See also: `gl_open_screen`, `gl_close`, [`gl_swap`](#gl_swap), [`gl_closed`](#gl_closed).
+
+<a id="gl_swap"></a>
+
+### `gl_swap()`
+
+Shows what was drawn since the last `gl_swap` and leaves the other buffer for the next frame. It waits for the
+screen's refresh (`gl_vsync`), so a drawing loop runs at 50 or 60 frames a second at most.
+
+See also: `gl_vsync`, `gl_clear`.
+
+<a id="gl_closed"></a>
+
+### `gl_closed()` → `Bool`
+
+Returns `true` once the close gadget of the window was clicked. For the drawing loop: `while not gl_closed()`. On
+`gl_open_screen` there is no gadget: leave with `gl_key` or `key_down`.
+
+See also: `gl_key`, [`key_down`](#key_down).
+
+<a id="gl_begin"></a>
+
+### `gl_begin(mode)`
+
+- `mode`: the shape, with OpenGL's numbers (`lib/amiga/gl.dash`): `GL_POINTS` 0, `GL_LINES` 1, `GL_LINE_LOOP` 2,
+  `GL_LINE_STRIP` 3, `GL_TRIANGLES` 4, `GL_TRIANGLE_STRIP` 5, `GL_TRIANGLE_FAN` 6, `GL_QUADS` 7, `GL_QUAD_STRIP` 8,
+  `GL_POLYGON` 9.
+
+The corners go with `gl_vertex` until `gl_end`. The front faces are the ones seen counterclockwise, as in OpenGL.
+
+See also: `gl_vertex`, `gl_end`, `gl_color`.
+
+<a id="gl_texture"></a>
+
+### `gl_texture(d)` → `Int`
+
+- `d`: an image decoded with `image_decode` (PNG, JPEG, GIF, BMP, WebP).
+
+Returns the number of a new texture, or 0. MiniGL wants sides that are powers of two: the image is taken to the power
+of two not above its size, up to 256 x 256 (the nearest point). The image can be freed afterwards with
+`image_decoded_free`. It is drawn with `gl_texture_bind` and `gl_tex_coord`; with `gl_close` the textures are lost.
+
+See also: `gl_texture_bind`, `gl_tex_coord`, `gl_texture_free`, [`image_decode`](#image_decode).
+
+<a id="gl_light"></a>
+
+### `gl_light(n, x, y, z)`
+
+- `n`: the light, 0 to 7.
+- `x`, `y`, `z`: where the light comes from (a direction, like the sun).
+
+Turns on that light and the lighting (`GL_LIGHTING`), with the colour of `gl_color` as the material of the shapes.
+Each face needs its `gl_normal`. `gl_disable(GL_LIGHTING)` turns them all off.
+
+See also: `gl_light_color`, `gl_ambient`, `gl_normal`.
+
+<a id="gl_fog"></a>
+
+### `gl_fog(start, end, r, g, b)`
+
+- `start`, `end`: where it starts and where it covers everything, as distance from the eye.
+- `r`, `g`, `b`: its colour, 0.0 to 1.0.
+
+Linear fog. With Wazp3D (Warp3D in software) it only shows if fog is turned on in its preferences.
+
+See also: `gl_disable`.
+
+<a id="gl_read_pixel"></a>
+
+### `gl_read_pixel(x, y)` → `Int`
+
+- `x`, `y`: the pixel, from the top left corner.
+
+Returns the colour of that pixel of the picture being drawn, before `gl_swap`, as `0xRRGGBB`; -1 without a window. It
+is slow: for tests or to know what is under the mouse, not for every pixel.
+
+See also: [`gl_swap`](#gl_swap).
 
 <a id="dashos_functions"></a>
 
