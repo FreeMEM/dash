@@ -23827,14 +23827,16 @@ static LONG _dash_mui_request(APTR win, STRPTR title, STRPTR text, STRPTR button
 #define _DASH_MUI_RT_CANCEL 0x5DA51002
 static STRPTR _dash_mui_request_text(APTR win, STRPTR title, STRPTR text, STRPTR initial, STRPTR buttons) {
     char labels[128];
-    STRPTR cancel, bar, contents = NULL, result;
+    STRPTR cancel, bar, contents = NULL;
+    static char result[1028];   /* (like mui_get_text: Dash copies it when kept; the window is gone) */
     Object *w, *str, *bok, *bcancel, *row, *root, *o;
     struct List *wl = NULL;
     APTR state;
     ULONG sigs = 0, params[1];
     LONG id = 0, quit = 0;
     IPTR open = 0;
-    if (!_dash_mui_app) return _dash_str_alloc(0, TRUE);
+    result[0] = 0;
+    if (!_dash_mui_app) return (STRPTR)result;
     strncpy(labels, buttons && *buttons ? (char *)buttons : "_Ok|_Cancel", sizeof labels - 1);
     labels[sizeof labels - 1] = 0;
     bar = (STRPTR)strchr(labels, '|');
@@ -23857,7 +23859,7 @@ static STRPTR _dash_mui_request_text(APTR win, STRPTR title, STRPTR text, STRPTR
     w = root ? _DASH_MUI_NEW(MUIC_Window, MUIA_Window_Title, (IPTR)(title ? title : (STRPTR)""),
                              MUIA_Window_RefWindow, (IPTR)win, MUIA_Window_RootObject, (IPTR)root,
                              MUIA_Window_ActiveObject, (IPTR)str) : NULL;
-    if (!w) return _dash_str_alloc(0, TRUE);
+    if (!w) return (STRPTR)result;
     GetAttr(MUIA_Application_WindowList, (Object *)_dash_mui_app, (IPTR *)&wl);
     if (wl)
         for (state = wl->lh_Head; (o = (Object *)NextObject((Object **)&state)) != NULL; )
@@ -23889,7 +23891,7 @@ static STRPTR _dash_mui_request_text(APTR win, STRPTR title, STRPTR text, STRPTR
         }
     }
     if (id == _DASH_MUI_RT_OK) GetAttr(MUIA_String_Contents, str, (IPTR *)&contents);
-    result = _dash_str_dup(contents ? contents : (STRPTR)"", TRUE);
+    if (contents) { strncpy(result, (char *)contents, sizeof result - 1); result[sizeof result - 1] = 0; }
     SetAttrs(w, MUIA_Window_Open, FALSE, TAG_DONE);
     _DASH_MUI_DO(_dash_mui_app, OM_REMMEMBER, (IPTR)w);
     MUI_DisposeObject(w);
@@ -23897,7 +23899,7 @@ static STRPTR _dash_mui_request_text(APTR win, STRPTR title, STRPTR text, STRPTR
         for (state = wl->lh_Head; (o = (Object *)NextObject((Object **)&state)) != NULL; )
             SetAttrs(o, MUIA_Window_Sleep, FALSE, TAG_DONE);
     if (quit) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
-    return result;
+    return (STRPTR)result;
 }
 
 /* mui_set_background (Dash 2.0, Forja): an RGB background ("2:rrrrrrrr,gggggggg,bbbbbbbb", MUI allocates the pen
