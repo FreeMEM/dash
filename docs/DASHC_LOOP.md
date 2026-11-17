@@ -992,4 +992,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     Inferencia y dbgserver, con y sin `--memcheck`, `--debug`, `--perfil`, `--fpu` y `--cpu 68020`, iguales byte a
     byte que los del dashc de main (`tests/identicos.py` 3.204 de 3.204; para los grandes, el mismo runtime: el de
     esta rama trae dbg_set e icon_save y eso mueve unos bytes de un ejecutable con `--memcheck`). En el PC tarda lo
-    mismo o algo menos (Forja 0,069 / 0,061 s).
+    mismo o algo menos (Forja 0,069 / 0,061 s); en el A1200 emulado a velocidad real, sprite_editor igual (3,12 /
+    3,14 s).
+  - En el A1200 emulado con 8 MB de Fast (y los 2 de Chip), con el `dash` del Amiga: Forja compila (pico 7.648 KB;
+    `--check`, 5.528). Por el camino salieron dos cosas más. Una, la pila: un texto de mil trozos sumados (los datos de
+    las plantillas de Forja) hacía que `expr_type` bajase mil veces por `a` y agotaba los 64 KB (también el `dash` de
+    main: se quedaba en "Software Failure"); ahora sube por la izquierda sin recursión y la pila es de 128 KB. Otra,
+    la memoria troceada: al juntar el código al final había 4,5 MB libres, pero el trozo seguido más grande era de 600
+    KB y hacían falta 740; los bloques de los nodos se piden desde arriba (`MEMF_REVERSE`) y, al soltarlos, dejan el
+    hueco. "sin memoria" dice ahora cuánto se pedía y cuánto había pedido ya.
