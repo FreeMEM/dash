@@ -1090,8 +1090,8 @@ static void walk_types(NodeList *l, int *ret)
             break;
         }
         }
-        walk_types(&st->body, ret);
-        walk_types(&st->els, ret);
+        walk_types(&st->x->body, ret);
+        walk_types(&st->x->els, ret);
     }
 }
 
@@ -1376,15 +1376,15 @@ static void gen_interp(Node *n)
     char *str;
     if (np > INTERP_TANDA) {
         Node head, rest;
-        memset(&head, 0, sizeof head);
+        memset(&head, 0, sizeof head); head.x = &node_no_ext;
         head.kind = E_INTERP;
         head.line = n->line;
         head.col = n->col;
         head.file = n->file;
         rest = head;
-        for (i = 0; i < INTERP_TANDA; i++) VEC_PUSH(head.args, n->args.v[i]);
-        VEC_PUSH(rest.args, &head);
-        for (i = INTERP_TANDA; i < np; i++) VEC_PUSH(rest.args, n->args.v[i]);
+        for (i = 0; i < INTERP_TANDA; i++) NL_PUSH(head.args, n->args.v[i]);
+        NL_PUSH(rest.args, &head);
+        for (i = INTERP_TANDA; i < np; i++) NL_PUSH(rest.args, n->args.v[i]);
         gen_interp(&rest);
         xfree(head.args.v);
         xfree(rest.args.v);
@@ -1415,7 +1415,7 @@ static void gen_concat(Node *n)
         join.line = n->line;
         join.col = n->col;
         join.file = n->file;
-        for (i = 0; i <= np; i++) VEC_PUSH(join.args, NULL);
+        for (i = 0; i <= np; i++) NL_PUSH(join.args, NULL);
         for (e = n, i = np; i > 0; e = e->a, i--) join.args.v[i] = e->b;
         join.args.v[0] = e;
         if (join.args.v[0]->kind == E_STR && join.args.v[0]->len == 0) {   /* "" + ...: el primero sobra */
@@ -1752,7 +1752,7 @@ static int gen_new(Node *n, int si, int fresh)
         if (!st->fields.v[i].init)
             fatal_node(n, "%s: falta %s (sin valor por defecto; solo se omiten los últimos campos)", st->name,
                        st->fields.v[i].name);
-    memset(&zero, 0, sizeof zero);
+    memset(&zero, 0, sizeof zero); zero.x = &node_no_ext;
     zero.kind = E_INT;
     char *conv = xmalloc(nf + 1);
     for (i = 0; i < nf; i++) {
@@ -1878,8 +1878,8 @@ static int gen_method(Node *n, int t)
     if (prog->structs.v[t - TY_STRUCT].iface) return gen_iface_call(n, t);
     snprintf(name, sizeof name, "%s.%s", prog->structs.v[t - TY_STRUCT].name, n->name);
     if (!find_func(name, &idx)) fatal_node(n, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
-    memset(&call, 0, sizeof call);
-    memset(&nn, 0, sizeof nn);
+    memset(&call, 0, sizeof call); call.x = &node_no_ext;
+    memset(&nn, 0, sizeof nn); nn.x = &node_no_ext;
     call.kind = E_CALL;
     call.line = n->line;
     call.col = n->col;
@@ -1887,10 +1887,10 @@ static int gen_method(Node *n, int t)
     nn.kind = E_NN;
     nn.line = n->line;
     nn.a = n->a;
-    VEC_PUSH(call.args, &nn);
+    NL_PUSH(call.args, &nn);
     {
         int i;
-        for (i = 0; i < n->args.n; i++) VEC_PUSH(call.args, n->args.v[i]);
+        for (i = 0; i < n->args.n; i++) NL_PUSH(call.args, n->args.v[i]);
     }
     r = gen_expr(&call);
     xfree(call.args.v);
@@ -2030,7 +2030,7 @@ static int gen_list_method(Node *n)
         /* l.has(x): x in l (lo pidió Forja) */
         Node *c;
         if (n->args.n != 1) fatal_node(n, "has pide 1 argumento");
-        c = xmalloc(sizeof *c);
+        c = node_alloc();
         *c = *n;
         c->kind = E_IN;
         c->name = NULL;
@@ -2123,10 +2123,10 @@ static int dict_passed(Node *e, const char *d)
     if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->c, d)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (dict_passed(e->args.v[i], d)) return 1;
-    for (i = 0; i < e->body.n; i++)
-        if (dict_passed(e->body.v[i], d)) return 1;
-    for (i = 0; i < e->els.n; i++)
-        if (dict_passed(e->els.v[i], d)) return 1;
+    for (i = 0; i < e->x->body.n; i++)
+        if (dict_passed(e->x->body.v[i], d)) return 1;
+    for (i = 0; i < e->x->els.n; i++)
+        if (dict_passed(e->x->els.v[i], d)) return 1;
     return 0;
 }
 
@@ -2423,7 +2423,7 @@ static int monotone(NodeList *l, const char *name, long *lo)
                 return 0;
             }
         }
-        if (!monotone(&s->body, name, lo) || !monotone(&s->els, name, lo)) return 0;
+        if (!monotone(&s->x->body, name, lo) || !monotone(&s->x->els, name, lo)) return 0;
     }
     return 1;
 }
@@ -2566,13 +2566,13 @@ static int gen_compare(Node *n)
         tb != TY_DOUBLE) {
         Node c = *n, wrap;
         int r;
-        memset(&wrap, 0, sizeof wrap);
+        memset(&wrap, 0, sizeof wrap); wrap.x = &node_no_ext;
         wrap.kind = E_CALL;
         wrap.name = "Fixed";
         wrap.line = n->line;
         wrap.col = n->col;
         wrap.file = n->file;
-        VEC_PUSH(wrap.args, ta == TY_FIXED ? n->b : n->a);
+        NL_PUSH(wrap.args, ta == TY_FIXED ? n->b : n->a);
         if (ta == TY_FIXED) c.b = &wrap;
         else c.a = &wrap;
         r = gen_compare(&c);
@@ -2653,7 +2653,7 @@ static int gen_compare(Node *n)
         (tb == TY_CHAR && n->a->kind == E_STR && n->a->len == 1)) {
         Node c = *n, lit;
         Node *s = ta == TY_CHAR ? n->b : n->a;
-        memset(&lit, 0, sizeof lit);
+        memset(&lit, 0, sizeof lit); lit.x = &node_no_ext;
         lit.kind = E_INT;
         lit.val = (signed char)s->str[0];
         if (ta == TY_CHAR) c.b = &lit;
@@ -2745,9 +2745,17 @@ static int gen_dash_builtin(Node *n)
         fatal_node(n, "%s aún no está en DashOS%s", n->name,
                    strncmp(n->name, "mui_", 4) ? "" : " (de las ventanas mui_*, solo algunas)");
 #endif
-    sym = xmalloc(strlen(n->name) + 5);
-    strcpy(sym, "_db_");
-    strcat(sym, n->name);
+    {
+        /* "_db_nombre", uno por builtin (lo guardan las reubicaciones: con uno por llamada, miles de copias) */
+        static char **syms;
+        if (!syms) syms = xmalloc(sizeof(char *) * (builtin_count + 1));
+        if (!syms[b]) {
+            syms[b] = xmalloc(strlen(n->name) + 5);
+            strcpy(syms[b], "_db_");
+            strcat(syms[b], n->name);
+        }
+        sym = syms[b];
+    }
     /* (los de DashOS no están en el runtime del 68k, el que mira runtime_has: los pone runtime/dashos/build.py) */
     if (builtin_info[b].dashos != 1 && !runtime_has(sym))
         fatal_node(n, "(sin --gcc) el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
@@ -2880,7 +2888,7 @@ static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
     }
     if ((r = task_impure(n->a, 0, visited, at)) || (r = task_impure(n->b, 0, visited, at)) ||
         (r = task_impure(n->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
-        (r = task_impure_list(&n->body, 0, visited, at)) || (r = task_impure_list(&n->els, 0, visited, at)))
+        (r = task_impure_list(&n->x->body, 0, visited, at)) || (r = task_impure_list(&n->x->els, 0, visited, at)))
         return r;
     return NULL;
 }
@@ -3089,14 +3097,13 @@ static Node *subst(Node *e, Func *f, NodeList *args)
         i = param_index(f, e->name);
         return i >= 0 ? args->v[i] : e;
     }
-    c = xmalloc(sizeof *c);
+    c = node_alloc();
     *c = *e;
     c->a = subst(e->a, f, args);
     c->b = subst(e->b, f, args);
     c->c = subst(e->c, f, args);
     if (e->args.n) {
         c->args.v = xmalloc(sizeof(Node *) * e->args.n);
-        c->args.cap = e->args.n;
         for (i = 0; i < e->args.n; i++) c->args.v[i] = subst(e->args.v[i], f, args);
     }
     return c;
@@ -3676,13 +3683,13 @@ static int gen_expr(Node *n)
             {
                 /* + - % con un Int: ese lado, Fixed(lado) */
                 Node c = *n, wrap;
-                memset(&wrap, 0, sizeof wrap);
+                memset(&wrap, 0, sizeof wrap); wrap.x = &node_no_ext;
                 wrap.kind = E_CALL;
                 wrap.name = "Fixed";
                 wrap.line = n->line;
                 wrap.col = n->col;
                 wrap.file = n->file;
-                VEC_PUSH(wrap.args, fa ? n->b : n->a);
+                NL_PUSH(wrap.args, fa ? n->b : n->a);
                 if (fa) c.b = &wrap;
                 else c.a = &wrap;
                 gen_binary(&c);
@@ -3748,26 +3755,26 @@ static void gen_in(Node *n)
             forget_d0();
             return;
         }
-        c = xmalloc(sizeof *c);
+        c = node_alloc();
         *c = *n;
         c->kind = E_CALL;
         c->name = "str_contains";
         c->a = c->b = NULL;
         memset(&c->args, 0, sizeof c->args);
-        VEC_PUSH(c->args, n->b);
-        VEC_PUSH(c->args, n->a);
+        NL_PUSH(c->args, n->b);
+        NL_PUSH(c->args, n->a);
         value(c);
         return;
     }
     if (IS_DICT(t)) {
-        Node *c = xmalloc(sizeof *c);
+        Node *c = node_alloc();
         *c = *n;
         c->kind = E_MCALL;
         c->name = "has";
         c->a = n->b;
         c->b = NULL;
         memset(&c->args, 0, sizeof c->args);
-        VEC_PUSH(c->args, n->a);
+        NL_PUSH(c->args, n->a);
         value(c);
         return;
     }
@@ -3941,8 +3948,8 @@ static void find_float_inv(Node *n, NodeList *body, const char *ivar, Node **inv
     find_float_inv(n->b, body, ivar, inv, ninv);
     find_float_inv(n->c, body, ivar, inv, ninv);
     for (i = 0; i < n->args.n; i++) find_float_inv(n->args.v[i], body, ivar, inv, ninv);
-    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], body, ivar, inv, ninv);
-    for (i = 0; i < n->els.n; i++) find_float_inv(n->els.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->x->body.n; i++) find_float_inv(n->x->body.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->x->els.n; i++) find_float_inv(n->x->els.v[i], body, ivar, inv, ninv);
 }
 
 static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *nm)
@@ -3965,8 +3972,8 @@ static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *
     find_mults(n->b, name, body, m, nm);
     find_mults(n->c, name, body, m, nm);
     for (i = 0; i < n->args.n; i++) find_mults(n->args.v[i], name, body, m, nm);
-    for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], name, body, m, nm);
-    for (i = 0; i < n->els.n; i++) find_mults(n->els.v[i], name, body, m, nm);
+    for (i = 0; i < n->x->body.n; i++) find_mults(n->x->body.v[i], name, body, m, nm);
+    for (i = 0; i < n->x->els.n; i++) find_mults(n->x->els.v[i], name, body, m, nm);
 }
 
 /* Un for con el número de vueltas conocido al empezar (el cuerpo no cambia i) lleva
@@ -4004,7 +4011,7 @@ static void gen_for(Node *n)
     fold(n->b, &to);
     if (step_known && step == 0) fatal_node(n, "el paso del for no puede ser 0");
 
-    counted = step_known && !list_assigns(&n->body, n->name);
+    counted = step_known && !list_assigns(&n->x->body, n->name);
     if (counted && from_known && end_known) {
         long long c = 0;
         if (down ? from >= to : from <= to)
@@ -4018,7 +4025,7 @@ static void gen_for(Node *n)
     ms = mark_begin();
     enter_scope();
     if (step_known) {
-        for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], n->name, &n->body, m, &nm);
+        for (i = 0; i < n->x->body.n; i++) find_mults(n->x->body.v[i], n->name, &n->x->body, m, &nm);
         for (i = 0; i < nm; i++) {
             for (j = 0; j < nsr && sr_k[j] != m[i].k; j++)
                 ;
@@ -4030,7 +4037,7 @@ static void gen_for(Node *n)
         }
     }
     use_i = !counted || !from_known || refs(n->b, n->name) || (n->c && refs(n->c, n->name)) ||
-            list_refs(&n->body, n->name);
+            list_refs(&n->x->body, n->name);
 
     if (use_i) {
         if (!from_known) value(n->a);
@@ -4065,7 +4072,7 @@ static void gen_for(Node *n)
     for (i = repl_base; i < repls.n; i++)
         if (repls.v[i].slot < 0) repls.v[i--] = repls.v[--repls.n];   /* sin hueco (más de MAX_SR) */
     /* los Float que no cambian en el cuerpo, en huecos (antes de reservar los del contador) */
-    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], &n->body, n->name, inv, &ninv);
+    for (i = 0; i < n->x->body.n; i++) find_float_inv(n->x->body.v[i], &n->x->body, n->name, inv, &ninv);
     for (j = 0; j < ninv; j++) {
         Var vv;
         float_value(inv[j]);
@@ -4125,14 +4132,14 @@ static void gen_for(Node *n)
     }
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
     lp.depth = depth;
     lp.sp = sp_depth;
     VEC_PUSH(loops, lp);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
 
@@ -4203,7 +4210,7 @@ static int refs(Node *n, const char *name)
     if (!n || is_repl(n)) return 0;
     if ((n->kind == E_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
     return refs(n->a, name) || refs(n->b, name) || refs(n->c, name) || list_refs(&n->args, name) ||
-           list_refs(&n->body, name) || list_refs(&n->els, name);
+           list_refs(&n->x->body, name) || list_refs(&n->x->els, name);
 }
 
 static int has_call(Node *n)
@@ -4342,7 +4349,7 @@ static int count_assigns(NodeList *l, const char *name)
     for (i = 0; i < l->n; i++) {
         Node *n = l->v[i];
         if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) c++;
-        c += count_assigns(&n->body, name) + count_assigns(&n->els, name);
+        c += count_assigns(&n->x->body, name) + count_assigns(&n->x->els, name);
     }
     return c;
 }
@@ -4394,7 +4401,7 @@ static int has_continue(NodeList *l)
 {
     int i;
     for (i = 0; i < l->n; i++)
-        if (l->v[i]->kind == S_CONTINUE || has_continue(&l->v[i]->body) || has_continue(&l->v[i]->els)) return 1;
+        if (l->v[i]->kind == S_CONTINUE || has_continue(&l->v[i]->x->body) || has_continue(&l->v[i]->x->els)) return 1;
     return 0;
 }
 
@@ -4428,7 +4435,7 @@ static int gen_counted_while(Node *n)
     if (c->kind != E_CMP) return 0;
     op = c->op;
     /* v es el lado que cambia en el cuerpo */
-    if (c->a->kind == E_VAR && !fold(c->a, &k) && count_assigns(&n->body, c->a->name) == 1) {
+    if (c->a->kind == E_VAR && !fold(c->a, &k) && count_assigns(&n->x->body, c->a->name) == 1) {
         vn = c->a;
         end = c->b;
     } else if (c->b->kind == E_VAR && !fold(c->b, &k)) {
@@ -4444,11 +4451,11 @@ static int gen_counted_while(Node *n)
     if (!fold(end, &k)) {
         Local *le;
         if (end->kind != E_VAR || !(le = find_local(end->name)) || le->slot < 0 ||
-            list_assigns(&n->body, end->name) || !strcmp(end->name, vn->name)) return 0;
+            list_assigns(&n->x->body, end->name) || !strcmp(end->name, vn->name)) return 0;
     }
-    if (count_assigns(&n->body, vn->name) != 1 || has_continue(&n->body)) return 0;
-    for (i = 0; i < n->body.n; i++)
-        if (step_of(n->body.v[i], vn->name) == (up ? 1 : -1)) inc = 1;
+    if (count_assigns(&n->x->body, vn->name) != 1 || has_continue(&n->x->body)) return 0;
+    for (i = 0; i < n->x->body.n; i++)
+        if (step_of(n->x->body.v[i], vn->name) == (up ? 1 : -1)) inc = 1;
     if (!inc) return 0;
 
     slot = new_slot_opt(0, 1);
@@ -4479,14 +4486,14 @@ static int gen_counted_while(Node *n)
     }
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = -1;                                      /* no hay continue */
     enter_scope();
     lp.depth = depth;
     lp.sp = sp_depth;
     VEC_PUSH(loops, lp);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     leave_scope();
     loops.n--;
     use_slot(slot);
@@ -4751,7 +4758,7 @@ static void gen_obj_assign(Node *n, int tt)
 static void gen_foreach_str(Node *n)
 {
     int top = new_label(), cont = new_label(), done = new_label(), src_slot = -1, idx_slot, len_slot = -1;
-    int assigned = n->a->kind == E_VAR && list_assigns(&n->body, n->a->name);
+    int assigned = n->a->kind == E_VAR && list_assigns(&n->x->body, n->a->name);
     MarkScope ms;
     Loop lp;
     Var vs, vi, vl, vx;
@@ -4782,7 +4789,7 @@ static void gen_foreach_str(Node *n)
     if (len_slot >= 0) use_slot(len_slot);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4812,7 +4819,7 @@ static void gen_foreach_str(Node *n)
     if (!assigned) branch(CC_EQ, done);                /* el 0 del final */
     vx = declare(n->name, TY_CHAR);
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -4966,7 +4973,7 @@ static int node_keeps(Node *e, int any_index)
         break;
     }
     return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->c, any_index) &&
-           list_keeps(&e->args, any_index) && list_keeps(&e->body, any_index) && list_keeps(&e->els, any_index);
+           list_keeps(&e->args, any_index) && list_keeps(&e->x->body, any_index) && list_keeps(&e->x->els, any_index);
 }
 
 static int keeps_eval(int i) { return list_keeps(&prog->funcs.v[i].body, 1); }
@@ -5201,7 +5208,7 @@ static int node_nofree(Node *e, char *nf)
         break;
     }
     return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->c, nf) && list_nofree(&e->args, nf) &&
-           list_nofree(&e->body, nf) && list_nofree(&e->els, nf);
+           list_nofree(&e->x->body, nf) && list_nofree(&e->x->els, nf);
 }
 
 static char *nofree_cur;
@@ -5272,8 +5279,8 @@ static int is_lent(int obj, const char *name)
 static int loop_keeps_elements(Node *n)
 {
     if (!keeps_fn) compute_keeps();
-    if (list_assigns(&n->body, n->name)) return 0;
-    return list_keeps(&n->body, 0);
+    if (list_assigns(&n->x->body, n->name)) return 0;
+    return list_keeps(&n->x->body, 0);
 }
 
 /* ---- for k in d.keys() por la tabla de d, sin hacer la lista de claves (como ./dash, _keys_in_place) ----
@@ -5305,10 +5312,10 @@ static int keys_body_ok(Node *e, const char *d)
     if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->c, d)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!keys_body_ok(e->args.v[i], d)) return 0;
-    for (i = 0; i < e->body.n; i++)
-        if (!keys_body_ok(e->body.v[i], d)) return 0;
-    for (i = 0; i < e->els.n; i++)
-        if (!keys_body_ok(e->els.v[i], d)) return 0;
+    for (i = 0; i < e->x->body.n; i++)
+        if (!keys_body_ok(e->x->body.v[i], d)) return 0;
+    for (i = 0; i < e->x->els.n; i++)
+        if (!keys_body_ok(e->x->els.v[i], d)) return 0;
     return 1;
 }
 
@@ -5320,9 +5327,9 @@ static int keys_in_place(Node *n)
     t = expr_type(it->a);
     if (!IS_DICT(t) || dict_ikeys(t) || !find_local(it->a->name)) return 0;
     if (!keeps_fn) compute_keeps();
-    if (list_assigns(&n->body, n->name)) return 0;     /* (k = ...: k no puede tomar prestada la clave) */
-    for (i = 0; i < n->body.n; i++)
-        if (!keys_body_ok(n->body.v[i], it->a->name)) return 0;
+    if (list_assigns(&n->x->body, n->name)) return 0;     /* (k = ...: k no puede tomar prestada la clave) */
+    for (i = 0; i < n->x->body.n; i++)
+        if (!keys_body_ok(n->x->body.v[i], it->a->name)) return 0;
     return 1;
 }
 
@@ -5349,7 +5356,7 @@ static void gen_keys_loop(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5372,9 +5379,9 @@ static void gen_keys_loop(Node *n)
         /* d[k] del cuerpo: de la casilla (kloop_of) */
         Local *ld = n->a->a->kind == E_VAR ? find_local(n->a->a->name) : NULL;
         int pushed = 0;
-        if (ld && !debug && !list_assigns(&n->body, n->name)) {
+        if (ld && !debug && !list_assigns(&n->x->body, n->name)) {
             int i, passed = 0;
-            for (i = 0; i < n->body.n && !passed; i++) passed = dict_passed(n->body.v[i], n->a->a->name);
+            for (i = 0; i < n->x->body.n && !passed; i++) passed = dict_passed(n->x->body.v[i], n->a->a->name);
             if (!passed) {
                 KLoop kl;
                 kl.d = n->a->a->name;
@@ -5388,7 +5395,7 @@ static void gen_keys_loop(Node *n)
                 pushed = 1;
             }
         }
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         if (pushed) kloops.n--;
     }
     loops.n--;
@@ -5438,10 +5445,10 @@ static int body_frozen(Node *e)
     if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->c)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!body_frozen(e->args.v[i])) return 0;
-    for (i = 0; i < e->body.n; i++)
-        if (!body_frozen(e->body.v[i])) return 0;
-    for (i = 0; i < e->els.n; i++)
-        if (!body_frozen(e->els.v[i])) return 0;
+    for (i = 0; i < e->x->body.n; i++)
+        if (!body_frozen(e->x->body.v[i])) return 0;
+    for (i = 0; i < e->x->els.n; i++)
+        if (!body_frozen(e->x->els.v[i])) return 0;
     return 1;
 }
 
@@ -5470,7 +5477,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     use_slot(cnt_slot);
     def_label(top);
     mark_release(ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5484,7 +5491,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     ptr_add(ELEM, &vp);                                /* el puntero, al siguiente */
     vx = declare(n->name, et);
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -5523,10 +5530,10 @@ static void gen_foreach(Node *n)
     store_d0(&va);
     push_d0();
     rt_call("_dl_hold", 1, 0);
-    keep = (IS_OBJ(et) && !loop_keeps_elements(n)) || (IS_STRLIKE(et) && list_assigns(&n->body, n->name));
+    keep = (IS_OBJ(et) && !loop_keeps_elements(n)) || (IS_STRLIKE(et) && list_assigns(&n->x->body, n->name));
     if (!keep && !debug) {
         int frozen = 1, i;
-        for (i = 0; i < n->body.n && frozen; i++) frozen = body_frozen(n->body.v[i]);
+        for (i = 0; i < n->x->body.n && frozen; i++) frozen = body_frozen(n->x->body.v[i]);
         if (frozen) {
             gen_foreach_frozen(n, t, et, arr_slot, &ms);
             return;
@@ -5540,7 +5547,7 @@ static void gen_foreach(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5561,7 +5568,7 @@ static void gen_foreach(Node *n)
         /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
         push_d0();
         rt_call("_dl_retain_r", 1, 0);
-    } else if (IS_STRLIKE(et) && list_assigns(&n->body, n->name)) {
+    } else if (IS_STRLIKE(et) && list_assigns(&n->x->body, n->name)) {
         /* un texto que el cuerpo cambia (x = str_trim(x)): una copia suya, como ./dash; si no, la asignación
            liberaba el de la lista (y la lista, otra vez al acabar) */
         push_d0();
@@ -5571,7 +5578,7 @@ static void gen_foreach(Node *n)
     vx = declare(n->name, et);
     if (keep) locals.v[locals.n - 1].owned = IS_OBJ(et) ? 2 : 1;
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -5634,8 +5641,8 @@ static void gen_evloop(Node *n)
     MarkScope ms;
     Loop lp;
     if (wi < 0) fatal_node(n, "EventLoop sin ventana abierta antes");
-    for (i = 0; i < n->body.n; i++)
-        if (n->body.v[i]->val == ON_TIMER) timer = i;
+    for (i = 0; i < n->x->body.n; i++)
+        if (n->x->body.v[i]->val == ON_TIMER) timer = i;
     if (uses_gadgets) {
         /* los mensajes con GT_GetIMsg, y el del gadget apuntado (gadget_id) */
         load_imm(0, gadget_keys);
@@ -5648,7 +5655,7 @@ static void gen_evloop(Node *n)
     mark_release(&ms);
     if (timer >= 0) {
         Node *a[1];
-        a[0] = n->body.v[timer]->a;
+        a[0] = n->x->body.v[timer]->a;
         args_to_stack(a, 1, NULL);                     /* el intervalo, en la pila */
         pea_window(wi);
         rt_call("_dl_event_next_timer", 2, 0);
@@ -5665,8 +5672,8 @@ static void gen_evloop(Node *n)
         ev.sp = sp_depth;                              /* sin la clase */
         VEC_PUSH(evloops, ev);
     }
-    for (i = 0; i < n->body.n; i++) {
-        Node *h = n->body.v[i];
+    for (i = 0; i < n->x->body.n; i++) {
+        Node *h = n->x->body.v[i];
         static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100,
                                    0x8 /* MOUSEBUTTONS */, 0x80000 /* INACTIVEWINDOW */};
         int next = new_label(), skip = new_label();
@@ -5726,7 +5733,7 @@ static void gen_evloop(Node *n)
             lp.depth = depth;
             lp.sp = sp_depth;
             VEC_PUSH(loops, lp);
-            gen_block(&h->body);
+            gen_block(&h->x->body);
             loops.n--;
             leave_scope();
             if (h->val == ON_MENU) branch(CC_T, mtop);
@@ -5935,12 +5942,12 @@ static void gen_stmt(Node *n)
         int f = new_label(), done = new_label();
         gen_branch(n->a, f, 0);
         enter_scope();
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         leave_scope();
-        if (n->els.n) branch(CC_T, done);
+        if (n->x->els.n) branch(CC_T, done);
         def_label(f);
         enter_scope();
-        gen_block(&n->els);
+        gen_block(&n->x->els);
         leave_scope();
         def_label(done);
         return;
@@ -5973,7 +5980,7 @@ static void gen_stmt(Node *n)
         lp.depth = depth;
         lp.sp = sp_depth;
         VEC_PUSH(loops, lp);
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         leave_scope();
         loops.n--;
         def_label_fwd(test);
@@ -6185,10 +6192,10 @@ static int len_uses_node(Node *e, const char *name)
     if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->c, name)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (len_uses_node(e->args.v[i], name)) return 1;
-    for (i = 0; i < e->body.n; i++)
-        if (len_uses_node(e->body.v[i], name)) return 1;
-    for (i = 0; i < e->els.n; i++)
-        if (len_uses_node(e->els.v[i], name)) return 1;
+    for (i = 0; i < e->x->body.n; i++)
+        if (len_uses_node(e->x->body.v[i], name)) return 1;
+    for (i = 0; i < e->x->els.n; i++)
+        if (len_uses_node(e->x->els.v[i], name)) return 1;
     return 0;
 }
 
@@ -6287,7 +6294,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 if (f->params.v[i].type == TY_STR && !param_set[idx][i] && len_uses(body, f->params.v[i].name)) {
                     Node pv;
                     Var vl;
-                    memset(&pv, 0, sizeof pv);
+                    memset(&pv, 0, sizeof pv); pv.x = &node_no_ext;
                     pv.kind = E_VAR;
                     pv.name = f->params.v[i].name;
                     str_len_inline(&pv);                   /* (aún sin plen: lo mide) */
@@ -6465,7 +6472,7 @@ static int tree_size(Node *n)
     if (!n) return 0;
     if (n->kind == E_CALL && find_func(n->name, &idx)) call_sites[idx]++;
     return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->c) +
-           list_size(&n->args) + list_size(&n->body) + list_size(&n->els);
+           list_size(&n->args) + list_size(&n->x->body) + list_size(&n->x->els);
 }
 
 /* ¿se asigna a name en el árbol? */
@@ -6483,7 +6490,7 @@ static int assigns(Node *n, const char *name)
 {
     if (!n) return 0;
     if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
-    return list_assigns(&n->body, name) || list_assigns(&n->els, name);
+    return list_assigns(&n->x->body, name) || list_assigns(&n->x->els, name);
 }
 
 static void gen_one(int idx, int label, Func *f, NodeList *body)
@@ -6534,8 +6541,8 @@ static void find_uses(NodeList *l)
         if (n->kind == S_ON && n->val == ON_MENU) needs_gt = 1;
         find_uses_expr(n->a);
         find_uses_expr(n->b);
-        find_uses(&n->body);
-        find_uses(&n->els);
+        find_uses(&n->x->body);
+        find_uses(&n->x->els);
     }
 }
 
@@ -6653,8 +6660,8 @@ static void resolve_list(NodeList *l)
         subst_consts(&n->c);
         for (int j = 0; j < n->args.n; j++) subst_consts(&n->args.v[j]);
         if (n->kind == S_VAR) n->type = resolve_type(n->type, n->line, n->col);
-        resolve_list(&n->body);
-        resolve_list(&n->els);
+        resolve_list(&n->x->body);
+        resolve_list(&n->x->els);
     }
 }
 
@@ -6794,10 +6801,10 @@ static int node_calls(Node *n)
     if (n->kind == E_CALL || n->kind == S_PRINT) return 1;
     for (i = 0; i < n->args.n; i++)
         if (node_calls(n->args.v[i])) return 1;
-    for (i = 0; i < n->body.n; i++)
-        if (node_calls(n->body.v[i])) return 1;
-    for (i = 0; i < n->els.n; i++)
-        if (node_calls(n->els.v[i])) return 1;
+    for (i = 0; i < n->x->body.n; i++)
+        if (node_calls(n->x->body.v[i])) return 1;
+    for (i = 0; i < n->x->els.n; i++)
+        if (node_calls(n->x->els.v[i])) return 1;
     return node_calls(n->a) || node_calls(n->b) || node_calls(n->c);
 }
 
@@ -6822,10 +6829,10 @@ static int handles_break(Node *n)
     }
     for (i = 0; i < n->args.n; i++)
         if (handles_break(n->args.v[i])) return 1;
-    for (i = 0; i < n->body.n; i++)
-        if (handles_break(n->body.v[i])) return 1;
-    for (i = 0; i < n->els.n; i++)
-        if (handles_break(n->els.v[i])) return 1;
+    for (i = 0; i < n->x->body.n; i++)
+        if (handles_break(n->x->body.v[i])) return 1;
+    for (i = 0; i < n->x->els.n; i++)
+        if (handles_break(n->x->els.v[i])) return 1;
     return handles_break(n->a) || handles_break(n->b) || handles_break(n->c);
 }
 

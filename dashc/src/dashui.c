@@ -84,8 +84,7 @@ static char *jstring(void)
         }
     }
     jp++;
-    buf_byte(&b, 0);
-    return (char *)b.p;
+    return buf_text(&b);
 }
 
 static JVal *jvalue(void)

@@ -174,6 +174,26 @@ void *xrealloc(void *p, size_t n)
     return q;
 }
 
+size_t xcap(const void *p) { return p ? SIZE_OF(p) & ~(size_t)1 : 0; }
+
+/* Los nodos del árbol, de corrido en bloques de 32 KB: sin la cabecera ni el redondeo a 8 de cada trozo (nunca se
+   sueltan uno a uno) */
+Node *node_alloc(void)
+{
+    static uint8_t *at, *end;
+    /* (de 4 en 4 bytes en el 68000, donde el struct va de 2 en 2: un long en dirección impar de palabra va más lento) */
+    size_t sz = (sizeof(Node) + 3) & ~(size_t)3;
+    Node *n;
+    if ((size_t)(end - at) < sz) {
+        at = xmalloc(32 * 1024);
+        end = at + 32 * 1024;
+    }
+    n = (Node *)at;                                /* (ya a 0: xmalloc) */
+    at += sz;
+    n->x = &node_no_ext;
+    return n;
+}
+
 /* (sin memcpy: el de libnix llama a CopyMem de exec, caro para unos pocos bytes) */
 static void copy_small(void *dst, const void *src, size_t n)
 {
@@ -193,6 +213,17 @@ char *xstrndup(const char *s, size_t n)
     copy_small(d, s, n);
     while (n < got) d[n++] = 0;
     return d;
+}
+
+/* lo de b como texto (con su 0 detrás), en un trozo de su tamaño: un Buf empieza con 256 bytes, y los miles de
+   textos de un programa grande se quedaban con ellos (b queda vacío) */
+char *buf_text(Buf *b)
+{
+    char *t = xstrndup(b->p ? (const char *)b->p : "", b->n);
+    xfree(b->p);
+    b->p = NULL;
+    b->n = b->cap = 0;
+    return t;
 }
 
 static void grow(Buf *b, size_t extra)

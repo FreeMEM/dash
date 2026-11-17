@@ -19,6 +19,7 @@ void buf_byte(Buf *b, int v);
 void buf_word(Buf *b, int v);
 void buf_long(Buf *b, uint32_t v);
 void buf_bytes(Buf *b, const void *p, size_t n);
+char *buf_text(Buf *b);   /* lo de b como texto del tamaño justo (y b, vacío) */
 /* (en línea: se llaman cientos de miles de veces al leer el runtime y escribir el código) */
 static inline void put_word(uint8_t *p, int v)
 {
@@ -40,6 +41,7 @@ static inline uint32_t get_long(const uint8_t *p)
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
 void xfree(void *p);      /* lo de xmalloc y xrealloc (no el free de C) */
+size_t xcap(const void *p);   /* lo que cabe en un trozo de xmalloc (0 con NULL) */
 void mem_init(void);      /* al empezar main: suelta la memoria al acabar */
 char *xstrndup(const char *s, size_t n);
 /* índice de nombres de una lista (util.c): nidx_sync(&x, lista.v, sizeof(*lista.v), offsetof(T, name), lista.n) antes de
@@ -168,22 +170,45 @@ int dict_type(int key, int val);
 extern struct TypeNames { char **v; int n, cap; } type_names;
 
 typedef struct Node Node;
-typedef struct { Node **v; int n, cap; } NodeList;
+/* lista de nodos: v sale de xmalloc (o NULL) y su sitio es el del trozo pedido (xcap): sin campo cap, que en cada
+   nodo eran 4 bytes por lista */
+typedef struct { Node **v; int n; } NodeList;
+/* añadir x (crece al doble, como VEC_PUSH) */
+#define NL_PUSH(l, x) do { \
+        if ((size_t)((l).n + 1) * sizeof(Node *) > xcap((l).v)) \
+            (l).v = xrealloc((l).v, (size_t)((l).n ? (l).n * 2 : 2) * sizeof(Node *)); \
+        (l).v[(l).n++] = (x); \
+    } while (0)
 
+/* lo que solo llevan las sentencias con bloques (if, while, for...): aparte, para que los demás nodos (casi todos)
+   no carguen con dos listas vacías */
+typedef struct { NodeList body, els; } NodeExt;
+extern NodeExt node_no_ext;      /* (parser.c) el de los nodos sin bloques: sus listas, vacías */
+NodeExt *node_ext(Node *n);      /* (parser.c) el suyo, para llenarlo (un nodo de node_alloc) */
+
+/* Un nodo del árbol. Con un programa grande hay decenas de miles (Forja: 75.000): sus campos, de lo más pequeño que
+   cabe; salen de corrido de bloques (node_alloc), sin cabecera. */
 struct Node {
-    int kind, line, col, file;
-    int op;          /* E_BIN, E_CMP: el token del operador */
-    long val;        /* E_INT, E_BOOL */
-    double dval;     /* E_FLOAT */
-    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
-    char *str;       /* E_STR */
-    int len;
+    int line;
     int type;        /* S_VAR: tipo declarado; E_LIST: lo que guarda, si lo dice su destino ([Double]) */
+    long val;        /* E_INT, E_BOOL */
+    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
+    union {
+        struct {
+            char *str;   /* E_STR */
+            int len;
+        };
+        double dval;     /* E_FLOAT */
+    };
     Node *a, *b, *c; /* operandos; S_IF: a = condición; S_FOR: desde, hasta, paso */
     NodeList args;   /* E_CALL */
-    NodeList body;   /* S_IF (rama sí), S_WHILE, S_FOR */
-    NodeList els;    /* S_IF (rama no; un elif es un S_IF dentro) */
+    NodeExt *x;      /* x->body: S_IF (rama sí), S_WHILE, S_FOR...; x->els: S_IF (rama no; un elif es un S_IF
+                        dentro). Nunca NULL: sin bloques, &node_no_ext (node_alloc), que nadie cambia */
+    unsigned short col, file;
+    unsigned char kind;
+    unsigned char op;    /* E_BIN, E_CMP: el token del operador */
 };
+Node *node_alloc(void);   /* util.c: un nodo a 0 */
 
 typedef struct {
     char *name;
