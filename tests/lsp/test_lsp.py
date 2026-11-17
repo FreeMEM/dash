@@ -460,6 +460,18 @@ class LanguageServerTest(unittest.TestCase):
         titles = [a["title"] for a in self.actions(u, by_name["totl"])]
         self.assertIn("Cambiar a 'total'", titles)
 
+    def test_quick_fixes_from_dash_check(self):
+        # the VS Code extension marks the errors with ./dash --check (the compiler's own words): the same fixes
+        u = self.open("q2.dash", "func doble(n: Int) -> Int\n    return n * 2\nend\nMain\n    total = 1\n    Print dobl(totl)\nend\n")
+        self.client.diagnostics(u)
+        line = {"start": {"line": 5, "character": 10}, "end": {"line": 5, "character": 14}}
+        titles = [a["title"] for a in self.actions(u, {"range": line, "message": "la función dobl no existe"})]
+        self.assertIn("Crear la función dobl(a)", titles)
+        self.assertIn("Cambiar a 'doble'", titles)
+        var = {"start": {"line": 5, "character": 15}, "end": {"line": 5, "character": 19}}
+        titles = [a["title"] for a in self.actions(u, {"range": var, "message": "la variable totl no existe"})]
+        self.assertIn("Cambiar a 'total'", titles)
+
     def test_unknown_request_gets_an_error_not_a_crash(self):
         reply = self.client.request("textDocument/noExiste", {})
         self.assertEqual(reply["error"]["code"], -32601)
