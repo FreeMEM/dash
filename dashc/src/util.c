@@ -5,9 +5,17 @@
 #include <string.h>
 
 #include <time.h>
+#ifdef __amigaos__
+/* (AllocMem y FreeMem: la struct Node de exec, con otro nombre; la de dashc es la del árbol) */
+#define Node ExecNode
+#include <proto/exec.h>
+#include <exec/memory.h>
+#undef Node
+#endif
 #include "dashc.h"
 
 int tiempos;   /* --tiempos */
+static long mem_in_use;   /* (--tiempos: la memoria pedida al sistema, en uso) */
 
 void tiempo(const char *fase)
 {
@@ -16,7 +24,7 @@ void tiempo(const char *fase)
     if (!tiempos) return;
     if (!last) last = clock();
     now = clock();
-    printf("%-12s %6ld ms\n", fase, (long)((now - last) * 1000 / CLOCKS_PER_SEC));
+    printf("%-12s %6ld ms %7ld KB\n", fase, (long)((now - last) * 1000 / CLOCKS_PER_SEC), mem_in_use / 1024);
     last = now;
 }
 
@@ -24,25 +32,166 @@ const char *src_name = "?";
 struct SrcFiles src_files;
 int lex_file;
 
+/* La memoria de dashc. El malloc de libnix recorre en cada llamada todos sus bloques (y free también, para saber de
+   cuál es): con los cientos de miles de trozos de un programa grande, en un A1200 se iba en eso casi todo el tiempo
+   de compilar (y la memoria, troceada). Aquí: los trozos pequeños salen de bloques de 64 KB, de corrido, y al
+   soltarlos van a una lista por tamaño (de 8 en 8 bytes) de donde sale el siguiente de ese tamaño; los grandes van
+   aparte (AllocMem), en una lista para soltarlos al acabar. */
+#ifdef __amigaos__
+#define HDR 4                     /* el tamaño del trozo, delante (con el bit 0 si es grande) */
+#define sys_alloc(n) AllocMem((n), MEMF_ANY)
+#define sys_free(p, n) FreeMem((p), (n))
+#else
+#define HDR 8                     /* (8: los double y punteros del PC, alineados) */
+#define sys_alloc(n) malloc(n)
+#define sys_free(p, n) ((void)(n), free(p))
+#endif
+#define SMALL_MAX 512
+#define CHUNK_SIZE (64 * 1024)
+
+typedef struct Big { struct Big *next, *prev; size_t size; size_t pad; } Big;   /* (16 bytes) delante de un grande */
+typedef struct Chunk { struct Chunk *next; size_t pad; } Chunk;
+static void *small_free[SMALL_MAX / 8 + 1];
+static uint8_t *bump, *bump_end;
+static Chunk *chunks;
+static Big bigs = {&bigs, &bigs, 0, 0};
+
+#define SIZE_OF(p) (*(size_t *)((uint8_t *)(p) - HDR))
+
+static void mem_free_all(void)
+{
+    while (bigs.next != &bigs) {
+        Big *b = bigs.next;
+        bigs.next = b->next;
+        sys_free(b, b->size);
+    }
+    bigs.prev = &bigs;
+    mem_in_use = 0;
+    while (chunks) {
+        Chunk *c = chunks;
+        chunks = c->next;
+        sys_free(c, CHUNK_SIZE);
+    }
+    bump = bump_end = NULL;
+    memset(small_free, 0, sizeof small_free);
+}
+
+void mem_init(void) { atexit(mem_free_all); }
+
+static void *alloc_raw(size_t n, size_t *got);
+
 void *xmalloc(size_t n)
 {
-    void *p = calloc(1, n ? n : 1);
-    if (!p) fatal("sin memoria");
+    size_t need;
+    void *p = alloc_raw(n, &need);
+    if (need <= 128) {                                 /* (sin llamar a memset para poco: un nodo son 100 bytes) */
+        uint32_t *q = p;
+        size_t k = need / 8;                           /* (need es múltiplo de 8) */
+        while (k--) {
+            q[0] = 0;
+            q[1] = 0;
+            q += 2;
+        }
+    } else {
+        memset(p, 0, need);
+    }
     return p;
+}
+
+/* (sin poner a 0; got: lo que cabe de verdad) */
+static void *alloc_raw(size_t n, size_t *got)
+{
+    size_t need = (n + 7) & ~(size_t)7;
+    uint8_t *p;
+    if (!need) need = 8;
+    if (need <= SMALL_MAX) {
+        void **fl = &small_free[need / 8];
+        if (*fl) {
+            p = *fl;
+            *fl = *(void **)p;
+        } else {
+            if ((size_t)(bump_end - bump) < need + HDR) {
+                Chunk *c = sys_alloc(CHUNK_SIZE);
+                if (!c) fatal("sin memoria");
+                mem_in_use += CHUNK_SIZE;
+                c->next = chunks;
+                chunks = c;
+                bump = (uint8_t *)(c + 1);
+                bump_end = (uint8_t *)c + CHUNK_SIZE;
+            }
+            p = bump + HDR;
+            bump += need + HDR;
+            SIZE_OF(p) = need;
+        }
+    } else {
+        size_t total = sizeof(Big) + HDR + need;
+        Big *b;
+        if (total < need) fatal("sin memoria");
+        b = sys_alloc(total);
+        if (!b) fatal("sin memoria");
+        mem_in_use += (long)total;
+        b->size = total;
+        b->next = bigs.next;
+        b->prev = &bigs;
+        bigs.next->prev = b;
+        bigs.next = b;
+        p = (uint8_t *)(b + 1) + HDR;
+        SIZE_OF(p) = need | 1;
+    }
+    *got = need;
+    return p;
+}
+
+void xfree(void *p)
+{
+    size_t s;
+    if (!p) return;
+    s = SIZE_OF(p);
+    if (s & 1) {
+        Big *b = (Big *)((uint8_t *)p - HDR) - 1;
+        b->prev->next = b->next;
+        b->next->prev = b->prev;
+        mem_in_use -= (long)b->size;
+        sys_free(b, b->size);
+    } else {
+        void **fl = &small_free[s / 8];
+        *(void **)p = *fl;
+        *fl = p;
+    }
 }
 
 void *xrealloc(void *p, size_t n)
 {
-    p = realloc(p, n ? n : 1);
-    if (!p) fatal("sin memoria");
-    return p;
+    size_t cap, got;
+    void *q;
+    if (!p) return xmalloc(n);
+    cap = SIZE_OF(p) & ~(size_t)1;
+    if (n <= cap) return p;
+    q = alloc_raw(n, &got);
+    memcpy(q, p, cap);
+    memset((uint8_t *)q + cap, 0, got - cap);
+    xfree(p);
+    return q;
+}
+
+/* (sin memcpy: el de libnix llama a CopyMem de exec, caro para unos pocos bytes) */
+static void copy_small(void *dst, const void *src, size_t n)
+{
+    uint8_t *d = dst;
+    const uint8_t *s = src;
+    if (n > 64) {
+        memcpy(d, s, n);
+        return;
+    }
+    while (n--) *d++ = *s++;
 }
 
 char *xstrndup(const char *s, size_t n)
 {
-    char *d = xmalloc(n + 1);
-    memcpy(d, s, n);
-    d[n] = 0;
+    size_t got;
+    char *d = alloc_raw(n + 1, &got);
+    copy_small(d, s, n);
+    while (n < got) d[n++] = 0;
     return d;
 }
 
@@ -78,30 +227,11 @@ void buf_long(Buf *b, uint32_t v)
 void buf_bytes(Buf *b, const void *p, size_t n)
 {
     grow(b, n);
-    memcpy(b->p + b->n, p, n);
+    copy_small(b->p + b->n, p, n);
     b->n += n;
 }
 
 /* el 68000 es big-endian */
-void put_word(uint8_t *p, int v)
-{
-    p[0] = (uint8_t)(v >> 8);
-    p[1] = (uint8_t)v;
-}
-
-void put_long(uint8_t *p, uint32_t v)
-{
-    p[0] = (uint8_t)(v >> 24);
-    p[1] = (uint8_t)(v >> 16);
-    p[2] = (uint8_t)(v >> 8);
-    p[3] = (uint8_t)v;
-}
-
-uint32_t get_long(const uint8_t *p)
-{
-    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-}
-
 /* Un error o aviso de dashc (DASHC_ERR). Los textos de dashc van en UTF-8; en el Amiga, en Latin-1 (lo que no es
    UTF-8 válido, como un nombre de fichero que ya está en Latin-1, queda como está) */
 static void err_out(const char *fmt, va_list ap)
@@ -219,4 +349,57 @@ void fatal_at(int line, int col, const char *fmt, ...)
     }
     err_printf("%s", full);
     exit(1);
+}
+
+/* Índice de nombres (dashc.h, NameIdx): para no comparar con strcmp un nombre con todas las funciones, globales,
+   símbolos del runtime... en cada búsqueda (en un A1200, la mayor parte del tiempo de compilar un programa grande).
+   Cada cubo encadena sus elementos en orden: el primero que encaja es el mismo que daba la búsqueda de antes. */
+unsigned name_hash(const char *s)
+{
+    /* los 8 primeros caracteres, el largo y los 3 últimos (sin multiplicar: en el 68000 es una llamada) */
+    const unsigned char *p = (const unsigned char *)s;
+    unsigned h = 5381;
+    while (*p && p - (const unsigned char *)s < 8) h = ((h << 5) + h) ^ *p++;
+    if (*p) {
+        while (*p) p++;
+        h = ((h << 5) + h) ^ (unsigned)(p - (const unsigned char *)s);
+        h = ((h << 5) + h) ^ p[-1];
+        h = ((h << 5) + h) ^ p[-2];
+        h = ((h << 5) + h) ^ p[-3];
+    }
+    return h ^ (h >> 11);
+}
+
+void nidx_sync(NameIdx *x, const void *base, size_t stride, size_t off, int n)
+{
+    int i;
+    if (base != x->base || n < x->n) x->n = 0;          /* otra lista (o más corta): de nuevo */
+    if (n * 2 > x->nb) {                                /* más cubos, y todo de nuevo */
+        int nb = 64;
+        while (nb < n * 2) nb *= 2;
+        xfree(x->head);
+        xfree(x->tail);
+        x->head = xmalloc(sizeof(int) * nb);
+        x->tail = xmalloc(sizeof(int) * nb);
+        x->nb = nb;
+        x->n = 0;
+    }
+    if (n > x->cap) {
+        x->cap = n * 2;
+        x->next = xrealloc(x->next, sizeof(int) * x->cap);
+    }
+    if (!x->n)
+        for (i = 0; i < x->nb; i++) x->head[i] = -1;
+    x->base = base;
+    if (x->n == n) return;                              /* (lo normal: nada nuevo) */
+    base = (const char *)base + (size_t)x->n * stride;
+    for (i = x->n; i < n; i++, base = (const char *)base + stride) {
+        const char *name = *(const char *const *)((const char *)base + off);   /* (base avanza: sin multiplicar) */
+        unsigned b = name_hash(name) & (unsigned)(x->nb - 1);
+        x->next[i] = -1;
+        if (x->head[b] < 0) x->head[b] = i;
+        else x->next[x->tail[b]] = i;
+        x->tail[b] = i;
+    }
+    x->n = n;
 }

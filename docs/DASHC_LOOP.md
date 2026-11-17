@@ -894,3 +894,71 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   Quedan: el número de versión del README y de compiler/__init__.py al publicar; la tabla de categorías de
   builtins de MANUAL_REFERENCIA suma 738 (la lista completa, 836, en BUILTINS); los límites del depurador con
   dashc (paso 4).
+- 2026-11-17, compilar más rápido en el Amiga (paso 4.3 de `docs/FORJA_LOOP.md` de Forja, lo pidió Forja; rama
+  `rapido`). Medido en FS-UAE a velocidad real (`uae_cpu_speed=real`), con `dash --tiempos` y el tiempo de la orden
+  entera (`time_ms` alrededor de `run_command`): A1200 (68020 a 14 MHz, 8 MB de Fast), A500 (68000 a 7 MHz) y, para
+  Forja, que no cabe en 8 MB, un 68030 a 14 MHz con 64 MB (algo más rápido que el A1200: grande, 2,5 s frente a 3,4).
+  Programas: hola (5 líneas), sprite_editor (546), "grande" (las 1.505 líneas de 300 funciones de las pruebas de
+  Forja) y Forja (17.000 líneas con sus módulos y los de lib/). Segundos, antes / después:
+
+  | Programa | Máquina | `--check` | Compilar |
+  |---|---|---|---|
+  | hola | A1200 | 0,21 / 0,21 | 1,05 / 0,54 |
+  | sprite_editor | A1200 | 5,0 / 2,3 | 9,1 / 3,5 |
+  | grande | A1200 | 6,2 / 3,5 | 8,1 / 3,8 |
+  | hola | A500 | 0,76 / 0,76 | 4,8 / 2,4 |
+  | sprite_editor | A500 | 21,4 / 10,0 | 38,5 / 15,4 |
+  | Forja | 68030, 64 MB | 1.299 / 102 | más de 2.100 (no lo esperé) / 155 |
+
+  El `--check` de hola es casi todo cargar dash (1,3 MB). Forja en un A1200 con 8 MB sigue sin caber ("sin
+  memoria"): necesita unos 10 MB al leer y 16 MB al compilar entero.
+  - Dónde se iba el tiempo. Perfil de 68020 en vamos (amitools, en el PC), sacando el PC cada pocos miles de ciclos
+    (aleatorios) desde Python, con la cadena de a5 para lo de arriba; vamos no lleva `OpenLocale`, así que para medir
+    dashc se enlaza con un `clock`/`localtime` vacíos. Lo que pesaba: buscar nombres recorriendo listas enteras con
+    strcmp (funciones, globales, constantes, structs, los 2.100 builtins, los 2.000 símbolos del runtime, las
+    variables locales, los métodos), `relax_branches` moviendo todo el código por cada salto acortado (cuadrático: en
+    Forja casi todo el tiempo de compilar), `def_label_at` mirando todas las etiquetas y todos los saltos en cada
+    etiqueta, los puntos fijos de keeps y nofree (una ronda tras otra por todas las funciones), leer los 4.500 hunks
+    del runtime en cada enlazado, abrir un z_stream (7 KB a 0) por cada hunk que se descomprime, un fwrite por cada
+    long del ejecutable y, sobre todo en el 68000, las llamadas a `__mulsi3` (utility.library) y a memcpy (CopyMem de
+    exec) para unos pocos bytes. El malloc de libnix (una lista de bloques que recorre en cada malloc y free) no era
+    lo que más pesaba, pero con Forja se quedaba sin memoria antes.
+  - Cambios; dashc genera los mismos bytes que antes:
+    - `util.c`: memoria propia (trozos pequeños de bloques de 64 KB con una lista libre por tamaño; los grandes con
+      AllocMem, soltados al acabar); `NameIdx`, un índice de nombres por hash que da el mismo primer elemento que el
+      recorrido de antes; `get_long`/`put_long` en línea; copias y ceros pequeños sin llamar a libnix.
+    - `gen68k.c`: índices para funciones, globales (con su visibilidad), constantes, structs, enums y métodos; los
+      builtins, partiendo en dos (la tabla viene ordenada); las variables locales por la cabeza de su nombre; los
+      puntos fijos con una cola que solo vuelve a mirar las funciones que leyeron la que cambió (mismo resultado:
+      los valores solo bajan); una función que no va en el ejecutable se genera sin la segunda pasada (solo da sus
+      errores, como con `--check`).
+    - `t68k_base.c`: `relax_branches` apunta los trozos de una vuelta y los quita todos juntos al final (si los
+      saltos no estuvieran en orden, el de antes); las etiquetas por posición y cuántos saltos van a cada una.
+    - `hunk.c`: el runtime de DRT2 trae al final "SIDX" (`runtime/rt_blob.py`): sus símbolos ordenados por nombre,
+      para buscarlos partiendo en dos sin leerlos todos; los hunks y símbolos del runtime se leen al mirarlos; las
+      referencias por hunk; los débiles en una lista; un solo z_stream; el ejecutable se escribe con un búfer.
+    - `lexer.c`, `parser.c`, `main.c`, `asm68k.c`: los tokens en su sitio (sin copiarlos), palabras clave y signos
+      por su primer carácter, números sin multiplicar; un módulo con nombres privados ya no se lee dos veces; los
+      tokens y el texto de cada módulo se sueltan tras leerlo; los ficheros se leen de una vez; `asm_extract` no
+      copia el fuente si ninguna línea empieza por `asm`; `Reloc` sin los campos de AArch64 en el 68000.
+    - `dashc.amiga` con `-fomit-frame-pointer` (un 4 % menos). Uno para 68020 (`make -C dashc amiga020`) solo gana
+      otro 3 %: no va en el paquete.
+  - Comprobado: los ejecutables de dashc/tests, examples, tests (y tests/errors) y Forja, con y sin `--check`,
+    `--memcheck`, `--debug`, `--perfil` (antes del arreglo de abajo), `--fpu`, `--cpu 68020`, `--stack`,
+    `--cabecera`, `DASHC_MAPA` y `--runtime dashrt.o`, iguales byte a byte que los del dashc de main (y los
+    mensajes); los .o de `dashc-a64` (también `--be`), iguales salvo los mensajes de abajo; en FS-UAE, el dashc del
+    Amiga nuevo hace los mismos 88 ejecutables que el de main (dashc/tests, ejemplos, Forja, `--memcheck`, `--fpu`,
+    `--cpu 68020`). Los DRT1, iguales; los DRT2, los de antes más SIDX (un dashc viejo lo ignora). run_tests 736 de
+    736, `make -C dashc test` bien (A1200 y A500), compile_all 36 de 36, portables 248.
+  - De paso: `arg` y `arg_count` no están en DashOS (su runtime lee el mensaje del Workbench y el arranque de DashOS
+    no le pasa argc/argv): la ayuda decía "sí" y no enlazaba; ahora la ayuda dice que no y `./dash --dashos` da el
+    error al compilar (`DASHOS_NOT_YET` en compiler/amiga_builtins.py; el aviso de mui_* solo con mui_*). Y la ficha
+    de `str_split` (y la de `regex_groups`) dicen `[String]`, no `[Int]` (tools/gen_builtins_doc.py y gen_ayuda.py
+    miran `list_of`).
+  - Y otro que vio Forja: con `--perfil`, el directo copiaba en línea las funciones pequeñas (también las de una
+    línea, puestas como expresión) y las que se llaman desde un solo sitio, y el informe solo enseñaba Main. Ahora
+    `can_inline` no copia con `--perfil`, como con `--debug` (por eso esos ejecutables sí cambian). Por `--gcc` no
+    pasaba: la entrada y salida del perfil van dentro de cada función aunque gcc la copie.
+    `tests/unit/test_perfil_copias.py` (con `--emu`, el informe trae cada función con sus llamadas por los dos caminos).
+  - Queda: Forja en 8 MB (bajar la memoria: un nodo son 100 bytes y hay 65.000); más velocidad pide menos pasadas
+    por el árbol (cada función se recorre una docena de veces en el análisis) o una caché por módulo.

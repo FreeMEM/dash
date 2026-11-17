@@ -191,5 +191,5 @@ void write_elf_obj(Obj *obj, const char *out)
     if (!f) fatal("no se puede escribir %s", out);
     fwrite(file.p, 1, file.n, f);
     fclose(f);
-    free(ext);
+    xfree(ext);
 }

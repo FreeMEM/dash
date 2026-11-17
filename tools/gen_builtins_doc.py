@@ -119,6 +119,13 @@ def example(path: str) -> str:
     return "\n".join(line for line in lines if not line.startswith(RUNNER_LINES)).strip("\n")
 
 
+def ret_type(b, t: dict, default=None):
+    """What a builtin returns, in Dash: a list of texts (list_of="String", like str_split) is [String], not [Int]"""
+    if b.return_type == "DashArrayLong *" and b.list_of:
+        return f"[{b.list_of}]"
+    return t["types"].get(b.return_type, default)
+
+
 def details(lang: str, group: dict, t: dict) -> list:
     """The explained functions of a group: a heading with an anchor each, the text and the related ones"""
     out = []
@@ -126,7 +133,7 @@ def details(lang: str, group: dict, t: dict) -> list:
         doc = builtins_doc.FUNCS.get(name)
         if not doc:
             continue
-        ret = t["types"].get(b.return_type)
+        ret = ret_type(b, t)
         head = f"### `{name}({', '.join(b.params)})`"
         out += [f'<a id="{name}"></a>', "", head + (f" → `{ret}`" if ret else ""), "", doc[lang].strip(), ""]
         if doc.get("see"):
@@ -182,7 +189,7 @@ def render(lang: str) -> str:
             call = f"`{name}({params})`"
             if name in builtins_doc.FUNCS:
                 call = f"[{call}](#{name})"
-            ret = t["types"].get(b.return_type, b.return_type) if b.return_type != "void" else "—"
+            ret = ret_type(b, t, b.return_type) if b.return_type != "void" else "—"
             rows.append(f"| {call} | {ret} | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
         sections += [f'<a id="{attr.lower()}"></a>', "", f"## {title}", ""]   # an anchor without accents

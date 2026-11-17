@@ -46,7 +46,16 @@ def drt2(b):
         while len(out) & 3:
             out.append(0)
     head = b"DRT2" + struct.pack(">6I", nh, ns, nr, nrel, stl, len(out))
-    return (head + bytes(table) + b[hp + nh * 28:fp_end] + struct.pack(f">{nh}I", *zl) + strs + bytes(out))
+    # al final, "SIDX": los símbolos ordenados por su nombre (y, a igual nombre, por su número): hunk.c los busca
+    # partiendo en dos, sin calcular nada de los miles de nombres en cada compilación
+    sp0 = hp + nh * 28 + nrel * 8
+
+    def sym_name(k):
+        o = L(sp0 + k * 12)
+        return strs[o:strs.index(b"\0", o)]
+    order = sorted(range(ns), key=lambda k: (sym_name(k), k))
+    sidx = b"SIDX" + struct.pack(f">{ns + 1}I", ns, *order)
+    return (head + bytes(table) + b[hp + nh * 28:fp_end] + struct.pack(f">{nh}I", *zl) + strs + bytes(out) + sidx)
 
 
 def array(name, data):

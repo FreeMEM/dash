@@ -4773,7 +4773,7 @@ end
 | [`str_replace(s, from, to)`](#str_replace) | String | Una copia con cada from cambiado por to |  |
 | [`str_contains(s, sub)`](#str_contains) | Bool | Si sub está en s ("" está en todos) |  |
 | [`str_join(list, sep)`](#str_join) | String | Los textos de una lista [String] uno tras otro, con sep entre cada dos; "" con la lista vacía (lo contrario de str_split) |  |
-| [`str_split(s, sep)`](#str_split) | [Int] | Los trozos de s entre cada sep, en una [String] nueva; con sep "" o si no está, [s] |  |
+| [`str_split(s, sep)`](#str_split) | [String] | Los trozos de s entre cada sep, en una [String] nueva; con sep "" o si no está, [s] |  |
 | [`file_read_text(filename)`](#file_read_text) | String | El fichero entero como texto (los bytes 0 pasan a espacios); nil si no se puede leer |  |
 | [`file_write_text(filename, text)`](#file_write_text) | Bool | Escribe el texto como el fichero entero; true si se escribió todo |  |
 | [`str_from_buffer(buffer, offset, length)`](#str_from_buffer) | String | Un texto con length bytes de un búfer desde offset (los bytes 0 pasan a espacios) |  |
@@ -4937,7 +4937,7 @@ Ver también: [`str_split`](#str_split).
 
 <a id="str_split"></a>
 
-### `str_split(s, sep)` → `[Int]`
+### `str_split(s, sep)` → `[String]`
 
 - `s`: el texto.
 - `sep`: el separador.
@@ -7680,7 +7680,7 @@ dice por qué. La sintaxis entera, en el manual (sección 5).
 | [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | La posición en bytes donde empieza lo primero que encaja desde el byte from; -1 si no hay (o el patrón está mal); regex_length da su largo |  |
 | [`regex_length()`](#regex_length) | Int | El largo en bytes de lo último que encajó con regex_find o regex_match (0 si nada) |  |
 | [`regex_group(n)`](#regex_group) | String | El texto del grupo n de lo último que encajó (0: todo lo que encajó); "" si no participó |  |
-| [`regex_groups()`](#regex_groups) | [Int] | Los textos de los grupos de lo último que encajó, del 1 a regex_group_count(), en un [String] nuevo |  |
+| [`regex_groups()`](#regex_groups) | [String] | Los textos de los grupos de lo último que encajó, del 1 a regex_group_count(), en un [String] nuevo |  |
 | [`regex_group_count()`](#regex_group_count) | Int | Cuántos grupos que capturan tiene el último patrón ((?: ) no cuenta) |  |
 | [`regex_group_start(n)`](#regex_group_start) | Int | El byte donde empieza el grupo n de lo último que encajó; -1 si no participó |  |
 | [`regex_group_length(n)`](#regex_group_length) | Int | El largo en bytes del grupo n de lo último que encajó (0 si no participó) |  |
@@ -7733,7 +7733,7 @@ Ver también: [`regex_groups`](#regex_groups), [`regex_group_start`](#regex_grou
 
 <a id="regex_groups"></a>
 
-### `regex_groups()` → `[Int]`
+### `regex_groups()` → `[String]`
 
 Devuelve un `[String]` nuevo con el texto de los grupos 1 a `regex_group_count()` de lo último que encajó, como
 `groups()` de Python; vacía si nada encajó. Los anidados salen en su sitio por el orden de su `(`, y

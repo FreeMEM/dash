@@ -84,31 +84,43 @@ static const char *texto_de(const char *path)
     return path;
 }
 
-char *read_text(const char *path)
+/* el fichero entero, con un 0 detrás: de una vez si se sabe su tamaño (en el Amiga, leerlo a trozos de 4 KB
+   copiando lo leído cada vez que crecía costaba con un fichero grande, como dash_mc.drt) */
+static uint8_t *slurp(FILE *f, size_t *len)
 {
-    FILE *f = fopen(texto_de(path), "rb");
     Buf b = {0};
     char tmp[4096];
     size_t n;
-    if (!f) return NULL;
-    while ((n = fread(tmp, 1, sizeof tmp, f)) > 0) buf_bytes(&b, tmp, n);
+    long size = -1;
+    if (!fseek(f, 0, SEEK_END)) size = ftell(f);
+    if (size >= 0 && !fseek(f, 0, SEEK_SET)) {
+        b.p = xmalloc((size_t)size + 1);
+        b.cap = (size_t)size + 1;
+        while (b.n < (size_t)size && (n = fread(b.p + b.n, 1, (size_t)size - b.n, f)) > 0) b.n += n;
+    } else {
+        rewind(f);
+        b.n = 0;
+    }
+    while ((n = fread(tmp, 1, sizeof tmp, f)) > 0) buf_bytes(&b, tmp, n);   /* (si creció, o sin tamaño) */
     fclose(f);
+    *len = b.n;
     buf_byte(&b, 0);
-    return (char *)b.p;
+    return b.p;
+}
+
+char *read_text(const char *path)
+{
+    FILE *f = fopen(texto_de(path), "rb");
+    size_t len;
+    if (!f) return NULL;
+    return (char *)slurp(f, &len);
 }
 
 static uint8_t *read_file(const char *path, size_t *len)
 {
     FILE *f = fopen(path, "rb");
-    Buf b = {0};
-    char tmp[4096];
-    size_t n;
     if (!f) fatal("no se puede leer %s", path);
-    while ((n = fread(tmp, 1, sizeof tmp, f)) > 0) buf_bytes(&b, tmp, n);
-    fclose(f);
-    *len = b.n;
-    buf_byte(&b, 0);
-    return b.p;
+    return slurp(f, len);
 }
 
 const uint8_t *rt_blob;
@@ -128,7 +140,7 @@ static void usage(void)
             "  --texto r=f    el texto de r (un módulo o el programa) se lee de f: lo que aún no se ha guardado\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
-            "  --tiempos      lo que lleva cada fase\n");
+            "  --tiempos      lo que lleva cada fase (y la memoria en uso)\n");
     exit(1);
 }
 
@@ -186,6 +198,7 @@ static void find_dash_home(const char *argv0)
 
 int main(int argc, char **argv)
 {
+    mem_init();
     find_dash_home(argv[0]);
     const char *in = NULL, *out = NULL, *rt_path = NULL, *header = NULL;
     const uint8_t *rt = NULL;
@@ -298,7 +311,11 @@ int main(int argc, char **argv)
     parse_module_ok = header && !out;
     {
         char *sin_asm = asm_extract((const char *)src);   /* los bloques asm ... end (asm68k.c) */
-        prog = parse(lex(sin_asm ? sin_asm : (const char *)src));
+        Token *toks = lex(sin_asm ? sin_asm : (const char *)src);
+        prog = parse(toks);
+        xfree(toks);                                   /* (el árbol no apunta a los tokens, ni al texto) */
+        xfree(sin_asm);
+        xfree(src);
     }
     if (cli_stack > prog->stack_min) prog->stack_min = cli_stack;   /* --stack N: como @stack N */
     if (header) {

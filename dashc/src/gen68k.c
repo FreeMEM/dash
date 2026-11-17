@@ -20,6 +20,10 @@
 #define MIN_USES 3   /* menos usos no pagan guardar y recuperar el registro */
 
 static Program *prog;
+/* (fixpoint: lo que lee cada evaluación) */
+static int fix_eval;
+static struct { int *v; int n, cap; } fix_reads;
+#define FIX_READ(j) do { if (fix_eval) VEC_PUSH(fix_reads, (j)); } while (0)
 static Obj *obj;
 int memcheck;
 int elf_be;
@@ -134,10 +138,81 @@ static int uses_gadgets, needs_gt, gadget_keys;
 static int needs_area;   /* gfx_circle_fill...: la ventana prepara el relleno de áreas al abrirse */
 static int uses_mui, uses_tls;   /* la pila: 32 KB con MUI, 64 KB con AmiSSL (como ./dash) */
 
+/* los índices de nombres de las listas del programa y de los builtins (NameIdx, util.c): buscar un nombre no recorre
+   toda la lista (lo que más tiempo llevaba en un A1200 con un programa grande) */
+static NameIdx idx_funcs, idx_globals, idx_consts, idx_structs, idx_enums, idx_builtins;
+
+static int first_func(const char *name)
+{
+    int i;
+    NIDX_SYNC(&idx_funcs, prog->funcs, name);
+    NIDX_FOR(&idx_funcs, name, i)
+        if (!strcmp(prog->funcs.v[i].name, name)) return i;
+    return -1;
+}
+
+/* la primera global con ese nombre (h: su name_hash); visible: solo las que se ven desde aquí (global_visible) */
+static int global_visible(int i);
+static int first_global_h(const char *name, unsigned h, int visible)
+{
+    int i;
+    NIDX_SYNC(&idx_globals, prog->globals, name);
+    NIDX_FOR_H(&idx_globals, h, i)
+        if ((!visible || global_visible(i)) && !strcmp(prog->globals.v[i].name, name)) return i;
+    return -1;
+}
+static int first_global(const char *name, int visible) { return first_global_h(name, name_hash(name), visible); }
+
+static int first_const_h(const char *name, unsigned h)
+{
+    int i;
+    NIDX_SYNC(&idx_consts, prog->consts, name);
+    NIDX_FOR_H(&idx_consts, h, i)
+        if (!strcmp(prog->consts.v[i].name, name)) return i;
+    return -1;
+}
+static int first_const(const char *name) { return first_const_h(name, name_hash(name)); }
+
+static int first_enum(const char *name)
+{
+    int i;
+    NIDX_SYNC(&idx_enums, prog->enums, name);
+    NIDX_FOR(&idx_enums, name, i)
+        if (!strcmp(prog->enums.v[i].name, name)) return i;
+    return -1;
+}
+
+/* la tabla de builtins viene ordenada por nombre (runtime/gen_builtins_tab.py): se busca partiendo en dos (el
+   primero de los iguales); si no lo estuviera, con un índice */
+static int find_builtin(const char *name)
+{
+    static int sorted = -1;
+    int i;
+    if (sorted < 0) {
+        sorted = 1;
+        for (i = 1; i < builtin_count; i++)
+            if (strcmp(builtin_info[i - 1].name, builtin_info[i].name) > 0) sorted = 0;
+    }
+    if (sorted) {
+        int lo = 0, hi = builtin_count;
+        while (lo < hi) {
+            int mid = (lo + hi) / 2;
+            if (strcmp(builtin_info[mid].name, name) < 0) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo < builtin_count && !strcmp(builtin_info[lo].name, name) ? lo : -1;
+    }
+    if (!idx_builtins.n) nidx_sync(&idx_builtins, builtin_info, sizeof(BuiltinInfo), offsetof(BuiltinInfo, name), builtin_count);
+    NIDX_FOR(&idx_builtins, name, i)
+        if (!strcmp(builtin_info[i].name, name)) return i;
+    return -1;
+}
+
 static int find_struct(const char *name)
 {
     int i;
-    for (i = 0; i < prog->structs.n; i++)
+    NIDX_SYNC(&idx_structs, prog->structs, name);
+    NIDX_FOR(&idx_structs, name, i)
         if (!strcmp(prog->structs.v[i].name, name)) return i;
     return -1;
 }
@@ -180,11 +255,57 @@ static int global_visible(int i)
     return prog->globals.v[i].file != 0 || cur_file_g == 0;
 }
 
+/* Las variables locales por la cabeza de su nombre (loc_head: la más nueva de cada cubo; loc_next: la anterior del
+   mismo cubo): find_local las miraba todas en cada nombre que se busca, también los de globales y funciones. Las que
+   se añaden entran al buscar (locals_sync); las que se quitan, con locals_cut (todo locals.n más pequeño pasa por ahí). */
+#define LOC_BUCKETS 256
+static int loc_head[LOC_BUCKETS], loc_n, loc_ready;
+static struct { int *v; int n, cap; } loc_next;
+
+static unsigned loc_hash(const char *s)
+{
+    unsigned h = (unsigned char)s[0];
+    if (s[0]) {
+        h = (h << 3) ^ (unsigned char)s[1];
+        if (s[1]) h = (h << 2) ^ (unsigned char)s[2];
+    }
+    return (h ^ (h >> 8)) & (LOC_BUCKETS - 1);
+}
+
+static void locals_cut(int n)                      /* locals.n = n */
+{
+    while (loc_n > n) {
+        loc_n--;
+        loc_head[loc_hash(locals.v[loc_n].name)] = loc_next.v[loc_n];   /* (era la cabeza de su cubo) */
+    }
+    locals.n = n;
+}
+
+static void locals_sync(void)
+{
+    if (!loc_ready) {
+        int b;
+        for (b = 0; b < LOC_BUCKETS; b++) loc_head[b] = -1;
+        loc_ready = 1;
+    }
+    while (loc_n < locals.n) {
+        unsigned b = loc_hash(locals.v[loc_n].name);
+        if (loc_n >= loc_next.cap) {
+            loc_next.cap = loc_next.cap ? loc_next.cap * 2 : 64;
+            loc_next.v = xrealloc(loc_next.v, sizeof(int) * loc_next.cap);
+        }
+        loc_next.v[loc_n] = loc_head[b];
+        loc_head[b] = loc_n++;
+    }
+}
+
 static Local *find_local(const char *name)
 {
     int i;
-    for (i = locals.n - 1; i >= 0; i--)
-        if (locals.v[i].frame == cur_frame && !strcmp(locals.v[i].name, name)) return &locals.v[i];
+    if (loc_n != locals.n || !loc_ready) locals_sync();
+    for (i = loc_head[loc_hash(name)]; i >= 0; i = loc_next.v[i])
+        if (locals.v[i].frame == cur_frame && locals.v[i].name[0] == name[0] && !strcmp(locals.v[i].name, name))
+            return &locals.v[i];
     return NULL;
 }
 
@@ -221,6 +342,7 @@ static Var lookup(const char *name)
     Var r = {V_NONE, 0, 0, TY_INT, 0};
     Local *lc = find_local(name);
     int i;
+    unsigned h;
     if (lc && lc->slot < 0) {
         r.kind = V_CONST;
         r.val = lc->val;
@@ -231,15 +353,14 @@ static Var lookup(const char *name)
         use_slot(lc->slot);
         return slot_var(lc->slot, lc->type);
     }
-    for (i = 0; i < prog->globals.n; i++)
-        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) {
-            r.kind = V_GLOBAL;
-            r.off = global_off(i);
-            r.type = global_type[i];
-            return r;
-        }
-    for (i = 0; i < prog->consts.n; i++)
-        if (!strcmp(prog->consts.v[i].name, name)) {
+    h = name_hash(name);
+    if ((i = first_global_h(name, h, 1)) >= 0) {
+        r.kind = V_GLOBAL;
+        r.off = global_off(i);
+        r.type = global_type[i];
+        return r;
+    }
+    if ((i = first_const_h(name, h)) >= 0) {
             Const *c = &prog->consts.v[i];
             r.kind = V_CONST;
             if (!fold(c->value, &r.val)) fatal_at(c->line, c->col, "la constante %s no es un número fijo", c->name);
@@ -345,7 +466,11 @@ static void leave_scope(void)
 {
     free_owned(depth, 0);
     depth--;
-    while (locals.n && locals.v[locals.n - 1].depth > depth) locals.n--;
+    {
+        int n = locals.n;
+        while (n && locals.v[n - 1].depth > depth) n--;
+        locals_cut(n);
+    }
 }
 
 static void enter_loop(void)
@@ -366,18 +491,15 @@ static void leave_loop(void)
     if (loop_weight > 1) loop_weight /= 8;
     for (i = 0; i < lf->slots.n; i++)
         if (slot_end.v[lf->slots.v[i]] < end) slot_end.v[lf->slots.v[i]] = end;
-    free(lf->slots.v);
+    xfree(lf->slots.v);
 }
 
 static Func *find_func(const char *name, int *idx)
 {
-    int i;
-    for (i = 0; i < prog->funcs.n; i++)
-        if (!strcmp(prog->funcs.v[i].name, name)) {
-            if (idx) *idx = i;
-            return &prog->funcs.v[i];
-        }
-    return NULL;
+    int i = first_func(name);
+    if (i < 0) return NULL;
+    if (idx) *idx = i;
+    return &prog->funcs.v[i];
 }
 
 /* ---- valores conocidos al compilar ---- */
@@ -563,18 +685,18 @@ static int fold(Node *n, long *v)
             *v = lc->val;
             return 1;
         }
-        for (i = 0; i < prog->globals.n; i++)
-            if (global_visible(i) && !strcmp(prog->globals.v[i].name, n->name)) return 0;
-        for (i = 0; i < prog->consts.n; i++)
-            if (!strcmp(prog->consts.v[i].name, n->name)) return fold(prog->consts.v[i].value, v);
+        {
+            unsigned h = name_hash(n->name);
+            if (first_global_h(n->name, h, 1) >= 0) return 0;
+            if ((i = first_const_h(n->name, h)) >= 0) return fold(prog->consts.v[i].value, v);
+        }
         return 0;
     }
     case E_FIELD:
         /* Enum.MIEMBRO */
         if (n->a->kind == E_VAR && !find_local(n->a->name)) {
-            int i, j;
-            for (i = 0; i < prog->enums.n; i++)
-                if (!strcmp(prog->enums.v[i].name, n->a->name))
+            int i = first_enum(n->a->name), j;
+            if (i >= 0)
                     for (j = 0; j < prog->enums.v[i].names.n; j++)
                         if (!strcmp(prog->enums.v[i].names.v[j], n->name)) {
                             *v = prog->enums.v[i].vals.v[j];
@@ -720,17 +842,17 @@ static int func_ret(int idx);
 static int var_type(const char *name)
 {
     int i;
+    unsigned h;
     if (tenv_on) {
         for (i = tenv.n - 1; i >= tenv_base; i--)
-            if (!strcmp(tenv.v[i].name, name)) return tenv.v[i].type;
+            if (tenv.v[i].name[0] == name[0] && !strcmp(tenv.v[i].name, name)) return tenv.v[i].type;
     } else {
         Local *lc = find_local(name);
         if (lc) return lc->type;
     }
-    for (i = 0; i < prog->globals.n; i++)
-        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) return global_type[i];
-    for (i = 0; i < prog->consts.n; i++)
-        if (!strcmp(prog->consts.v[i].name, name)) {
+    h = name_hash(name);
+    if ((i = first_global_h(name, h, 1)) >= 0) return global_type[i];
+    if ((i = first_const_h(name, h)) >= 0) {
             Node *v = prog->consts.v[i].value;
             return v->kind == E_BOOL ? TY_BOOL : v->kind == E_STR ? TY_STR : TY_INT;
         }
@@ -768,8 +890,7 @@ static int expr_type(Node *n)
             !strcmp(n->name, "fx_cos")) return TY_FIXED;
         if (!strcmp(n->name, "Int")) return TY_INT;
         if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
-        for (idx = 0; idx < builtin_count; idx++)
-            if (!strcmp(builtin_info[idx].name, n->name)) {
+        if ((idx = find_builtin(n->name)) >= 0) {
                 static const int ret[] = {TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_ARR + TY_STR, TY_DOUBLE};
                 return ret[builtin_info[idx].ret];
             }
@@ -1042,7 +1163,7 @@ static void infer_params(Program *p)
         p->funcs.v[i].ret = rets[i];
         fret_state[i] = 0;
     }
-    free(rets);
+    xfree(rets);
 }
 
 /* ¿da dbl_value(n) una caja constante (un literal o un número fijo, ya convertido al compilar)? */
@@ -1265,14 +1386,14 @@ static void gen_interp(Node *n)
         VEC_PUSH(rest.args, &head);
         for (i = INTERP_TANDA; i < np; i++) VEC_PUSH(rest.args, n->args.v[i]);
         gen_interp(&rest);
-        free(head.args.v);
-        free(rest.args.v);
+        xfree(head.args.v);
+        xfree(rest.args.v);
         return;
     }
     str = xmalloc(np + 1);
     for (i = 0; i < np; i++) str[i] = 1;
     args_to_stack(n->args.v, np, str);
-    free(str);
+    xfree(str);
     push_array(0, np, 0);                              /* la dirección de los trozos */
     push_word(np);
     rt_call("_dl_str_join", 2, 1);
@@ -1302,7 +1423,7 @@ static void gen_concat(Node *n)
             join.args.n--;
         }
         gen_interp(&join);
-        free(join.args.v);
+        xfree(join.args.v);
         return;
     }
     a[0] = n->a;
@@ -1515,7 +1636,7 @@ static void gen_list(Node *n, int fresh)
         char *conv = xmalloc(np + 1);
         memset(conv, et == TY_DOUBLE ? 3 : et == TY_FLOAT ? 2 : et == TY_FIXED ? 4 : 0, np);
         args_to_stack(n->args.v, np, conv);
-        free(conv);
+        xfree(conv);
         push_array(0, np, 0);
         push_word(np);
         rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
@@ -1642,7 +1763,7 @@ static int gen_new(Node *n, int si, int fresh)
         list_hint(vals[i], st->fields.v[i].type);
     }
     if (nf) args_to_stack(vals, nf, conv);
-    free(conv);
+    xfree(conv);
     push_label(desc_label[si]);                        /* el descriptor */
     push_word(struct_bytes(nf));                       /* el tamaño */
     rt_call(fresh ? "_dl_rc_new_obj" : "_dl_rc_alloc_obj", 2, !fresh);
@@ -1668,7 +1789,7 @@ static int gen_new(Node *n, int si, int fresh)
     }
     obj_end();
     pop_args(nf);
-    free(vals);
+    xfree(vals);
     return TY_STRUCT + si;
 }
 
@@ -1772,7 +1893,7 @@ static int gen_method(Node *n, int t)
         for (i = 0; i < n->args.n; i++) VEC_PUSH(call.args, n->args.v[i]);
     }
     r = gen_expr(&call);
-    free(call.args.v);
+    xfree(call.args.v);
     return r;
 }
 
@@ -1957,8 +2078,8 @@ static int gen_dict(Node *n)
     push_word(kind);
     rt_call(ikeys ? "_dl_dict_fromi" : "_dl_dict_from", 4, 1);
     pop_args(2 * np);
-    free(keys);
-    free(vals);
+    xfree(keys);
+    xfree(vals);
     return t;
 }
 
@@ -2455,7 +2576,7 @@ static int gen_compare(Node *n)
         if (ta == TY_FIXED) c.b = &wrap;
         else c.a = &wrap;
         r = gen_compare(&c);
-        free(wrap.args.v);
+        xfree(wrap.args.v);
         return r;
     }
     /* Double: dl_d_cmp da -1, 0, 1 o 2 (nan: solo != es cierto, como en C) */
@@ -2616,13 +2737,13 @@ static int gen_dash_builtin(Node *n)
 {
     int b, i, np;
     char *sym;
-    for (b = 0; b < builtin_count; b++)
-        if (!strcmp(builtin_info[b].name, n->name)) break;
-    if (b == builtin_count) fatal_node(n, "la función %s no existe", n->name);
+    if ((b = find_builtin(n->name)) < 0) fatal_node(n, "la función %s no existe", n->name);
 #ifndef DASH_A64
     if (builtin_info[b].dashos == 1) fatal_node(n, "%s es solo de DashOS (./dash --dashos)", n->name);
 #else
-    if (builtin_info[b].dashos == 2) fatal_node(n, "%s aún no está en DashOS (de las ventanas mui_*, solo algunas)", n->name);
+    if (builtin_info[b].dashos == 2)
+        fatal_node(n, "%s aún no está en DashOS%s", n->name,
+                   strncmp(n->name, "mui_", 4) ? "" : " (de las ventanas mui_*, solo algunas)");
 #endif
     sym = xmalloc(strlen(n->name) + 5);
     strcpy(sym, "_db_");
@@ -2797,7 +2918,7 @@ static int gen_builtin(Node *n)
             if (f->params.n != 1) fatal_node(n, "task_start: %s tiene que recibir un Int", f->name);
             if ((why = task_impure_func(idx, visited, &at)))
                 fatal_node(at, "task_start: %s corre a la vez que el programa y no puede %s", f->name, why);
-            free(visited);
+            xfree(visited);
         }
     }
     if (!strcmp(n->name, "str_code") && n->args.n == 2 && expr_type(n->args.v[0]) == TY_STR) {
@@ -2886,7 +3007,8 @@ static int can_inline(int idx)
 {
     int i;
     static int sin_copiar = -1;
-    if (debug) return 0;                               /* --debug: cada función en su sitio */
+    if (debug || profile) return 0;                    /* --debug y --perfil: cada función en su sitio (con --perfil,
+                                                          copiada en línea no salía en el informe; lo vio Forja) */
     if (sin_copiar < 0) sin_copiar = getenv("DASHC_SIN_COPIAR") != NULL;   /* (para buscar fallos: sin copiar en línea) */
     if (sin_copiar) return 0;
     {
@@ -3090,7 +3212,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     }
     cur_frame = frame;
     for (i = 0; i < n->args.n; i++) VEC_PUSH(locals, binds[i]);
-    free(binds);
+    xfree(binds);
     ret_label = new_label();
     ret_branch = branch_to;
     ret_when = when_true;
@@ -3115,7 +3237,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     loop_base = saved_base;
     cur_frame = saved_frame;
     depth--;                                           /* sin leave_scope: sus textos ya se liberaron */
-    while (locals.n && locals.v[locals.n - 1].depth > depth) locals.n--;
+    {
+        int n = locals.n;
+        while (n && locals.v[n - 1].depth > depth) n--;
+        locals_cut(n);
+    }
     return f->ret;
 }
 
@@ -3212,15 +3338,15 @@ static int gen_asm(Node *n)
         for (i = 0; i + 1 < rl.n; i += 2) {
             Fixup f;
             int lab = new_label();
-            labels.v[lab] = (long)(base + rl.v[i + 1]);
+            label_put(lab, (long)(base + rl.v[i + 1]));
             f.at = base + rl.v[i];
             f.label = lab;
             f.abs = 1;
             f.size = 2;
-            VEC_PUSH(fixups, f);
+            FIXUP_PUSH(f);
             add_reloc(f.at, HK_CODE, NULL);
         }
-        free(rl.v);
+        xfree(rl.v);
         for (i = 0; i < m; i++) {
             int r = bk->out_reg[i];
             w(0x2F40 | (r < 8 ? r : 8 | (r & 7)));     /* move.l rN,off(sp) */
@@ -3560,7 +3686,7 @@ static int gen_expr(Node *n)
                 if (fa) c.b = &wrap;
                 else c.a = &wrap;
                 gen_binary(&c);
-                free(wrap.args.v);
+                xfree(wrap.args.v);
                 return TY_FIXED;
             }
         }
@@ -4230,12 +4356,8 @@ static NodeList *cur_body(void)
 
 static int lookup_global(const char *name)
 {
-    int i;
-    for (i = 0; i < prog->globals.n; i++)
-        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) return 1;
-    for (i = 0; i < prog->consts.n; i++)
-        if (!strcmp(prog->consts.v[i].name, name)) return 1;
-    return 0;
+    unsigned h = name_hash(name);
+    return first_global_h(name, h, 1) >= 0 || first_const_h(name, h) >= 0;
 }
 
 /* ¿se sabe que la condición c se cumple al llegar al bucle? (v op k, con el rango de v) */
@@ -4721,26 +4843,94 @@ static int passes_func(Node *e)
 static int call_keeps(Node *e)
 {
     int idx, b;
-    if (find_func(e->name, &idx)) return keeps_fn[idx];
+    if (find_func(e->name, &idx)) {
+        FIX_READ(idx);
+        return keeps_fn[idx];
+    }
     if (find_struct(e->name) >= 0) return 1;           /* un constructor: un objeto nuevo */
     if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;   /* pueden llamar a Dash */
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
-    for (b = 0; b < builtin_count; b++)
-        if (!strcmp(builtin_info[b].name, e->name)) return 1;
+    if ((b = find_builtin(e->name)) >= 0) return 1;
     return 0;                                          /* una Func, o algo que no se sabe */
+}
+
+/* Los puntos fijos de keeps_fn y de nofree (cada función, ¿conserva / no libera?): con una ronda tras otra por todas
+   las funciones hasta que nada cambiaba, un programa grande daba muchas rondas. Ahora (fixpoint) se evalúa cada una y
+   se apunta de qué otras leyó el valor (FIX_READ); cuando una pasa a 0 se vuelven a mirar solo las que la leyeron. El
+   resultado es el mismo: los valores solo bajan y cada evaluación depende solo de lo que lee. */
+
+static void fixpoint(char *val, int (*eval)(int i))
+{
+    int n = prog->funcs.n, i, k, *queue, qh = 0, qt = 0;
+    char *inq = xmalloc(n + 1);
+    struct { int *v; int n, cap; } *rdeps = xmalloc(sizeof(*rdeps) * (n + 1));
+    queue = xmalloc(sizeof(int) * (n + 1));
+    for (i = 0; i < n; i++)                            /* (una cola circular: cada función, como mucho una vez) */
+        if (val[i]) {
+            queue[qt++] = i;
+            inq[i] = 1;
+        }
+    qt %= n + 1;
+    while (qh != qt) {
+        int r;
+        i = queue[qh];
+        qh = (qh + 1) % (n + 1);
+        inq[i] = 0;
+        if (!val[i]) continue;
+        fix_reads.n = 0;
+        fix_eval = 1;
+        r = eval(i);
+        fix_eval = 0;
+        for (k = 0; k < fix_reads.n; k++) VEC_PUSH(rdeps[fix_reads.v[k]], i);
+        if (!r) {
+            val[i] = 0;
+            for (k = 0; k < rdeps[i].n; k++) {
+                int j = rdeps[i].v[k];
+                if (val[j] && !inq[j]) {
+                    inq[j] = 1;
+                    queue[qt] = j;
+                    qt = (qt + 1) % (n + 1);
+                }
+            }
+        }
+    }
+    for (i = 0; i < n; i++) xfree(rdeps[i].v);
+    xfree(rdeps);
+    xfree(queue);
+    xfree(inq);
+}
+
+/* los métodos por su nombre sin el struct ("Struct.name" -> "name"; "" las funciones sin punto): METHODS_FOR
+   recorre, en orden, las funciones cuyo nombre de método puede ser ese (hay que comparar method_suffix) */
+static struct { const char **v; int n, cap; } method_suffix;
+static NameIdx idx_methods;
+
+static void methods_sync(void)
+{
+    if (method_suffix.n != prog->funcs.n) {
+        int i;
+        method_suffix.n = 0;
+        for (i = 0; i < prog->funcs.n; i++) {
+            const char *dot = strchr(prog->funcs.v[i].name, '.');
+            VEC_PUSH(method_suffix, dot ? dot + 1 : "");
+        }
+    }
+    if (idx_methods.base != (const void *)method_suffix.v || idx_methods.n != method_suffix.n)
+        nidx_sync(&idx_methods, method_suffix.v, sizeof(char *), 0, method_suffix.n);
 }
 
 /* ¿un método de ese nombre que no conserva? (sin tipos: todos los "Struct.name") */
 static int method_keeps(const char *name)
 {
     int i;
-    size_t ln = strlen(name);
-    for (i = 0; i < prog->funcs.n; i++) {
-        const char *fn = prog->funcs.v[i].name, *dot = strchr(fn, '.');
-        if (dot && strlen(dot + 1) == ln && !strcmp(dot + 1, name) && !keeps_fn[i]) return 0;
-    }
+    methods_sync();
+    NIDX_FOR(&idx_methods, name, i)
+        if (!strcmp(method_suffix.v[i], name)) {
+            FIX_READ(i);
+            if (!keeps_fn[i]) return 0;
+        }
     return 1;
 }
 
@@ -4779,19 +4969,14 @@ static int node_keeps(Node *e, int any_index)
            list_keeps(&e->args, any_index) && list_keeps(&e->body, any_index) && list_keeps(&e->els, any_index);
 }
 
+static int keeps_eval(int i) { return list_keeps(&prog->funcs.v[i].body, 1); }
+
 static void compute_keeps(void)
 {
-    int i, changed = 1;
+    int i;
     keeps_fn = xmalloc(prog->funcs.n + 1);
     for (i = 0; i < prog->funcs.n; i++) keeps_fn[i] = !prog->funcs.v[i].native;
-    while (changed) {
-        changed = 0;
-        for (i = 0; i < prog->funcs.n; i++)
-            if (keeps_fn[i] && !list_keeps(&prog->funcs.v[i].body, 1)) {
-                keeps_fn[i] = 0;
-                changed = 1;
-            }
-    }
+    fixpoint(keeps_fn, keeps_eval);
 }
 
 /* ---- variables que toman prestado su valor, sin copia ni referencia propia (como ./dash: D66 los textos, Lorraine
@@ -4850,7 +5035,7 @@ static int in_tenv(const char *name)
 {
     int i;
     for (i = tenv.n - 1; i >= tenv_base; i--)
-        if (!strcmp(tenv.v[i].name, name)) return 1;
+        if (tenv.v[i].name[0] == name[0] && !strcmp(tenv.v[i].name, name)) return 1;
     return 0;
 }
 
@@ -4968,14 +5153,16 @@ static void collect_lent(Node *st)
 static int call_nofree(Node *e, char *nf)
 {
     int idx, b;
-    if (find_func(e->name, &idx)) return nf[idx];
+    if (find_func(e->name, &idx)) {
+        FIX_READ(idx);
+        return nf[idx];
+    }
     if (find_struct(e->name) >= 0) return 1;
     if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
-    for (b = 0; b < builtin_count; b++)
-        if (!strcmp(builtin_info[b].name, e->name)) return 1;
+    if ((b = find_builtin(e->name)) >= 0) return 1;
     return 0;
 }
 
@@ -5000,12 +5187,13 @@ static int node_nofree(Node *e, char *nf)
         break;
     case E_MCALL: {
         int i;
-        size_t ln = strlen(e->name);
         if (!strcmp(e->name, "pop") || !strcmp(e->name, "remove") || !strcmp(e->name, "clear")) return 0;
-        for (i = 0; i < prog->funcs.n; i++) {
-            const char *dot = strchr(prog->funcs.v[i].name, '.');
-            if (dot && strlen(dot + 1) == ln && !strcmp(dot + 1, e->name) && !nf[i]) return 0;
-        }
+        methods_sync();
+        NIDX_FOR(&idx_methods, e->name, i)
+            if (!strcmp(method_suffix.v[i], e->name)) {
+                FIX_READ(i);
+                if (!nf[i]) return 0;
+            }
         break;
     }
     case E_CALL:
@@ -5016,18 +5204,15 @@ static int node_nofree(Node *e, char *nf)
            list_nofree(&e->body, nf) && list_nofree(&e->els, nf);
 }
 
+static char *nofree_cur;
+static int nofree_eval(int i) { return list_nofree(&prog->funcs.v[i].body, nofree_cur); }
+
 static void nofree_fixpoint(char *nf, int bit)
 {
-    int i, changed = 1;
+    int i;
     for (i = 0; i < prog->funcs.n; i++) nf[i] = !prog->funcs.v[i].native && !(lent_info[i].frees & bit);
-    while (changed) {
-        changed = 0;
-        for (i = 0; i < prog->funcs.n; i++)
-            if (nf[i] && !list_nofree(&prog->funcs.v[i].body, nf)) {
-                nf[i] = 0;
-                changed = 1;
-            }
-    }
+    nofree_cur = nf;
+    fixpoint(nf, nofree_eval);
 }
 
 static void lent_end(void)
@@ -5948,7 +6133,7 @@ static void gen_stmt_check(Node *n)
     if (setjmp(jb)) {
         check_jmp = prev;
         sp_depth = s_sp;
-        locals.n = s_locals;
+        locals_cut(s_locals);
         depth = s_depth;
         loops.n = s_loops;
         inl_stack.n = s_inl;
@@ -6022,7 +6207,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 
     n_plen = 0;
     plen_depth = -1;
-    locals.n = 0;
+    locals_cut(0);
     depth = 0;
     check_poisoned.n = 0;
     nframe = 0;
@@ -6205,6 +6390,7 @@ static void undo(Mark *m)
     obj->data.n = m->data_n;
     while (n_dash_lits && dash_lits[n_dash_lits - 1].off >= m->data_n) n_dash_lits--;   /* (sus datos ya no están) */
     obj->relocs.n = m->relocs_n;
+    labels_undo(m->labels_n, m->fixups_n);
     fixups.n = m->fixups_n;
     labels.n = m->labels_n;
     dbg_lines.n = m->dlines_n;
@@ -6213,6 +6399,8 @@ static void undo(Mark *m)
     brk_sites.n = m->brk_n;
     sink_off = m->sink;
 }
+
+static int gen_discarding;   /* gen_program: una función que no va en el ejecutable (solo sus errores) */
 
 static void gen_function(int label, Func *f, NodeList *body)
 {
@@ -6255,7 +6443,8 @@ static void gen_function(int label, Func *f, NodeList *body)
         if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
     }
     if (debug || !CAN_FRAMELESS) frameless = 0;
-    if (check_mode) return;   /* (--check: la segunda pasada no da otros errores) */
+    /* (--check: la segunda pasada no da otros errores; ni para una función que no va y se genera solo por ellos) */
+    if (check_mode || gen_discarding) return;
     pass = 2;
     gen_function_pass(label, f, body);
 }
@@ -6404,9 +6593,8 @@ static int resolve_type(int t, int line, int col)
     if (t >= TY_NAMED && !strncmp(type_names.v[t - TY_NAMED], "Ptr ", 4))
         return aptr_of(type_names.v[t - TY_NAMED] + 4, line, col) + d * TY_ARR;
     if (t >= TY_NAMED) {
-        int si = find_struct(type_names.v[t - TY_NAMED]), i;
-        for (i = 0; si < 0 && i < prog->enums.n; i++)
-            if (!strcmp(prog->enums.v[i].name, type_names.v[t - TY_NAMED])) return TY_INT + d * TY_ARR;   /* un enum es Int */
+        int si = find_struct(type_names.v[t - TY_NAMED]);
+        if (si < 0 && first_enum(type_names.v[t - TY_NAMED]) >= 0) return TY_INT + d * TY_ARR;   /* un enum es Int */
         if (si < 0) fatal_at(line, col, "el tipo %s no existe", type_names.v[t - TY_NAMED]);
         t = TY_STRUCT + si;
     }
@@ -6434,14 +6622,12 @@ static void subst_consts(Node **pe)
     long k;
     if (!e) return;
     if (e->kind == E_VAR) {
-        for (i = 0; i < prog->globals.n; i++)
-            if (!strcmp(prog->globals.v[i].name, e->name)) return;
+        if (first_global(e->name, 0) >= 0) return;
         if (find_func(e->name, NULL) && !is_local_name(e->name)) {
             e->kind = E_FUNCREF;                       /* una función como valor */
             return;
         }
-        for (i = 0; i < prog->consts.n; i++)
-            if (!strcmp(prog->consts.v[i].name, e->name)) {
+        if ((i = first_const(e->name)) >= 0) {
                 Node *v = prog->consts.v[i].value;
                 if (v->kind == E_FLOAT || !fold(v, &k)) {
                     subst_consts(&prog->consts.v[i].value);
@@ -6688,10 +6874,8 @@ void gen_program(Program *p, Obj *o)
 
     func_label = xmalloc(sizeof(int) * (p->funcs.n + 1));
     for (i = 0; i < p->funcs.n; i++) {
-        int j;
-        for (j = 0; j < i; j++)
-            if (!strcmp(p->funcs.v[i].name, p->funcs.v[j].name))
-                fatal_at(p->funcs.v[i].line, p->funcs.v[i].col, "la función %s ya existe", p->funcs.v[i].name);
+        if (first_func(p->funcs.v[i].name) < i)
+            fatal_at(p->funcs.v[i].line, p->funcs.v[i].col, "la función %s ya existe", p->funcs.v[i].name);
         func_label[i] = new_label();
     }
 
@@ -6703,8 +6887,7 @@ void gen_program(Program *p, Obj *o)
     for (i = 0; i < p->structs.n; i++) {
         int j;
         Struct *st = &p->structs.v[i];
-        for (j = 0; j < i; j++)
-            if (!strcmp(p->structs.v[j].name, st->name)) fatal_at(st->line, st->col, "el struct %s ya existe", st->name);
+        if (find_struct(st->name) < i) fatal_at(st->line, st->col, "el struct %s ya existe", st->name);
         for (j = 0; j < st->fields.n; j++)
             st->fields.v[j].type = resolve_type(st->fields.v[j].type, st->fields.v[j].line, st->fields.v[j].col);
         desc_label[i] = new_label();
@@ -6716,31 +6899,25 @@ void gen_program(Program *p, Obj *o)
     /* un nombre global es de una sola cosa (como en --gcc): una constante, una variable global o una función */
     for (i = 0; i < p->globals.n; i++) {
         Global *g = &p->globals.v[i];
-        int j;
-        for (j = 0; j < p->consts.n; j++)
-            if (!strcmp(p->consts.v[j].name, g->name)) {
-                src_name = src_files.v[g->file];
-                fatal_at(g->line, g->col, "%s ya existe: es una constante", g->name);
-            }
-        for (j = 0; j < i; j++)
-            if (!strcmp(p->globals.v[j].name, g->name)) {
-                src_name = src_files.v[g->file];
-                fatal_at(g->line, g->col, "la variable global %s ya existe", g->name);
-            }
+        if (first_const(g->name) >= 0) {
+            src_name = src_files.v[g->file];
+            fatal_at(g->line, g->col, "%s ya existe: es una constante", g->name);
+        }
+        if (first_global(g->name, 0) < i) {
+            src_name = src_files.v[g->file];
+            fatal_at(g->line, g->col, "la variable global %s ya existe", g->name);
+        }
     }
     for (i = 0; i < p->funcs.n; i++) {
         Func *f = &p->funcs.v[i];
-        int j;
-        for (j = 0; j < p->globals.n; j++)
-            if (!strcmp(p->globals.v[j].name, f->name)) {
-                src_name = src_files.v[f->file];
-                fatal_at(f->line, f->col, "%s ya existe: es una variable global", f->name);
-            }
-        for (j = 0; j < p->consts.n; j++)
-            if (!strcmp(p->consts.v[j].name, f->name)) {
-                src_name = src_files.v[f->file];
-                fatal_at(f->line, f->col, "%s ya existe: es una constante", f->name);
-            }
+        if (first_global(f->name, 0) >= 0) {
+            src_name = src_files.v[f->file];
+            fatal_at(f->line, f->col, "%s ya existe: es una variable global", f->name);
+        }
+        if (first_const(f->name) >= 0) {
+            src_name = src_files.v[f->file];
+            fatal_at(f->line, f->col, "%s ya existe: es una constante", f->name);
+        }
     }
     for (i = 0; i < p->funcs.n; i++) {
         Func *f = &p->funcs.v[i];
@@ -6885,11 +7062,13 @@ void gen_program(Program *p, Obj *o)
             Mark m = mark();
             int *saved = xmalloc(sizeof(int) * (p->funcs.n + 1));
             memcpy(saved, needed, sizeof(int) * p->funcs.n);
+            gen_discarding = 1;
             gen_one(i, func_label[i], &p->funcs.v[i], &p->funcs.v[i].body);
+            gen_discarding = 0;
             undo(&m);
-            labels.v[func_label[i]] = -1;
+            label_put(func_label[i], -1);
             memcpy(needed, saved, sizeof(int) * p->funcs.n);
-            free(saved);
+            xfree(saved);
         }
     gen_struct_types();
     gen_window_descs();

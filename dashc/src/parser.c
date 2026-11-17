@@ -318,6 +318,7 @@ static Node *interp(Token *t)
             VEC_PUSH(n->args, expr());
             if (peek()->kind != T_EOF) fatal_at(peek()->line, peek()->col, "sobra algo dentro de #{...}");
             tk = saved;
+            xfree(sub);                                /* (los nodos no apuntan a los tokens) */
         }
     }
     return n;
@@ -805,7 +806,10 @@ static void import_file(Program *p, Token *at, const char *path)
     }
     if (!full) fatal_at(at->line, at->col, "no encuentro %s para importarlo", path);
     for (i = 0; i < src_files.n; i++)
-        if (!strcmp(src_files.v[i], full)) return;     /* ya importado */
+        if (!strcmp(src_files.v[i], full)) {           /* ya importado */
+            xfree(text);
+            return;
+        }
     /* un .dashui (ventanas del editor de MUI): su código Dash, como un módulo más */
     if (strlen(path) > 7 && !strcmp(path + strlen(path) - 7, ".dashui")) text = dashui_generate(text, full);
     VEC_PUSH(src_files, full);
@@ -815,12 +819,17 @@ static void import_file(Program *p, Token *at, const char *path)
         /* sus nombres privados: lo que declara con `_` delante (func, const, var, struct, enum...) */
         const char **saved_priv = lex_priv;
         int saved_npriv = lex_npriv, n = 0;
+        Token *mod_tk;
         lex_npriv = 0;
         {
             char *sin_asm = asm_extract(text);         /* los bloques asm ... end (asm68k.c) */
-            if (sin_asm) text = sin_asm;
+            if (sin_asm) {
+                xfree(text);                           /* (lo de asm_extract es una copia) */
+                text = sin_asm;
+            }
         }
         tk = lex(text);
+        xfree(text);                                   /* (los tokens no apuntan al texto) */
         lex_priv = NULL;
         for (i = 1; tk[i - 1].kind != T_EOF && tk[i].kind != T_EOF; i++) {
             Token *d = &tk[i - 1];
@@ -832,8 +841,10 @@ static void import_file(Program *p, Token *at, const char *path)
             }
         }
         lex_npriv = n;
-        if (n) tk = lex(text);
+        if (n) lex_rename_private(tk);                 /* (antes se leía otra vez entero) */
+        mod_tk = tk;
         parse_into(p);
+        xfree(mod_tk);                                 /* los tokens del módulo ya no hacen falta */
         while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
         lex_priv = saved_priv;
         lex_npriv = saved_npriv;

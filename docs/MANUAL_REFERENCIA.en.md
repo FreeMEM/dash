@@ -156,7 +156,8 @@ with the date of the day it is compiled, for `C:Version` and the Workbench (Info
 `--profile` compiles a version that, on exit, writes a table with the calls to each function and
 the time spent in it (self) and in what it calls (total), from slowest to fastest
 (`perfil: ...`). Time is measured by checking where the program is 50 times per second (VBlank
-interrupt): it takes a few seconds of running for it to be reliable.
+interrupt): it takes a few seconds of running for it to be reliable. With `--profile` the compiler does not copy
+small functions into each call site, so that all of them show up in the table.
 
 `--memcheck` compiles a test version that watches the memory of lists, structs and strings. It warns
 as soon as something is freed twice or used after being freed (`memcheck: ERROR ...`) and, on
@@ -4663,7 +4664,7 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc. It gives every error it can, in line order and at most 20 (not the ones that come from another, such as a variable whose assignment failed). A module without `Main` is fine |
 | `--texto path=file` | With `--check`: the text of `path` (a module or the program) is read from `file`, what the editor has not saved yet; the errors name `path`. This checks a module inside its program: `./dash --check main.dash --texto lib/module.dash=T:copy`. Repeat it for several files |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
-| `--tiempos` | How long each phase of the compilation takes |
+| `--tiempos` | How long each phase of the compilation takes, and the memory in use at the end of each |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
 | `--version` | `Dash 2.3.1` |
 

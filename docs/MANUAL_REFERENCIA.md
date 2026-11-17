@@ -156,7 +156,8 @@ con la fecha del dia en que se compila, para `C:Version` y el Workbench (Informa
 `--profile` compila una version que, al salir, escribe una tabla con las llamadas a cada funcion y
 el tiempo que paso en ella (propio) y en lo que llama (total), de la mas lenta a la mas rapida
 (`perfil: ...`). El tiempo se mide mirando 50 veces por segundo donde esta el programa (interrupcion
-VBlank): hacen falta unos segundos de ejecucion para que sea fiable.
+VBlank): hacen falta unos segundos de ejecucion para que sea fiable. Con `--profile` el compilador no copia
+las funciones pequenas en el sitio de cada llamada, para que todas salgan en la tabla.
 
 `--memcheck` compila una version de prueba que vigila la memoria de listas, structs y textos. Avisa
 en cuanto algo se libera dos veces o se usa despues de liberarse (`memcheck: ERROR ...`) y, al
@@ -4662,7 +4663,7 @@ línea: `dash: el programa lleva C: se compila por C con gcc`.
 | `--check` | Solo comprueba: da los errores como al compilar, sin hacer el ejecutable y sin `-o` (un editor los marca al guardar). También con `--gcc`, sin llamar a gcc. Da todos los que puede, por orden de línea y como mucho 20 (no los que vienen de otro, como una variable cuya asignación falló). Vale un módulo sin `Main` |
 | `--texto ruta=fichero` | Con `--check`: el texto de `ruta` (un módulo o el programa) se lee de `fichero`, lo que el editor aún no ha guardado; los errores dicen `ruta`. Así se comprueba un módulo dentro de su programa: `./dash --check principal.dash --texto lib/modulo.dash=T:copia`. Se repite para varios ficheros |
 | `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
-| `--tiempos` | Cuánto tarda cada fase de la compilación |
+| `--tiempos` | Cuánto tarda cada fase de la compilación, y la memoria que lleva pedida al acabar cada una |
 | `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |
 | `--version` | `Dash 2.3.1` |
 

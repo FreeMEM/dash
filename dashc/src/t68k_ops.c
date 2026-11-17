@@ -98,8 +98,8 @@ static int take_move_to_d0(void)
     if (d0_loaded != obj->code.n || obj->code.n < 2 || p[0] != 0x20 || (p[1] & 0xF8) != 0) return -1;
     x = p[1] & 7;
     if (x < 2) return -1;
-    for (i = 0; i < labels.n; i++)                     /* una etiqueta de justo detrás */
-        if (labels.v[i] == (long)obj->code.n) labels.v[i] -= 2;
+    (void)i;
+    lpos_move((long)obj->code.n, (long)obj->code.n - 2);   /* una etiqueta de justo detrás */
     obj->code.n -= 2;
     d0_loaded = (uint32_t)-1;
     return x;
@@ -334,7 +334,7 @@ static void push_label(int label)                      /* la dirección de una e
     f.label = label;
     f.abs = 1;
     f.size = 2;
-    VEC_PUSH(fixups, f);
+    FIXUP_PUSH(f);
     add_reloc(f.at, HK_CODE, NULL);
     l(0);
     sp_depth += 4;
@@ -678,7 +678,7 @@ static void load_label(int label)
     f.label = label;
     f.abs = 1;
     f.size = 2;
-    VEC_PUSH(fixups, f);
+    FIXUP_PUSH(f);
     add_reloc(f.at, HK_CODE, NULL);
     l(0);
 }
@@ -812,7 +812,7 @@ static void dbra(int reg, int label)
     f.label = label;
     f.abs = 0;
     f.size = 2;
-    VEC_PUSH(fixups, f);
+    FIXUP_PUSH(f);
     w(0);
 }
 
@@ -868,7 +868,7 @@ static void set_rt_label(const char *sym, int label)
     f.label = label;
     f.abs = 1;
     f.size = 2;
-    VEC_PUSH(fixups, f);
+    FIXUP_PUSH(f);
     add_reloc(f.at, HK_CODE, NULL);
     l(0);
     add_reloc((uint32_t)obj->code.n, -1, sym);
@@ -952,7 +952,7 @@ static void code_ptr(int label)                        /* la dirección de una e
         f.label = label;
         f.abs = 1;
         f.size = 2;
-        VEC_PUSH(fixups, f);
+        FIXUP_PUSH(f);
         add_reloc(f.at, HK_CODE, NULL);
     }
     l(0);
@@ -995,7 +995,7 @@ static void start_arg_label(int label)
     f.label = label;
     f.abs = 1;
     f.size = 2;
-    VEC_PUSH(fixups, f);
+    FIXUP_PUSH(f);
     add_reloc(f.at, HK_CODE, NULL);
     l(0);
 }
