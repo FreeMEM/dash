@@ -456,7 +456,7 @@ tools/                Emulator (emu_run.py, emu_preview.py, screenshots with too
                       fuzz_refcount.py, gen_builtins_doc.py, gen_tmgrammar.py
 editor/vscode/        VS Code extension: syntax coloring, errors as you type, compiling, emulator, debugger, MUI
                       visual editor
-examples/             Example programs (34)
+examples/             Example programs (35)
 tests/                Test suite (tests/errors: must fail; tests/runtime: runtime on the PC;
                       tests/lsp and tests/unit: Python tests; tests/bench: benchmarks)
 docs/                 Documentation

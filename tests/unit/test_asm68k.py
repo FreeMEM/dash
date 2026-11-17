@@ -61,6 +61,14 @@ class Extract(unittest.TestCase):
             self.assertIn(msg, e.exception.message)
             self.assertEqual(e.exception.line, 2)
 
+    def test_end_with_comment(self):
+        src = "Main\n    asm uses d0\n        moveq #1,d0\n    end   # fin del asm\n    Print 1\nend\n"
+        new = asm68k.extract(src, "")
+        self.assertEqual(new.count("\n"), src.count("\n"))
+        self.assertIn("Print 1", new.split("\n")[4])
+        new = asm68k.extract(src.replace("# fin del asm", "; fin"), "")
+        self.assertIn("Print 1", new.split("\n")[4])
+
     def test_missing_end(self):
         with self.assertRaises(asm68k.AsmError) as e:
             asm68k.extract("Main\n    asm\n        nop\n", "")
@@ -115,6 +123,49 @@ class Translate(unittest.TestCase):
                 text_of(body)
             self.assertEqual(e.exception.message, msg)
             self.assertEqual(e.exception.line, line)
+
+    def test_errors_as_dashc(self):
+        """The same verdict and text as dashc/src/asm68k.c, not gas's messages."""
+        cases = [("  lea d0,a0", "asm: operando no válido: d0"),
+                 ("  move.b a0,d0", "asm: tamaño .b no válido con un registro de direcciones"),
+                 ("  add.b #1,a0", "asm: tamaño .b no válido en add"),
+                 ("  jmp d0", "asm: operando no válido: d0"),
+                 ("  clr.l a0", "asm: operando no válido: a0"),
+                 ("  swap a0", "asm: operando no válido: a0"),
+                 ("  asl.l #9,d0", "asm: la cuenta de asl va de 1 a 8"),
+                 ("  lsr.l (a0)", "asm: tamaño .l no válido en lsr"),
+                 ("  rol.b #1,(a0)", "asm: operando no válido: (a0)"),
+                 ("  or.w d0,a0", "asm: operando no válido: a0"),
+                 ("  eor.l (a0),d0", "asm: operandos no válidos en eor"),
+                 ("  cmp.l d0,(a0)", "asm: operandos no válidos en cmp"),
+                 ("  cmpm.w (a0)+,(a1)", "asm: cmpm va con (Ay)+,(Ax)+"),
+                 ("  abcd d0,-(a1)", "asm: operandos no válidos en abcd"),
+                 ("  addx.l (a0)+,(a1)+", "asm: operandos no válidos en addx"),
+                 ("  movem.l d0,d1", "asm: operando no válido: d1"),
+                 ("  move.w #70000,d0", "asm: el valor no cabe en 16 bits: 70000"),
+                 ("  move.b #-129,d0", "asm: el valor no cabe en un byte: -129"),
+                 ("  addq.l #9,d0", "asm: addq va de 1 a 8"),
+                 ("  trap #16", "asm: trap va de 0 a 15"),
+                 ("  dc.b 256", "asm: el valor no cabe en un byte: 256"),
+                 ("  dc.w .x\n.x:", "asm: una etiqueta en dc va con dc.l"),
+                 ("  move.l .a(a0),d0\n.a: nop", "asm: una etiqueta como desplazamiento de An no se admite: .a(a0)"),
+                 ("  lea 40000(a0),a1", "asm: el desplazamiento no cabe en 16 bits: 40000(a0)"),
+                 ("  move.w .a.w,d0\n.a: nop", "asm: una etiqueta como dirección corta no se admite: .a.w"),
+                 ("  move.l #.a,d0\n  move.w #.a,d1\n.a: nop", "asm: una etiqueta como inmediato necesita .l"),
+                 ("  ds.b -1", "asm: ds: tamaño no válido"),
+                 ("  divsl.l d0,d1", "asm: divsl.l va con Dr:Dq"),
+                 ("  bfextu d0,d1", "asm: falta el campo {desplazamiento:ancho}: d0"),
+                 ("  swap d0,d1", "asm: swap pide 1 operando")]
+        for body, msg in cases:
+            with self.assertRaises(asm68k.AsmError, msg=body) as e:
+                text_of(body)
+            self.assertEqual(e.exception.message, msg, body)
+
+    def test_accepted_as_dashc(self):
+        """What dashc and vasm take: a list from d to a, a difference of labels, tst.l a0 (68020)."""
+        text, need = text_of("  movem.l d0-a6,-(sp)\n  move.l .b-.a(a0),d0\n.a: nop\n.b: nop\n  tst.l a0")
+        self.assertIn("d0-a6", text)
+        self.assertEqual([w for w, _ in need], ["tst con ese operando"])
 
     def test_c_string(self):
         self.assertEqual(asm68k.c_string('\t.Ld%=Nx:\n\t.incbin "a%b"'),

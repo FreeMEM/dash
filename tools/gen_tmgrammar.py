@@ -66,6 +66,33 @@ def build():
 
     repository = {
         "comment": {"match": r"#(?!\{).*$", "name": "comment.line.number-sign.dash"},
+        # asm ... end (docs/ASM_DISEÑO.md): 68000 in Motorola syntax; the header line says in, out and uses
+        "asm-block": {
+            "begin": r"^\s*(asm)(?=\s*$|\s*#|\s+(?:in|out|uses)\b)(.*)$",
+            "beginCaptures": {
+                "1": {"name": "keyword.control.dash"},
+                "2": {"patterns": [
+                    {"match": r"#(?!\{).*$", "name": "comment.line.number-sign.dash"},
+                    {"match": r"\b(?:in|out|uses)\b", "name": "keyword.other.dash"},
+                    {"match": r"\b(?:[dDaA][0-7]|sp|SP)\b", "name": "variable.language.register.asm.dash"},
+                    {"include": "#string"}, {"include": "#number"}, {"include": "#operator"}]},
+            },
+            "end": r"^\s*(end)\b",
+            "endCaptures": {"1": {"name": "keyword.control.dash"}},
+            "contentName": "source.asm.m68k.dash",
+            "patterns": [
+                {"match": r"^\s*\*.*$", "name": "comment.line.asterisk.asm.dash"},
+                {"match": r";.*$", "name": "comment.line.semicolon.asm.dash"},
+                {"match": r"^\s*([A-Za-z_.][A-Za-z0-9_]*:)?\s*([A-Za-z][A-Za-z0-9]*(?:\.[bwlsBWLS])?)?(?=\s|;|$)",
+                 "captures": {"1": {"name": "entity.name.label.asm.dash"},
+                              "2": {"name": "keyword.other.instruction.asm.dash"}}},
+                {"match": r"\b(?:[dDaA][0-7](?:\.[wlWL])?(?:\*[1248])?|sp|SP|pc|PC|sr|SR|ccr|CCR|usp|USP)\b",
+                 "name": "variable.language.register.asm.dash"},
+                {"match": r"(?:#)?(?:\$[0-9A-Fa-f]+|%[01]+|0[xX][0-9A-Fa-f]+|0[bB][01]+|\b[0-9]+\b)",
+                 "name": "constant.numeric.asm.dash"},
+                {"match": r"'[^']*'|\"[^\"]*\"", "name": "string.quoted.asm.dash"},
+            ],
+        },
         "native-block": {
             "begin": '"""', "end": '"""', "name": "meta.embedded.block.c.dash", "contentName": "source.c",
             "patterns": [{"include": "source.c"}],
@@ -187,7 +214,7 @@ def build():
                           "call", "operator")]
         },
     }
-    order = ("comment", "native-block", "string", "directive", "window-block", "declaration", "builtin", "member",
+    order = ("asm-block", "comment", "native-block", "string", "directive", "window-block", "declaration", "builtin", "member",
              "keyword", "type", "constant", "number", "call", "operator")
     return {
         "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",

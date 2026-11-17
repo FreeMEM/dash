@@ -117,6 +117,24 @@ async function grammarTests() {
         // the C grammar runs inside: "volatile" is a C keyword, not part of a Dash string
         assert.strictEqual(scopeOf(tokens, 'volatile'), 'keyword.c');
     });
+    await check('grammar: asm block (68000, Motorola syntax)', () => {
+        const ta = tokenize(g, [
+            'func suma(a: Int, b: Int) -> Int',
+            '    asm in d0 = a, d1 = b out r = d0 uses d2',
+            '    .bucle:',
+            '        add.l   #$10,d0          ; comentario',
+            '        dbra    d1,.bucle',
+            '    end',
+            '    return r',
+            'end'].join('\n'));
+        assert.match(scopeOf(ta, 'asm'), /^keyword\.control/);
+        assert.match(scopeOf(ta, 'uses'), /^keyword\.other/);
+        assert.match(scopeOf(ta, '.bucle:'), /^entity\.name\.label/);
+        assert.match(scopeOf(ta, 'add.l'), /^keyword\.other\.instruction/);
+        assert.match(scopeOf(ta, '#$10'), /^constant\.numeric/);
+        assert.match(scopeOf(ta, '; comentario'), /^comment\.line\.semicolon/);
+        assert.match(scopeOf(ta, 'return'), /^keyword\.control/);        // after end, Dash again
+    });
     // generated from the compiler (tools/gen_tmgrammar.py): every builtin, directives, blocks...
     const t2 = tokenize(g, SAMPLE2);
     await check('grammar: directives', () => {

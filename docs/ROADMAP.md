@@ -1138,6 +1138,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       de nombres y de palabras que se leen a trozos (`docs/AYUDA_FORMATO.md`, `lib/ayuda.dash`), y `Dash.guide` y
       `Dash_en.guide` para MultiView. El paquete los pone en `DASH:Ayuda`. `docs/SINTAXIS.en.md` nuevo.
       `tests/unit/test_gen_ayuda.py` (con `--emu`, lee fichas en el emulador)
+- [x] Ensamblador 68k en línea (2026-11-17, lo pidió el usuario, para demos; paso 5.1 de Forja): bloques
+      `asm in d0 = x out r = d0 uses d2 ... end` con la sintaxis de Motorola. El directo los ensambla él mismo
+      (`dashc/src/asm68k.c`: todo el 68000 y lo común del 68020, los mismos bytes que vasm); `--gcc` los pasa al `as`
+      de binutils (`compiler/asm68k.py`), con los mismos errores. Diseño: `docs/ASM_DISEÑO.md`; manual, sección 26.
+      `tests/test_asm*.dash` (A1200, A500 y 68040), `tests/errors/asm_*.dash`, `tests/unit/test_asm68k.py`,
+      `examples/asm_barras.dash`
 
 ## Notas y Decisiones
 

@@ -244,6 +244,16 @@ static const char *head_end(const char *p, const char *e)
     return p;
 }
 
+/* la línea que cierra el bloque: end, solo o con un comentario # o ; detrás */
+static int end_line(const char *x, const char *xe)
+{
+    if (xe - x < 3 || memcmp(x, "end", 3)) return 0;
+    x += 3;
+    if (x < xe && *x != ' ' && *x != '\t' && *x != '#' && *x != ';') return 0;
+    while (x < xe && (*x == ' ' || *x == '\t')) x++;
+    return x == xe || *x == '#' || *x == ';';
+}
+
 char *asm_extract(const char *src)
 {
     Buf out = {0};
@@ -277,7 +287,7 @@ char *asm_extract(const char *src)
                 xe = le;
                 trim(&x, &xe);
                 nlines++;
-                if (xe - x == 3 && !memcmp(x, "end", 3)) {
+                if (end_line(x, xe)) {
                     b = *le ? le + 1 : le;
                     break;
                 }
@@ -539,7 +549,11 @@ static AVal expr(const char *s, const char *e)
     xp = buf;
     r = x_or();
     if (*xp) aerr("expresión no válida: %s", buf);
-    if (r.rel < 0 || r.rel > 1) aerr("expresión no válida: %s", buf);
+    if (r.rel < 0 || r.rel > 1) {
+        /* (un nombre de más abajo aún sin saber, en una pasada que no es la última: .b-.a) */
+        if (!r.undef || afinal) aerr("expresión no válida: %s", buf);
+        r.rel = 0;
+    }
     return r;
 }
 
@@ -968,7 +982,7 @@ static void ins_branch(int cc)
         if (afinal && (d < -128 || d > 127)) aerr("el salto .s no llega (%ld bytes)", d);
         ow(0x6000 | cc << 8 | (int)(d & 0xFF));
     } else if (cur->size == 'l') {
-        need020("bcc.l");
+        need020(cur->op);
         ow(0x60FF | cc << 8);
         ol((uint32_t)d);
     } else if (cur->size == 'w' || cur->big) {

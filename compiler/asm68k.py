@@ -206,6 +206,10 @@ def is_header(text: str) -> bool:
     return not header.strip() or bool(re.match(r"[ \t]*(in|out|uses)\b", header))
 
 
+# the line that closes a block: end alone, or with a comment (# or ;) after spaces
+_END_RE = re.compile(r"^\s*end(?:\s+[#;].*|\s*)$")
+
+
 def extract(source: str, filename: str = "") -> str:
     """The source with its asm blocks taken out (BLOCKS) and replaced by internal calls."""
     key = (filename, source)
@@ -239,7 +243,7 @@ def extract(source: str, filename: str = "") -> str:
         _parse_header(block, header, line_no)
         body = []
         j = i + 1
-        while j < len(lines) and lines[j].strip() != "end":
+        while j < len(lines) and not _END_RE.match(lines[j]):
             body.append((j + 1, lines[j]))
             j += 1
         if j >= len(lines):
@@ -419,10 +423,16 @@ def _parse_body(block: Block, body):
         ops_text = rest[m.end():].strip()
         operands = [o.strip() for o in _split_top(ops_text)] if ops_text else []
         if counts is not None and len(operands) not in counts:
-            want = " o ".join(str(c) for c in counts)
-            raise AsmError(f"asm: {op} pide {want} operandos", line_no, col)
+            # (the texts of dashc: nops, nops2)
+            if op == "incbin":
+                want = "de 1 a 3 operandos"
+            elif len(counts) == 1:
+                want = f"{counts[0]} operando" + ("" if counts[0] == 1 else "s")
+            else:
+                want = " o ".join(str(c) for c in counts) + " operandos"
+            raise AsmError(f"asm: {op} pide {want}", line_no, col)
         if op == "dc" and not operands:
-            raise AsmError("asm: dc pide 1 o más operandos", line_no, col)
+            raise AsmError("asm: dc pide al menos un valor", line_no, col)
         if any(not o for o in operands):
             raise AsmError(f"asm: operando no válido: {ops_text}", line_no, col)
         block.lines.append(Line(line=line_no, col=col, labels=labels, op=op, size=size, operands=operands))
@@ -443,6 +453,10 @@ class Value:
 
     def const(self) -> bool:
         return not self.labels
+
+    def rel(self) -> int:
+        """How many labels it adds (dashc's rel): 0 for a number or a difference of labels."""
+        return sum(self.labels.values())
 
 
 class _Expr:
@@ -566,6 +580,7 @@ class _Expr:
 
 # ---- operands ----
 
+_REG_ORDER = [f"d{i}" for i in range(8)] + [f"a{i}" for i in range(8)]
 _INDEX_RE = re.compile(r"^(d[0-7]|a[0-7]|sp)(?:\.([wl]))?(?:\*([1248]))?$", re.I)
 _SPECIAL = {"sr", "ccr", "usp", "pc"}
 
@@ -576,6 +591,65 @@ class Operand:
     text: str                    # for as
     value: Optional[Value] = None
     needs_020: bool = False
+    base_mode: str = ""          # bf: the mode of the operand with the field
+
+
+# ---- addressing modes, as dashc names them (dashc/src/asm68k.c: A_ALL, A_DATA...) ----
+ALL = {"dn", "an", "ind", "post", "pre", "d16", "idx", "absw", "absl", "pcd", "pcidx", "imm"}
+DATA = ALL - {"an"}
+MEM = DATA - {"dn"}
+CTRL = {"ind", "d16", "idx", "absw", "absl", "pcd", "pcidx"}
+ALT = ALL - {"imm", "pcd", "pcidx"}
+DALT = DATA & ALT
+MALT = MEM & ALT
+CALT = CTRL & ALT
+
+
+def _s32(k: int) -> int:
+    """A value as dashc keeps it: 32 bits with sign."""
+    k &= 0xFFFFFFFF
+    return k - 0x100000000 if k >= 0x80000000 else k
+
+
+def _nospace(text: str) -> str:
+    """An operand as dashc shows it: without spaces outside quotes."""
+    out, quote = [], None
+    for c in text.strip():
+        if quote:
+            if c == quote:
+                quote = None
+        elif c in "\"'":
+            quote = c
+        elif c in " \t":
+            continue
+        out.append(c)
+    return "".join(out)
+
+
+def _mode(o) -> str:
+    """The mode of an operand with dashc's names (M_DN, M_ABSW...)."""
+    k = o.kind
+    if k == "abs":
+        return "absw" if o.text.lower().endswith(".w") else "absl"
+    if k == "special":
+        return o.text
+    return {"disp": "d16", "index": "idx", "postinc": "post", "predec": "pre", "pcdisp": "pcd",
+            "pcindex": "pcidx", "reglist": "list"}.get(k, k)
+
+
+def _imm_fits(tr, v, nbytes: int):
+    """An immediate of nbytes (dashc's out_imm): a label only in a long, and the value has to fit."""
+    if v is None:
+        return
+    if not v.const():
+        if nbytes != 4 and v.rel():
+            tr._error("asm: una etiqueta como inmediato necesita .l")
+        return
+    k = _s32(v.k)
+    if nbytes == 1 and not -128 <= k <= 255:
+        tr._error(f"asm: el valor no cabe en un byte: {k}")
+    if nbytes == 2 and not -32768 <= k <= 65535:
+        tr._error(f"asm: el valor no cabe en 16 bits: {k}")
 
 
 class Translator:
@@ -665,7 +739,7 @@ class Translator:
             parts = []
             for part in low.replace(" ", "").split("/"):
                 rr = [_reg_name(x) for x in part.split("-")]
-                if len(rr) == 2 and (rr[0][0] != rr[1][0] or rr[0] > rr[1]):
+                if len(rr) == 2 and _REG_ORDER.index(rr[0]) > _REG_ORDER.index(rr[1]):
                     bad()
                 parts.append("-".join(rr))
             return Operand("reglist", "/".join(parts))
@@ -689,7 +763,8 @@ class Translator:
                     fields.append(r)
                 else:
                     fields.append(str(self.const(f)))
-            return Operand("bf", f"{base.text}{{{fields[0]}:{fields[1]}}}")   # (the bf instruction asks for the 68020)
+            return Operand("bf", f"{base.text}{{{fields[0]}:{fields[1]}}}",   # (the bf instruction asks for the 68020)
+                           base.value, base.needs_020, _mode(base))
         # absolute size suffix
         size_sfx = ""
         m = re.match(r"^(.*)\.([wl])$", t, re.I | re.S)
@@ -698,6 +773,11 @@ class Translator:
             body = m.group(1)
             if not self._is_indirect(body):
                 v = self.expr(body)
+                if m.group(2).lower() == "w":
+                    if v.rel():
+                        self._error(f"asm: una etiqueta como dirección corta no se admite: {_nospace(t)}")
+                    if v.const() and not -32768 <= _s32(v.k) <= 65535:
+                        self._error(f"asm: la dirección no cabe en 16 bits: {_nospace(t)}")
                 return Operand("abs", f"{self.value_text(v)}.{m.group(2).lower()}", v)
         if t.endswith(")"):
             return self._indirect(t, bad)
@@ -752,9 +832,11 @@ class Translator:
         disp = self.expr(prefix) if prefix else Value(0)
         index = parts[base_i + 1] if base_i + 1 < len(parts) else None
         need = False
+        if base_reg != "pc" and disp.rel():
+            self._error(f"asm: una etiqueta como desplazamiento de An no se admite: {_nospace(t)}")
         if index is None:
-            if disp.const() and not -32768 <= disp.k <= 32767 and base_reg != "pc":
-                bad()
+            if disp.const() and not -32768 <= _s32(disp.k) <= 32767 and base_reg != "pc":
+                self._error(f"asm: el desplazamiento no cabe en 16 bits: {_nospace(t)}")
             kind = "pcdisp" if base_reg == "pc" else "disp"
             if base_reg != "pc" and disp.const() and disp.k == 0 and not prefix:
                 return Operand("ind", f"({base_reg})")
@@ -805,8 +887,10 @@ class Translator:
                             data.extend(str(b) for b in o[1:-1].encode("latin-1", "replace"))
                         else:
                             v = self.expr(o)
-                            if v.const() and not -128 <= v.k <= 255:
-                                self._error(f"asm: operando no válido: {o}")
+                            if v.rel():
+                                self._error("asm: una etiqueta en dc va con dc.l")
+                            if v.const() and not -128 <= _s32(v.k) <= 255:
+                                self._error(f"asm: el valor no cabe en un byte: {_s32(v.k)}")
                             data.append(self.value_text(v))
                     out.append(".byte " + ",".join(data))
                     if len(data) % 2:
@@ -817,15 +901,17 @@ class Translator:
                     vals = []
                     for o in ops:
                         v = self.expr(o)
-                        if size == "w" and v.const() and not -32768 <= v.k <= 65535:
-                            self._error(f"asm: operando no válido: {o}")
+                        if size == "w" and v.rel():
+                            self._error("asm: una etiqueta en dc va con dc.l")
+                        if size == "w" and not -32768 <= _s32(v.k) <= 65535:
+                            self._error(f"asm: el valor no cabe en 16 bits: {_s32(v.k)}")
                         vals.append(self.value_text(v))
                     out.append((".word " if size == "w" else ".long ") + ",".join(vals))
                 continue
             if op == "ds":
                 count = self.const(ops[0])
-                if count < 0:
-                    self._error(f"asm: operando no válido: {ops[0]}")
+                if not 0 <= count <= 0x1000000:
+                    self._error("asm: ds: tamaño no válido")
                 if size != "b":
                     align()
                 flush_labels()
@@ -900,45 +986,7 @@ class Translator:
         texts = [o.text for o in operands]
         if op in _M020 or (op in _M020_LONG and size == "l") or (op in _BRANCHES and size == "l"):
             self._020(f"{op}.{size}" if size else op)
-        if "pair" in kinds and not (op in ("muls", "mulu", "divs", "divu", "divsl", "divul") and size == "l"
-                                    and kinds[-1] == "pair"):
-            self._error(f"asm: operando no válido: {ln.operands[kinds.index('pair')]}")
-        if op in ("muls", "mulu", "divs", "divu") and size == "l" and kinds[-1] == "pair":
-            pass
-        if op in ("divsl", "divul") and kinds[-1] != "pair":
-            self._error(f"asm: operando no válido: {ln.operands[-1]}")
-        if "bf" in kinds and not op.startswith("bf"):
-            self._error(f"asm: operando no válido: {ln.operands[kinds.index('bf')]}")
-        if op.startswith("bf") and kinds[0] != "bf" and not (op == "bfins" and kinds[1] == "bf"):
-            self._error(f"asm: operando no válido: {ln.operands[0]}")
-        if "reglist" in kinds and op != "movem":
-            self._error(f"asm: operando no válido: {ln.operands[kinds.index('reglist')]}")
-        if op == "moveq":
-            if kinds[0] != "imm" or kinds[1] != "dn":
-                self._error(f"asm: operando no válido: {ln.operands[0] if kinds[0] != 'imm' else ln.operands[1]}")
-            v = operands[0].value
-            if not v.const() or not -128 <= v.k <= 127:
-                self._error("asm: moveq va de -128 a 127")
-        if op in ("addq", "subq"):
-            v = operands[0].value
-            if kinds[0] != "imm" or not v.const() or not 1 <= v.k <= 8:
-                self._error(f"asm: operando no válido: {ln.operands[0]}")
-        if op.startswith("db") and kinds[0] != "dn":
-            self._error(f"asm: operando no válido: {ln.operands[0]}")
-        if op == "lea" and kinds[1] != "an":
-            self._error(f"asm: operando no válido: {ln.operands[1]}")
-        if op in ("trap",):
-            v = operands[0].value
-            if kinds[0] != "imm" or not v.const() or not 0 <= v.k <= 15:
-                self._error(f"asm: operando no válido: {ln.operands[0]}")
-        # what cannot be written: a number or something read through pc
-        if len(kinds) == 2 and kinds[1] in ("imm", "pcdisp", "pcindex") and op not in ("link", "btst", "cmp", "cmpi"):
-            self._error(f"asm: operando no válido: {ln.operands[1]}")
-        if len(kinds) == 1 and op not in _BRANCHES:
-            if kinds[0] == "imm" and op not in ("stop", "rtd", "trap", "tst"):
-                self._error(f"asm: operando no válido: {ln.operands[0]}")
-            if kinds[0] in ("pcdisp", "pcindex") and op not in ("jmp", "jsr", "pea", "tst") and not op.startswith("bf"):
-                self._error(f"asm: operando no válido: {ln.operands[0]}")
+        self._validate(op, size, operands)
         if op in ("add", "sub", "cmp", "and", "or", "eor") and kinds[0] == "imm" and kinds[1] != "an":
             name = op + "i"
         if op in ("asl", "asr", "lsl", "lsr", "rol", "ror", "roxl", "roxr") and kinds == ["dn"]:
@@ -946,10 +994,333 @@ class Translator:
         mn = name + (f".{'s' if size == 'b' and op in _BRANCHES else size}" if size else "")
         return mn + (" " + ",".join(texts) if texts else "")
 
+    # ---- the checks of each instruction, as dashc does them (ins_* in dashc/src/asm68k.c) ----
+    def _validate(self, op: str, size: str, operands: List[Operand]):
+        ln = self.cur
+        raw = [_nospace(o) for o in ln.operands]
+        modes = [_mode(o) for o in operands]
+
+        def bad(i):
+            self._error(f"asm: operando no válido: {raw[i]}")
+
+        def check(i, mask):
+            if modes[i] not in mask:
+                bad(i)
+
+        def sizes(ok, default):
+            sz = size or default
+            if sz not in ok:
+                self._error(f"asm: tamaño .{sz} no válido en {op}")
+            return sz
+
+        def imm(i, nbytes):
+            if modes[i] == "imm":
+                _imm_fits(self, operands[i].value, nbytes)
+
+        def need_imm(i):
+            if modes[i] != "imm":
+                self._error(f"asm: operando no válido: {raw[i]} (va un #inmediato)")
+
+        def no_byte_an(i, sz):
+            if modes[i] == "an" and sz == "b":
+                self._error("asm: tamaño .b no válido con un registro de direcciones")
+
+        def nbytes(sz):
+            return {"b": 1, "w": 2, "l": 4}[sz]
+
+        cc = None
+        if op.startswith("s") and op[1:] in _CC + list(_CC_ALIAS):
+            cc = "s"
+        if op in _BRANCHES:
+            return
+        if op.startswith("db") and (op[2:] in _CC + list(_CC_ALIAS) or op == "dbra"):
+            if modes[0] != "dn":
+                bad(0)
+            return
+        if op in ("move", "movea"):
+            if op == "movea" and modes[1] != "an":
+                bad(1)
+            if modes[1] in ("ccr", "sr"):
+                if size and size != "w":
+                    self._error(f"asm: tamaño .{size} no válido en {op}")
+                check(0, DATA)
+                imm(0, 2)
+                return
+            if modes[0] in ("sr", "ccr"):
+                if size and size != "w":
+                    self._error(f"asm: tamaño .{size} no válido en {op}")
+                if modes[0] == "ccr":
+                    self._020("move ccr")
+                check(1, DALT)
+                return
+            if "usp" in modes:
+                if size and size != "l":
+                    self._error(f"asm: tamaño .{size} no válido en {op}")
+                if sorted(modes) != ["an", "usp"]:
+                    self._error("asm: operandos no válidos en move")
+                return
+            if modes[1] == "an":
+                sz = sizes("wl", "w")
+            else:
+                sz = sizes("bwl", "w")
+                check(1, DALT)
+                no_byte_an(0, sz)
+            check(0, ALL)
+            imm(0, nbytes(sz))
+            return
+        if op == "moveq":
+            if size and size != "l":
+                self._error(f"asm: tamaño .{size} no válido en moveq")
+            need_imm(0)
+            if modes[1] != "dn":
+                bad(1)
+            v = operands[0].value
+            if not v.const() or not -128 <= _s32(v.k) <= 127:
+                self._error("asm: moveq va de -128 a 127")
+            return
+        if op == "movem":
+            sizes("wl", "w")
+            if modes[0] in ("dn", "an", "list"):
+                check(1, CALT | {"pre"})
+            elif modes[1] in ("dn", "an", "list"):
+                check(0, CTRL | {"post"})
+            else:
+                self._error("asm: movem pide una lista de registros")
+            return
+        if op == "movep":
+            sizes("wl", "w")
+            if not ((modes[0] == "dn" and modes[1] in ("d16", "ind")) or (modes[1] == "dn" and modes[0] in ("d16", "ind"))):
+                self._error("asm: operandos no válidos en movep")
+            return
+        if op in ("add", "sub", "cmp", "and", "or", "eor", "adda", "suba", "cmpa"):
+            if op in ("adda", "suba", "cmpa"):
+                if modes[1] != "an":
+                    bad(1)
+                check(0, ALL)
+                op = op[:-1] if op != "cmpa" else "cmp"
+                op = {"add": "add", "sub": "sub", "cmp": "cmp"}.get(op, op)
+            if modes[1] == "an" and op in ("add", "sub", "cmp"):
+                sz = sizes("wl", "w")
+                check(0, ALL)
+                imm(0, nbytes(sz))
+                return
+            if modes[0] == "imm" and not (modes[1] == "dn" and op != "eor"):
+                self._imm_form({"add": "addi", "sub": "subi", "cmp": "cmpi", "and": "andi", "or": "ori",
+                                "eor": "eori"}[op], size, operands, modes, raw)
+                return
+            sz = sizes("bwl", "w")
+            if modes[1] == "dn" and op != "eor":
+                check(0, DATA if op in ("and", "or") else ALL)
+                no_byte_an(0, sz)
+                imm(0, nbytes(sz))
+                return
+            if modes[0] == "dn" and op != "cmp":
+                check(1, DALT if op == "eor" else MALT)
+                return
+            self._error(f"asm: operandos no válidos en {ln.op}")
+        if op in ("addi", "subi", "cmpi", "andi", "ori", "eori"):
+            self._imm_form(op, size, operands, modes, raw)
+            return
+        if op in ("addq", "subq"):
+            need_imm(0)
+            sz = sizes("bwl", "w")
+            check(1, ALT)
+            no_byte_an(1, sz)
+            v = operands[0].value
+            if not v.const() or not 1 <= _s32(v.k) <= 8:
+                self._error(f"asm: {op} va de 1 a 8")
+            return
+        if op in ("addx", "subx", "abcd", "sbcd"):
+            if op[1] == "b":
+                sizes("b", "b")
+            else:
+                sizes("bwl", "w")
+            if modes not in (["dn", "dn"], ["pre", "pre"]):
+                self._error(f"asm: operandos no válidos en {op}")
+            return
+        if op == "cmpm":
+            sizes("bwl", "w")
+            if modes != ["post", "post"]:
+                self._error("asm: cmpm va con (Ay)+,(Ax)+")
+            return
+        if op in ("muls", "mulu", "divs", "divu", "divsl", "divul"):
+            check(0, DATA)
+            sz = sizes("l", "l") if op in ("divsl", "divul") else sizes("wl", "w")
+            if sz == "w":
+                if modes[1] != "dn":
+                    bad(1)
+                imm(0, 2)
+                return
+            if modes[1] == "dn":
+                if op in ("divsl", "divul"):
+                    self._error(f"asm: {op}.l va con Dr:Dq")
+            elif modes[1] != "pair":
+                bad(1)
+            imm(0, 4)
+            return
+        if op in ("asl", "asr", "lsl", "lsr", "rol", "ror", "roxl", "roxr"):
+            if len(operands) == 1:
+                if modes[0] == "dn":
+                    sizes("bwl", "w")
+                    return
+                sizes("w", "w")
+                check(0, MALT)
+                return
+            sizes("bwl", "w")
+            if modes[1] != "dn":
+                bad(1)
+            if modes[0] == "imm":
+                v = operands[0].value
+                if not v.const() or not 1 <= _s32(v.k) <= 8:
+                    self._error(f"asm: la cuenta de {op} va de 1 a 8")
+            elif modes[0] != "dn":
+                bad(0)
+            return
+        if op in ("btst", "bchg", "bclr", "bset"):
+            want = "l" if modes[1] == "dn" else "b"
+            if size and size != want:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+            if modes[0] == "dn":
+                check(1, DATA if op == "btst" else DALT)
+                imm(1, 1)
+            elif modes[0] == "imm":
+                check(1, (DATA - {"imm"}) if op == "btst" else DALT)
+                if not operands[0].value.const():
+                    self._error("asm: el número de bit es un número")
+            else:
+                bad(0)
+            return
+        if op.startswith("bf"):
+            if size:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+            if op in ("bfextu", "bfexts", "bfffo"):
+                f = 0
+                if modes[1] != "dn":
+                    bad(1)
+            elif op == "bfins":
+                f = 1
+                if modes[0] != "dn":
+                    bad(0)
+            else:
+                f = 0
+            if operands[f].kind != "bf":
+                self._error(f"asm: falta el campo {{desplazamiento:ancho}}: {raw[f]}")
+            mask = {"dn"} | (CTRL if op in ("bftst", "bfextu", "bfexts", "bfffo") else CALT)
+            if operands[f].base_mode not in mask:
+                bad(f)
+            for i, k in enumerate(operands):
+                if k.kind == "bf" and i != f:
+                    bad(i)
+            return
+        if op in ("clr", "neg", "negx", "not", "tst", "nbcd", "tas") or cc == "s":
+            if op == "tst":
+                if modes[0] in ("an", "imm", "pcd", "pcidx"):
+                    self._020("tst con ese operando")
+                sz = sizes("bwl", "w")
+                check(0, ALL)
+            elif op in ("nbcd", "tas") or cc == "s":
+                sz = sizes("b", "b")
+                check(0, DALT)
+            else:
+                sz = sizes("bwl", "w")
+                check(0, DALT)
+            no_byte_an(0, sz)
+            imm(0, nbytes(sz))
+            return
+        if op == "lea":
+            sizes("l", "l")
+            check(0, CTRL)
+            if modes[1] != "an":
+                bad(1)
+            return
+        if op in ("pea", "jmp", "jsr"):
+            if op == "pea":
+                sizes("l", "l")
+            elif size:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+            check(0, CTRL)
+            return
+        if op == "chk":
+            sz = sizes("wl", "w")
+            check(0, DATA)
+            if modes[1] != "dn":
+                bad(1)
+            imm(0, nbytes(sz))
+            return
+        if op in ("ext", "extb"):
+            if modes[0] != "dn":
+                bad(0)
+            if op == "extb":
+                sizes("l", "l")
+            else:
+                sizes("wl", "w")
+            return
+        if op == "swap":
+            sizes("w", "w")
+            if modes[0] != "dn":
+                bad(0)
+            return
+        if op == "exg":
+            sizes("l", "l")
+            if not all(m in ("dn", "an") for m in modes):
+                self._error("asm: operandos no válidos en exg")
+            return
+        if op == "link":
+            sz = sizes("wl", "w")
+            if modes[0] != "an":
+                bad(0)
+            need_imm(1)
+            v = operands[1].value
+            if sz == "l":
+                _imm_fits(self, v, 4)
+            else:
+                if v.const() and not -32768 <= _s32(v.k) <= 32767:
+                    self._error(f"asm: el valor no cabe en 16 bits: {_s32(v.k)}")
+                _imm_fits(self, v, 2)
+            return
+        if op == "unlk":
+            if size:
+                self._error(f"asm: tamaño .{size} no válido en unlk")
+            if modes[0] != "an":
+                bad(0)
+            return
+        if op in ("trap", "stop", "rtd"):
+            if size:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+            need_imm(0)
+            v = operands[0].value
+            if op == "trap":
+                if not v.const() or not 0 <= _s32(v.k) <= 15:
+                    self._error("asm: trap va de 0 a 15")
+            else:
+                _imm_fits(self, v, 2)
+            return
+
+    def _imm_form(self, op: str, size: str, operands: List[Operand], modes: List[str], raw: List[str]):
+        """ori, andi, subi, addi, eori, cmpi: #n,<ea> (and to ccr or sr), as dashc's ins_imm."""
+        if modes[0] != "imm":
+            self._error(f"asm: operando no válido: {raw[0]} (va un #inmediato)")
+        if modes[1] in ("ccr", "sr"):
+            if op not in ("ori", "andi", "eori"):
+                self._error(f"asm: operando no válido: {raw[1]}")
+            want = "b" if modes[1] == "ccr" else "w"
+            if size and size != want:
+                self._error(f"asm: tamaño .{size} no válido en {self.cur.op}")
+            _imm_fits(self, operands[0].value, 1 if modes[1] == "ccr" else 2)
+            return
+        sz = size or "w"
+        if sz not in "bwl":
+            self._error(f"asm: tamaño .{sz} no válido en {self.cur.op}")
+        if op == "cmpi" and modes[1] in ("pcd", "pcidx"):
+            self._020("cmpi con (pc)")
+        elif modes[1] not in DALT:
+            self._error(f"asm: operando no válido: {raw[1]}")
+        _imm_fits(self, operands[0].value, {"b": 1, "w": 2, "l": 4}[sz])
+
     def _target(self, text: str, op: str):
         v = self.expr(text)
         if len(v.labels) != 1 or list(v.labels.values())[0] != 1:
-            self._error(f"asm: operando no válido: {text.strip()}")
+            self._error(f"asm: un salto va a una etiqueta del bloque: {_nospace(text)}")
         return Operand("target", self.value_text(v), v)
 
 

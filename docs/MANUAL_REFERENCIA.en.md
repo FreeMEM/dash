@@ -35,6 +35,8 @@
 22. [Complete Examples](#22-complete-examples)
 23. [Quick Reference](#23-quick-reference)
 24. [Dash 2.0: the straight compiler](#24-dash-20-the-straight-compiler)
+25. [DashOS (AArch64)](#25-dashos-aarch64)
+26. [Inline assembler](#26-inline-assembler)
 
 ---
 
@@ -4971,6 +4973,60 @@ end
   the Amiga box, below 4 GB. On DashOS, writing an address of 4 GB or more into a `Ptr` field is a run-time error.
 - The Amiga's memory is big-endian. In a little-endian program, `Word` and `Long` fields are read and written with
   their bytes swapped, so they hold the same values as on the Amiga. `peek_*` and `poke_*` use the processor's order.
+
+---
+
+## 26. Inline assembler
+
+An `asm ... end` block puts 68000 code in a function or in `Main`, in Motorola syntax (the one of Devpac, ASM-One
+and vasm). It is for demos and for whatever has to run as fast as possible. It works the same on both paths:
+`./dash` assembles it itself and `./dash --gcc` hands it to GCC's assembler. Full design: `docs/ASM_DISEÑO.md`
+(in Spanish). Asked for by the user, for demos.
+
+```ruby
+func sum_list(data: [Int]) -> Int
+    asm in a0 = data, d0 = data.length - 1 out total = d1
+        moveq   #0,d1
+    .loop:
+        add.l   (a0)+,d1        ; comment
+        dbra    d0,.loop
+    end
+    return total
+end
+```
+
+The `asm` line says what goes in and what comes out:
+
+- `in r = expression, ...`: before the block, the register gets the value. An Int or a Bool, its number; a Fixed,
+  its 32 bits; a string, the address of its first character; a list, the address of its first element (4 bytes
+  each; 0 if it is `nil`). A Float or a Double cannot go: `Int(x)` or `Fixed(x)`.
+- `out variable = r, ...`: after it, the variable gets the register as an Int (a new one is declared).
+- `uses r, ...`: the other registers the block changes, also as in `movem`: `uses d2-d4/a1`.
+
+d0-d7, a0-a4 and a6 can be used. Not a5 (the frame of Dash functions) nor a7 (sp). Every register the block
+changes goes in `in`, `out` or `uses`; the others must be left as they were. The stack must be left the same and the
+block ends at its bottom: no `rts` and no jumps out of it.
+
+The body:
+
+- One instruction per line, `[label:] instruction[.size] operands ; comment`. A line starting with `*` is a
+  comment. Labels belong to the block (`.loop` or `loop`); another block can use the same name.
+- Numbers `123`, `$1F`, `0x1F`, `%1010`, `0b1010`, `'A'`; expressions with `+ - * / << >> & | ^ ~` and brackets. A
+  name can be a label, a constant of the block (`WIDTH equ 320` or `WIDTH = 320`) or a Dash `const`.
+- Data: `dc.b 1,2,"hello",0`, `dc.w`, `dc.l` (also `dc.l label`), `ds.b`/`ds.w`/`ds.l n` (zeros), `even` and
+  `incbin "file"[,from[,count]]` (the path, from the `.dash`). Data sits among the code: the block jumps over it
+  (`bra.s .end`). It is not in chip memory.
+- Every 68000 instruction with all its modes (`4(a0)` or `(4,a0)`, `8(a0,d1.w)`, `table(pc)`, `$dff180`, `4.w`...)
+  and the usual aliases (`dbra`, `bhs`, `blo`...). A branch without a size picks the short or the long one itself.
+- From the 68020, with `--cpu 68020` or higher (or `--fpu`): `muls.l`/`mulu.l` (also 64-bit, `d1:d2`), `divs.l`,
+  `divu.l`, `divsl.l`, `divul.l`, `extb.l`, bit fields (`bfextu d0{4:8},d1`...), `bra.l`, `link.l`, `rtd`, `chk.l`
+  and the scaled index (`(a0,d0.l*4)`). Without the option, the error says so.
+- Not there: the FPU, the MMU, the 68020 memory indirection, `cnop` and sections (`section data_c`).
+
+An error in the block comes with the line of the `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida:
+movx`. On DashOS (AArch64) an `asm` block is an error.
+
+Demo example: `examples/asm_barras.dash` (raster bars: the loop of every frame, in assembler).
 
 ---
 
