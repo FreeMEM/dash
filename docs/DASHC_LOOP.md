@@ -962,3 +962,42 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     `tests/unit/test_perfil_copias.py` (con `--emu`, el informe trae cada función con sus llamadas por los dos caminos).
   - Queda: Forja en 8 MB (bajar la memoria: un nodo son 100 bytes y hay 65.000); más velocidad pide menos pasadas
     por el árbol (cada función se recorre una docena de veces en el análisis) o una caché por módulo.
+- 2026-11-17, menos memoria al compilar en el Amiga (lo pidió Forja; rama `memoria`). Forja (20.000 líneas con sus
+  módulos y los de lib/) no cabía en un A1200 con 8 MB: `dash` pedía unos 11 MB al leer y 18 MB al compilar. Medido
+  con un dashc de 32 bits en el PC (`cc -m32`: los mismos tamaños que en el 68000, a 100 KB de lo que da el Amiga) y
+  con el perfil de memoria por sitio (quién pide cada trozo, lo vivo en el pico). `--tiempos` dice ahora también el
+  pico (lo más que llegó a pedir). Forja, en KB:
+
+  | | leer (pico) | `--check` (pico) | compilar (pico) |
+  |---|---|---|---|
+  | antes | 13.265 | 13.265 | 18.285 |
+  | después | 5.470 | 5.470 | 7.696 |
+
+  - El árbol: 75.000 nodos de 100 bytes (96 y la cabecera del trozo). Ahora 40: `line`, `val`, `name`, `a`, `b`,
+    `args` (una lista sin `cap`: el sitio es el del trozo, `xcap`) y `x`; `kind`, `op`, `col` y `file` en bytes y
+    palabras. Lo que llevan pocos (los bloques `body` y `els`, `c`, el `type` de un `var` o de una lista, el texto de un
+    literal y el `dval`) va aparte, en un `NodeExt` (`n->x->body`); los que no tienen, comparten `node_no_ext`, a 0 (al
+    acabar se comprueba que nadie escribió en él). Los nodos salen de corrido de bloques de 32 KB (`node_arena`), sin
+    cabecera, y se sueltan todos tras generar.
+  - Los nombres, una sola copia de cada uno (43.000 en el fuente; `intern` en lexer.c); los textos, del tamaño justo
+    (un `Buf` empezaba con 256 bytes: 1,3 MB); `_db_nombre`, uno por builtin (no uno por llamada).
+  - Los tokens: 32 bytes (eran 48) y sitio para los que puede haber (`count_tokens`), no uno cada 5 caracteres (un
+    fuente con textos largos, los datos de Forja, pedía 1,5 MB para 20 tokens).
+  - Al generar: el código, los datos y las reubicaciones de las funciones ya hechas salen aparte entre función y
+    función (`buf_spill`, `rel_spill`) y se juntan al final, con el árbol ya suelto: no crecen copiándolo todo (con dos
+    veces su tamaño a la vez). La tabla de etiquetas por posición (`lpos`) se queda con las de cerca del final
+    (`lpos_trim`: mientras se genera solo se busca ahí); `Reloc` y `Fixup` de 8 bytes; las listas grandes crecen la
+    mitad, no al doble; las etiquetas y los saltos se sueltan antes de enlazar.
+  - Comprobado: los ejecutables de dashc/tests, examples, tests (y tests/errors), Forja, Trasfondo, Tachyon,
+    Inferencia y dbgserver, con y sin `--memcheck`, `--debug`, `--perfil`, `--fpu` y `--cpu 68020`, iguales byte a
+    byte que los del dashc de main (`tests/identicos.py` 3.204 de 3.204; para los grandes, el mismo runtime: el de
+    esta rama trae dbg_set e icon_save y eso mueve unos bytes de un ejecutable con `--memcheck`). En el PC tarda lo
+    mismo o algo menos (Forja 0,069 / 0,061 s); en el A1200 emulado a velocidad real, sprite_editor igual (3,12 /
+    3,14 s).
+  - En el A1200 emulado con 8 MB de Fast (y los 2 de Chip), con el `dash` del Amiga: Forja compila (pico 7.648 KB;
+    `--check`, 5.528). Por el camino salieron dos cosas más. Una, la pila: un texto de mil trozos sumados (los datos de
+    las plantillas de Forja) hacía que `expr_type` bajase mil veces por `a` y agotaba los 64 KB (también el `dash` de
+    main: se quedaba en "Software Failure"); ahora sube por la izquierda sin recursión y la pila es de 128 KB. Otra,
+    la memoria troceada: al juntar el código al final había 4,5 MB libres, pero el trozo seguido más grande era de 600
+    KB y hacían falta 740; los bloques de los nodos se piden desde arriba (`MEMF_REVERSE`) y, al soltarlos, dejan el
+    hueco. "sin memoria" dice ahora cuánto se pedía y cuánto había pedido ya.

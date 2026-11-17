@@ -10,15 +10,26 @@
 #include <setjmp.h>
 
 /* ---- utilidades (util.c) ---- */
+/* Un Buf puede tener lo de antes de base fuera (buf_spill): en trozos aparte (segs), sin moverlo más al crecer. p
+   está corrido base bytes: p[i] vale para i >= base (lo de antes, tras buf_flatten) */
+struct BufSeg;
 typedef struct {
     uint8_t *p;
-    size_t n, cap;
+    size_t n, cap;     /* cap: lo que cabe desde base */
+    size_t base;
+    struct BufSeg *segs, *segs_end;
 } Buf;
 
 void buf_byte(Buf *b, int v);
 void buf_word(Buf *b, int v);
 void buf_long(Buf *b, uint32_t v);
 void buf_bytes(Buf *b, const void *p, size_t n);
+char *buf_text(Buf *b);   /* lo de b como texto del tamaño justo (y b, vacío) */
+/* el código y los datos de un programa grande (gen68k.c): entre función y función, lo ya hecho (menos los últimos
+   keep bytes) sale aparte, y el Buf no tiene que crecer copiándolo todo (con dos veces su tamaño a la vez); se junta
+   otra vez con buf_flatten antes de volver a tocarlo */
+void buf_spill(Buf *b, size_t keep);
+void buf_flatten(Buf *b);
 /* (en línea: se llaman cientos de miles de veces al leer el runtime y escribir el código) */
 static inline void put_word(uint8_t *p, int v)
 {
@@ -40,6 +51,7 @@ static inline uint32_t get_long(const uint8_t *p)
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
 void xfree(void *p);      /* lo de xmalloc y xrealloc (no el free de C) */
+size_t xcap(const void *p);   /* lo que cabe en un trozo de xmalloc (0 con NULL) */
 void mem_init(void);      /* al empezar main: suelta la memoria al acabar */
 char *xstrndup(const char *s, size_t n);
 /* índice de nombres de una lista (util.c): nidx_sync(&x, lista.v, sizeof(*lista.v), offsetof(T, name), lista.n) antes de
@@ -57,9 +69,11 @@ void nidx_sync(NameIdx *x, const void *base, size_t stride, size_t off, int n);
     } while (0)
 
 /* lista dinámica: struct { T *v; int n, cap; } */
+/* (crece al doble; desde 4.096 elementos, la mitad más: con listas de decenas de miles, menos sitio sin usar y menos
+   memoria a la vez al crecer, la vieja y la nueva) */
 #define VEC_PUSH(vec, x) do { \
         if ((vec).n == (vec).cap) { \
-            (vec).cap = (vec).cap ? (vec).cap * 2 : 8; \
+            (vec).cap = (vec).cap ? (vec).cap + ((vec).cap < 4096 ? (vec).cap : (vec).cap / 2) : 8; \
             (vec).v = xrealloc((vec).v, (vec).cap * sizeof(*(vec).v)); \
         } \
         (vec).v[(vec).n++] = (x); \
@@ -99,15 +113,22 @@ enum {
     T_FLOAT   /* val: los bits del float (IEEE de 32 bits) */
 };
 
+/* (32 bytes: un fuente grande tiene decenas de miles, y están todos a la vez mientras se lee su fichero) */
 typedef struct {
-    int kind, line, col, file;
+    int line;
     long val;      /* T_INT */
-    double dval;   /* T_FLOAT: el valor entero (un Double lo quiere con todas sus cifras) */
     char *text;    /* T_ID; T_STR ya en Latin-1 y sin escapes */
     int len;
-    /* T_ISTR: piece[0] texto, piece[1] código, piece[2] texto...; plen: largo de cada texto */
-    char **piece;
-    int *plen, npieces;
+    union {
+        double dval;   /* T_FLOAT: el valor entero (un Double lo quiere con todas sus cifras) */
+        struct {
+            /* T_ISTR: piece[0] texto, piece[1] código, piece[2] texto...; plen: largo de cada texto */
+            char **piece;
+            int *plen;
+        };
+    };
+    unsigned short col, file, npieces;
+    unsigned char kind;
 } Token;
 
 Token *lex(const char *src);
@@ -168,22 +189,50 @@ int dict_type(int key, int val);
 extern struct TypeNames { char **v; int n, cap; } type_names;
 
 typedef struct Node Node;
-typedef struct { Node **v; int n, cap; } NodeList;
+/* lista de nodos: v sale de xmalloc (o NULL) y su sitio es el del trozo pedido (xcap): sin campo cap, que en cada
+   nodo eran 4 bytes por lista */
+typedef struct { Node **v; int n; } NodeList;
+/* añadir x (crece al doble, como VEC_PUSH) */
+#define NL_PUSH(l, x) do { \
+        if ((size_t)((l).n + 1) * sizeof(Node *) > xcap((l).v)) \
+            (l).v = xrealloc((l).v, (size_t)((l).n ? (l).n * 2 : 2) * sizeof(Node *)); \
+        (l).v[(l).n++] = (x); \
+    } while (0)
 
-struct Node {
-    int kind, line, col, file;
-    int op;          /* E_BIN, E_CMP: el token del operador */
-    long val;        /* E_INT, E_BOOL */
-    double dval;     /* E_FLOAT */
-    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
-    char *str;       /* E_STR */
-    int len;
-    int type;        /* S_VAR: tipo declarado; E_LIST: lo que guarda, si lo dice su destino ([Double]) */
-    Node *a, *b, *c; /* operandos; S_IF: a = condición; S_FOR: desde, hasta, paso */
-    NodeList args;   /* E_CALL */
-    NodeList body;   /* S_IF (rama sí), S_WHILE, S_FOR */
+/* Lo que llevan pocos nodos (los bloques de if, while, for...; el texto de un literal; c; el tipo de un var o de
+   una lista), aparte: así los demás (casi todos: nombres, números, operaciones, llamadas) no cargan con ello */
+typedef struct {
+    NodeList body;   /* S_IF (rama sí), S_WHILE, S_FOR... */
     NodeList els;    /* S_IF (rama no; un elif es un S_IF dentro) */
+    Node *c;         /* S_FOR: el paso; E_SLICE: el final; E_INRANGE: la comprobación */
+    int type;        /* S_VAR: tipo declarado; E_LIST: lo que guarda, si lo dice su destino ([Double]) */
+    union {
+        struct {
+            char *str;   /* E_STR */
+            int len;
+        };
+        double dval;     /* E_FLOAT */
+    };
+} NodeExt;
+extern NodeExt node_no_ext;      /* (parser.c) el de los nodos sin nada de eso: todo a 0, y nadie lo cambia */
+NodeExt *node_ext(Node *n);      /* (parser.c) el suyo, para escribir en él */
+
+/* Un nodo del árbol. Con un programa grande hay decenas de miles (Forja: 75.000): sus campos, de lo más pequeño que
+   cabe; salen de corrido de bloques (node_alloc), sin cabecera. */
+struct Node {
+    int line;
+    long val;        /* E_INT, E_BOOL */
+    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
+    Node *a, *b;     /* operandos; S_IF: a = condición; S_FOR: desde, hasta (x->c el paso) */
+    NodeList args;   /* E_CALL */
+    NodeExt *x;      /* lo de NodeExt (n->x->body...). Nunca NULL: sin nada de eso, &node_no_ext (node_alloc) */
+    unsigned short col, file;
+    unsigned char kind;
+    unsigned char op;    /* E_BIN, E_CMP: el token del operador */
 };
+Node *node_alloc(void);   /* util.c: un nodo a 0 */
+void *node_arena(size_t size);   /* util.c: de donde salen los nodos (a 0): un NodeExt */
+void node_free_all(void);        /* util.c: suelta todos los nodos (tras generar: el árbol ya no hace falta) */
 
 typedef struct {
     char *name;
@@ -312,9 +361,16 @@ extern size_t rt_blob_len;
 enum { HK_CODE = 0, HK_DATA = 1 };
 
 typedef struct {
-    uint32_t off;      /* dónde está el long que hay que reubicar */
-    int hunk;          /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
+#ifndef DASH_A64
+    /* (8 bytes: un programa grande lleva decenas de miles) */
+    uint32_t off : 30; /* dónde está el long que hay que reubicar */
+    int hunk : 2;      /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
     const char *sym;
+#else
+    uint32_t off;
+    int hunk;
+    const char *sym;
+#endif
 #ifdef DASH_A64
     int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
     long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */

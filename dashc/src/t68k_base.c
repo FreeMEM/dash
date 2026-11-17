@@ -36,7 +36,7 @@ enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
 static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
 /* at: dónde va el desplazamiento (o la dirección, si abs); size: 2 = Bcc.w, 1 = Bcc.s
    (at ya es la instrucción siguiente), 0 = quitado */
-typedef struct { uint32_t at; int label; int abs; int size; } Fixup;
+typedef struct { uint32_t at; int label : 29; unsigned abs : 1, size : 2; } Fixup;   /* (8 bytes: hay decenas de miles) */
 static struct { Fixup *v; int n, cap; } fixups;
 
 /* Las etiquetas por su posición (lpos) y cuántos saltos van a cada una (lab_refs): def_label_at miraba en cada
@@ -50,7 +50,7 @@ static int lpos_ok = 1;
 static int lpos_slot(long pos, int add)            /* el hueco de pos en la tabla (-1 si no está y no se añade) */
 {
     unsigned h;
-    if (add && (lpos.used + 1) * 2 > lpos.cap) {
+    if (add && (lpos.used + 1) * 4 > lpos.cap * 3) {   /* (hasta 3/4 llena: decenas de miles de posiciones) */
         /* más grande: se rehace con las posiciones que tienen alguna etiqueta */
         long *ok = lpos.key;
         int *oh = lpos.head, oc = lpos.cap, i;
@@ -84,7 +84,10 @@ static void lpos_unlink(int l)
 {
     if (labels.v[l] < 0) return;
     if (lab_x.prev[l] >= 0) lab_x.next[lab_x.prev[l]] = lab_x.next[l];
-    else lpos.head[lpos_slot(labels.v[l], 0)] = lab_x.next[l];
+    else {
+        int k = lpos_slot(labels.v[l], 0);
+        if (k >= 0) lpos.head[k] = lab_x.next[l];  /* (no está si lpos_trim la dejó fuera: nadie la busca ya) */
+    }
     if (lab_x.next[l] >= 0) lab_x.prev[lab_x.next[l]] = lab_x.prev[l];
 }
 
@@ -127,6 +130,24 @@ static int lpos_first(long pos)                    /* la primera etiqueta en pos
     return k < 0 ? -1 : lpos.head[k];
 }
 
+/* Al empezar una función (gen_one): mientras se genera solo se buscan etiquetas junto al final del código (lo que
+   miran def_label_at y take_move_to_d0: n - 4, n + 4...). La tabla se rehace solo con las que están cerca del final
+   (desde from): con un programa grande tenía decenas de miles de posiciones. Al acabar, cut_code e insert_code la
+   rehacen entera (lpos_ok = 0). */
+static void lpos_trim(long from)
+{
+    int keep[256], nk = 0, i, l;
+    long pos;
+    if (!lpos_ok || lpos.used < 2048) return;
+    for (pos = from < 0 ? 0 : from; pos <= (long)obj->code.n + 8; pos++)
+        for (l = lpos_first(pos); l >= 0 && nk < 256; l = lab_x.next[l]) keep[nk++] = l;
+    if (nk == 256) return;                             /* (no pasa: muchas a la vez; mejor no tocar nada) */
+    xfree(lpos.key);
+    xfree(lpos.head);
+    memset(&lpos, 0, sizeof lpos);
+    for (i = nk - 1; i >= 0; i--) lpos_link(keep[i]);   /* (al revés: lpos_link pone delante; así, en su orden) */
+}
+
 static void lpos_move(long from, long to)          /* las etiquetas de from, a to */
 {
     int l;
@@ -137,7 +158,7 @@ static int new_label(void)
 {
     VEC_PUSH(labels, -1);
     if (labels.n > lab_x.cap) {
-        lab_x.cap = labels.n * 2;
+        lab_x.cap = labels.cap;
         lab_x.next = xrealloc(lab_x.next, sizeof(int) * lab_x.cap);
         lab_x.prev = xrealloc(lab_x.prev, sizeof(int) * lab_x.cap);
         lab_x.refs = xrealloc(lab_x.refs, sizeof(int) * lab_x.cap);
@@ -225,13 +246,65 @@ static void flags_set(int reg, int full)
 static void l(uint32_t v) { buf_long(&obj->code, v); }
 
 
+/* Las reubicaciones, como el código (buf_spill): entre función y función, las ya hechas salen aparte (rel_spill) y
+   la lista no crece copiándolas todas; rel_flatten las junta al acabar. obj->relocs.v está corrido rel_base
+   elementos (vale desde rel_base) y cap cuenta desde 0 */
+static int rel_base;
+static struct RelSeg { struct RelSeg *next; int n; } *rel_segs, *rel_segs_end;   /* (y detrás, sus n Reloc) */
+
 static void add_reloc(uint32_t off, int hunk, const char *sym)
 {
     Reloc r;
     r.off = off;
     r.hunk = hunk;
     r.sym = sym;
-    VEC_PUSH(obj->relocs, r);
+    if (obj->relocs.n == obj->relocs.cap) {
+        int have = obj->relocs.cap - rel_base, nc = have ? have + (have < 4096 ? have : have / 2) : 8;
+        Reloc *real = obj->relocs.v ? obj->relocs.v + rel_base : NULL;
+        real = xrealloc(real, sizeof(Reloc) * (size_t)nc);
+        obj->relocs.v = real - rel_base;
+        obj->relocs.cap = rel_base + nc;
+    }
+    obj->relocs.v[obj->relocs.n++] = r;
+}
+
+static void rel_spill(void)
+{
+    int k = obj->relocs.n - rel_base;
+    struct RelSeg *s;
+    if (k < 2048) return;
+    s = xmalloc(sizeof *s + sizeof(Reloc) * (size_t)k);
+    s->n = k;
+    memcpy(s + 1, obj->relocs.v + rel_base, sizeof(Reloc) * (size_t)k);
+    if (rel_segs_end) rel_segs_end->next = s;
+    else rel_segs = s;
+    rel_segs_end = s;
+    obj->relocs.v -= k;                            /* (el mismo sitio de memoria, con base k más allá) */
+    obj->relocs.cap += k;
+    rel_base += k;
+}
+
+static void rel_flatten(void)
+{
+    Reloc *all, *d;
+    struct RelSeg *s;
+    if (!rel_segs) return;
+    all = d = xmalloc(sizeof(Reloc) * (size_t)(obj->relocs.n + 1));
+    for (s = rel_segs; s; s = s->next) {
+        memcpy(d, s + 1, sizeof(Reloc) * (size_t)s->n);
+        d += s->n;
+    }
+    memcpy(d, obj->relocs.v + rel_base, sizeof(Reloc) * (size_t)(obj->relocs.n - rel_base));
+    while (rel_segs) {
+        s = rel_segs;
+        rel_segs = s->next;
+        xfree(s);
+    }
+    rel_segs_end = NULL;
+    xfree(obj->relocs.v + rel_base);
+    obj->relocs.v = all;
+    obj->relocs.cap = obj->relocs.n + 1;
+    rel_base = 0;
 }
 
 /* Bcc.w etiqueta (CC_T = bra) */
@@ -359,6 +432,25 @@ static void cut_note(uint32_t pos, int n)
     cuts.pos[cuts.n] = pos;
     cuts.sum[cuts.n] = (cuts.n ? cuts.sum[cuts.n - 1] : 0) + n;
     cuts.n++;
+}
+
+/* al acabar de generar (gen_program): las etiquetas y los saltos ya no hacen falta; su memoria, para enlazar */
+static void labels_free(void)
+{
+    xfree(fixups.v);
+    xfree(labels.v);
+    xfree(lab_x.next);
+    xfree(lab_x.prev);
+    xfree(lab_x.refs);
+    xfree(lpos.key);
+    xfree(lpos.head);
+    xfree(cuts.pos);
+    xfree(cuts.sum);
+    memset(&fixups, 0, sizeof fixups);
+    memset(&labels, 0, sizeof labels);
+    memset(&lab_x, 0, sizeof lab_x);
+    memset(&lpos, 0, sizeof lpos);
+    memset(&cuts, 0, sizeof cuts);
 }
 
 static void relax_branches(void)

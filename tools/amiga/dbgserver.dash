@@ -15,6 +15,8 @@
 #     globals                     "var NOMBRE TIPO VALOR" por cada global
 #     values MARCO EXPR...        "val TIPO VALOR" por cada expresión (una variable con .campo y [n] detrás; en el
 #                                 marco -1, solo las globales)
+#     set MARCO EXPR VALOR        cambia el valor de EXPR (como en values) por VALOR (un Int, Char, Bool, Fixed o
+#                                 Float, como texto: 3, $FF, true, 1.5): "ok VALOR_NUEVO" o "error MOTIVO"
 #     state                       el estado (0 nada, 1 en pausa al empezar, 2 corriendo, 3 parado, 4 acabado)
 #     end                         lo acaba (con su limpieza de siempre); quit, además, cierra el servidor
 #
@@ -214,6 +216,18 @@ func orden(linea: String) -> Bool
             k = k + 1
         end
         enviar("ok")
+    elif o == "set"
+        if c.length < 4
+            enviar("error\tfalta el marco, la expresión o el valor")
+        else
+            m = str_to_int(c[1])
+            r = dbg_set(m, c[2], c[3])
+            if r == ""
+                enviar("ok\t" + escapar(dbg_value(m, c[2])))
+            else
+                enviar("error\t" + escapar(r))
+            end
+        end
     elif o == "state"
         enviar("ok\t#{dbg_state()}")
     elif o == "end" or o == "quit"

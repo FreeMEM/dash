@@ -93,9 +93,8 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             }
             t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 2));
             t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 2));
-            buf_byte(&b, 0);
-            t->piece[t->npieces] = (char *)b.p;
-            t->plen[t->npieces] = (int)b.n - 1;
+            t->plen[t->npieces] = (int)b.n;
+            t->piece[t->npieces] = buf_text(&b);
             {
                 /* el código, con \" y \\ ya como " y \ */
                 char *code = xstrndup(s + 2, e - (s + 2)), *r = code, *w2 = code;
@@ -186,16 +185,60 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
     }
     *ps = s + 1;
     *len = (int)b.n;
-    buf_byte(&b, 0);
-    if (t->kind == T_ISTR) {
-        /* el último trozo de texto */
-        t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 1));
-        t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 1));
-        t->piece[t->npieces] = (char *)b.p;
-        t->plen[t->npieces] = *len;
-        t->npieces++;
+    {
+        char *text = buf_text(&b);
+        if (t->kind == T_ISTR) {
+            /* el último trozo de texto */
+            t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 1));
+            t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 1));
+            t->piece[t->npieces] = text;
+            t->plen[t->npieces] = *len;
+            t->npieces++;
+        }
+        return text;
     }
-    return (char *)b.p;
+}
+
+/* Los nombres, una sola copia de cada uno para todo el programa (con Forja, 43.000 nombres en el fuente, de unos
+   pocos miles distintos): nadie los cambia ni los suelta. Van de corrido en bloques de 16 KB, sin cabecera. */
+static struct { const char **v; unsigned cap, n; } names;
+
+static const char *intern(const char *b, size_t n)
+{
+    static char *at, *end;
+    unsigned h = 5381, i;
+    size_t k;
+    char *d;
+    for (k = 0; k < n; k++) h = ((h << 5) + h) ^ (unsigned char)b[k];   /* (sin multiplicar) */
+    if ((names.n + 1) * 2 > names.cap) {
+        const char **old = names.v;
+        unsigned oc = names.cap, j;
+        names.cap = oc ? oc * 2 : 1024;
+        names.v = xmalloc(sizeof(char *) * names.cap);
+        for (j = 0; j < oc; j++)
+            if (old[j]) {
+                unsigned g = 5381;
+                const unsigned char *q = (const unsigned char *)old[j];
+                while (*q) g = ((g << 5) + g) ^ *q++;
+                for (i = g & (names.cap - 1); names.v[i]; i = (i + 1) & (names.cap - 1)) {}
+                names.v[i] = old[j];
+            }
+        xfree(old);
+    }
+    for (i = h & (names.cap - 1); names.v[i]; i = (i + 1) & (names.cap - 1))
+        if (!strncmp(names.v[i], b, n) && !names.v[i][n]) return names.v[i];
+    if ((size_t)(end - at) < n + 1) {
+        size_t sz = n + 1 > 16384 ? n + 1 : 16384;
+        at = xmalloc(sz);
+        end = at + sz;
+    }
+    d = at;
+    for (k = 0; k < n; k++) d[k] = b[k];              /* (sin memcpy: CopyMem de exec, caro para tan poco) */
+    d[n] = 0;
+    at += n + 1;
+    names.v[i] = d;
+    names.n++;
+    return d;
 }
 
 /* los nombres privados (`_x`) de un módulo: se leen con su sufijo (`_x__m2`), para que dos módulos y el
@@ -215,8 +258,9 @@ static void rename_private(Token *t)
                 char *n = xmalloc(strlen(t[i].text) + strlen(buf) + 1);
                 strcpy(n, t[i].text);
                 strcat(n, buf);
-                t[i].text = n;
                 t[i].len = (int)strlen(n);
+                t[i].text = (char *)intern(n, (size_t)t[i].len);
+                xfree(n);
                 break;
             }
     }
@@ -224,6 +268,39 @@ static void rename_private(Token *t)
 
 /* los nombres privados en unos tokens ya leídos (lo mismo que leerlos otra vez con lex_priv puesto) */
 void lex_rename_private(Token *t) { rename_private(t); }
+
+/* Cuántos tokens puede tener src, por arriba: cada nombre o número, cada signo y cada texto, sin los comentarios. Antes
+   se pedía sitio para uno cada 5 caracteres: en un fuente con textos largos (los datos de Forja) eran megas de más,
+   a la vez que el árbol. (Si se queda corto, lex crece.) */
+static int count_tokens(const char *s)
+{
+    int n = 0;
+    while (*s) {
+        unsigned char c = (unsigned char)*s;
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') s++;
+        else if (c == '#') {
+            while (*s && *s != '\n') s++;
+        } else if (c == '"') {
+            n++;
+            if (s[1] == '"' && s[2] == '"') {
+                const char *e = strstr(s + 3, "\"\"\"");
+                s = e ? e + 3 : s + strlen(s);
+            } else {
+                /* (un texto con #{...}: sus trozos de código se leen aparte, con su propio lex) */
+                for (s++; *s && *s != '"' && *s != '\n'; s++)
+                    if (*s == '\\' && s[1]) s++;
+                if (*s == '"') s++;
+            }
+        } else if (isalnum(c) || c == '_' || c == '@' || c == '$') {
+            n++;                                       /* (1.5 cuenta tres: mejor de más) */
+            while (isalnum((unsigned char)*s) || *s == '_' || *s == '@' || *s == '$') s++;
+        } else {
+            n++;
+            s++;
+        }
+    }
+    return n;
+}
 
 Token *lex(const char *src)
 {
@@ -234,8 +311,8 @@ Token *lex(const char *src)
     if (!strncmp(src, "\xEF\xBB\xBF", 3)) src += 3;   /* la marca de UTF-8 de los editores de Windows */
     lex_latin1 = !valid_utf8((const unsigned char *)src);
     s = line_start = src;
-    /* sitio para los tokens de una vez (uno cada 5 caracteres basta casi siempre): sin copiarlos al crecer */
-    toks.cap = (int)(strlen(src) / 5) + 16;
+    /* sitio para los tokens de una vez, sin copiarlos al crecer: cuántos puede haber como mucho (count_tokens) */
+    toks.cap = count_tokens(src) + 16;
     toks.v = xmalloc(sizeof(Token) * toks.cap);
 
     for (;;) {
@@ -258,8 +335,8 @@ Token *lex(const char *src)
             s++;
         }
         t->line = line;
-        t->file = lex_file;
-        t->col = (int)(s - line_start) + 1;
+        t->file = (unsigned short)lex_file;
+        t->col = (unsigned short)(s - line_start + 1 > 65535 ? 65535 : s - line_start + 1);
         if (!*s) {
             t->kind = T_EOF;
             toks.n++;
@@ -325,7 +402,7 @@ Token *lex(const char *src)
                         break;
                     }
             if (t->kind == T_ID) {
-                t->text = xstrndup(b, s - b);
+                t->text = (char *)intern(b, s - b);
                 t->len = (int)(s - b);
             }
         } else if (s[0] == '"' && s[1] == '"' && s[2] == '"') {
@@ -346,7 +423,7 @@ Token *lex(const char *src)
             const char *b = s++;
             while (isalnum((unsigned char)*s) || *s == '_') s++;
             t->kind = T_ID;
-            t->text = xstrndup(b, s - b);
+            t->text = (char *)intern(b, s - b);
             t->len = (int)(s - b);
         } else if (*s == '"') {
             t->kind = T_STR;
@@ -363,7 +440,7 @@ Token *lex(const char *src)
                 P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE, P_LB, P_RB, P_DOT,
                 P_LBRACE, P_RBRACE
             };
-            int i;
+            int i, k;
             /* (por el carácter: one_of[c] es su signo + 1; two_of[c], el primero de two que empieza por c, + 1) */
             static unsigned char one_of[256], two_of[256], ready;
             if (!ready) {
@@ -373,19 +450,20 @@ Token *lex(const char *src)
                 for (i = 0; two[i].p; i++)
                     if (!two_of[(unsigned char)two[i].p[0]]) two_of[(unsigned char)two[i].p[0]] = (unsigned char)(i + 1);
             }
-            t->kind = -1;
+            k = -1;
             if (two_of[(unsigned char)*s])
                 for (i = two_of[(unsigned char)*s] - 1; two[i].p; i++)
                     if (s[0] == two[i].p[0] && s[1] == two[i].p[1]) {
-                        t->kind = two[i].k;
+                        k = two[i].k;
                         s += 2;
                         break;
                     }
-            if (t->kind < 0 && *s && one_of[(unsigned char)*s]) {
-                t->kind = one_k[one_of[(unsigned char)*s] - 1];
+            if (k < 0 && *s && one_of[(unsigned char)*s]) {
+                k = one_k[one_of[(unsigned char)*s] - 1];
                 s++;
             }
-            if (t->kind < 0) fatal_at(t->line, t->col, "carácter inesperado '%c'", *s);
+            if (k < 0) fatal_at(t->line, t->col, "carácter inesperado '%c'", *s);
+            t->kind = (unsigned char)k;
         }
         toks.n++;
     }

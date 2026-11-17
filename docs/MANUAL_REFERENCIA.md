@@ -50,7 +50,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1061 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1063 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -4663,7 +4663,7 @@ línea: `dash: el programa lleva C: se compila por C con gcc`.
 | `--check` | Solo comprueba: da los errores como al compilar, sin hacer el ejecutable y sin `-o` (un editor los marca al guardar). También con `--gcc`, sin llamar a gcc. Da todos los que puede, por orden de línea y como mucho 20 (no los que vienen de otro, como una variable cuya asignación falló). Vale un módulo sin `Main` |
 | `--texto ruta=fichero` | Con `--check`: el texto de `ruta` (un módulo o el programa) se lee de `fichero`, lo que el editor aún no ha guardado; los errores dicen `ruta`. Así se comprueba un módulo dentro de su programa: `./dash --check principal.dash --texto lib/modulo.dash=T:copia`. Se repite para varios ficheros |
 | `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
-| `--tiempos` | Cuánto tarda cada fase de la compilación, y la memoria que lleva pedida al acabar cada una |
+| `--tiempos` | Cuánto tarda cada fase de la compilación, la memoria que lleva pedida al acabar cada una y lo más que llegó a pedir (pico) |
 | `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |
 | `--version` | `Dash 2.3.1` |
 

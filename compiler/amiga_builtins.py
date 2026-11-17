@@ -5087,6 +5087,14 @@ TASK_FUNCTIONS = {
     "icon_height": BuiltinFunc(
         name="icon_height", params=["icon"], return_type="LONG", c_template="_dash_icon_size(${icon}, 1)",
         description="The height of an icon of icon_load as icon_draw draws it (0 without it)"),
+    "icon_save": BuiltinFunc(
+        name="icon_save", params=["path", "base", "type", "tool", "tooltypes"], return_type="BOOL",
+        c_template="_dash_icon_save(${path}, ${base}, ${type}, ${tool}, ${tooltypes})", reads_only=True,
+        description="Writes the icon (.info) of path (without \".info\"), by icon.library: a copy of the icon of base "
+                    "(another file, with or without \".info\"), or with base \"\" the default one of its type; type 0 "
+                    "keeps the base's (1 disk, 2 drawer, 3 tool, 4 project, 5 trash can); tool, its default tool, and "
+                    "tooltypes, its tooltypes one per line (\"\" keeps those of the base). The Workbench places it. "
+                    "true if it was written"),
     "icon_free": BuiltinFunc(
         name="icon_free", params=["icon"], return_type="void", c_template="_dash_icon_free(${icon})",
         description="Frees an icon of icon_load (the ones left, at exit)"),
@@ -6180,6 +6188,9 @@ DEBUGGER_FUNCTIONS = {
     "dbg_value_type": BuiltinFunc(
         name="dbg_value_type", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value_type((LONG)(${i}), (LONG)(${expr})))",
         reads_only=True, description='The type of expr in call i ("" if it cannot)'),
+    "dbg_set": BuiltinFunc(
+        name="dbg_set", params=['i', 'expr', 'value'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_set((LONG)(${i}), (LONG)(${expr}), (LONG)(${value})))",
+        reads_only=True, description='Change the value of expr in call i (as in dbg_value: a variable or global, with .field and [n] after it) to value, a text: an Int or Char (3, -1, $FF), a Bool (true, false), a Fixed or a Float (1.5); "" if it changed, else why (a String, Double or object cannot be changed)'),
     "dbg_reg": BuiltinFunc(
         name="dbg_reg", params=['n'], return_type="LONG", c_template="((LONG)_dash_dbg_reg((LONG)(${n})))",
         reads_only=True, description='A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC'),
@@ -6214,7 +6225,8 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
     "wm_activate", "wm_zip", "wm_hide", "wm_show", "wm_can_hide", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
-    "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
+    "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free",
+    "icon_save"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [

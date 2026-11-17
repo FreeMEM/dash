@@ -1,0 +1,20 @@
+# `not` delante de un builtin cuyo C es "f(...) != NULL" (screen_open_custom): con --gcc salía
+# "(!f(...) != NULL)", que es "(!f(...)) != NULL" y gcc avisaba de comparar un puntero con un entero
+# (lo pidió Forja)
+# expect-no-c: (!_dash_open_screen_custom(
+# expect-c: (!(_dash_open_screen_custom(
+# expect-out: abierta
+# expect-out: fin
+Main
+    if not screen_open_custom(320, 200, 2, "prueba")
+        Print "no se abre"
+    else
+        Print "abierta"
+        screen_close()
+    end
+    cerrada = not screen_open_custom(320, 200, 2, "prueba")
+    if not cerrada
+        screen_close()
+    end
+    Print "fin"
+end

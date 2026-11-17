@@ -15,7 +15,7 @@
 #include "dashc.h"
 
 int tiempos;   /* --tiempos */
-static long mem_in_use;   /* (--tiempos: la memoria pedida al sistema, en uso) */
+static long mem_in_use, mem_peak;   /* (--tiempos: la memoria pedida al sistema, en uso, y lo más que llegó) */
 
 void tiempo(const char *fase)
 {
@@ -24,7 +24,8 @@ void tiempo(const char *fase)
     if (!tiempos) return;
     if (!last) last = clock();
     now = clock();
-    printf("%-12s %6ld ms %7ld KB\n", fase, (long)((now - last) * 1000 / CLOCKS_PER_SEC), mem_in_use / 1024);
+    printf("%-12s %6ld ms %7ld KB (pico %ld KB)\n", fase, (long)((now - last) * 1000 / CLOCKS_PER_SEC), mem_in_use / 1024,
+           mem_peak / 1024);
     last = now;
 }
 
@@ -39,7 +40,10 @@ int lex_file;
    aparte (AllocMem), en una lista para soltarlos al acabar. */
 #ifdef __amigaos__
 #define HDR 4                     /* el tamaño del trozo, delante (con el bit 0 si es grande) */
-#define sys_alloc(n) AllocMem((n), MEMF_ANY)
+/* (los bloques de los nodos, desde arriba de la memoria: juntos, para que al soltarlos quede un hueco grande donde
+   juntar el código; si no, con 8 MB no había 700 KB seguidos) */
+static int alloc_top;
+#define sys_alloc(n) AllocMem((n), MEMF_ANY | (alloc_top ? MEMF_REVERSE : 0))
 #define sys_free(p, n) FreeMem((p), (n))
 #else
 #define HDR 8                     /* (8: los double y punteros del PC, alineados) */
@@ -80,6 +84,17 @@ void mem_init(void) { atexit(mem_free_all); }
 
 static void *alloc_raw(size_t n, size_t *got);
 
+/* sin memoria: cuánto se pedía y cuánto llevaba (para saber cuánta hace falta) */
+static void no_memory(size_t want)
+{
+#if defined(__amigaos__) && defined(DIAG_MEM)
+    printf("diag: pide %lu, en uso %ld, libre %lu, mayor %lu, chip mayor %lu\n", (unsigned long)want, mem_in_use,
+           (unsigned long)AvailMem(MEMF_ANY), (unsigned long)AvailMem(MEMF_ANY | MEMF_LARGEST),
+           (unsigned long)AvailMem(MEMF_CHIP | MEMF_LARGEST));
+#endif
+    fatal("sin memoria (%lu KB más, con %ld KB pedidos)", (unsigned long)(want + 1023) / 1024, mem_in_use / 1024);
+}
+
 void *xmalloc(size_t n)
 {
     size_t need;
@@ -112,8 +127,9 @@ static void *alloc_raw(size_t n, size_t *got)
         } else {
             if ((size_t)(bump_end - bump) < need + HDR) {
                 Chunk *c = sys_alloc(CHUNK_SIZE);
-                if (!c) fatal("sin memoria");
+                if (!c) no_memory(CHUNK_SIZE);
                 mem_in_use += CHUNK_SIZE;
+                if (mem_in_use > mem_peak) mem_peak = mem_in_use;
                 c->next = chunks;
                 chunks = c;
                 bump = (uint8_t *)(c + 1);
@@ -126,10 +142,11 @@ static void *alloc_raw(size_t n, size_t *got)
     } else {
         size_t total = sizeof(Big) + HDR + need;
         Big *b;
-        if (total < need) fatal("sin memoria");
+        if (total < need) no_memory(need);
         b = sys_alloc(total);
-        if (!b) fatal("sin memoria");
+        if (!b) no_memory(total);
         mem_in_use += (long)total;
+        if (mem_in_use > mem_peak) mem_peak = mem_in_use;
         b->size = total;
         b->next = bigs.next;
         b->prev = &bigs;
@@ -174,6 +191,64 @@ void *xrealloc(void *p, size_t n)
     return q;
 }
 
+size_t xcap(const void *p) { return p ? SIZE_OF(p) & ~(size_t)1 : 0; }
+
+/* Los nodos del árbol (y sus NodeExt), de corrido en bloques de 32 KB: sin la cabecera ni el redondeo a 8 de cada
+   trozo (nunca se sueltan uno a uno; node_free_all, todos al acabar de generar) */
+static struct NodeBlock { struct NodeBlock *next; } *node_blocks;
+
+static uint8_t *arena_at, *arena_end;
+
+void *node_arena(size_t size)
+{
+    uint8_t *at = arena_at, *end = arena_end;
+    /* (de 4 en 4 bytes, también en el 68000, donde el struct va de 2 en 2: un long que no empieza en múltiplo de 4
+       va más lento en un 68020) */
+    size_t sz = (size + 3) & ~(size_t)3;
+    void *n;
+#if !defined(__amigaos__)
+    sz = (size + 7) & ~(size_t)7;                  /* (los double y punteros del PC, alineados) */
+#endif
+    if ((size_t)(end - at) < sz) {
+        struct NodeBlock *b;
+#ifdef __amigaos__
+        alloc_top = 1;
+#endif
+        b = xmalloc(32 * 1024);
+#ifdef __amigaos__
+        alloc_top = 0;
+#endif
+        b->next = node_blocks;
+        node_blocks = b;
+        at = (uint8_t *)(b + 1);
+#if !defined(__amigaos__)
+        at = (uint8_t *)b + 8;
+#endif
+        end = (uint8_t *)b + 32 * 1024;
+    }
+    n = at;                                        /* (ya a 0: xmalloc) */
+    arena_at = at + sz;
+    arena_end = end;
+    return n;
+}
+
+void node_free_all(void)
+{
+    arena_at = arena_end = NULL;
+    while (node_blocks) {
+        struct NodeBlock *b = node_blocks;
+        node_blocks = b->next;
+        xfree(b);
+    }
+}
+
+Node *node_alloc(void)
+{
+    Node *n = node_arena(sizeof(Node));
+    n->x = &node_no_ext;
+    return n;
+}
+
 /* (sin memcpy: el de libnix llama a CopyMem de exec, caro para unos pocos bytes) */
 static void copy_small(void *dst, const void *src, size_t n)
 {
@@ -195,13 +270,70 @@ char *xstrndup(const char *s, size_t n)
     return d;
 }
 
+/* lo de b como texto (con su 0 detrás), en un trozo de su tamaño: un Buf empieza con 256 bytes, y los miles de
+   textos de un programa grande se quedaban con ellos (b queda vacío) */
+char *buf_text(Buf *b)
+{
+    char *t = xstrndup(b->p ? (const char *)b->p : "", b->n);
+    xfree(b->p);
+    b->p = NULL;
+    b->n = b->cap = 0;
+    return t;
+}
+
 static void grow(Buf *b, size_t extra)
 {
-    if (b->n + extra > b->cap) {
-        b->cap = b->cap ? b->cap * 2 : 256;
-        while (b->cap < b->n + extra) b->cap *= 2;
-        b->p = xrealloc(b->p, b->cap);
+    if (b->n - b->base + extra > b->cap) {
+        uint8_t *real = b->p ? b->p + b->base : NULL;
+        /* (al doble; desde 64 KB, la mitad más, como VEC_PUSH) */
+        b->cap = b->cap ? b->cap + (b->cap < 65536 ? b->cap : b->cap / 2) : 256;
+        while (b->cap < b->n - b->base + extra) b->cap *= 2;
+        real = xrealloc(real, b->cap);
+        b->p = real - b->base;
     }
+}
+
+struct BufSeg { struct BufSeg *next; size_t n; };   /* y detrás, sus n bytes */
+#define SPILL_MIN (32 * 1024)
+
+void buf_spill(Buf *b, size_t keep)
+{
+    struct BufSeg *s;
+    size_t k;
+    if (b->n - b->base < SPILL_MIN + keep) return;
+    k = b->n - b->base - keep;
+    s = xmalloc(sizeof *s + k);
+    s->n = k;
+    memcpy(s + 1, b->p + b->base, k);
+    memmove(b->p + b->base, b->p + b->base + k, keep);
+    if (b->segs_end) b->segs_end->next = s;
+    else b->segs = s;
+    b->segs_end = s;
+    b->p -= k;                                     /* (el mismo sitio de memoria, con base k más allá) */
+    b->base += k;
+}
+
+void buf_flatten(Buf *b)
+{
+    uint8_t *all, *d;
+    struct BufSeg *s;
+    if (!b->segs) return;
+    all = d = xmalloc(b->n + 1);
+    for (s = b->segs; s; s = s->next) {
+        memcpy(d, s + 1, s->n);
+        d += s->n;
+    }
+    memcpy(d, b->p + b->base, b->n - b->base);
+    while (b->segs) {
+        s = b->segs;
+        b->segs = s->next;
+        xfree(s);
+    }
+    b->segs_end = NULL;
+    xfree(b->p + b->base);
+    b->p = all;
+    b->base = 0;
+    b->cap = b->n + 1;
 }
 
 void buf_byte(Buf *b, int v)

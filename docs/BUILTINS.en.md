@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1061 functions, 1061 implemented, 0 not implemented.
+Total: 1063 functions, 1063 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -8672,7 +8672,7 @@ it, go line by line and look at its variables.
 3. `dbg_continue()`, `dbg_step()`, `dbg_next()` or `dbg_out()`: set it going, and `dbg_wait` waits for it to stop
    or end (with MUI, `dbg_signal` with `mui_wait_event_signals`).
 4. Stopped: `dbg_file`, `dbg_line` and `dbg_function` say where; `dbg_frames` and `dbg_frame_*`, the call stack;
-   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables.
+   `dbg_vars`, `dbg_var_*` and `dbg_value`, the variables, and `dbg_set` changes them.
 5. When it ends (`dbg_state()` 4), `dbg_rc` and `dbg_output`.
 
 There is one debugged program at a time. Calls are numbered from the stopping point: 0 where it stopped, 1 its
@@ -8743,6 +8743,7 @@ end
 | [`dbg_global_name(g)`](#dbg_global_name) | String | Name of global g (from 0) |  |
 | [`dbg_value(i, expr)`](#dbg_value) | String | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
 | [`dbg_value_type(i, expr)`](#dbg_value_type) | String | The type of expr in call i ("" if it cannot) |  |
+| [`dbg_set(i, expr, value)`](#dbg_set) | String | Change the value of expr in call i (as in dbg_value: a variable or global, with .field and [n] after it) to value, a text: an Int or Char (3, -1, $FF), a Bool (true, false), a Fixed or a Float (1.5); "" if it changed, else why (a String, Double or object cannot be changed) |  |
 | [`dbg_reg(n)`](#dbg_reg) | Int | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
 | [`dbg_peek(addr, size)`](#dbg_peek) | Int | 1, 2 or 4 bytes of memory at addr, without sign |  |
 | [`dbg_output()`](#dbg_output) | String | What the program has written so far (output and error output) |  |
@@ -9004,6 +9005,21 @@ See also: [`dbg_value_type`](#dbg_value_type), [`dbg_vars`](#dbg_vars).
 - `expr`: as in `dbg_value`.
 
 Returns its type; `""` if it cannot.
+
+See also: [`dbg_value`](#dbg_value).
+
+<a id="dbg_set"></a>
+
+### `dbg_set(i, expr, value)` → `String`
+
+- `i`: the call: 0 where it stopped, 1 its caller...
+- `expr`: as in `dbg_value`: a variable of that call or a global, with `.field` and `[n]` after it.
+- `value`: the new value, as a text: an `Int` or `Char` (`"3"`, `"-1"`, `"$FF"`, `"0x10"`), a `Bool` (`"true"`,
+  `"false"`), a `Fixed` or a `Float` (`"1.5"`).
+
+Changes that value in the stopped program; when it goes on, the program uses the new one. Returns `""` if it changed
+it and, if not, why. A `String`, a `Double` or an object cannot be changed: they are the program's memory and the
+debugger cannot give it one of its own.
 
 See also: [`dbg_value`](#dbg_value).
 
@@ -9585,6 +9601,7 @@ those dropped on a window.
 | [`icon_width(icon)`](#icon_width) | Int | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
 | [`icon_height(icon)`](#icon_height) | Int | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
 | [`icon_free(icon)`](#icon_free) | — | Frees an icon of icon_load (the ones left, at exit) |  |
+| [`icon_save(path, base, type, tool, tooltypes)`](#icon_save) | Bool | Writes the icon (.info) of path (without ".info"), by icon.library: a copy of the icon of base (another file, with or without ".info"), or with base "" the default one of its type; type 0 keeps the base's (1 disk, 2 drawer, 3 tool, 4 project, 5 trash can); tool, its default tool, and tooltypes, its tooltypes one per line ("" keeps those of the base). The Workbench places it. true if it was written |  |
 
 <a id="wm_read"></a>
 
@@ -9940,6 +9957,24 @@ See also: [`icon_width`](#icon_width).
 Frees it. Those left, at the end.
 
 See also: [`icon_load`](#icon_load).
+
+<a id="icon_save"></a>
+
+### `icon_save(path, base, type, tool, tooltypes)` → `Bool`
+
+- `path`: the file whose icon is written, without `.info`.
+- `base`: another file (with or without `.info`) whose icon is copied; with `""`, icon.library's one for its type.
+- `type`: 0 the base's; 1 disk, 2 drawer, 3 tool, 4 project, 5 trash can. A drawer, disk or trash can only comes from
+  a base that is one.
+- `tool`: its default tool (the program a project opens with); `""` keeps the base's.
+- `tooltypes`: its tooltypes, one per line (`"PUBSCREEN=Workbench\nDONOTWAIT"`); `""` keeps the base's.
+
+Writes `path.info` with icon.library (`PutDiskObject`), with no position: the Workbench places it. Returns `true` if it
+wrote it. So, the icon of a project that opens with a program:
+`icon_save("RAM:notes.txt", "", 4, "SYS:Utilities/MultiView", "")`; and the copy of one, changing its tool:
+`icon_save("Work:game", "Work:old_game", 0, "Work:Game", "")`.
+
+See also: [`icon_load`](#icon_load), [`tooltype`](#tooltype).
 
 <a id="audio_functions"></a>
 

@@ -65,6 +65,7 @@ dbg_end(5000)                           # lo acaba (su limpieza de siempre); dbg
 | `dbg_frames()`, `dbg_frame_function/line/file(i)` | La pila de llamadas (0, donde está) |
 | `dbg_vars(i)`, `dbg_var_name/type(i, k)`, `dbg_globals()`, `dbg_global_name(g)` | Las variables de cada marco y las globales |
 | `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | El valor como texto (`"p.hijos[0].x"`) y su tipo |
+| `dbg_set(i, expr, valor)` | Cambia un `Int`, `Char`, `Bool`, `Fixed` o `Float` (`"3"`, `"true"`, `"1.5"`): `""` o el porqué |
 | `dbg_reg(n)`, `dbg_peek(dir, tamaño)` | Registros (0-7 d0-d7, 8-15 a0-a7, 16 el PC) y memoria |
 
 Cómo va (`DEBUGGER_RUNTIME` de `compiler/codegen.py`, plan en `docs/DEPURADOR_LOOP.md`): el programa corre en un proceso hijo con su

@@ -807,7 +807,7 @@ static void push_value(Node *n)
 {
     Var v;
     if (n->kind == E_STR) {
-        pea_string(n->str, n->len);
+        pea_string(n->x->str, n->x->len);
         return;
     }
     if (simple(n, &v)) {
@@ -861,9 +861,24 @@ static int var_type(const char *name)
 
 static int dict_val(int t);
 
+/* el tipo de a op b (E_BIN), con los de a y b */
+static int bin_type(Node *n, int ta, int tb)
+{
+    if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
+    if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
+        return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
+    if ((ta == TY_DOUBLE || tb == TY_DOUBLE) &&
+        (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
+    if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
+        (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
+    if ((ta == TY_FIXED || tb == TY_FIXED) && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR ||
+                                               n->op == P_SLASH || n->op == P_PERCENT)) return TY_FIXED;
+    return TY_INT;
+}
+
 static int expr_type(Node *n)
 {
-    int ta, tb, idx;
+    int ta, idx;
     switch (n->kind) {
     case E_NEG:
         ta = expr_type(n->a);
@@ -897,19 +912,31 @@ static int expr_type(Node *n)
         return TY_VOID;
     case E_NN:
         return expr_type(n->a);
-    case E_BIN:
-        ta = expr_type(n->a);
-        tb = expr_type(n->b);
-        if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
-        if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
-            return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
-        if ((ta == TY_DOUBLE || tb == TY_DOUBLE) &&
-            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
-        if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
-            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
-        if ((ta == TY_FIXED || tb == TY_FIXED) && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR ||
-                                                   n->op == P_SLASH || n->op == P_PERCENT)) return TY_FIXED;
-        return TY_INT;
+    case E_BIN: {
+        /* a + b + c...: por la izquierda, sin recursión (un texto de mil trozos sumados, como los datos de las
+           plantillas de Forja, agotaba la pila de dash en el Amiga); el mismo orden que antes: a, b, el b de arriba... */
+        Node *spine[32], **sp = spine;
+        int ns = 0, cap = 32;
+        Node *m = n;
+        while (m->kind == E_BIN) {
+            if (ns == cap) {
+                Node **bigger = xmalloc(sizeof(Node *) * (size_t)cap * 2);
+                memcpy(bigger, sp, sizeof(Node *) * (size_t)cap);
+                if (sp != spine) xfree(sp);
+                sp = bigger;
+                cap *= 2;
+            }
+            sp[ns++] = m;
+            m = m->a;
+        }
+        ta = expr_type(m);
+        while (ns) {
+            m = sp[--ns];
+            ta = bin_type(m, ta, expr_type(m->b));
+        }
+        if (sp != spine) xfree(sp);
+        return ta;
+    }
     case E_INDEX:
         ta = expr_type(n->a);
         if (ta == TY_STR) return TY_CHAR;
@@ -935,7 +962,7 @@ static int expr_type(Node *n)
         ta = expr_type(n->args.v[1]);
         return dict_type(expr_type(n->args.v[0]) == TY_INT ? TY_INT : TY_STR, ta == TY_NIL ? TY_INT : ta);
     case E_LIST:
-        if (n->type) return TY_ARR + n->type;          /* (el de su destino: un campo [Double]...) */
+        if (n->x->type) return TY_ARR + n->x->type;          /* (el de su destino: un campo [Double]...) */
         if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
         ta = expr_type(n->args.v[0]);
         return TY_ARR + (ta == TY_NIL ? TY_INT : ta);
@@ -996,7 +1023,7 @@ static void infer_calls(Node *e)
     if (!e) return;
     infer_calls(e->a);
     infer_calls(e->b);
-    infer_calls(e->c);
+    infer_calls(e->x->c);
     for (i = 0; i < e->args.n; i++) infer_calls(e->args.v[i]);
     if (e->kind == E_MCALL && !strcmp(e->name, "sort") && e->args.n == 1 &&
         (e->args.v[0]->kind == E_VAR || e->args.v[0]->kind == E_FUNCREF) &&
@@ -1043,7 +1070,7 @@ static void walk_types(NodeList *l, int *ret)
         if (infer_on) {
             infer_calls(st->a);
             infer_calls(st->b);
-            infer_calls(st->c);
+            infer_calls(st->x->c);
         }
         switch (st->kind) {
         case S_ASSIGN:
@@ -1053,7 +1080,7 @@ static void walk_types(NodeList *l, int *ret)
             }
             break;
         case S_VAR:
-            b.type = st->type;
+            b.type = st->x->type;
             VEC_PUSH(tenv, b);
             break;
         case S_FOR:
@@ -1090,8 +1117,8 @@ static void walk_types(NodeList *l, int *ret)
             break;
         }
         }
-        walk_types(&st->body, ret);
-        walk_types(&st->els, ret);
+        walk_types(&st->x->body, ret);
+        walk_types(&st->x->els, ret);
     }
 }
 
@@ -1258,7 +1285,7 @@ static void fix_value(Node *n)
     int t;
     Node *lit = n->kind == E_NEG ? n->a : n;
     if ((lit->kind == E_FLOAT || lit->kind == E_INT) && expr_type(n) != TY_FIXED) {
-        double v = lit->kind == E_FLOAT ? lit->dval : (double)(int32_t)lit->val;
+        double v = lit->kind == E_FLOAT ? lit->x->dval : (double)(int32_t)lit->val;
         double r = v * 65536.0;
         long q = (long)(r < 0 ? r - 0.5 : r + 0.5);       /* (round de Python, salvo los .5 exactos) */
         if (n->kind == E_NEG) q = -q;
@@ -1320,11 +1347,11 @@ static void dbl_value(Node *n)
     long k;
     int t;
     if (n->kind == E_FLOAT) {
-        load_dbl_lit(n->dval);
+        load_dbl_lit(n->x->dval);
         return;
     }
     if (n->kind == E_NEG && n->a->kind == E_FLOAT) {
-        load_dbl_lit(-n->a->dval);
+        load_dbl_lit(-n->a->x->dval);
         return;
     }
     if (expr_type(n) != TY_DOUBLE && fold(n, &k)) {
@@ -1376,15 +1403,15 @@ static void gen_interp(Node *n)
     char *str;
     if (np > INTERP_TANDA) {
         Node head, rest;
-        memset(&head, 0, sizeof head);
+        memset(&head, 0, sizeof head); head.x = &node_no_ext;
         head.kind = E_INTERP;
         head.line = n->line;
         head.col = n->col;
         head.file = n->file;
         rest = head;
-        for (i = 0; i < INTERP_TANDA; i++) VEC_PUSH(head.args, n->args.v[i]);
-        VEC_PUSH(rest.args, &head);
-        for (i = INTERP_TANDA; i < np; i++) VEC_PUSH(rest.args, n->args.v[i]);
+        for (i = 0; i < INTERP_TANDA; i++) NL_PUSH(head.args, n->args.v[i]);
+        NL_PUSH(rest.args, &head);
+        for (i = INTERP_TANDA; i < np; i++) NL_PUSH(rest.args, n->args.v[i]);
         gen_interp(&rest);
         xfree(head.args.v);
         xfree(rest.args.v);
@@ -1415,10 +1442,10 @@ static void gen_concat(Node *n)
         join.line = n->line;
         join.col = n->col;
         join.file = n->file;
-        for (i = 0; i <= np; i++) VEC_PUSH(join.args, NULL);
+        for (i = 0; i <= np; i++) NL_PUSH(join.args, NULL);
         for (e = n, i = np; i > 0; e = e->a, i--) join.args.v[i] = e->b;
         join.args.v[0] = e;
-        if (join.args.v[0]->kind == E_STR && join.args.v[0]->len == 0) {   /* "" + ...: el primero sobra */
+        if (join.args.v[0]->kind == E_STR && join.args.v[0]->x->len == 0) {   /* "" + ...: el primero sobra */
             memmove(join.args.v, join.args.v + 1, sizeof(Node *) * np);
             join.args.n--;
         }
@@ -1556,7 +1583,7 @@ static int gen_str_slice(Node *n)
     to.val = 0x7FFFFFFF;
     a[0] = n->a;
     a[1] = n->b ? n->b : &from;
-    a[2] = n->c ? n->c : &to;
+    a[2] = n->x->c ? n->x->c : &to;
     args_to_stack(a, 3, NULL);
     rt_call("_dl_str_slice", 3, 1);
     return TY_STR;
@@ -1596,7 +1623,7 @@ static void elem_value(Node *v, int et)
 /* una lista literal que va a un destino de tipo t ([Double]...): guarda eso, no lo de su primer elemento */
 static void list_hint(Node *e, int t)
 {
-    if (e && e->kind == E_LIST && IS_ARR(t) && t != TY_ARR + TY_VOID && !e->type) e->type = t - TY_ARR;
+    if (e && e->kind == E_LIST && IS_ARR(t) && t != TY_ARR + TY_VOID && !e->x->type) node_ext(e)->type = t - TY_ARR;
 }
 
 static void str_kept(Node *e)
@@ -1752,7 +1779,7 @@ static int gen_new(Node *n, int si, int fresh)
         if (!st->fields.v[i].init)
             fatal_node(n, "%s: falta %s (sin valor por defecto; solo se omiten los últimos campos)", st->name,
                        st->fields.v[i].name);
-    memset(&zero, 0, sizeof zero);
+    memset(&zero, 0, sizeof zero); zero.x = &node_no_ext;
     zero.kind = E_INT;
     char *conv = xmalloc(nf + 1);
     for (i = 0; i < nf; i++) {
@@ -1772,7 +1799,7 @@ static int gen_new(Node *n, int si, int fresh)
         int ft = st->fields.v[i].type, off = field_off(i);
         if (ft == TY_STR && vals[i]->kind == E_STR) {
             /* un literal: el texto fijo de Dash (dash_lit), sin copia */
-            obj_field_data(off, dash_lit(vals[i]->str, vals[i]->len));
+            obj_field_data(off, dash_lit(vals[i]->x->str, vals[i]->x->len));
         } else if (IS_STRLIKE(ft)) {
             obj_field_clear(off);
             push_sp_off(SLOT * (i + 1));               /* el valor (por encima, lo guardado de obj_begin) */
@@ -1878,8 +1905,8 @@ static int gen_method(Node *n, int t)
     if (prog->structs.v[t - TY_STRUCT].iface) return gen_iface_call(n, t);
     snprintf(name, sizeof name, "%s.%s", prog->structs.v[t - TY_STRUCT].name, n->name);
     if (!find_func(name, &idx)) fatal_node(n, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
-    memset(&call, 0, sizeof call);
-    memset(&nn, 0, sizeof nn);
+    memset(&call, 0, sizeof call); call.x = &node_no_ext;
+    memset(&nn, 0, sizeof nn); nn.x = &node_no_ext;
     call.kind = E_CALL;
     call.line = n->line;
     call.col = n->col;
@@ -1887,10 +1914,10 @@ static int gen_method(Node *n, int t)
     nn.kind = E_NN;
     nn.line = n->line;
     nn.a = n->a;
-    VEC_PUSH(call.args, &nn);
+    NL_PUSH(call.args, &nn);
     {
         int i;
-        for (i = 0; i < n->args.n; i++) VEC_PUSH(call.args, n->args.v[i]);
+        for (i = 0; i < n->args.n; i++) NL_PUSH(call.args, n->args.v[i]);
     }
     r = gen_expr(&call);
     xfree(call.args.v);
@@ -1935,7 +1962,7 @@ static int gen_arr_slice(Node *n)
     to.val = 0x7FFFFFFF;
     a[0] = n->a;
     a[1] = n->b ? n->b : &from;
-    a[2] = n->c ? n->c : &to;
+    a[2] = n->x->c ? n->x->c : &to;
     args_to_stack(a, 3, NULL);
     rt_call("_dl_arr_slice", 3, 1);
     return expr_type(n->a);
@@ -2030,7 +2057,7 @@ static int gen_list_method(Node *n)
         /* l.has(x): x in l (lo pidió Forja) */
         Node *c;
         if (n->args.n != 1) fatal_node(n, "has pide 1 argumento");
-        c = xmalloc(sizeof *c);
+        c = node_alloc();
         *c = *n;
         c->kind = E_IN;
         c->name = NULL;
@@ -2091,8 +2118,8 @@ static int push_key_hash(int t, Node *k)
 {
     uint32_t h = 5381;
     int i;
-    if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->str) != k->len) return 0;
-    for (i = 0; i < k->len; i++) h = (h << 5) + h + (unsigned char)k->str[i];
+    if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->x->str) != k->x->len) return 0;
+    for (i = 0; i < k->x->len; i++) h = (h << 5) + h + (unsigned char)k->x->str[i];
     push_long(h);
     return 1;
 }
@@ -2120,13 +2147,13 @@ static int dict_passed(Node *e, const char *d)
             return 1;
         if (e->kind == S_STORE && e->a && e->a->kind == E_VAR && !strcmp(e->a->name, d)) return 1;
     }
-    if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->c, d)) return 1;
+    if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->x->c, d)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (dict_passed(e->args.v[i], d)) return 1;
-    for (i = 0; i < e->body.n; i++)
-        if (dict_passed(e->body.v[i], d)) return 1;
-    for (i = 0; i < e->els.n; i++)
-        if (dict_passed(e->els.v[i], d)) return 1;
+    for (i = 0; i < e->x->body.n; i++)
+        if (dict_passed(e->x->body.v[i], d)) return 1;
+    for (i = 0; i < e->x->els.n; i++)
+        if (dict_passed(e->x->els.v[i], d)) return 1;
     return 0;
 }
 
@@ -2423,7 +2450,7 @@ static int monotone(NodeList *l, const char *name, long *lo)
                 return 0;
             }
         }
-        if (!monotone(&s->body, name, lo) || !monotone(&s->els, name, lo)) return 0;
+        if (!monotone(&s->x->body, name, lo) || !monotone(&s->x->els, name, lo)) return 0;
     }
     return 1;
 }
@@ -2566,13 +2593,13 @@ static int gen_compare(Node *n)
         tb != TY_DOUBLE) {
         Node c = *n, wrap;
         int r;
-        memset(&wrap, 0, sizeof wrap);
+        memset(&wrap, 0, sizeof wrap); wrap.x = &node_no_ext;
         wrap.kind = E_CALL;
         wrap.name = "Fixed";
         wrap.line = n->line;
         wrap.col = n->col;
         wrap.file = n->file;
-        VEC_PUSH(wrap.args, ta == TY_FIXED ? n->b : n->a);
+        NL_PUSH(wrap.args, ta == TY_FIXED ? n->b : n->a);
         if (ta == TY_FIXED) c.b = &wrap;
         else c.a = &wrap;
         r = gen_compare(&c);
@@ -2611,8 +2638,8 @@ static int gen_compare(Node *n)
     if (ta == TY_STR && tb == TY_STR && (n->op == P_EQ || n->op == P_NE) &&
         ((n->b->kind == E_STR && n->a->kind != E_STR) || (n->a->kind == E_STR && n->b->kind != E_STR))) {
         Node *lit = n->b->kind == E_STR ? n->b : n->a, *s = lit == n->b ? n->a : n->b;
-        int i, ok, done, len = lit->len, inl = len <= 8 ? len : 2;
-        if ((int)strlen(lit->str) == len) {
+        int i, ok, done, len = lit->x->len, inl = len <= 8 ? len : 2;
+        if ((int)strlen(lit->x->str) == len) {
             value(s);
             tst_d0();
             ok = new_label();
@@ -2623,13 +2650,13 @@ static int gen_compare(Node *n)
             def_label(ok);
             move_d0_a0();
             for (i = 0; i < inl; i++) {
-                cmp_byte_next((unsigned char)lit->str[i]);
+                cmp_byte_next((unsigned char)lit->x->str[i]);
                 branch(CC_NE, done);
             }
             if (inl == len) {
                 tst_byte_a0();                         /* el final */
             } else {
-                pea_string(lit->str + inl, len - inl);
+                pea_string(lit->x->str + inl, len - inl);
                 push_a0();
                 rt_call("_dl_str_cmp", 2, 0);
                 test_d0();
@@ -2649,13 +2676,13 @@ static int gen_compare(Node *n)
         return cc;
     }
     /* un carácter con un texto de uno: el código del carácter, con signo como char */
-    if ((ta == TY_CHAR && n->b->kind == E_STR && n->b->len == 1) ||
-        (tb == TY_CHAR && n->a->kind == E_STR && n->a->len == 1)) {
+    if ((ta == TY_CHAR && n->b->kind == E_STR && n->b->x->len == 1) ||
+        (tb == TY_CHAR && n->a->kind == E_STR && n->a->x->len == 1)) {
         Node c = *n, lit;
         Node *s = ta == TY_CHAR ? n->b : n->a;
-        memset(&lit, 0, sizeof lit);
+        memset(&lit, 0, sizeof lit); lit.x = &node_no_ext;
         lit.kind = E_INT;
-        lit.val = (signed char)s->str[0];
+        lit.val = (signed char)s->x->str[0];
         if (ta == TY_CHAR) c.b = &lit;
         else c.a = &lit;
         return gen_compare(&c);
@@ -2745,9 +2772,17 @@ static int gen_dash_builtin(Node *n)
         fatal_node(n, "%s aún no está en DashOS%s", n->name,
                    strncmp(n->name, "mui_", 4) ? "" : " (de las ventanas mui_*, solo algunas)");
 #endif
-    sym = xmalloc(strlen(n->name) + 5);
-    strcpy(sym, "_db_");
-    strcat(sym, n->name);
+    {
+        /* "_db_nombre", uno por builtin (lo guardan las reubicaciones: con uno por llamada, miles de copias) */
+        static char **syms;
+        if (!syms) syms = xmalloc(sizeof(char *) * (builtin_count + 1));
+        if (!syms[b]) {
+            syms[b] = xmalloc(strlen(n->name) + 5);
+            strcpy(syms[b], "_db_");
+            strcat(syms[b], n->name);
+        }
+        sym = syms[b];
+    }
     /* (los de DashOS no están en el runtime del 68k, el que mira runtime_has: los pone runtime/dashos/build.py) */
     if (builtin_info[b].dashos != 1 && !runtime_has(sym))
         fatal_node(n, "(sin --gcc) el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
@@ -2850,7 +2885,7 @@ static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
                 return "usar textos";
         return NULL;
     case S_VAR:
-        if (n->type && n->type != TY_INT && n->type != TY_BOOL && n->type != TY_FLOAT)
+        if (n->x->type && n->x->type != TY_INT && n->x->type != TY_BOOL && n->x->type != TY_FLOAT)
             return "tener una variable que no es Int, Bool ni Float";
         break;
     case S_PRINT:
@@ -2879,8 +2914,8 @@ static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
         break;
     }
     if ((r = task_impure(n->a, 0, visited, at)) || (r = task_impure(n->b, 0, visited, at)) ||
-        (r = task_impure(n->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
-        (r = task_impure_list(&n->body, 0, visited, at)) || (r = task_impure_list(&n->els, 0, visited, at)))
+        (r = task_impure(n->x->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
+        (r = task_impure_list(&n->x->body, 0, visited, at)) || (r = task_impure_list(&n->x->els, 0, visited, at)))
         return r;
     return NULL;
 }
@@ -2980,7 +3015,7 @@ static int gen_builtin(Node *n)
         Node *a = n->args.v[i];
         if (builtins[b].args[i] == 'S') {
             if (a->kind != E_STR) fatal_node(a, "(sin --gcc) aquí va un texto literal");
-            pea_string(a->str, a->len);
+            pea_string(a->x->str, a->x->len);
         } else {
             push_value(a);
         }
@@ -3040,7 +3075,7 @@ static int count_refs(Node *n, const char *name)
     if (!n) return 0;
     c = n->kind == E_VAR && !strcmp(n->name, name);
     for (i = 0; i < n->args.n; i++) c += count_refs(n->args.v[i], name);
-    return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->c, name);
+    return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->x->c, name);
 }
 
 /* Float, Double y Fixed: un Int que va a ellos se convierte */
@@ -3057,7 +3092,7 @@ static int calls_name(Node *n, const char *name)
     if (n->kind == E_CALL && !strcmp(n->name, name)) return 1;
     for (i = 0; i < n->args.n; i++)
         if (calls_name(n->args.v[i], name)) return 1;
-    return calls_name(n->a, name) || calls_name(n->b, name) || calls_name(n->c, name);
+    return calls_name(n->a, name) || calls_name(n->b, name) || calls_name(n->x->c, name);
 }
 
 static int param_index(Func *f, const char *name)
@@ -3077,7 +3112,7 @@ static int subst_ok(Node *e, Func *f)
     if (e->kind == E_VAR && param_index(f, e->name) < 0 && find_local(e->name)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!subst_ok(e->args.v[i], f)) return 0;
-    return subst_ok(e->a, f) && subst_ok(e->b, f) && subst_ok(e->c, f);
+    return subst_ok(e->a, f) && subst_ok(e->b, f) && subst_ok(e->x->c, f);
 }
 
 static Node *subst(Node *e, Func *f, NodeList *args)
@@ -3089,14 +3124,18 @@ static Node *subst(Node *e, Func *f, NodeList *args)
         i = param_index(f, e->name);
         return i >= 0 ? args->v[i] : e;
     }
-    c = xmalloc(sizeof *c);
+    c = node_alloc();
     *c = *e;
     c->a = subst(e->a, f, args);
     c->b = subst(e->b, f, args);
-    c->c = subst(e->c, f, args);
+    if (e->x != &node_no_ext) {
+        /* (el suyo: lo que se cambie en la copia, como el tipo de una lista, no va al original) */
+        c->x = node_arena(sizeof(NodeExt));
+        *c->x = *e->x;
+        c->x->c = subst(e->x->c, f, args);
+    }
     if (e->args.n) {
         c->args.v = xmalloc(sizeof(Node *) * e->args.n);
-        c->args.cap = e->args.n;
         for (i = 0; i < e->args.n; i++) c->args.v[i] = subst(e->args.v[i], f, args);
     }
     return c;
@@ -3464,7 +3503,7 @@ static int gen_expr(Node *n)
     }
     switch (n->kind) {
     case E_STR:
-        load_str_lit(n->str, n->len);
+        load_str_lit(n->x->str, n->x->len);
         return TY_STR;
     case E_NIL:
         load_imm(0, 0);
@@ -3676,13 +3715,13 @@ static int gen_expr(Node *n)
             {
                 /* + - % con un Int: ese lado, Fixed(lado) */
                 Node c = *n, wrap;
-                memset(&wrap, 0, sizeof wrap);
+                memset(&wrap, 0, sizeof wrap); wrap.x = &node_no_ext;
                 wrap.kind = E_CALL;
                 wrap.name = "Fixed";
                 wrap.line = n->line;
                 wrap.col = n->col;
                 wrap.file = n->file;
-                VEC_PUSH(wrap.args, fa ? n->b : n->a);
+                NL_PUSH(wrap.args, fa ? n->b : n->a);
                 if (fa) c.b = &wrap;
                 else c.a = &wrap;
                 gen_binary(&c);
@@ -3710,15 +3749,15 @@ static Node *in_const(Node *n)
         if (t != TY_INT && t != TY_CHAR && t != TY_BOOL)
             fatal_node(n, "x in (a..b) es para enteros (Int() pasa a entero un Float o un Fixed)");
     }
-    if (!n->c || !fold(n->args.v[0], &a) || !fold(n->args.v[1], &b)) return NULL;
-    if (a > b && !n->c->val) {
+    if (!n->x->c || !fold(n->args.v[0], &a) || !fold(n->args.v[1], &b)) return NULL;
+    if (a > b && !n->x->c->val) {
         /* (10..1): de 1 a 10 */
-        Node *lo = n->c->a->b;
-        n->c->a->b = n->c->b->b;
-        n->c->b->b = lo;
+        Node *lo = n->x->c->a->b;
+        n->x->c->a->b = n->x->c->b->b;
+        n->x->c->b->b = lo;
     }
-    n->c->val = 1;   /* ya ordenado */
-    return n->c;
+    n->x->c->val = 1;   /* ya ordenado */
+    return n->x->c;
 }
 
 /* x in (a..b step s), x in lista, x in texto, x in diccionario (lo pidió David Martínez): 1 o 0 en d0 */
@@ -3748,26 +3787,26 @@ static void gen_in(Node *n)
             forget_d0();
             return;
         }
-        c = xmalloc(sizeof *c);
+        c = node_alloc();
         *c = *n;
         c->kind = E_CALL;
         c->name = "str_contains";
         c->a = c->b = NULL;
         memset(&c->args, 0, sizeof c->args);
-        VEC_PUSH(c->args, n->b);
-        VEC_PUSH(c->args, n->a);
+        NL_PUSH(c->args, n->b);
+        NL_PUSH(c->args, n->a);
         value(c);
         return;
     }
     if (IS_DICT(t)) {
-        Node *c = xmalloc(sizeof *c);
+        Node *c = node_alloc();
         *c = *n;
         c->kind = E_MCALL;
         c->name = "has";
         c->a = n->b;
         c->b = NULL;
         memset(&c->args, 0, sizeof c->args);
-        VEC_PUSH(c->args, n->a);
+        NL_PUSH(c->args, n->a);
         value(c);
         return;
     }
@@ -3939,10 +3978,10 @@ static void find_float_inv(Node *n, NodeList *body, const char *ivar, Node **inv
     }
     find_float_inv(n->a, body, ivar, inv, ninv);
     find_float_inv(n->b, body, ivar, inv, ninv);
-    find_float_inv(n->c, body, ivar, inv, ninv);
+    find_float_inv(n->x->c, body, ivar, inv, ninv);
     for (i = 0; i < n->args.n; i++) find_float_inv(n->args.v[i], body, ivar, inv, ninv);
-    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], body, ivar, inv, ninv);
-    for (i = 0; i < n->els.n; i++) find_float_inv(n->els.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->x->body.n; i++) find_float_inv(n->x->body.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->x->els.n; i++) find_float_inv(n->x->els.v[i], body, ivar, inv, ninv);
 }
 
 static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *nm)
@@ -3963,10 +4002,10 @@ static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *
     }
     find_mults(n->a, name, body, m, nm);
     find_mults(n->b, name, body, m, nm);
-    find_mults(n->c, name, body, m, nm);
+    find_mults(n->x->c, name, body, m, nm);
     for (i = 0; i < n->args.n; i++) find_mults(n->args.v[i], name, body, m, nm);
-    for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], name, body, m, nm);
-    for (i = 0; i < n->els.n; i++) find_mults(n->els.v[i], name, body, m, nm);
+    for (i = 0; i < n->x->body.n; i++) find_mults(n->x->body.v[i], name, body, m, nm);
+    for (i = 0; i < n->x->els.n; i++) find_mults(n->x->els.v[i], name, body, m, nm);
 }
 
 /* Un for con el número de vueltas conocido al empezar (el cuerpo no cambia i) lleva
@@ -3988,14 +4027,14 @@ static void gen_for(Node *n)
     Loop lp;
     MarkScope ms;
 
-    if (n->c && !fold(n->c, &step)) step_known = 0;
+    if (n->x->c && !fold(n->x->c, &step)) step_known = 0;
     if (step_known && step < 0) down = 1;
     from_known = fold(n->a, &from);
     end_known = fold(n->b, &to);
     /* sin paso, (5..1) cuenta hacia atrás si los dos extremos son literales o
        constantes (no variables, aunque se sepa su valor) */
     fold_literal = 1;
-    if (!n->c && fold(n->a, &from) && fold(n->b, &to) && from > to) {
+    if (!n->x->c && fold(n->a, &from) && fold(n->b, &to) && from > to) {
         down = 1;
         step = -1;
     }
@@ -4004,7 +4043,7 @@ static void gen_for(Node *n)
     fold(n->b, &to);
     if (step_known && step == 0) fatal_node(n, "el paso del for no puede ser 0");
 
-    counted = step_known && !list_assigns(&n->body, n->name);
+    counted = step_known && !list_assigns(&n->x->body, n->name);
     if (counted && from_known && end_known) {
         long long c = 0;
         if (down ? from >= to : from <= to)
@@ -4018,7 +4057,7 @@ static void gen_for(Node *n)
     ms = mark_begin();
     enter_scope();
     if (step_known) {
-        for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], n->name, &n->body, m, &nm);
+        for (i = 0; i < n->x->body.n; i++) find_mults(n->x->body.v[i], n->name, &n->x->body, m, &nm);
         for (i = 0; i < nm; i++) {
             for (j = 0; j < nsr && sr_k[j] != m[i].k; j++)
                 ;
@@ -4029,8 +4068,8 @@ static void gen_for(Node *n)
             add_repl(m[i].n, -1, 0);                   /* el hueco, más abajo */
         }
     }
-    use_i = !counted || !from_known || refs(n->b, n->name) || (n->c && refs(n->c, n->name)) ||
-            list_refs(&n->body, n->name);
+    use_i = !counted || !from_known || refs(n->b, n->name) || (n->x->c && refs(n->x->c, n->name)) ||
+            list_refs(&n->x->body, n->name);
 
     if (use_i) {
         if (!from_known) value(n->a);
@@ -4065,7 +4104,7 @@ static void gen_for(Node *n)
     for (i = repl_base; i < repls.n; i++)
         if (repls.v[i].slot < 0) repls.v[i--] = repls.v[--repls.n];   /* sin hueco (más de MAX_SR) */
     /* los Float que no cambian en el cuerpo, en huecos (antes de reservar los del contador) */
-    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], &n->body, n->name, inv, &ninv);
+    for (i = 0; i < n->x->body.n; i++) find_float_inv(n->x->body.v[i], &n->x->body, n->name, inv, &ninv);
     for (j = 0; j < ninv; j++) {
         Var vv;
         float_value(inv[j]);
@@ -4103,7 +4142,7 @@ static void gen_for(Node *n)
             store_d0(&vend);
         }
         if (!step_known) {
-            value(n->c);
+            value(n->x->c);
             vstep = declare_slot("", TY_INT, &step_slot);
             store_d0(&vstep);
         }
@@ -4125,14 +4164,14 @@ static void gen_for(Node *n)
     }
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
     lp.depth = depth;
     lp.sp = sp_depth;
     VEC_PUSH(loops, lp);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
 
@@ -4202,8 +4241,8 @@ static int refs(Node *n, const char *name)
 {
     if (!n || is_repl(n)) return 0;
     if ((n->kind == E_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
-    return refs(n->a, name) || refs(n->b, name) || refs(n->c, name) || list_refs(&n->args, name) ||
-           list_refs(&n->body, name) || list_refs(&n->els, name);
+    return refs(n->a, name) || refs(n->b, name) || refs(n->x->c, name) || list_refs(&n->args, name) ||
+           list_refs(&n->x->body, name) || list_refs(&n->x->els, name);
 }
 
 static int has_call(Node *n)
@@ -4213,7 +4252,7 @@ static int has_call(Node *n)
     if (n->kind == E_CALL) return 1;
     for (i = 0; i < n->args.n; i++)
         if (has_call(n->args.v[i])) return 1;
-    return has_call(n->a) || has_call(n->b) || has_call(n->c);
+    return has_call(n->a) || has_call(n->b) || has_call(n->x->c);
 }
 
 /* e como suma de términos con signo; self: si sale la variable name sumando (una vez) */
@@ -4342,7 +4381,7 @@ static int count_assigns(NodeList *l, const char *name)
     for (i = 0; i < l->n; i++) {
         Node *n = l->v[i];
         if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) c++;
-        c += count_assigns(&n->body, name) + count_assigns(&n->els, name);
+        c += count_assigns(&n->x->body, name) + count_assigns(&n->x->els, name);
     }
     return c;
 }
@@ -4394,7 +4433,7 @@ static int has_continue(NodeList *l)
 {
     int i;
     for (i = 0; i < l->n; i++)
-        if (l->v[i]->kind == S_CONTINUE || has_continue(&l->v[i]->body) || has_continue(&l->v[i]->els)) return 1;
+        if (l->v[i]->kind == S_CONTINUE || has_continue(&l->v[i]->x->body) || has_continue(&l->v[i]->x->els)) return 1;
     return 0;
 }
 
@@ -4428,7 +4467,7 @@ static int gen_counted_while(Node *n)
     if (c->kind != E_CMP) return 0;
     op = c->op;
     /* v es el lado que cambia en el cuerpo */
-    if (c->a->kind == E_VAR && !fold(c->a, &k) && count_assigns(&n->body, c->a->name) == 1) {
+    if (c->a->kind == E_VAR && !fold(c->a, &k) && count_assigns(&n->x->body, c->a->name) == 1) {
         vn = c->a;
         end = c->b;
     } else if (c->b->kind == E_VAR && !fold(c->b, &k)) {
@@ -4444,11 +4483,11 @@ static int gen_counted_while(Node *n)
     if (!fold(end, &k)) {
         Local *le;
         if (end->kind != E_VAR || !(le = find_local(end->name)) || le->slot < 0 ||
-            list_assigns(&n->body, end->name) || !strcmp(end->name, vn->name)) return 0;
+            list_assigns(&n->x->body, end->name) || !strcmp(end->name, vn->name)) return 0;
     }
-    if (count_assigns(&n->body, vn->name) != 1 || has_continue(&n->body)) return 0;
-    for (i = 0; i < n->body.n; i++)
-        if (step_of(n->body.v[i], vn->name) == (up ? 1 : -1)) inc = 1;
+    if (count_assigns(&n->x->body, vn->name) != 1 || has_continue(&n->x->body)) return 0;
+    for (i = 0; i < n->x->body.n; i++)
+        if (step_of(n->x->body.v[i], vn->name) == (up ? 1 : -1)) inc = 1;
     if (!inc) return 0;
 
     slot = new_slot_opt(0, 1);
@@ -4479,14 +4518,14 @@ static int gen_counted_while(Node *n)
     }
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = -1;                                      /* no hay continue */
     enter_scope();
     lp.depth = depth;
     lp.sp = sp_depth;
     VEC_PUSH(loops, lp);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     leave_scope();
     loops.n--;
     use_slot(slot);
@@ -4536,7 +4575,7 @@ static int assign_in_reg(Node *n)
 static int join_hint(Node *p)
 {
     int ty;
-    if (p->kind == E_STR && p->len < 32768) return p->len;
+    if (p->kind == E_STR && p->x->len < 32768) return p->x->len;
     ty = expr_type(p);
     if (ty == TY_INT || ty == TY_CHAR || ty == TY_BOOL) return -2;
     return -1;
@@ -4563,12 +4602,12 @@ static int str_set_join(Node *n, Node *e, int fresh)
         for (x = e, i = np; i > 0; x = x->a, i--) parts[i] = x->b;
         np++;
     } else return 0;
-    if (np == 2 && parts[0]->kind == E_STR && parts[0]->len < 32768 && expr_type(parts[1]) == TY_INT) {
+    if (np == 2 && parts[0]->kind == E_STR && parts[0]->x->len < 32768 && expr_type(parts[1]) == TY_INT) {
         /* literal + número: dl_str_cat_li_r(var, literal, largo, n) */
         value(parts[1]);
         push_d0();
-        push_word(parts[0]->len);                      /* el largo */
-        load_str_lit(parts[0]->str, parts[0]->len);
+        push_word(parts[0]->x->len);                      /* el largo */
+        load_str_lit(parts[0]->x->str, parts[0]->x->len);
         push_d0();
         if (fresh) {
             push_word(0);                                  /* sin texto antes */
@@ -4751,7 +4790,7 @@ static void gen_obj_assign(Node *n, int tt)
 static void gen_foreach_str(Node *n)
 {
     int top = new_label(), cont = new_label(), done = new_label(), src_slot = -1, idx_slot, len_slot = -1;
-    int assigned = n->a->kind == E_VAR && list_assigns(&n->body, n->a->name);
+    int assigned = n->a->kind == E_VAR && list_assigns(&n->x->body, n->a->name);
     MarkScope ms;
     Loop lp;
     Var vs, vi, vl, vx;
@@ -4782,7 +4821,7 @@ static void gen_foreach_str(Node *n)
     if (len_slot >= 0) use_slot(len_slot);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -4812,7 +4851,7 @@ static void gen_foreach_str(Node *n)
     if (!assigned) branch(CC_EQ, done);                /* el 0 del final */
     vx = declare(n->name, TY_CHAR);
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -4965,8 +5004,8 @@ static int node_keeps(Node *e, int any_index)
         if (!call_keeps(e)) return 0;
         break;
     }
-    return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->c, any_index) &&
-           list_keeps(&e->args, any_index) && list_keeps(&e->body, any_index) && list_keeps(&e->els, any_index);
+    return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->x->c, any_index) &&
+           list_keeps(&e->args, any_index) && list_keeps(&e->x->body, any_index) && list_keeps(&e->x->els, any_index);
 }
 
 static int keeps_eval(int i) { return list_keeps(&prog->funcs.v[i].body, 1); }
@@ -5088,7 +5127,7 @@ static void lent_escapes_expr(LentInfo *li, Node *e)
         for (i = 0; i < e->args.n; i++) lent_escape(li, e->args.v[i]);
     lent_escapes_expr(li, e->a);
     lent_escapes_expr(li, e->b);
-    lent_escapes_expr(li, e->c);
+    lent_escapes_expr(li, e->x->c);
     for (i = 0; i < e->args.n; i++) lent_escapes_expr(li, e->args.v[i]);
 }
 
@@ -5200,8 +5239,8 @@ static int node_nofree(Node *e, char *nf)
         if (!call_nofree(e, nf)) return 0;
         break;
     }
-    return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->c, nf) && list_nofree(&e->args, nf) &&
-           list_nofree(&e->body, nf) && list_nofree(&e->els, nf);
+    return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->x->c, nf) && list_nofree(&e->args, nf) &&
+           list_nofree(&e->x->body, nf) && list_nofree(&e->x->els, nf);
 }
 
 static char *nofree_cur;
@@ -5272,8 +5311,8 @@ static int is_lent(int obj, const char *name)
 static int loop_keeps_elements(Node *n)
 {
     if (!keeps_fn) compute_keeps();
-    if (list_assigns(&n->body, n->name)) return 0;
-    return list_keeps(&n->body, 0);
+    if (list_assigns(&n->x->body, n->name)) return 0;
+    return list_keeps(&n->x->body, 0);
 }
 
 /* ---- for k in d.keys() por la tabla de d, sin hacer la lista de claves (como ./dash, _keys_in_place) ----
@@ -5302,13 +5341,13 @@ static int keys_body_ok(Node *e, const char *d)
         if (!call_keeps(e)) return 0;
         break;
     }
-    if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->c, d)) return 0;
+    if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->x->c, d)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!keys_body_ok(e->args.v[i], d)) return 0;
-    for (i = 0; i < e->body.n; i++)
-        if (!keys_body_ok(e->body.v[i], d)) return 0;
-    for (i = 0; i < e->els.n; i++)
-        if (!keys_body_ok(e->els.v[i], d)) return 0;
+    for (i = 0; i < e->x->body.n; i++)
+        if (!keys_body_ok(e->x->body.v[i], d)) return 0;
+    for (i = 0; i < e->x->els.n; i++)
+        if (!keys_body_ok(e->x->els.v[i], d)) return 0;
     return 1;
 }
 
@@ -5320,9 +5359,9 @@ static int keys_in_place(Node *n)
     t = expr_type(it->a);
     if (!IS_DICT(t) || dict_ikeys(t) || !find_local(it->a->name)) return 0;
     if (!keeps_fn) compute_keeps();
-    if (list_assigns(&n->body, n->name)) return 0;     /* (k = ...: k no puede tomar prestada la clave) */
-    for (i = 0; i < n->body.n; i++)
-        if (!keys_body_ok(n->body.v[i], it->a->name)) return 0;
+    if (list_assigns(&n->x->body, n->name)) return 0;     /* (k = ...: k no puede tomar prestada la clave) */
+    for (i = 0; i < n->x->body.n; i++)
+        if (!keys_body_ok(n->x->body.v[i], it->a->name)) return 0;
     return 1;
 }
 
@@ -5349,7 +5388,7 @@ static void gen_keys_loop(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5372,9 +5411,9 @@ static void gen_keys_loop(Node *n)
         /* d[k] del cuerpo: de la casilla (kloop_of) */
         Local *ld = n->a->a->kind == E_VAR ? find_local(n->a->a->name) : NULL;
         int pushed = 0;
-        if (ld && !debug && !list_assigns(&n->body, n->name)) {
+        if (ld && !debug && !list_assigns(&n->x->body, n->name)) {
             int i, passed = 0;
-            for (i = 0; i < n->body.n && !passed; i++) passed = dict_passed(n->body.v[i], n->a->a->name);
+            for (i = 0; i < n->x->body.n && !passed; i++) passed = dict_passed(n->x->body.v[i], n->a->a->name);
             if (!passed) {
                 KLoop kl;
                 kl.d = n->a->a->name;
@@ -5388,7 +5427,7 @@ static void gen_keys_loop(Node *n)
                 pushed = 1;
             }
         }
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         if (pushed) kloops.n--;
     }
     loops.n--;
@@ -5435,13 +5474,13 @@ static int body_frozen(Node *e)
     default:
         break;
     }
-    if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->c)) return 0;
+    if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->x->c)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!body_frozen(e->args.v[i])) return 0;
-    for (i = 0; i < e->body.n; i++)
-        if (!body_frozen(e->body.v[i])) return 0;
-    for (i = 0; i < e->els.n; i++)
-        if (!body_frozen(e->els.v[i])) return 0;
+    for (i = 0; i < e->x->body.n; i++)
+        if (!body_frozen(e->x->body.v[i])) return 0;
+    for (i = 0; i < e->x->els.n; i++)
+        if (!body_frozen(e->x->els.v[i])) return 0;
     return 1;
 }
 
@@ -5470,7 +5509,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     use_slot(cnt_slot);
     def_label(top);
     mark_release(ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5484,7 +5523,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     ptr_add(ELEM, &vp);                                /* el puntero, al siguiente */
     vx = declare(n->name, et);
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -5523,10 +5562,10 @@ static void gen_foreach(Node *n)
     store_d0(&va);
     push_d0();
     rt_call("_dl_hold", 1, 0);
-    keep = (IS_OBJ(et) && !loop_keeps_elements(n)) || (IS_STRLIKE(et) && list_assigns(&n->body, n->name));
+    keep = (IS_OBJ(et) && !loop_keeps_elements(n)) || (IS_STRLIKE(et) && list_assigns(&n->x->body, n->name));
     if (!keep && !debug) {
         int frozen = 1, i;
-        for (i = 0; i < n->body.n && frozen; i++) frozen = body_frozen(n->body.v[i]);
+        for (i = 0; i < n->x->body.n && frozen; i++) frozen = body_frozen(n->x->body.v[i]);
         if (frozen) {
             gen_foreach_frozen(n, t, et, arr_slot, &ms);
             return;
@@ -5540,7 +5579,7 @@ static void gen_foreach(Node *n)
     branch(CC_T, test);
     def_label(top);
     mark_release(&ms);
-    if (auto_brk && body_calls(&n->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
+    if (auto_brk && body_calls(&n->x->body)) brk_check();   /* con llamadas: Ctrl-C (no cuesta nada a su lado) */
     lp.brk = done;
     lp.cont = cont;
     enter_scope();
@@ -5561,7 +5600,7 @@ static void gen_foreach(Node *n)
         /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
         push_d0();
         rt_call("_dl_retain_r", 1, 0);
-    } else if (IS_STRLIKE(et) && list_assigns(&n->body, n->name)) {
+    } else if (IS_STRLIKE(et) && list_assigns(&n->x->body, n->name)) {
         /* un texto que el cuerpo cambia (x = str_trim(x)): una copia suya, como ./dash; si no, la asignación
            liberaba el de la lista (y la lista, otra vez al acabar) */
         push_d0();
@@ -5571,7 +5610,7 @@ static void gen_foreach(Node *n)
     vx = declare(n->name, et);
     if (keep) locals.v[locals.n - 1].owned = IS_OBJ(et) ? 2 : 1;
     store_d0(&vx);
-    gen_block(&n->body);
+    gen_block(&n->x->body);
     loops.n--;
     leave_scope();
     def_label(cont);
@@ -5634,8 +5673,8 @@ static void gen_evloop(Node *n)
     MarkScope ms;
     Loop lp;
     if (wi < 0) fatal_node(n, "EventLoop sin ventana abierta antes");
-    for (i = 0; i < n->body.n; i++)
-        if (n->body.v[i]->val == ON_TIMER) timer = i;
+    for (i = 0; i < n->x->body.n; i++)
+        if (n->x->body.v[i]->val == ON_TIMER) timer = i;
     if (uses_gadgets) {
         /* los mensajes con GT_GetIMsg, y el del gadget apuntado (gadget_id) */
         load_imm(0, gadget_keys);
@@ -5648,7 +5687,7 @@ static void gen_evloop(Node *n)
     mark_release(&ms);
     if (timer >= 0) {
         Node *a[1];
-        a[0] = n->body.v[timer]->a;
+        a[0] = n->x->body.v[timer]->a;
         args_to_stack(a, 1, NULL);                     /* el intervalo, en la pila */
         pea_window(wi);
         rt_call("_dl_event_next_timer", 2, 0);
@@ -5665,8 +5704,8 @@ static void gen_evloop(Node *n)
         ev.sp = sp_depth;                              /* sin la clase */
         VEC_PUSH(evloops, ev);
     }
-    for (i = 0; i < n->body.n; i++) {
-        Node *h = n->body.v[i];
+    for (i = 0; i < n->x->body.n; i++) {
+        Node *h = n->x->body.v[i];
         static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100,
                                    0x8 /* MOUSEBUTTONS */, 0x80000 /* INACTIVEWINDOW */};
         int next = new_label(), skip = new_label();
@@ -5682,8 +5721,8 @@ static void gen_evloop(Node *n)
             if (h->a) {
                 long code = -1;
                 if (h->a->kind == E_INT) code = h->a->val;
-                else if (h->a->len == 1) {
-                    load_imm(0, (unsigned char)h->a->str[0]);
+                else if (h->a->x->len == 1) {
+                    load_imm(0, (unsigned char)h->a->x->str[0]);
                     push_d0();
                     rt_call("_dl_key_char", 1, 0);
                     tst_d0();
@@ -5691,11 +5730,11 @@ static void gen_evloop(Node *n)
                 } else {
                     int k;
                     for (k = 0; key_names[k].name; k++) {
-                        const char *a = key_names[k].name, *b = h->a->str;
+                        const char *a = key_names[k].name, *b = h->a->x->str;
                         while (*a && toupper((unsigned char)*a) == toupper((unsigned char)*b)) a++, b++;
                         if (!*a && !*b) code = key_names[k].code;
                     }
-                    if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->str);
+                    if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->x->str);
                 }
                 if (code >= 0) {
                     call_sym("_dl_event_code", 0);
@@ -5726,7 +5765,7 @@ static void gen_evloop(Node *n)
             lp.depth = depth;
             lp.sp = sp_depth;
             VEC_PUSH(loops, lp);
-            gen_block(&h->body);
+            gen_block(&h->x->body);
             loops.n--;
             leave_scope();
             if (h->val == ON_MENU) branch(CC_T, mtop);
@@ -5820,7 +5859,7 @@ static void gen_stmt(Node *n)
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
-            pea_string(n->a->str, n->a->len);
+            pea_string(n->a->x->str, n->a->x->len);
             call_sym("__dash_print_str", 1);
         } else {
             ty = gen_expr(n->a);
@@ -5862,7 +5901,7 @@ static void gen_stmt(Node *n)
             }
         }
         {
-            int tt = n->kind == S_VAR ? n->type : var_type(n->name);
+            int tt = n->kind == S_VAR ? n->x->type : var_type(n->name);
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
             else if (n->kind == S_ASSIGN && n->a->kind != E_NIL)
                 check_assign_type(n, tt, expr_type(n->a));
@@ -5893,7 +5932,7 @@ static void gen_stmt(Node *n)
             Local lc;
             lc.name = n->name;
             lc.slot = -1;
-            lc.type = n->kind == S_VAR ? n->type : forced >= 0 ? forced : fold_type(n->a);
+            lc.type = n->kind == S_VAR ? n->x->type : forced >= 0 ? forced : fold_type(n->a);
             lc.depth = depth;
             lc.frame = cur_frame;
             lc.val = k;
@@ -5922,7 +5961,7 @@ static void gen_stmt(Node *n)
         v = lookup(n->name);
         if (n->kind == S_VAR || v.kind == V_NONE) {
             /* la primera asignación declara (en el bloque actual) */
-            v = declare(n->name, n->kind == S_VAR ? n->type : ty);
+            v = declare(n->name, n->kind == S_VAR ? n->x->type : ty);
         } else if (v.kind == V_CONST) {
             fatal_node(n, "%s es una constante", n->name);
         }
@@ -5935,12 +5974,12 @@ static void gen_stmt(Node *n)
         int f = new_label(), done = new_label();
         gen_branch(n->a, f, 0);
         enter_scope();
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         leave_scope();
-        if (n->els.n) branch(CC_T, done);
+        if (n->x->els.n) branch(CC_T, done);
         def_label(f);
         enter_scope();
-        gen_block(&n->els);
+        gen_block(&n->x->els);
         leave_scope();
         def_label(done);
         return;
@@ -5973,7 +6012,7 @@ static void gen_stmt(Node *n)
         lp.depth = depth;
         lp.sp = sp_depth;
         VEC_PUSH(loops, lp);
-        gen_block(&n->body);
+        gen_block(&n->x->body);
         leave_scope();
         loops.n--;
         def_label_fwd(test);
@@ -6116,7 +6155,7 @@ static int check_reads_poisoned(Node *n)
     int i;
     if (!n) return 0;
     if (n->kind == E_VAR && check_is_poisoned(n->name) && lookup(n->name).kind == V_NONE) return 1;
-    if (check_reads_poisoned(n->a) || check_reads_poisoned(n->b) || check_reads_poisoned(n->c)) return 1;
+    if (check_reads_poisoned(n->a) || check_reads_poisoned(n->b) || check_reads_poisoned(n->x->c)) return 1;
     for (i = 0; i < n->args.n; i++)
         if (check_reads_poisoned(n->args.v[i])) return 1;
     return 0;
@@ -6182,13 +6221,13 @@ static int len_uses_node(Node *e, const char *name)
         !strcmp(e->args.v[0]->name, name)) return 1;
     if ((e->kind == E_INDEX || (e->kind == E_FIELD && !strcmp(e->name, "length"))) && e->a && e->a->kind == E_VAR &&
         !strcmp(e->a->name, name)) return 1;
-    if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->c, name)) return 1;
+    if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->x->c, name)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (len_uses_node(e->args.v[i], name)) return 1;
-    for (i = 0; i < e->body.n; i++)
-        if (len_uses_node(e->body.v[i], name)) return 1;
-    for (i = 0; i < e->els.n; i++)
-        if (len_uses_node(e->els.v[i], name)) return 1;
+    for (i = 0; i < e->x->body.n; i++)
+        if (len_uses_node(e->x->body.v[i], name)) return 1;
+    for (i = 0; i < e->x->els.n; i++)
+        if (len_uses_node(e->x->els.v[i], name)) return 1;
     return 0;
 }
 
@@ -6287,7 +6326,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 if (f->params.v[i].type == TY_STR && !param_set[idx][i] && len_uses(body, f->params.v[i].name)) {
                     Node pv;
                     Var vl;
-                    memset(&pv, 0, sizeof pv);
+                    memset(&pv, 0, sizeof pv); pv.x = &node_no_ext;
                     pv.kind = E_VAR;
                     pv.name = f->params.v[i].name;
                     str_len_inline(&pv);                   /* (aún sin plen: lo mide) */
@@ -6464,8 +6503,8 @@ static int tree_size(Node *n)
     int idx;
     if (!n) return 0;
     if (n->kind == E_CALL && find_func(n->name, &idx)) call_sites[idx]++;
-    return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->c) +
-           list_size(&n->args) + list_size(&n->body) + list_size(&n->els);
+    return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->x->c) +
+           list_size(&n->args) + list_size(&n->x->body) + list_size(&n->x->els);
 }
 
 /* ¿se asigna a name en el árbol? */
@@ -6483,11 +6522,19 @@ static int assigns(Node *n, const char *name)
 {
     if (!n) return 0;
     if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
-    return list_assigns(&n->body, name) || list_assigns(&n->els, name);
+    return list_assigns(&n->x->body, name) || list_assigns(&n->x->els, name);
 }
 
 static void gen_one(int idx, int label, Func *f, NodeList *body)
 {
+#ifndef DASH_A64
+    /* lo ya hecho, aparte (menos lo último, que aún pueden mirar las mejoras de def_label y load_var): con un programa
+       grande, el código y los datos no crecen copiándolo todo (gen_program los junta al acabar) */
+    buf_spill(&obj->code, 64);
+    buf_spill(&obj->data, 64);
+    rel_spill();
+    lpos_trim((long)obj->code.n - 64);
+#endif
     VEC_PUSH(inl_stack, idx);
     gen_function(label, f, body);
     inl_stack.n--;
@@ -6513,12 +6560,12 @@ static void find_uses_expr(Node *n)
         /* button_create(..., "_Vale"): la tecla del gadget */
         if ((!strcmp(n->name, "button_create") || !strcmp(n->name, "checkbox_create")))
             for (i = 0; i < n->args.n; i++)
-                if (n->args.v[i]->kind == E_STR && memchr(n->args.v[i]->str, '_', n->args.v[i]->len))
+                if (n->args.v[i]->kind == E_STR && memchr(n->args.v[i]->x->str, '_', n->args.v[i]->x->len))
                     gadget_keys = uses_keys = 1;
     }
     find_uses_expr(n->a);
     find_uses_expr(n->b);
-    find_uses_expr(n->c);
+    find_uses_expr(n->x->c);
     for (i = 0; i < n->args.n; i++) find_uses_expr(n->args.v[i]);
 }
 
@@ -6534,8 +6581,8 @@ static void find_uses(NodeList *l)
         if (n->kind == S_ON && n->val == ON_MENU) needs_gt = 1;
         find_uses_expr(n->a);
         find_uses_expr(n->b);
-        find_uses(&n->body);
-        find_uses(&n->els);
+        find_uses(&n->x->body);
+        find_uses(&n->x->els);
     }
 }
 
@@ -6554,7 +6601,7 @@ static void gen_window_descs(void)
             int f;
             if (!strcmp(v->name, "title")) {
                 if (v->kind != E_STR) fatal_at(v->line, v->col, "title es un texto");
-                title = v->str;
+                title = v->x->str;
                 continue;
             }
             if (!fold(v, &k)) fatal_at(v->line, v->col, "%s tiene que ser un valor fijo", v->name);
@@ -6639,7 +6686,7 @@ static void subst_consts(Node **pe)
     }
     subst_consts(&e->a);
     subst_consts(&e->b);
-    subst_consts(&e->c);
+    subst_consts(&e->x->c);
     for (i = 0; i < e->args.n; i++) subst_consts(&e->args.v[i]);
 }
 
@@ -6650,11 +6697,11 @@ static void resolve_list(NodeList *l)
         Node *n = l->v[i];
         subst_consts(&n->a);
         subst_consts(&n->b);
-        subst_consts(&n->c);
+        subst_consts(&n->x->c);
         for (int j = 0; j < n->args.n; j++) subst_consts(&n->args.v[j]);
-        if (n->kind == S_VAR) n->type = resolve_type(n->type, n->line, n->col);
-        resolve_list(&n->body);
-        resolve_list(&n->els);
+        if (n->kind == S_VAR) node_ext(n)->type = resolve_type(n->x->type, n->line, n->col);
+        resolve_list(&n->x->body);
+        resolve_list(&n->x->els);
     }
 }
 
@@ -6794,11 +6841,11 @@ static int node_calls(Node *n)
     if (n->kind == E_CALL || n->kind == S_PRINT) return 1;
     for (i = 0; i < n->args.n; i++)
         if (node_calls(n->args.v[i])) return 1;
-    for (i = 0; i < n->body.n; i++)
-        if (node_calls(n->body.v[i])) return 1;
-    for (i = 0; i < n->els.n; i++)
-        if (node_calls(n->els.v[i])) return 1;
-    return node_calls(n->a) || node_calls(n->b) || node_calls(n->c);
+    for (i = 0; i < n->x->body.n; i++)
+        if (node_calls(n->x->body.v[i])) return 1;
+    for (i = 0; i < n->x->els.n; i++)
+        if (node_calls(n->x->els.v[i])) return 1;
+    return node_calls(n->a) || node_calls(n->b) || node_calls(n->x->c);
 }
 
 static int body_calls(NodeList *b)
@@ -6822,11 +6869,11 @@ static int handles_break(Node *n)
     }
     for (i = 0; i < n->args.n; i++)
         if (handles_break(n->args.v[i])) return 1;
-    for (i = 0; i < n->body.n; i++)
-        if (handles_break(n->body.v[i])) return 1;
-    for (i = 0; i < n->els.n; i++)
-        if (handles_break(n->els.v[i])) return 1;
-    return handles_break(n->a) || handles_break(n->b) || handles_break(n->c);
+    for (i = 0; i < n->x->body.n; i++)
+        if (handles_break(n->x->body.v[i])) return 1;
+    for (i = 0; i < n->x->els.n; i++)
+        if (handles_break(n->x->els.v[i])) return 1;
+    return handles_break(n->a) || handles_break(n->b) || handles_break(n->x->c);
 }
 
 static int prog_handles_break(Program *p)
@@ -7110,7 +7157,18 @@ void gen_program(Program *p, Obj *o)
         code_data_ptr(add_string("Main", 4));
         for (i = 0; i < p->funcs.n; i++) code_data_ptr(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
     }
+#ifndef DASH_A64
+    node_free_all();                                   /* (el árbol ya no hace falta: su sitio, para juntar el código) */
+    buf_flatten(&obj->code);
+    buf_flatten(&obj->data);
+    rel_flatten();
+#endif
     resolve_fixups();
+    {
+        /* el NodeExt de los nodos que no tienen el suyo, compartido: nadie puede haber escrito en él */
+        static const NodeExt zero;
+        if (memcmp(&node_no_ext, &zero, sizeof zero)) fatal("interno: se cambió node_no_ext");
+    }
     if (debug) debug_text(p);
     /* las @export, con su nombre de C, para hunk.c */
     for (i = 0; i < p->funcs.n; i++)
@@ -7120,6 +7178,9 @@ void gen_program(Program *p, Obj *o)
             e.off = (uint32_t)labels.v[func_label[i]];
             VEC_PUSH(obj->exports, e);
         }
+#ifndef DASH_A64
+    labels_free();
+#endif
 }
 
 /* ---- dashc --cabecera: los structs del programa para el C de @link ---- */

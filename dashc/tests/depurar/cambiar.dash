@@ -1,0 +1,29 @@
+# El depurador: dbg_set cambia el valor de una variable (Int, Float, Bool; un campo, un elemento de una lista, una
+# global) y el programa sigue con él; lo que no se puede cambiar (lo pidieron Forja y la extensión de VS Code)
+# expect-out: n: [] 10
+# expect-out: p.x: [] 40
+# expect-out: lista[1]: [] 99 -> [10, 99, 30]
+# expect-out: f: [] 2.25
+# expect-out: ok: [] false
+# expect-out: cuenta: [] -3
+# expect-out: mal: [solo se cambian Int, Char, Bool, Fixed y Float (es String)] [no es un número entero] [un Bool es true o false] [no existe: nada]
+# expect-out: r: 50
+# expect-out: acabado: 4
+
+Main
+    dbg_start("DH0:depurado_datos", "")
+    dbg_break("depurado_datos.dash", 12)
+    dbg_continue()
+    dbg_wait(10000)
+    Print "n: [" + dbg_set(0, "n", "10") + "] " + dbg_value(0, "n")
+    Print "p.x: [" + dbg_set(0, "p.x", "40") + "] " + dbg_value(0, "p.x")
+    Print "lista[1]: [" + dbg_set(1, "lista[1]", "99") + "] " + dbg_value(1, "lista[1]") + " -> " + dbg_value(1, "lista")
+    Print "f: [" + dbg_set(1, "f", "2.25") + "] " + dbg_value(1, "f")
+    Print "ok: [" + dbg_set(1, "ok", "false") + "] " + dbg_value(1, "ok")
+    Print "cuenta: [" + dbg_set(0, "cuenta", " -3 ") + "] " + dbg_value(0, "cuenta")
+    Print "mal: [" + dbg_set(0, "saludo", "x") + "] [" + dbg_set(0, "n", "abc") + "] [" + dbg_set(1, "ok", "si") + "] [" + dbg_set(0, "nada", "1") + "]"
+    dbg_continue()
+    e = dbg_wait(10000)
+    Print str_trim(dbg_output())
+    Print "acabado: #{e}"
+end

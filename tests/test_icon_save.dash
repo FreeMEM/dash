@@ -1,0 +1,43 @@
+# icon_save: escribir un icono (.info) con icon.library: el de un tipo (un proyecto con su herramienta y sus
+# tooltypes) y la copia de otro cambiando la herramienta; uno que no se puede (lo pidió Forja)
+# expect-out: proyecto: true 227 16 tipo 4 herramienta: true tooltypes: true
+# expect-out: copia: true tipo 4 herramienta: true antigua: false tooltypes: true
+# expect-out: herramienta de cajón: false
+# expect-out: sin base: false
+# expect-out: fin
+
+# los bytes del fichero como texto (los 0 como "."), para buscar en ellos
+func bytes_de(ruta: String) -> String
+    t = ""
+    fh = file_open(ruta, 1005)
+    if fh == 0
+        return t
+    end
+    b = file_read_byte(fh)
+    while b >= 0
+        if b == 0
+            t = t + "."
+        else
+            t = t + str_char(b)
+        end
+        b = file_read_byte(fh)
+    end
+    file_close(fh)
+    return t
+end
+
+Main
+    ok = icon_save("RAM:icono_prueba", "", 4, "SYS:Utilities/MultiView", "PUBSCREEN=Workbench\nDONOTWAIT\n")
+    t = bytes_de("RAM:icono_prueba.info")
+    Print "proyecto: #{ok} #{str_code(t, 0)} #{str_code(t, 1)} tipo #{str_code(t, 48)} herramienta: #{str_contains(t, "SYS:Utilities/MultiView.")} tooltypes: #{str_contains(t, "PUBSCREEN=Workbench.") and str_contains(t, "DONOTWAIT.")}"
+    # la copia: el mismo tipo y sus tooltypes, otra herramienta
+    ok = icon_save("RAM:icono_copia", "RAM:icono_prueba.info", 0, "C:Ed", "")
+    t = bytes_de("RAM:icono_copia.info")
+    Print "copia: #{ok} tipo #{str_code(t, 48)} herramienta: #{str_contains(t, "C:Ed.")} antigua: #{str_contains(t, "MultiView")} tooltypes: #{str_contains(t, "DONOTWAIT.")}"
+    # un cajón necesita los datos de su ventana: no de un proyecto
+    Print "herramienta de cajón: #{icon_save("RAM:icono_cajon", "RAM:icono_prueba", 2, "", "")}"
+    Print "sin base: #{icon_save("RAM:icono_otro", "RAM:no_existe", 0, "", "")}"
+    file_delete("RAM:icono_prueba.info")
+    file_delete("RAM:icono_copia.info")
+    Print "fin"
+end

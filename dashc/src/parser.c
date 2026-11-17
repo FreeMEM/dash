@@ -29,10 +29,18 @@ static Token *expect(int kind)
     return tk++;
 }
 
+NodeExt node_no_ext;
+
+NodeExt *node_ext(Node *n)
+{
+    if (n->x == &node_no_ext) n->x = node_arena(sizeof(NodeExt));
+    return n->x;
+}
+
 static Node *node(int kind, Token *at)
 {
-    Node *n = xmalloc(sizeof(Node));
-    n->kind = kind;
+    Node *n = node_alloc();
+    n->kind = (unsigned char)kind;
     n->line = at->line;
     n->col = at->col;
     n->file = at->file;
@@ -123,7 +131,7 @@ static Node *interp(Token *t);
 static void args_until(NodeList *out, int close)
 {
     if (accept(close)) return;
-    do VEC_PUSH(*out, expr()); while (accept(P_COMMA));
+    do NL_PUSH(*out, expr()); while (accept(P_COMMA));
     expect(close);
 }
 
@@ -138,15 +146,15 @@ static Node *atom(void)
         return n;
     case T_STR:
         n = node(E_STR, t);
-        n->str = t->text;
-        n->len = t->len;
+        node_ext(n)->str = t->text;
+        node_ext(n)->len = t->len;
         return n;
     case T_ISTR:
         return interp(t);
     case T_FLOAT:
         n = node(E_FLOAT, t);
         n->val = t->val;
-        n->dval = t->dval;
+        node_ext(n)->dval = t->dval;
         return n;
     case K_TRUE:
     case K_FALSE:
@@ -164,9 +172,9 @@ static Node *atom(void)
         n = node(E_DICT, t);
         if (!accept(P_RBRACE)) {
             do {
-                VEC_PUSH(n->args, expr());
+                NL_PUSH(n->args, expr());
                 expect(P_COLON);
-                VEC_PUSH(n->args, expr());
+                NL_PUSH(n->args, expr());
             } while (accept(P_COMMA));
             expect(P_RBRACE);
         }
@@ -183,8 +191,8 @@ static Node *atom(void)
             next();
             strftime(buf, sizeof buf, t->text[6] == 'd' ? "%Y-%m-%d" : "%H:%M:%S", tm);
             n = node(E_STR, t);
-            n->str = xstrndup(buf, strlen(buf));
-            n->len = (int)strlen(buf);
+            node_ext(n)->str = xstrndup(buf, strlen(buf));
+            node_ext(n)->len = (int)strlen(buf);
             return n;
         }
         if (!strcmp(t->text, "Ptr") && peek()->kind == T_ID && tk[1].kind == P_LP) {
@@ -246,7 +254,7 @@ static Node *lambda(Token *t)
         r->a = expr();
         f.boolret = r->a->kind == E_CMP || r->a->kind == E_AND || r->a->kind == E_OR || r->a->kind == E_NOT ||
                     r->a->kind == E_BOOL;
-        VEC_PUSH(f.body, r);
+        NL_PUSH(f.body, r);
     } else {
         /* fn(x) en su línea, el cuerpo debajo y end */
         Func *saved = cur_func;
@@ -273,7 +281,7 @@ static Node *primary(void)
             if (accept(P_COLON)) {
                 m = node(E_SLICE, t);
                 m->b = i;
-                m->c = peek()->kind == P_RB ? NULL : expr();
+                node_ext(m)->c = peek()->kind == P_RB ? NULL : expr();
             } else {
                 m = node(E_INDEX, t);
                 m->b = i;
@@ -303,9 +311,9 @@ static Node *interp(Token *t)
         if (i % 2 == 0) {
             if (t->plen[i]) {
                 Node *s = node(E_STR, t);
-                s->str = t->piece[i];
-                s->len = t->plen[i];
-                VEC_PUSH(n->args, s);
+                node_ext(s)->str = t->piece[i];
+                node_ext(s)->len = t->plen[i];
+                NL_PUSH(n->args, s);
             }
         } else {
             Token *saved = tk, *sub = lex(t->piece[i]), *p;
@@ -315,7 +323,7 @@ static Node *interp(Token *t)
                 if (p->kind == T_EOF) break;
             }
             tk = sub;
-            VEC_PUSH(n->args, expr());
+            NL_PUSH(n->args, expr());
             if (peek()->kind != T_EOF) fatal_at(peek()->line, peek()->col, "sobra algo dentro de #{...}");
             tk = saved;
             xfree(sub);                                /* (los nodos no apuntan a los tokens) */
@@ -425,18 +433,18 @@ static Node *in_expr(Node *x, Token *t)
     if (peek()->kind == P_LP && range_ahead()) {
         next();
         n->kind = E_INRANGE;
-        VEC_PUSH(n->args, expr());
+        NL_PUSH(n->args, expr());
         expect(P_DOTDOT);
-        VEC_PUSH(n->args, expr());
+        NL_PUSH(n->args, expr());
         if (accept(K_STEP)) {
-            VEC_PUSH(n->args, expr());
+            NL_PUSH(n->args, expr());
         } else {
             Node *z = node(E_INT, t);
             z->val = 0;
-            VEC_PUSH(n->args, z);
+            NL_PUSH(n->args, z);
             /* (1..10) fijo y x una variable: 1 <= x and x <= 10 (gen68k.c, tras mirar los tipos) */
             if (chain_safe(x))
-                n->c = logic(E_AND, t, cmp_node(t, x, P_GE, n->args.v[0]), cmp_node(t, x, P_LE, n->args.v[1]));
+                node_ext(n)->c = logic(E_AND, t, cmp_node(t, x, P_GE, n->args.v[0]), cmp_node(t, x, P_LE, n->args.v[1]));
         }
         expect(P_RP);
         return n;
@@ -541,19 +549,19 @@ static Node *stmt(void)
     case K_ELIF:
         n = node(S_IF, t);
         n->a = expr();
-        block(&n->body, K_ELIF, K_ELSE, K_END);
+        block(&node_ext(n)->body, K_ELIF, K_ELSE, K_END);
         if (peek()->kind == K_ELIF) {
             /* elif: un if dentro de la rama no, que se lleva el "end" */
-            VEC_PUSH(n->els, stmt());
+            NL_PUSH(node_ext(n)->els, stmt());
             return n;
         }
-        if (accept(K_ELSE)) block(&n->els, K_END, K_END, K_END);
+        if (accept(K_ELSE)) block(&node_ext(n)->els, K_END, K_END, K_END);
         expect(K_END);
         return n;
     case K_WHILE:
         n = node(S_WHILE, t);
         n->a = expr();
-        block(&n->body, K_END, K_END, K_END);
+        block(&node_ext(n)->body, K_END, K_END, K_END);
         expect(K_END);
         return n;
     case K_FOR:
@@ -564,16 +572,16 @@ static Node *stmt(void)
             /* for x in lista */
             n->kind = S_FOREACH;
             n->a = expr();
-            block(&n->body, K_END, K_END, K_END);
+            block(&node_ext(n)->body, K_END, K_END, K_END);
             expect(K_END);
             return n;
         }
         n->a = expr();
         expect(P_DOTDOT);
         n->b = expr();
-        if (accept(K_STEP)) n->c = expr();
+        if (accept(K_STEP)) node_ext(n)->c = expr();
         expect(P_RP);
-        block(&n->body, K_END, K_END, K_END);
+        block(&node_ext(n)->body, K_END, K_END, K_END);
         expect(K_END);
         return n;
     case K_RETURN:
@@ -597,8 +605,8 @@ static Node *stmt(void)
         n = node(S_VAR, t);
         n->name = expect(T_ID)->text;
         expect(P_COLON);
-        n->type = parse_type();
-        n->a = accept(P_ASSIGN) ? expr() : zero_value(t, n->type);
+        node_ext(n)->type = parse_type();
+        n->a = accept(P_ASSIGN) ? expr() : zero_value(t, n->x->type);
         return n;
     case T_ID: {
         Node *target;
@@ -623,9 +631,9 @@ static Node *stmt(void)
                 if (i == ON_KEY && peek()->line == kind->line && (peek()->kind == T_STR || peek()->kind == T_INT))
                     h->a = atom();
                 if (i == ON_TIMER) h->a = atom();
-                block(&h->body, K_END, K_END, K_END);
+                block(&node_ext(h)->body, K_END, K_END, K_END);
                 expect(K_END);
-                VEC_PUSH(n->body, h);
+                NL_PUSH(node_ext(n)->body, h);
             }
             return n;
         }
@@ -635,7 +643,7 @@ static Node *stmt(void)
             n = node(S_EXPR, t);
             n->a = node(E_CALL, t);
             n->a->name = "Wait";
-            VEC_PUSH(n->a->args, expr());
+            NL_PUSH(n->a->args, expr());
             return n;
         }
         tk--;
@@ -680,7 +688,7 @@ static void block(NodeList *out, int stop1, int stop2, int stop3)
         int k = peek()->kind;
         if (k == stop1 || k == stop2 || k == stop3) return;
         if (k == T_EOF) fatal_at(peek()->line, peek()->col, "falta \"end\"");
-        VEC_PUSH(*out, stmt());
+        NL_PUSH(*out, stmt());
     }
 }
 
@@ -889,7 +897,7 @@ static void parse_into(Program *p)
                 Token *pn = expect(T_ID);
                 Node *v = expr();
                 v->name = pn->text;
-                VEC_PUSH(wd.props, v);
+                NL_PUSH(wd.props, v);
             }
             VEC_PUSH(p->windows, wd);
             continue;
