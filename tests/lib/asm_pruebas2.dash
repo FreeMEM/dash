@@ -12,6 +12,18 @@ func suma3(a: Int, b: Int, c: Int) -> Int
     return a + b + c
 end
 
+# una función que usa textos y listas (el runtime): llamada desde asm, deja d2-d7 y a2-a6 como estaban
+func lio(x: Int) -> Int
+    s = "a" + "#{x}"
+    l = [1, 2, 3]
+    l.push(x)
+    t = 0
+    for v in l
+        t = t + v
+    end
+    return t + s.length
+end
+
 # una función entera en ensamblador: los parámetros en d0 y d1, lo que devuelve en d0
 asm func suma_asm(a: Int, b: Int) -> Int
     add.l   d1,d0
@@ -105,6 +117,31 @@ func pruebas2()
         exg     d0,d3
     end
     Print "#{r} #{s}"
+    asm out ok = d0, t = d1 uses d2-d7/a2-a4/a6
+        moveq   #2,d2
+        moveq   #7,d7
+        move.l  #$a2a2,a2
+        move.l  #$a4a4,a4
+        move.l  #$a6a6,a6
+        pea     10
+        jsr     lio
+        addq.l  #4,sp
+        move.l  d0,d1
+        moveq   #0,d0
+        cmp.l   #2,d2
+        bne.s   .mal
+        cmp.l   #7,d7
+        bne.s   .mal
+        cmp.l   #$a2a2,a2
+        bne.s   .mal
+        cmp.l   #$a4a4,a4
+        bne.s   .mal
+        cmp.l   #$a6a6,a6
+        bne.s   .mal
+        moveq   #1,d0
+    .mal:
+    end
+    Print "#{ok} #{t}"
     # una base de librería: la versión de graphics.library (lib_Version)
     asm out v = d0
         move.l  GfxBase,a0

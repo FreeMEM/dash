@@ -4,6 +4,7 @@
 # expect-out: 1234 21930 2 0
 # expect-out: true
 # expect-out: 42 47
+# expect-out: 1 19
 # expect-out: true
 # expect-out: 0 0
 # expect-out: 1069547520 -1073741824
