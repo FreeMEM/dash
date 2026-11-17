@@ -191,15 +191,19 @@ def builtins(dashos=False):
 def builtin_wrappers():
     """Cada builtin como db_nombre(LONG...): su plantilla de C con los parámetros en LONG"""
     from string import Template
+    from compiler.codegen import builtin_float_params
     out = ["\n/* ---- builtins (compiler/amiga_builtins.py) ---- */\n"
-           "#pragma GCC diagnostic ignored \"-Wint-conversion\"\n"]
+           "#pragma GCC diagnostic ignored \"-Wint-conversion\"\n"
+           "static __inline__ float dl_fget(LONG v) { union { LONG l; float f; } u; u.l = v; return u.f; }\n"]
     for n, b in sorted(builtins().items()):
         if n in SKIP:
             continue
         # (los parámetros como _a0, _a1...: alguno se llama como una palabra de C, default)
         params = ", ".join(f"LONG _a{i}" for i in range(len(b.params))) or "void"
         dp = double_params(n, b)
-        code = Template(b.c_template).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else f"_a{i}"
+        fp = builtin_float_params(b)   # (gl_*: llegan los bits de un Float)
+        code = Template(b.c_template).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else
+                                                  f"dl_fget(_a{i})" if i in fp else f"_a{i}"
                                                   for i, p in enumerate(b.params)})
         if b.return_type == "double":
             out.append(f"LONG db_{n}({params}) {{ return (LONG)dl_dbox({code}); }}\n")

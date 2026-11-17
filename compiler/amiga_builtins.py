@@ -6354,9 +6354,101 @@ DASHOS_MUI = {
 }
 
 
+
+def _gl(name, params, ret, desc, c_template=None):
+    args = ", ".join("${%s}" % p for p in params)
+    return BuiltinFunc(name=name, params=params, return_type=ret, reads_only=True,
+                       c_template=c_template or f"_dash_{name}({args})", description=desc)
+
+
+# MiniGL (FORJA_LOOP 5.3, docs/MINIGL.md): OpenGL 1.x over minigl.library 29+ (MiniGL Classic over Warp3D or
+# Wazp3D, PiStorm3D, RadeonGL...). The numbers go to MiniGL as float: a Float, an Int or a Double is fine
+GL_FUNCTIONS = {
+    "gl_open": _gl("gl_open", ["width", "height"], "BOOL",
+                   "Opens a MiniGL window of width x height on the Workbench (double buffered, a 16-bit Z buffer, "
+                   "a 60 degree perspective and the modelview matrix current): false without minigl.library 29+, "
+                   "without a FPU or if it cannot open"),
+    "gl_open_screen": _gl("gl_open_screen", ["width", "height"], "BOOL",
+                          "As gl_open, but on a screen of its own of width x height (16 bits)"),
+    "gl_close": _gl("gl_close", [], "void", "Closes the MiniGL window or screen (at the end of the program, too); "
+                    "its textures go with it"),
+    "gl_swap": _gl("gl_swap", [], "void", "Shows what was drawn (the other buffer is drawn next)"),
+    "gl_vsync": _gl("gl_vsync", ["on"], "void",
+                    "With true (the default), gl_swap waits for the screen's refresh: no tearing, at most its rate "
+                    "(50 to 60 a second); false draws as fast as it can"),
+    "gl_closed": _gl("gl_closed", [], "BOOL", "True once the close gadget of the MiniGL window was clicked"),
+    "gl_key": _gl("gl_key", [], "LONG", "The next key typed in the MiniGL window (its character code), 0 if none"),
+    "gl_enable": _gl("gl_enable", ["cap"], "void",
+                     "Turns on a GL state (glEnable): GL_DEPTH_TEST, GL_CULL_FACE, GL_BLEND, GL_FOG, GL_LIGHTING... "
+                     "(their names with import \"lib/amiga/gl.dash\")"),
+    "gl_disable": _gl("gl_disable", ["cap"], "void", "Turns off a GL state (glDisable)"),
+    "gl_clear_color": _gl("gl_clear_color", ["r", "g", "b"], "void",
+                          "The color gl_clear paints with, each part from 0.0 to 1.0"),
+    "gl_clear": _gl("gl_clear", [], "void", "Clears the picture (with gl_clear_color) and the Z buffer"),
+    "gl_viewport": _gl("gl_viewport", ["x", "y", "width", "height"], "void",
+                       "The part of the window drawn on (gl_open sets the whole window)"),
+    "gl_blend_func": _gl("gl_blend_func", ["src", "dst"], "void",
+                         "How a pixel mixes with the one below with GL_BLEND on (glBlendFunc): GL_SRC_ALPHA, "
+                         "GL_ONE_MINUS_SRC_ALPHA, GL_ONE..."),
+    "gl_shade_model": _gl("gl_shade_model", ["mode"], "void",
+                          "GL_SMOOTH (colors blended between the corners, the default) or GL_FLAT"),
+    "gl_cull_face": _gl("gl_cull_face", ["mode"], "void",
+                        "Which faces GL_CULL_FACE leaves out: GL_BACK (the default) or GL_FRONT"),
+    "gl_matrix_mode": _gl("gl_matrix_mode", ["mode"], "void",
+                          "The matrix the next calls change: GL_PROJECTION or GL_MODELVIEW"),
+    "gl_load_identity": _gl("gl_load_identity", [], "void", "Resets the current matrix"),
+    "gl_push_matrix": _gl("gl_push_matrix", [], "void", "Keeps a copy of the current matrix"),
+    "gl_pop_matrix": _gl("gl_pop_matrix", [], "void", "Gets back the matrix of the last gl_push_matrix"),
+    "gl_translate": _gl("gl_translate", ["x", "y", "z"], "void", "Moves what is drawn next by x, y, z"),
+    "gl_rotate": _gl("gl_rotate", ["angle", "x", "y", "z"], "void",
+                     "Turns what is drawn next by angle degrees around the axis (x, y, z)"),
+    "gl_scale": _gl("gl_scale", ["x", "y", "z"], "void", "Scales what is drawn next"),
+    "gl_perspective": _gl("gl_perspective", ["fovy", "aspect", "near", "far"], "void",
+                          "Multiplies the current matrix by a perspective (gluPerspective): fovy degrees high, "
+                          "aspect = width / height, near and far > 0"),
+    "gl_ortho": _gl("gl_ortho", ["left", "right", "bottom", "top", "near", "far"], "void",
+                    "Multiplies the current matrix by a parallel projection (glOrtho)"),
+    "gl_look_at": _gl("gl_look_at", ["ex", "ey", "ez", "cx", "cy", "cz", "ux", "uy", "uz"], "void",
+                      "A camera at (ex, ey, ez) looking at (cx, cy, cz), with (ux, uy, uz) up (gluLookAt)"),
+    "gl_begin": _gl("gl_begin", ["mode"], "void",
+                    "Starts a shape: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, "
+                    "GL_POLYGON...; its corners with gl_vertex until gl_end"),
+    "gl_end": _gl("gl_end", [], "void", "Ends the shape of gl_begin"),
+    "gl_vertex": _gl("gl_vertex", ["x", "y", "z"], "void",
+                     "A corner, with the color, normal and texture point set last"),
+    "gl_color": _gl("gl_color", ["r", "g", "b"], "void", "The color of the next corners, each part from 0.0 to 1.0"),
+    "gl_color_alpha": _gl("gl_color_alpha", ["r", "g", "b", "a"], "void",
+                          "As gl_color, with the opacity a (0.0 to 1.0; with GL_BLEND)"),
+    "gl_normal": _gl("gl_normal", ["x", "y", "z"], "void",
+                     "The direction the next corners face, for the lights (of length 1)"),
+    "gl_tex_coord": _gl("gl_tex_coord", ["s", "t"], "void",
+                        "The point of the texture (0.0 to 1.0 across and down) of the next corner"),
+    "gl_texture": _gl("gl_texture", ["d"], "LONG",
+                      "A texture from an image decoded with image_decode (scaled to powers of two, up to 256 x 256): "
+                      "its number, or 0. The decoded image can be freed afterwards",
+                      c_template="_dash_gl_texture(_dash_image_decoded_pixels(${d}), _dash_image_decoded_width(${d}), "
+                                 "_dash_image_decoded_height(${d}), _dash_image_decoded_alpha(${d}))"),
+    "gl_texture_bind": _gl("gl_texture_bind", ["texture"], "void",
+                           "Draws the next shapes with that texture (0: without one)"),
+    "gl_texture_free": _gl("gl_texture_free", ["texture"], "void", "Frees a texture"),
+    "gl_light": _gl("gl_light", ["n", "x", "y", "z"], "void",
+                    "Turns on light n (0 to 7) shining from the direction (x, y, z), and the lighting: the shapes "
+                    "need gl_normal; gl_color gives their material"),
+    "gl_light_color": _gl("gl_light_color", ["n", "r", "g", "b"], "void", "The color of light n (white by default)"),
+    "gl_ambient": _gl("gl_ambient", ["r", "g", "b"], "void", "The light that reaches every face (dim grey by default)"),
+    "gl_fog": _gl("gl_fog", ["start", "end", "r", "g", "b"], "void",
+                  "Linear fog of that color, from start to end (distances from the eye); gl_disable(GL_FOG) takes it "
+                  "away"),
+    "gl_read_pixel": _gl("gl_read_pixel", ["x", "y"], "LONG",
+                         "The color of a pixel of the picture being drawn (before gl_swap), 0xRRGGBB, y from the top; "
+                         "-1 without gl_open"),
+    "gl_error": _gl("gl_error", [], "LONG", "The last GL error (glGetError), 0 if none"),
+}
+
+
 def dashos_missing(name: str) -> bool:
     """A builtin of the Amiga that DashOS does not have yet (./dash --dashos: a compile error)"""
-    return name.startswith("mui_") and name not in DASHOS_MUI
+    return name.startswith("mui_") and name not in DASHOS_MUI or name.startswith("gl_")
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
@@ -6399,6 +6491,7 @@ ALL_BUILTINS = {
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
     **MUI_FUNCTIONS,
+    **GL_FUNCTIONS,            # MiniGL
     **DASHOS_FUNCTIONS,        # A7
 }
 

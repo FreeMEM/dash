@@ -1,0 +1,195 @@
+# The same as test_gl.dash, built by ./dash straight to hunk.
+# dash-direct:
+# Test: gl_* (MiniGL). Needs minigl.library 29+ and a FPU: on --emu-coffin with $DASH_EMU_MINIGL (MiniGL Classic over
+# the Wazp3D of the disk). A triangle, a colored quad seen through gl_ortho, a texture from a decoded PNG (left half
+# red, right half blue), blending, a light and face culling, each checked with gl_read_pixel; without a context every
+# gl_* does nothing. Wazp3D with its default settings blends with black and has no fog (docs/MINIGL.md): the blue at
+# half alpha is only checked to be half as bright, and the fog only to give no error.
+# emu-needs: minigl.library
+# expect-out: sin contexto: -1 0
+# expect-out: abierto
+# expect-out: triángulo: rojo fondo
+# expect-out: cuadrado: verde
+# expect-out: textura: rojo azul
+# expect-out: mezcla: azul a medias
+# expect-out: luz: más clara de frente
+# expect-out: niebla: puesta
+# expect-out: caras: la de delante sí, la de detrás no
+# expect-out: error: 0
+# expect-out: ventana: false 0
+# expect-out: otra vez: true
+# expect-out: fin
+import "lib/amiga/gl.dash"
+
+func escribir(nombre: String, datos: Array) -> Bool
+    b = buffer_alloc(datos.length)
+    i = 0
+    for x in datos
+        buffer_set_byte(b, i, x)
+        i = i + 1
+    end
+    ok = file_save(nombre, b, datos.length)
+    buffer_free(b)
+    return ok
+end
+
+# the color of a pixel by its strongest part
+func color(c: Int) -> String
+    r = (c >> 16) & 255
+    g = (c >> 8) & 255
+    b = c & 255
+    if r > 160 and g < 90 and b < 90
+        return "rojo"
+    end
+    if g > 160 and r < 90 and b < 90
+        return "verde"
+    end
+    if b > 160 and r < 90 and g < 90
+        return "azul"
+    end
+    if r < 40 and g < 40 and b < 40
+        return "fondo"
+    end
+    return "#{r},#{g},#{b}"
+end
+
+# a square from -1 to 1 at depth z
+func cuadrado(z: Float)
+    gl_begin(GL_QUADS)
+    gl_tex_coord(0, 0)
+    gl_vertex(-1, 1, z)
+    gl_tex_coord(0, 1)
+    gl_vertex(-1, -1, z)
+    gl_tex_coord(1, 1)
+    gl_vertex(1, -1, z)
+    gl_tex_coord(1, 0)
+    gl_vertex(1, 1, z)
+    gl_end()
+end
+
+# the brightness of the middle of a grey square lit by light 0 from (x, y, z)
+func luz(x: Float, y: Float, z: Float) -> Int
+    gl_clear()
+    gl_light(0, x, y, z)
+    gl_normal(0, 0, 1)
+    gl_color(0.8, 0.8, 0.8)
+    cuadrado(0)
+    v = (gl_read_pixel(40, 40) >> 8) & 255
+    gl_disable(GL_LIGHTING)
+    return v
+end
+
+Main
+    gl_vertex(0, 0, 0)
+    Print "sin contexto: #{gl_read_pixel(0, 0)} #{gl_error()}"
+    if not gl_open(80, 80)
+        Print "sin MiniGL"
+        program_exit(5)
+    end
+    Print "abierto"
+    gl_vsync(false)
+    gl_clear_color(0, 0, 0)
+    gl_clear()
+    # perspective of gl_open: a red triangle at z -3, wide at the bottom
+    gl_translate(0, 0, -3)
+    gl_begin(GL_TRIANGLES)
+    gl_color(1, 0, 0)
+    gl_vertex(0, 1, 0)
+    gl_vertex(-1, -1, 0)
+    gl_vertex(1, -1, 0)
+    gl_end()
+    Print "triángulo: #{color(gl_read_pixel(40, 50))} #{color(gl_read_pixel(5, 5))}"
+    gl_swap()
+
+    # a parallel projection from -1 to 1
+    gl_matrix_mode(GL_PROJECTION)
+    gl_load_identity()
+    gl_ortho(-1, 1, -1, 1, -1, 1)
+    gl_matrix_mode(GL_MODELVIEW)
+    gl_load_identity()
+    gl_clear()
+    gl_color(0, 1, 0)
+    cuadrado(0)
+    Print "cuadrado: #{color(gl_read_pixel(40, 40))}"
+
+    png = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 16, 0, 0, 0, 8, 8, 2, 0, 0, 0, 127, 20, 232, 192, 0, 0, 0, 30, 73, 68, 65, 84, 120, 156, 99, 252, 207, 128, 29, 48, 50, 96, 151, 97, 98, 32, 17, 48, 141, 68, 13, 140, 56, 66, 15, 39, 0, 0, 47, 16, 3, 13, 30, 105, 216, 199, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]
+    escribir("RAM:gl.png", png)
+    d = image_decode("RAM:gl.png", 0, 0)
+    t = gl_texture(d)
+    image_decoded_free(d)
+    gl_clear()
+    gl_color(1, 1, 1)
+    gl_texture_bind(t)
+    cuadrado(0)
+    gl_texture_bind(0)
+    Print "textura: #{color(gl_read_pixel(20, 40))} #{color(gl_read_pixel(60, 40))}"
+    gl_texture_free(t)
+
+    # half-transparent blue over red
+    gl_clear()
+    gl_color(1, 0, 0)
+    cuadrado(0)
+    gl_enable(GL_BLEND)
+    gl_blend_func(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    gl_color_alpha(0, 0, 1, 0.5)
+    cuadrado(0.5)
+    gl_disable(GL_BLEND)
+    azul = gl_read_pixel(40, 40) & 255
+    if azul > 90 and azul < 170
+        Print "mezcla: azul a medias"
+    else
+        Print "mezcla: #{color(gl_read_pixel(40, 40))}"
+    end
+
+    gl_ambient(0.1, 0.1, 0.1)
+    de_frente = luz(0, 0, 1)
+    de_lado = luz(1, 0, 0.2)
+    if de_frente > de_lado + 40
+        Print "luz: más clara de frente"
+    else
+        Print "luz: #{de_frente} #{de_lado}"
+    end
+
+    # fog: a black square far away, in grey fog from 0 to 0.1
+    gl_matrix_mode(GL_PROJECTION)
+    gl_load_identity()
+    gl_perspective(60, 1, 0.5, 100)
+    gl_matrix_mode(GL_MODELVIEW)
+    gl_load_identity()
+    gl_clear()
+    gl_fog(0, 0.1, 0.5, 0.5, 0.5)
+    gl_color(0, 0, 0)
+    gl_translate(0, 0, -2)
+    cuadrado(0)
+    if gl_error() == 0
+        Print "niebla: puesta"
+    end
+    gl_disable(GL_FOG)
+    # GL_CULL_FACE leaves out the clockwise (back) faces, as in OpenGL (gl_open corrects MiniGL Classic over Wazp3D)
+    gl_enable(GL_CULL_FACE)
+    gl_clear()
+    gl_color(1, 0, 0)
+    cuadrado(0)
+    delante = color(gl_read_pixel(40, 40))
+    gl_clear()
+    gl_begin(GL_QUADS)
+    gl_vertex(-1, 1, 0)
+    gl_vertex(1, 1, 0)
+    gl_vertex(1, -1, 0)
+    gl_vertex(-1, -1, 0)
+    gl_end()
+    detras = color(gl_read_pixel(40, 40))
+    gl_disable(GL_CULL_FACE)
+    if delante == "rojo" and detras == "fondo"
+        Print "caras: la de delante sí, la de detrás no"
+    else
+        Print "caras: #{delante} #{detras}"
+    end
+    Print "error: #{gl_error()}"
+    gl_swap()
+    Print "ventana: #{gl_closed()} #{gl_key()}"
+    gl_close()
+    Print "otra vez: #{gl_open(64, 48)}"
+    gl_close()
+    Print "fin"
+end

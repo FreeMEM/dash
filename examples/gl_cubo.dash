@@ -1,0 +1,68 @@
+# Un cubo que gira con MiniGL: caras de colores, una luz y el Z-buffer.
+# Hace falta minigl.library 29 o más (MiniGL Classic con Warp3D o Wazp3D, PiStorm3D...) y una FPU.
+# Compilar: ./dash --fpu examples/gl_cubo.dash -o gl_cubo
+# Se cierra con la ventana, con Esc o con q. SEGUNDOS=n lo cierra solo a los n segundos; RAPIDO=1 no espera
+# al refresco de la pantalla (para medir).
+# Al acabar dice los fotogramas por segundo.
+import "lib/amiga/gl.dash"
+
+# Una cara: su normal, su color y sus cuatro esquinas (x, y, z de cada una)
+func cara(nx: Float, ny: Float, nz: Float, r: Float, g: Float, b: Float, p: [Float])
+    gl_normal(nx, ny, nz)
+    gl_color(r, g, b)
+    for i in (0..3)
+        gl_vertex(p[i * 3], p[i * 3 + 1], p[i * 3 + 2])
+    end
+end
+
+Main
+    if not gl_open(320, 240)
+        Print "No se pudo abrir MiniGL (hace falta minigl.library y una FPU)"
+        program_exit(5)
+    end
+    segundos = Int(tooltype("SEGUNDOS", "0"))
+    if tooltype("RAPIDO", "0") == "1"
+        gl_vsync(false)
+    end
+    gl_enable(GL_DEPTH_TEST)
+    gl_enable(GL_CULL_FACE)
+    gl_light(0, 0.5, 1.0, 1.0)
+    gl_ambient(0.3, 0.3, 0.3)
+
+    angulo = 0.0
+    cuadros = 0
+    t0 = time_ms()
+    seguir = true
+    while seguir
+        gl_clear_color(0.05, 0.05, 0.2)
+        gl_clear()
+        gl_load_identity()
+        gl_translate(0, 0, -5)
+        gl_rotate(angulo, 1, 0, 0)
+        gl_rotate(angulo * 1.3, 0, 1, 0)
+        gl_begin(GL_QUADS)
+        cara(0, 0, 1, 1, 0.2, 0.2, [-1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0])
+        cara(0, 0, -1, 0.2, 1, 0.2, [-1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0])
+        cara(0, 1, 0, 0.2, 0.2, 1, [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0])
+        cara(0, -1, 0, 1, 1, 0.2, [-1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0])
+        cara(1, 0, 0, 1, 0.2, 1, [1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0])
+        cara(-1, 0, 0, 0.2, 1, 1, [-1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0])
+        gl_end()
+        gl_swap()
+        angulo = angulo + 2.0
+        cuadros = cuadros + 1
+
+        k = gl_key()
+        if gl_closed() or k == 27 or k == 113
+            seguir = false
+        end
+        if segundos > 0 and time_ms() - t0 >= segundos * 1000
+            seguir = false
+        end
+    end
+    ms = time_ms() - t0
+    gl_close()
+    if ms > 0
+        Print "#{cuadros} fotogramas en #{ms} ms: #{cuadros * 1000 / ms} por segundo"
+    end
+end

@@ -2641,6 +2641,9 @@ static int gen_dash_builtin(Node *n)
                 if (builtin_info[b].dparams >> i & 1) {
                     dbl_value(a);                      /* un parámetro Double: una caja */
                     t = TY_DOUBLE;
+                } else if (builtin_info[b].fmask >> i & 1) {
+                    float_value(a);                    /* un float de C (gl_*): sus bits */
+                    t = TY_FLOAT;
                 } else {
                     t = gen_expr(a);
                     need_value(a, t);

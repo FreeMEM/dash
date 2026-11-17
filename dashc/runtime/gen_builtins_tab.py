@@ -9,7 +9,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
 from compiler import amiga_builtins as ab  # noqa: E402
-from compiler.codegen import CodeGenerator, builtin_string_params  # noqa: E402
+from compiler.codegen import CodeGenerator, builtin_float_params, builtin_string_params  # noqa: E402
 
 RET = {"void": 0, "LONG": 1, "ULONG": 1, "APTR": 1, "BOOL": 2, "STRPTR": 3, "double": 5}
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -31,7 +31,8 @@ def main():
             dmask = sum(1 << i for i in double_params(n, b))
             smask = sum(1 << i for i in builtin_string_params(b))   # los parámetros String: un carácter, str_char
             dashos = 1 if b.needs_dashos else 2 if ab.dashos_missing(n) else 0   # (2: aún no en DashOS)
-            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}, {dashos}, {smask}u}},\n')
+            fmask = sum(1 << i for i in builtin_float_params(b))   # los float de C (gl_*): van como Float
+            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}, {dashos}, {smask}u, {fmask}u}},\n')
     from compiler.ast_nodes import KEY_NAMES
     keys = "".join(f'    {{"{k}", {v}}},\n' for k, v in sorted(KEY_NAMES.items()))
     out = Path(sys.argv[1])

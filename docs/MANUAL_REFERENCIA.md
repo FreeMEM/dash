@@ -37,6 +37,7 @@
 24. [Dash 2.0: el compilador directo](#24-dash-20-el-compilador-directo)
 25. [DashOS (AArch64)](#25-dashos-aarch64)
 26. [Ensamblador en línea](#26-ensamblador-en-línea)
+27. [3D con MiniGL](#27-3d-con-minigl)
 
 ---
 
@@ -49,7 +50,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1020 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1061 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -5038,6 +5039,46 @@ las palabras de C (`int`, `default`, `long`, `static`...) y `main`: por C se ren
 dicen el nombre de Dash (lo encontró Forja).
 
 Ejemplo de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador).
+
+---
+
+## 27. 3D con MiniGL
+
+Las funciones `gl_*` dibujan en 3D con MiniGL (OpenGL 1.x del Amiga) a través de `minigl.library` 29 o más: MiniGL
+Classic encima de Warp3D o Wazp3D, PiStorm3D o RadeonGL. La biblioteca necesita una FPU; sin ella, o sin la
+biblioteca, `gl_open` da `false`. Van por los dos caminos, con y sin `--fpu` (con `--fpu`, las cuentas del programa
+van más rápidas). Lo pidió el usuario.
+
+```ruby
+import "lib/amiga/gl.dash"      # GL_TRIANGLES, GL_DEPTH_TEST...
+
+Main
+    if not gl_open(320, 240)    # ventana con doble búfer, Z-buffer y perspectiva de 60 grados
+        Print "Hace falta minigl.library y una FPU"
+        program_exit(5)
+    end
+    angulo = 0.0
+    while not gl_closed()
+        gl_clear()
+        gl_load_identity()
+        gl_translate(0, 0, -4)
+        gl_rotate(angulo, 0, 1, 0)
+        gl_begin(GL_TRIANGLES)
+        gl_color(1, 0, 0)
+        gl_vertex(0, 1, 0)
+        gl_color(0, 0, 1)
+        gl_vertex(-1, -1, 0)
+        gl_vertex(1, -1, 0)
+        gl_end()
+        gl_swap()               # se ve; espera al refresco de la pantalla
+        angulo = angulo + 2.0
+    end
+end
+```
+
+Hay estado (`gl_enable`, `gl_blend_func`...), matrices (`gl_perspective`, `gl_ortho`, `gl_look_at`...), texturas
+desde `image_decode` (`gl_texture`), luces (`gl_light`), niebla (`gl_fog`) y `gl_read_pixel` para pruebas. Todo,
+con lo probado en el emulador y lo que Wazp3D no hace, en [MINIGL.md](MINIGL.md). Ejemplo: `examples/gl_cubo.dash`.
 
 ---
 

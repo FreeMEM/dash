@@ -1144,6 +1144,13 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       de binutils (`compiler/asm68k.py`), con los mismos errores. Diseño: `docs/ASM_DISEÑO.md`; manual, sección 26.
       `tests/test_asm*.dash` (A1200, A500 y 68040), `tests/errors/asm_*.dash`, `tests/unit/test_asm68k.py`,
       `examples/asm_barras.dash`
+- [x] 3D con MiniGL (2026-11-17, lo pidió el usuario; paso 5.3 de Forja): 41 funciones `gl_*` (contexto, estado,
+      matrices, figuras, texturas desde `image_decode`, luces, niebla, mezcla, `gl_read_pixel`) sobre
+      `minigl.library` 29+, sin su SDK (su tabla de funciones, ABI 5), por los dos caminos y con o sin `--fpu`;
+      `gl_open` da `false` sin la biblioteca o sin FPU. El directo pasa los `float` de C como Float (`fmask` de su
+      tabla de builtins). Constantes en `lib/amiga/gl.dash`. Probado en la máquina coffin con MiniGL Classic 30.0
+      sobre Wazp3D (`$DASH_EMU_MINIGL`, `tools/emu_run.py --lib`); lo que Wazp3D no hace, en `docs/MINIGL.md`.
+      1061 funciones. `tests/test_gl*.dash`, `examples/gl_cubo.dash`
 
 ## Notas y Decisiones
 
