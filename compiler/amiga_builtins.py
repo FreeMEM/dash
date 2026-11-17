@@ -4050,6 +4050,15 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_list_insert(${list}, -1, ${text})",
         description="Add a line at the end"
     ),
+    "mui_list_add_lines": BuiltinFunc(
+        name="mui_list_add_lines",
+        params=["list", "text"],
+        return_type="void",
+        c_template="_dash_mui_list_add_lines(${list}, ${text})",
+        reads_only=True,
+        description="Add every line of text (separated by line breaks) at the end, all at once: much faster than "
+                    "mui_list_add one by one"
+    ),
     "mui_list_insert": BuiltinFunc(
         name="mui_list_insert",
         params=["list", "pos", "text"],
@@ -6329,7 +6338,7 @@ DASHOS_DIALOGS = {"file_open_dialog", "file_save_dialog", "file_get_path", "file
 DASHOS_MUI = {
     "mui_app_begin", "mui_app_end", "mui_window_begin", "mui_window_end", "mui_window_open", "mui_window_close",
     "mui_vgroup_begin", "mui_hgroup_begin", "mui_group_end", "mui_text", "mui_label", "mui_button", "mui_string",
-    "mui_checkbox", "mui_cycle", "mui_list", "mui_list_add", "mui_list_insert", "mui_list_remove", "mui_list_clear",
+    "mui_checkbox", "mui_cycle", "mui_list", "mui_list_add", "mui_list_add_lines", "mui_list_insert", "mui_list_remove", "mui_list_clear",
     "mui_list_count", "mui_list_get", "mui_on_double", "mui_menu_begin", "mui_menu_item", "mui_menu_separator",
     "mui_menu_end", "mui_menu_check", "mui_menu_radio", "mui_submenu_begin", "mui_submenu_end", "mui_on_press",
     "mui_on_change", "mui_on_close", "mui_get_text", "mui_set_text", "mui_get_value", "mui_set_value", "mui_set_enabled", "mui_request", "mui_wait_event",

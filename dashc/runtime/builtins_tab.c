@@ -991,6 +991,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_list", 0, 1, 1, 0, 0, 0u},
     {"mui_list_add", 2, 0, 0, 0, 0, 2u},
     {"mui_list_add", 2, 0, 0, 0, 0, 2u},
+    {"mui_list_add_lines", 2, 0, 0, 0, 0, 2u},
+    {"mui_list_add_lines", 2, 0, 0, 0, 0, 2u},
     {"mui_list_clear", 1, 0, 1, 0, 0, 0u},
     {"mui_list_clear", 1, 0, 1, 0, 0, 0u},
     {"mui_list_count", 1, 1, 1, 0, 0, 0u},
@@ -2036,7 +2038,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2034;
+const int builtin_count = 2036;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

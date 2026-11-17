@@ -49,7 +49,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1017 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1018 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3568,6 +3568,7 @@ Cada una explicada, con sus parámetros y dos ejemplos que se prueban: [BUILTINS
 | `mui_set_enabled(obj, si)` | Activa o desactiva (en gris). |
 | `mui_list()` | Lista de textos con barra de desplazamiento. Su valor es la línea elegida (-1 = ninguna). |
 | `mui_list_add(l, texto)`, `mui_list_insert(l, pos, texto)` | Añade al final o en `pos` (0 = primera). |
+| `mui_list_add_lines(l, texto)` | Añade al final cada línea del texto (separadas por saltos de línea) de una vez: para cientos de líneas, mucho más rápido que `mui_list_add` una a una (300 líneas en un A1200: 0,6 s en vez de 10,6 s). |
 | `mui_list_remove(l, pos)`, `mui_list_clear(l)` | Borra una línea o todas. |
 | `mui_list_count(l)`, `mui_list_get(l, pos)` | Número de líneas y texto de una (`""` fuera de la lista). |
 | `mui_list_quiet(l, si)` | Mientras está "quieta" no se redibuja: para añadir muchas líneas. |
@@ -4888,7 +4889,7 @@ Hace falta `clang` (con los objetivos `aarch64-none-elf` y `aarch64_be-none-elf`
 Las ventanas de MUI (`mui_*`) funcionan en DashOS con el kit de DashOS: el mismo programa sale con MUI en el Amiga y
 con el aspecto de Material 3 en DashOS. De momento, estas: `mui_app_begin`/`end`, `mui_window_begin`/`end`/`open`/
 `close`, `mui_vgroup_begin`, `mui_hgroup_begin`, `mui_group_end`, `mui_text`, `mui_label`, `mui_button`, `mui_string`,
-`mui_checkbox`, `mui_cycle`, `mui_list` (con `mui_list_add`, `_insert`, `_remove`, `_clear`, `_count`, `_get` y
+`mui_checkbox`, `mui_cycle`, `mui_list` (con `mui_list_add`, `_add_lines`, `_insert`, `_remove`, `_clear`, `_count`, `_get` y
 `mui_on_double`), los menús (`mui_menu_begin`, `mui_menu_item`, `mui_menu_check`, `mui_menu_radio`,
 `mui_menu_separator`, `mui_submenu_begin`/`end`, `mui_menu_end`), los eventos
 (`mui_on_press`, `mui_on_change`, `mui_on_close`, `mui_wait_event`), `mui_get_text`, `mui_set_text`,

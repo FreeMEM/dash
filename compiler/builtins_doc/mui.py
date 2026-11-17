@@ -664,7 +664,27 @@ Añade la línea al final.
 - `text`: the line; the list keeps its own copy.
 
 Adds the line at the end.
-""", ["mui_list_insert", "mui_list_quiet"]),
+""", ["mui_list_add_lines", "mui_list_insert", "mui_list_quiet"]),
+    "mui_list_add_lines": _f("""\
+- `list`: la lista (o un `mui_combo`).
+- `text`: las líneas, separadas por saltos de línea (`\\n`; un `\\r` delante también vale). Un salto al final no
+  añade una línea vacía.
+
+Añade todas al final de una vez: la lista se redibuja una sola vez, no una por línea. Para cientos de líneas (la
+salida de una orden, un fichero), mucho más rápido que `mui_list_add` una a una: 300 líneas con la ventana abierta
+en un A1200 emulado, 10,6 s una a una y 0,6 s así. Una lista que el programa dejó en silencio (`mui_list_quiet`)
+sigue en silencio.
+
+""", """\
+- `list`: the list (or a `mui_combo`).
+- `text`: the lines, separated by line breaks (`\\n`; a `\\r` before it is fine too). A break at the end adds no
+  empty line.
+
+Adds them all at the end at once: the list is redrawn once, not once per line. For hundreds of lines (a command's
+output, a file), much faster than `mui_list_add` one by one: 300 lines with the window open on an emulated A1200,
+10.6 s one by one and 0.6 s this way. A list the program left quiet (`mui_list_quiet`) stays quiet.
+
+""", ["mui_list_add", "mui_list_quiet"]),
     "mui_list_insert": _f("""\
 - `list`: la lista.
 - `pos`: dónde, desde 0; las de después bajan.
@@ -706,7 +726,7 @@ Para añadir muchas líneas de golpe sin que se vea cada una.
 - `quiet`: `true` stops redrawing it; `false` redraws it with everything new.
 
 To add many lines at once without each one being drawn.
-""", ["mui_list_add"]),
+""", ["mui_list_add", "mui_list_add_lines"]),
     # ------------------------------------------------------------ eventos
     "mui_on_press": _f("""\
 - `obj`: un botón (o un botón con imagen).

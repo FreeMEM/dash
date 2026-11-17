@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1017 functions, 1017 implemented, 0 not implemented.
+Total: 1018 functions, 1018 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11457,6 +11457,7 @@ end
 | [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
 | [`mui_list()`](#mui_list) | Int (address) | List of texts with scroller; its value is the selected line (-1 none) |  |
 | [`mui_list_add(list, text)`](#mui_list_add) | — | Add a line at the end |  |
+| [`mui_list_add_lines(list, text)`](#mui_list_add_lines) | — | Add every line of text (separated by line breaks) at the end, all at once: much faster than mui_list_add one by one |  |
 | [`mui_list_insert(list, pos, text)`](#mui_list_insert) | — | Insert a line at pos (0 = first) |  |
 | [`mui_list_remove(list, pos)`](#mui_list_remove) | — | Remove the line at pos |  |
 | [`mui_list_clear(list)`](#mui_list_clear) | — | Remove all lines |  |
@@ -12047,7 +12048,21 @@ See also: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double).
 
 Adds the line at the end.
 
-See also: [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+See also: [`mui_list_add_lines`](#mui_list_add_lines), [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+
+<a id="mui_list_add_lines"></a>
+
+### `mui_list_add_lines(list, text)`
+
+- `list`: the list (or a `mui_combo`).
+- `text`: the lines, separated by line breaks (`\n`; a `\r` before it is fine too). A break at the end adds no
+  empty line.
+
+Adds them all at the end at once: the list is redrawn once, not once per line. For hundreds of lines (a command's
+output, a file), much faster than `mui_list_add` one by one: 300 lines with the window open on an emulated A1200,
+10.6 s one by one and 0.6 s this way. A list the program left quiet (`mui_list_quiet`) stays quiet.
+
+See also: [`mui_list_add`](#mui_list_add), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_list_insert"></a>
 
@@ -12108,7 +12123,7 @@ See also: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_value)
 
 To add many lines at once without each one being drawn.
 
-See also: [`mui_list_add`](#mui_list_add).
+See also: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_add_lines).
 
 <a id="mui_on_double"></a>
 

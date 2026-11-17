@@ -95,7 +95,10 @@ menus, cycles, tabs) are copied by the runtime into its pool, and live until `mu
 
 `mui_list_add(lista, texto)`, `mui_list_insert(lista, pos, texto)`, `mui_list_remove(lista, pos)`,
 `mui_list_clear(lista)`, `mui_list_count(lista) -> Int`, `mui_list_get(lista, pos) -> String`.
-The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines: `mui_list_quiet(lista, si)`.
+The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines: `mui_list_quiet(lista, si)`, or
+`mui_list_add_lines(lista, texto)`, which adds every line of the text with a single `MUIM_List_Insert` and the list
+quiet (300 lines with the window open on an emulated A1200: 10.6 s with `mui_list_add`, 0.6 s this way; Forja asked
+for it).
 
 ### Events
 

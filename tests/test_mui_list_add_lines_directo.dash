@@ -1,0 +1,60 @@
+# El mismo test que test_mui_list_add_lines.dash, por ./dash directo a hunk.
+# dash-direct:
+# mui_list_add_lines (lo pidió Forja: cientos de líneas en una lista): todas las líneas de un texto al final de la
+# lista con un solo MUIM_List_Insert. Un \r antes del salto también se va, una línea vacía en medio cuenta y un salto
+# al final no añade otra. Y la medida: 300 líneas una a una con mui_list_add y de una vez (en una ventana abierta,
+# donde cada línea se dibuja).
+# emu-needs: muimaster.library
+# expect-out: 4 lineas: [uno] [dos] [] [cuatro]
+# expect-out: con la de antes: 6, la ultima [seis]
+# expect-out: vacio: 6
+# expect-out: 300 y 300 lineas
+# expect-out: de una vez, mas rapido: true
+# expect-out: fin
+# ignore-out: medida:
+
+Main
+    if mui_app_begin("Lineas", "LINEAS") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Lineas", 0)
+        mui_hgroup_begin()
+            a = mui_list()
+            b = mui_list()
+            c = mui_list()
+        mui_group_end()
+    mui_window_end()
+    mui_list_add_lines(a, "uno\r\ndos\n\ncuatro\n")
+    Print "#{mui_list_count(a)} lineas: [#{mui_list_get(a, 0)}] [#{mui_list_get(a, 1)}] [#{mui_list_get(a, 2)}] [#{mui_list_get(a, 3)}]"
+    mui_list_add_lines(a, "cinco\nseis")
+    Print "con la de antes: #{mui_list_count(a)}, la ultima [#{mui_list_get(a, 5)}]"
+    mui_list_add_lines(a, "")
+    Print "vacio: #{mui_list_count(a)}"
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+
+    texto = ""
+    i = 0
+    while i < 300
+        texto = texto + "Línea número #{i}\n"
+        i = i + 1
+    end
+    t0 = time_ms()
+    i = 0
+    while i < 300
+        mui_list_add(b, "Línea número #{i}")
+        i = i + 1
+    end
+    una = time_ms() - t0
+    t0 = time_ms()
+    mui_list_add_lines(c, texto)
+    todas = time_ms() - t0
+    Print "#{mui_list_count(b)} y #{mui_list_count(c)} lineas"
+    Print "medida: una a una #{una} ms, de una vez #{todas} ms"
+    Print "de una vez, mas rapido: #{todas * 3 < una}"
+    mui_app_end()
+    Print "fin"
+end

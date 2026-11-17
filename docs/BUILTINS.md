@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1017 funciones, 1017 implementadas, 0 sin implementar.
+Total: 1018 funciones, 1018 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11463,6 +11463,7 @@ end
 | [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event da id cuando se pulsa Return en un campo de texto (en un mui_combo, también al elegir una línea) |  |
 | [`mui_list()`](#mui_list) | Int (dirección) | Una lista de textos con barra de desplazamiento; su valor es la línea elegida (-1 ninguna) |  |
 | [`mui_list_add(list, text)`](#mui_list_add) | — | Añade una línea al final |  |
+| [`mui_list_add_lines(list, text)`](#mui_list_add_lines) | — | Añade al final cada línea de text (separadas por saltos de línea), todas de una vez: mucho más rápido que mui_list_add una a una |  |
 | [`mui_list_insert(list, pos, text)`](#mui_list_insert) | — | Mete una línea en pos (0 = la primera) |  |
 | [`mui_list_remove(list, pos)`](#mui_list_remove) | — | Quita la línea de pos |  |
 | [`mui_list_clear(list)`](#mui_list_clear) | — | Quita todas las líneas |  |
@@ -12057,7 +12058,22 @@ Ver también: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double)
 
 Añade la línea al final.
 
-Ver también: [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+Ver también: [`mui_list_add_lines`](#mui_list_add_lines), [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+
+<a id="mui_list_add_lines"></a>
+
+### `mui_list_add_lines(list, text)`
+
+- `list`: la lista (o un `mui_combo`).
+- `text`: las líneas, separadas por saltos de línea (`\n`; un `\r` delante también vale). Un salto al final no
+  añade una línea vacía.
+
+Añade todas al final de una vez: la lista se redibuja una sola vez, no una por línea. Para cientos de líneas (la
+salida de una orden, un fichero), mucho más rápido que `mui_list_add` una a una: 300 líneas con la ventana abierta
+en un A1200 emulado, 10,6 s una a una y 0,6 s así. Una lista que el programa dejó en silencio (`mui_list_quiet`)
+sigue en silencio.
+
+Ver también: [`mui_list_add`](#mui_list_add), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_list_insert"></a>
 
@@ -12118,7 +12134,7 @@ Ver también: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_va
 
 Para añadir muchas líneas de golpe sin que se vea cada una.
 
-Ver también: [`mui_list_add`](#mui_list_add).
+Ver también: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_add_lines).
 
 <a id="mui_on_double"></a>
 

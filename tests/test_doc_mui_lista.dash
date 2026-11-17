@@ -1,6 +1,6 @@
 # MUI: una lista con unas líneas; al elegir una, el evento dice cuál.
 # emu-needs: muimaster.library
-# expect-out: 3 lineas
+# expect-out: 5 lineas
 # expect-out: elegida: Lorraine
 # expect-out: fin
 
@@ -17,6 +17,7 @@ Main
     mui_list_add(maquinas, "A500")                 # al final, una a una
     mui_list_add(maquinas, "Lorraine")
     mui_list_add(maquinas, "A1200")
+    mui_list_add_lines(maquinas, "A3000\nA4000")   # muchas de una vez: una por línea del texto
     Print "#{mui_list_count(maquinas)} lineas"
     mui_on_change(maquinas, ID_LISTA)              # un evento al elegir una
     if mui_window_open(win) == 0

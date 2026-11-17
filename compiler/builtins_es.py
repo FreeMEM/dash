@@ -1198,6 +1198,8 @@ DESC_ES = {
                   "una línea)",
     "mui_list": "Una lista de textos con barra de desplazamiento; su valor es la línea elegida (-1 ninguna)",
     "mui_list_add": "Añade una línea al final",
+    "mui_list_add_lines": "Añade al final cada línea de text (separadas por saltos de línea), todas de una vez: mucho "
+                          "más rápido que mui_list_add una a una",
     "mui_list_insert": "Mete una línea en pos (0 = la primera)",
     "mui_list_remove": "Quita la línea de pos",
     "mui_list_clear": "Quita todas las líneas",

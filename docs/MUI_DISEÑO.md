@@ -95,7 +95,9 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 
 `mui_list_add(lista, texto)`, `mui_list_insert(lista, pos, texto)`, `mui_list_remove(lista, pos)`,
 `mui_list_clear(lista)`, `mui_list_count(lista) -> Int`, `mui_list_get(lista, pos) -> String`.
-Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas: `mui_list_quiet(lista, si)`.
+Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas: `mui_list_quiet(lista, si)`, o
+`mui_list_add_lines(lista, texto)`, que añade cada línea del texto con un solo `MUIM_List_Insert` y la lista en silencio
+(300 líneas con la ventana abierta en un A1200 emulado: 10,6 s con `mui_list_add`, 0,6 s así; lo pidió Forja).
 
 ### Eventos
 
