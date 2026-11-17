@@ -214,10 +214,13 @@ _counter = [0]
 _memo: Dict[Tuple[str, str], str] = {}
 
 _ASM_LINE = re.compile(r"^([ \t]*)asm(?=$|[ \t#])(.*)$")
+_ASM_FUNC = re.compile(r"^([ \t]*)asm[ \t]+func[ \t]+(.*)$")
 
 
 def is_header(text: str) -> bool:
-    """Is this line the start of an asm block (asm alone, or followed by in, out or uses)?"""
+    """Is this line the start of an asm block (asm alone, or followed by in, out or uses, or asm func)?"""
+    if _ASM_FUNC.match(text):
+        return True
     m = _ASM_LINE.match(text)
     if not m:
         return False
@@ -253,6 +256,10 @@ def extract(source: str, filename: str = "") -> str:
             out.append(text)
             i += 1
             continue
+        fm = _ASM_FUNC.match(text)
+        if fm:
+            i = _asm_func(fm, lines, i, out, filename, directory)
+            continue
         m = _ASM_LINE.match(text)
         header = _strip_dash_comment(m.group(2))
         line_no = i + 1
@@ -281,6 +288,125 @@ def extract(source: str, filename: str = "") -> str:
         _memo.clear()
     _memo[key] = result
     return result
+
+
+def _find_kw(text: str, kw: str) -> int:
+    """Where the word kw (in, out, uses) is at the top level of text, or -1."""
+    depth, quote, i = 0, None, 0
+    while i < len(text):
+        c = text[i]
+        if quote:
+            if c == "\\":
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c == '"':
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif (not depth and text.startswith(kw, i) and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] == "_"))
+              and (i + len(kw) == len(text) or not (text[i + len(kw)].isalnum() or text[i + len(kw)] == "_"))):
+            return i
+        i += 1
+    return -1
+
+
+def _asm_func(m, lines: List[str], i: int, out: List[str], filename: str, directory: str) -> int:
+    """asm func nombre(params) [-> Tipo] [in ...] [out r] [uses ...] (dashc's asm_func): a Dash function whose body
+    is an asm block. Without in, the parameters go in d0, d1... in order; without out, it returns d0. It becomes
+        func nombre(params) [-> Tipo]
+            __dash_asm(N, ...) __dash_asm_r = __dash_asm_out(N, 0) return __dash_asm_r
+        end
+    in the same lines. Returns the index of the line after its end."""
+    line_no = i + 1
+    indent = m.group(1)
+    head = _strip_dash_comment(m.group(2)).rstrip()
+    nm = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\(", head)
+    if not nm:
+        raise AsmError("asm func: se esperaba nombre(parámetros)", line_no)
+    depth, pe = 0, -1
+    for k in range(nm.end() - 1, len(head)):
+        if head[k] == "(":
+            depth += 1
+        elif head[k] == ")":
+            depth -= 1
+            if depth == 0:
+                pe = k
+                break
+    if pe < 0:
+        raise AsmError("asm func: falta el ')'", line_no)
+    params = head[nm.end():pe]
+    rest = head[pe + 1:].strip()
+    ret = None
+    if rest.startswith("->"):
+        rm = re.match(r"->\s*([A-Za-z_][A-Za-z0-9_]*)", rest)
+        ret = rm.group(1) if rm else ""
+        if ret not in ("Int", "Bool", "Pointer"):
+            raise AsmError("asm func: devuelve Int, Bool o Pointer (lo que queda en un registro)", line_no)
+        rest = rest[rm.end():].strip()
+    pos = {k: _find_kw(rest, k) for k in ("in", "out", "uses")}
+    if rest and 0 not in pos.values():
+        raise AsmError("asm: se esperaba in, out o uses", line_no)
+
+    def part(k):
+        if pos[k] < 0:
+            return None
+        end = min([p for p in pos.values() if p > pos[k]] + [len(rest)])
+        return rest[pos[k]:end].strip()
+    hdr = []
+    if part("in") is not None:
+        hdr.append(part("in"))
+    else:
+        names = []
+        for prm in _split_top(params):
+            prm = prm.strip()
+            if not prm:
+                continue
+            pm = re.match(r"[A-Za-z_][A-Za-z0-9_]*", prm)
+            if not pm:
+                raise AsmError(f"asm func: parámetro no válido: {prm}", line_no)
+            names.append(pm.group(0))
+        if len(names) > 8:
+            raise AsmError("asm func: sin in, los parámetros van en d0-d7 (8 como mucho)", line_no)
+        if names:
+            hdr.append("in " + ", ".join(f"d{k} = {n}" for k, n in enumerate(names)))
+    if part("out") is not None:
+        reg = part("out")[3:].strip()
+        if ret is None:
+            raise AsmError("asm func: sin -> Tipo no devuelve nada (quita el out)", line_no)
+        if not _reg_name(reg):
+            raise AsmError("asm func: out lleva solo el registro de lo que devuelve (out d0)", line_no)
+        hdr.append(f"out __dash_asm_r = {reg}")
+    elif ret:
+        hdr.append("out __dash_asm_r = d0")
+    if part("uses") is not None:
+        hdr.append(part("uses"))
+    block = Block(n=_counter[0], filename=filename, directory=directory, line=line_no)
+    _counter[0] += 1
+    _parse_header(block, " ".join(hdr), line_no)
+    body = []
+    j = i + 1
+    while j < len(lines) and not _END_RE.match(lines[j]):
+        body.append((j + 1, lines[j]))
+        j += 1
+    if j >= len(lines):
+        raise AsmError("asm: falta el end del bloque asm", line_no, len(indent) + 1)
+    if not body:
+        raise AsmError("asm func: el cuerpo está vacío", line_no)
+    _parse_body(block, body)
+    BLOCKS[block.n] = block
+    args = ", ".join([str(block.n)] + [e for _, e in block.ins])
+    call = f"{indent}    __dash_asm({args})"
+    if block.outs:
+        call += f" __dash_asm_r = __dash_asm_out({block.n}, 0) return __dash_asm_r"
+    out.append(f"{indent}func {head[:pe + 1]}" + (f" -> {ret}" if ret else ""))
+    out.append(call)
+    out.extend([""] * (j - i - 2))
+    out.append(f"{indent}end")
+    return j + 1
 
 
 def _parse_header(block: Block, header: str, line: int):

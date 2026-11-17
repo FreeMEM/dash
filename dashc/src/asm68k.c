@@ -254,6 +254,43 @@ static const char *asm_line(const char *b, const char *e)
     return NULL;
 }
 
+/* ¿la línea es "asm func nombre(...)"? Devuelve dónde empieza el nombre (o NULL) */
+static const char *asm_func_line(const char *b, const char *e)
+{
+    const char *p = b;
+    while (p < e && (*p == ' ' || *p == '\t')) p++;
+    if (e - p < 9 || memcmp(p, "asm", 3) || (p[3] != ' ' && p[3] != '\t')) return NULL;
+    p += 3;
+    while (p < e && (*p == ' ' || *p == '\t')) p++;
+    if (e - p < 5 || memcmp(p, "func", 4) || (p[4] != ' ' && p[4] != '\t')) return NULL;
+    p += 4;
+    while (p < e && (*p == ' ' || *p == '\t')) p++;
+    return p;
+}
+
+/* dónde está la palabra kw (in, out, uses) a nivel superior en [b, e), o NULL */
+static const char *find_kw(const char *b, const char *e, const char *kw)
+{
+    size_t n = strlen(kw);
+    int depth = 0;
+    char q = 0;
+    const char *p;
+    for (p = b; p < e; p++) {
+        if (q) {
+            if (*p == '\\' && p + 1 < e) p++;
+            else if (*p == q) q = 0;
+            continue;
+        }
+        if (*p == '"') { q = *p; continue; }
+        if (*p == '(' || *p == '[' || *p == '{') depth++;
+        if (*p == ')' || *p == ']' || *p == '}') depth--;
+        if (!depth && (size_t)(e - p) >= n && !memcmp(p, kw, n) && (p == b || !is_idc((unsigned char)p[-1])) &&
+            ((size_t)(e - p) == n || !is_idc((unsigned char)p[n])))
+            return p;
+    }
+    return NULL;
+}
+
 /* el comentario # de la cabecera (fuera de textos) */
 static const char *head_end(const char *p, const char *e)
 {
@@ -308,6 +345,155 @@ static int body_sections(const char *s)
     return 0;
 }
 
+/* el cuerpo de un bloque, desde b hasta la línea del end: en body; nlines, las líneas (con la del end) */
+static const char *asm_body(const char *b, int hline, Buf *body, int *nlines)
+{
+    for (;;) {
+        const char *le, *x, *xe;
+        if (!*b) fatal_at(hline, 1, "asm: falta el end del bloque asm");
+        le = strchr(b, '\n');
+        if (!le) le = b + strlen(b);
+        x = b;
+        xe = le;
+        trim(&x, &xe);
+        (*nlines)++;
+        if (end_line(x, xe)) return *le ? le + 1 : le;
+        buf_bytes(body, b, (size_t)(le - b));
+        buf_byte(body, '\n');
+        b = *le ? le + 1 : le;
+    }
+}
+
+/* asm func nombre(params) [-> Tipo] [in ...] [out r] [uses ...]: una función de Dash cuyo cuerpo es un bloque asm.
+   Sin in, los parámetros van en d0, d1... por orden; sin out, lo que devuelve sale de d0. Queda como
+       func nombre(params) [-> Tipo]
+           __dash_asm(n, ...) __dash_asm_r = __dash_asm_out(n, 0) return __dash_asm_r
+       end
+   (en las mismas líneas) */
+static const char *asm_func(const char *s, const char *e, const char *h, int line, Buf *out)
+{
+    const char *he = head_end(h, e), *q, *pe, *r, *ret = NULL, *rete = NULL, *kin, *kout, *kuses, *b;
+    const char *ends[3];
+    Buf hb = {0}, call = {0}, outs = {0}, body = {0};
+    AsmBlock bk;
+    char num[48];
+    int depth = 0, nlines = 0, i, nparams = 0;
+    size_t ind = (size_t)(h - s);
+    for (i = 0; s + i < h && (s[i] == ' ' || s[i] == '\t'); i++) ;
+    ind = (size_t)i;
+    for (q = h; q < he && is_idc((unsigned char)*q); q++) ;
+    if (q == h || q >= he || *q != '(') fatal_at(line, 1, "asm func: se esperaba nombre(parámetros)");
+    for (pe = q; pe < he; pe++) {
+        if (*pe == '(') depth++;
+        else if (*pe == ')' && --depth == 0) break;
+    }
+    if (pe >= he) fatal_at(line, 1, "asm func: falta el ')'");
+    r = pe + 1;
+    while (r < he && (*r == ' ' || *r == '\t')) r++;
+    if (r + 1 < he && r[0] == '-' && r[1] == '>') {
+        r += 2;
+        while (r < he && (*r == ' ' || *r == '\t')) r++;
+        ret = r;
+        while (r < he && is_idc((unsigned char)*r)) r++;
+        rete = r;
+        if (!((rete - ret == 3 && !memcmp(ret, "Int", 3)) || (rete - ret == 4 && !memcmp(ret, "Bool", 4)) ||
+              (rete - ret == 7 && !memcmp(ret, "Pointer", 7))))
+            fatal_at(line, 1, "asm func: devuelve Int, Bool o Pointer (lo que queda en un registro)");
+    }
+    while (r < he && (*r == ' ' || *r == '\t')) r++;
+    kin = find_kw(r, he, "in");
+    kout = find_kw(r, he, "out");
+    kuses = find_kw(r, he, "uses");
+    if (r < he && r != kin && r != kout && r != kuses) fatal_at(line, 1, "asm: se esperaba in, out o uses");
+    /* dónde acaba cada parte */
+    {
+        const char *k[3] = {kin, kout, kuses};
+        int a, c;
+        for (a = 0; a < 3; a++) {
+            ends[a] = he;
+            for (c = 0; c < 3; c++)
+                if (k[c] && k[a] && k[c] > k[a] && k[c] < ends[a]) ends[a] = k[c];
+        }
+    }
+    /* la cabecera del bloque: in (o los parámetros en d0, d1...), out __dash_asm_r = r, uses */
+    if (kin) {
+        buf_bytes(&hb, kin, (size_t)(ends[0] - kin));
+    } else {
+        const char *p = q + 1, *c;
+        while (p < pe) {
+            const char *x, *xe;
+            c = top_comma(p, pe);
+            x = p;
+            xe = c;
+            trim(&x, &xe);
+            if (x < xe) {
+                const char *ne = x;
+                char rg[16];
+                while (ne < xe && is_idc((unsigned char)*ne)) ne++;
+                if (ne == x) fatal_at(line, 1, "asm func: parámetro no válido: %.*s", (int)(xe - x), x);
+                if (nparams == 8) fatal_at(line, 1, "asm func: sin in, los parámetros van en d0-d7 (8 como mucho)");
+                buf_bytes(&hb, nparams ? ", " : "in ", nparams ? 2 : 3);
+                snprintf(rg, sizeof rg, "d%d = ", nparams);
+                buf_bytes(&hb, rg, strlen(rg));
+                buf_bytes(&hb, x, (size_t)(ne - x));
+                nparams++;
+            }
+            p = c + 1;
+        }
+    }
+    if (kout) {
+        const char *x = kout + 3, *xe = ends[1];
+        trim(&x, &xe);
+        if (!ret) fatal_at(line, 1, "asm func: sin -> Tipo no devuelve nada (quita el out)");
+        if (reg_num(x, (size_t)(xe - x)) < 0)
+            fatal_at(line, 1, "asm func: out lleva solo el registro de lo que devuelve (out d0)");
+        buf_bytes(&hb, " out __dash_asm_r = ", 20);
+        buf_bytes(&hb, x, (size_t)(xe - x));
+    } else if (ret) {
+        buf_bytes(&hb, " out __dash_asm_r = d0", 22);
+    }
+    if (kuses) {
+        buf_byte(&hb, ' ');
+        buf_bytes(&hb, kuses, (size_t)(ends[2] - kuses));
+    }
+    memset(&bk, 0, sizeof bk);
+    bk.file = lex_file;
+    snprintf(num, sizeof num, "__dash_asm(%d", asm_blocks.n);
+    buf_bytes(&call, num, strlen(num));
+    if (hb.n) parse_head((const char *)hb.p, (const char *)hb.p + hb.n, line, &bk, &call, &outs);
+    buf_byte(&call, ')');
+    b = *e ? e + 1 : e;
+    bk.line = line + 1;
+    b = asm_body(b, line, &body, &nlines);
+    if (nlines < 2) fatal_at(line, 1, "asm func: el cuerpo está vacío");
+    buf_byte(&body, 0);
+    bk.body = (char *)body.p;
+    bk.sections = body_sections(bk.body);
+    VEC_PUSH(asm_blocks, bk);
+    /* func nombre(params) -> Tipo */
+    buf_bytes(out, s, ind);
+    buf_bytes(out, "func ", 5);
+    buf_bytes(out, h, (size_t)(pe + 1 - h));
+    if (ret) {
+        buf_bytes(out, " -> ", 4);
+        buf_bytes(out, ret, (size_t)(rete - ret));
+    }
+    buf_byte(out, '\n');
+    buf_bytes(out, s, ind);
+    buf_bytes(out, "    ", 4);
+    buf_bytes(out, call.p, call.n);
+    if (outs.n) buf_bytes(out, outs.p, outs.n);
+    if (ret) buf_bytes(out, " return __dash_asm_r", 20);
+    buf_byte(out, '\n');
+    for (i = 0; i < nlines - 2; i++) buf_byte(out, '\n');
+    buf_bytes(out, s, ind);
+    buf_bytes(out, "end\n", 4);
+    xfree(hb.p);
+    xfree(call.p);
+    xfree(outs.p);
+    return b;
+}
+
 char *asm_extract(const char *src)
 {
     Buf out = {0};
@@ -326,6 +512,15 @@ char *asm_extract(const char *src)
         const char *e = strchr(s, '\n'), *h, *t;
         if (!e) e = s + strlen(s);
         /* las regiones """ (el C de un @native) se copian tal cual */
+        if (!in_native && (h = asm_func_line(s, e)) != NULL) {
+            const char *b = asm_func(s, e, h, line, &out), *c;
+            for (c = s; c < b; c++)
+                if (*c == '\n') line++;
+            if (!*b && b > s && b[-1] != '\n') line++;
+            s = b;
+            any = 1;
+            continue;
+        }
         if (!in_native && (h = asm_line(s, e)) != NULL) {
             AsmBlock bk;
             Buf call = {0}, outs = {0}, body = {0};
