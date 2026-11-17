@@ -1157,6 +1157,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       C, los nombres que son palabras de C (`asm`, `int`, `default`...) o `main` se renombran (`test_nombres_c*`);
       por C, `l = []` en una lista con tipo ya no olvida lo que guarda: Forja compila con `--gcc`
       (`test_lista_vaciada*`)
+- [x] Extensión de VS Code 0.6.0 (2026-11-17, lo pidió el usuario; paso 6.1 de Forja: en Linux y DashOS, el IDE de
+      Dash es la extensión): ejecutar en DashOS (`./dash --dashos` y `tools/dashos_run.py` en QEMU), la ayuda de
+      Forja (vista con la ficha entera, búsqueda, Mayúsculas+F1, Probar, y lo que añade al pasar el ratón), errores al
+      escribir con `./dash --check` (`--texto`), plantillas de orden, demo, 3D y DashOS, y fragmentos de `asm`,
+      `gl_*` y lo nuevo. `compiler/lsp.py`: sus arreglos rápidos entienden también los mensajes de `--check`.
+      `editor/vscode/test/forja.js`, `tests/lsp/test_lsp.py`
 
 ## Notas y Decisiones
 

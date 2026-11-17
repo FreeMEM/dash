@@ -6,6 +6,21 @@
 
 /** @type {import('vscode-languageclient/node').LanguageClient | null} */
 let client = null;
+/** What the rest of the extension decides: whether the server's errors are hidden (./dash --check marks them), and
+    what the help adds to a hover */
+const hooks = { hideDiagnostics: () => false, hover: (h, document, position) => h };
+const lspDiagnostics = new Map();       // uri -> the server's last errors there (and how to show them)
+
+/** @param {{hideDiagnostics?: () => boolean, hover?: (h: any, d: any, p: any) => any}} h */
+function setHooks(h) { Object.assign(hooks, h); }
+
+/** Shows or hides again the server's errors (after hooks.hideDiagnostics changes its answer) */
+function refreshDiagnostics() {
+    for (const { uri, diagnostics, next } of lspDiagnostics.values()) next(uri, hooks.hideDiagnostics() ? [] : diagnostics);
+}
+
+/** Whether the server is running */
+function languageServerRunning() { return !!client; }
 let starting = null;
 let warnedOld = false;      // said once that dash.path has no compiler/lsp.py
 
@@ -46,6 +61,15 @@ async function startLanguageServer(vscode, findDash, fromFile, noDash) {
     const clientOptions = {
         documentSelector: [{ scheme: 'file', language: 'dash' }, { scheme: 'untitled', language: 'dash' }],
         outputChannelName: 'Dash (servidor de lenguaje)',
+        middleware: {
+            // its errors are shown only when ./dash --check does not mark them (check.js); kept, to show them if it stops
+            handleDiagnostics: (uri, diagnostics, next) => {
+                lspDiagnostics.set(uri.toString(), { uri, diagnostics, next });
+                next(uri, hooks.hideDiagnostics() ? [] : diagnostics);
+            },
+            // the hover of a builtin, with what Dash's help adds (help.js): parameters, DashOS, its ficha, Probar
+            provideHover: async (document, position, token, next) => hooks.hover(await next(document, position, token), document, position),
+        },
     };
     const c = new LanguageClient('dash', 'Dash', serverOptions, clientOptions);
     starting = c.start().then(() => { client = c; return c; }, (e) => {
@@ -58,6 +82,7 @@ async function startLanguageServer(vscode, findDash, fromFile, noDash) {
 async function stopLanguageServer() {
     const c = client;
     client = null;
+    lspDiagnostics.clear();
     if (c) await c.stop();
 }
 
@@ -86,4 +111,4 @@ function setupLanguageServer(vscode, context, findDash, noDash) {
     );
 }
 
-module.exports = { setupLanguageServer, stopLanguageServer };
+module.exports = { setupLanguageServer, stopLanguageServer, setHooks, refreshDiagnostics, languageServerRunning };

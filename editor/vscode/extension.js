@@ -9,12 +9,14 @@ const { registerSpriteEditor, registerMapEditor } = require('./spriteEditor');
 const DashUI = require('./media/model');
 const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
-const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
+const { setupLanguageServer, stopLanguageServer, setHooks, refreshDiagnostics, languageServerRunning } = require('./lspClient');
+const { setupCheck } = require('./check');
+const { setupHelp } = require('./helpView');
 const { setupTasks, emulatorOptions, savedFile, outputFile, outputFolder } = require('./tasks');
 const { missing } = require('./missing');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
-const { writeProject, cleanName } = require('./newProject');
+const { writeProject, cleanName, KINDS: PROJECT_KINDS } = require('./newProject');
 const { checkUpdates } = require('./updates');
 
 /** A .dashui given to VS Code when it starts ("code carpeta ventana.dashui") opens as JSON text: its editor
@@ -107,6 +109,11 @@ function emulatorEnv() {
                                         ['system32', 'DASH_EMU_SYS_32'], ['systemRtg', 'DASH_EMU_SYS_32_RTG'],
                                         ['muiSystem', 'DASH_EMU_SYS_MUI'], ['muiSystem32', 'DASH_EMU_SYS_32_MUI']])
         if (config.get(setting)) env[variable] = config.get(setting);
+    // DashOS: where its libkit_c.a is, for the windows (tools/dashos_run.py)
+    const dashos = vscode.workspace.getConfiguration('dash.dashos');
+    const home = (p) => String(p || '').replace(/^~(?=$|\/)/, require('os').homedir());
+    if (dashos.get('folder')) env.DASHOS_DIR = home(dashos.get('folder'));
+    if (dashos.get('kitC')) env.DASH_KIT_C = home(dashos.get('kitC'));
     return env;
 }
 
@@ -271,16 +278,15 @@ async function newWindowFile() {
 async function newProject(parent, name, open, kind) {
     if (!kind && name) kind = 'mui';                 // (the tests, and the walkthrough's: the MUI program)
     if (!kind) {
-        const picked = await vscode.window.showQuickPick([
-            { id: 'mui', label: 'Aplicación con ventana MUI', detail: 'Un programa con su ventana del editor visual (MUI y un 68020)' },
-            { id: 'game', label: 'Juego', detail: 'Un jugador (sprite de hardware), un nivel (mapa de tiles con choques) y el programa que lo mueve con el joystick' },
-        ], { title: 'Nuevo proyecto de Dash', placeHolder: 'Qué clase de programa' });
+        const picked = await vscode.window.showQuickPick(PROJECT_KINDS.map((k) => Object.assign({}, k)),
+                                                         { title: 'Nuevo proyecto de Dash', placeHolder: 'Qué clase de programa' });
         if (!picked) return null;
         kind = picked.id;
     }
     if (!name) {
+        const k = PROJECT_KINDS.find((x) => x.id === kind);
         name = await vscode.window.showInputBox({ title: 'Nuevo proyecto de Dash', prompt: 'Nombre del programa',
-                                                  value: kind === 'game' ? 'juego' : 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
+                                                  value: k ? k.name : 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
         if (!name) return null;
     }
     if (!parent) {
@@ -364,11 +370,18 @@ function activate(context) {
         context.globalState.update('dash.openAfter', undefined);
         if (fs.existsSync(after)) vscode.window.showTextDocument(vscode.Uri.file(after)).then(undefined, () => {});
     }
-    setupLanguageServer(vscode, context, findDash, noDash);   // errors while typing (compiler/lsp.py)
+    setupLanguageServer(vscode, context, findDash, noDash);   // completion, hover, definition... (compiler/lsp.py)
     if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
         runTask = setupTasks(vscode, context, { findDash, noDash, env: emulatorEnv, trusted });
     if (vscode.debug && vscode.debug.registerDebugConfigurationProvider)   // F5: debug on the Amiga (gdb + bgdbserver)
-        setupDebugger(vscode, context, { findDash, noDash, env: emulatorEnv, trusted, emulatorOptions });
+        setupDebugger(vscode, context, { findDash, noDash, env: emulatorEnv, trusted, emulatorOptions, runTask });
+    if (vscode.languages && vscode.languages.createDiagnosticCollection) {
+        // errors while typing: ./dash --check (check.js); the language server's, without it
+        const errors = setupCheck(vscode, context, { findDash, trusted, onFallback: refreshDiagnostics });
+        // Dash's help: the view, Shift+F1, the hover of the builtins and "Probar" (helpView.js)
+        const helpView = setupHelp(vscode, context, { findDash, noDash, trusted, runTask: runTask || undefined, lspRunning: languageServerRunning });
+        setHooks({ hideDiagnostics: errors.usesCheck, hover: helpView.hover });
+    }
     if (vscode.env && vscode.env.openExternal)       // a newer Dash on GitHub (once a day)
         checkUpdates(vscode, context, compilerInUse).catch(() => {});
 }

@@ -862,6 +862,17 @@ async function editingTests() {
         EventLoop: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n${s}\nend`,
         On: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n    EventLoop\n${s}\n    end\nend`,
         'Programa MUI con .dashui': null,   // needs the .dashui file
+        asm: (s) => `func f(valor: Int) -> Int\n${s}\n    return r\nend\nMain\nend`,
+        'func con asm': (s) => `${s}\nMain\nend`,
+        gl_begin: (s) => `import "lib/amiga/gl.dash"\nMain\n${s}\nend`,
+        has: (s) => `Main\n    lista = [1]\n    valor = 1\n${s}\nend`,
+        str_join: (s) => `Main\n    lista = ["a", "b"]\n    Print ${s}\nend`,
+        'Menú añadido con la ventana hecha': (s) => `Main\n    ventana = mui_window_begin("x", 0)\n    mui_window_end()\n${s}\nend`,
+        mui_menu_extend: (s) => `Main\n    ventana = mui_window_begin("x", 0)\n    mui_window_end()\n    menu = mui_menu_add(ventana, "M")\n    mui_menu_end()\n${s}\nend`,
+        mui_on_activate: (s) => `const ID_ACTIVA = 5\nMain\n    ventana = mui_window_begin("x", 0)\n    mui_window_end()\n${s}\nend`,
+        rexx_send_wait: (s) => `Main\n${s}\nend`,
+        mui_list_add_lines: (s) => `Main\n    lista = mui_list()\n    var lineas: [String] = ["a", "b"]\n${s}\nend`,
+        mui_request_text: (s) => `Main\n${s}\nend`,
     };
     for (const [name, snip] of Object.entries(snippets)) {
         const w = name in wrap ? wrap[name] : (s) => s;
@@ -873,6 +884,9 @@ async function editingTests() {
             try {
                 execFileSync('python3', ['-m', 'compiler.main', file, '-o', path.join(dir, 'snip.c')],
                              { cwd: repo, stdio: 'pipe' });
+                // and by the compiler that makes the executable (./dash --check), when it is built
+                if (fs.existsSync(path.join(repo, 'dashc', 'dashc')))
+                    execFileSync(path.join(repo, 'dash'), ['--check', file], { cwd: repo, stdio: 'pipe' });
             } catch (e) {
                 throw new Error(fs.readFileSync(file, 'utf8') + '\n' + String(e.stdout) + String(e.stderr));
             } finally {
@@ -1447,6 +1461,7 @@ async function updateTests() {
     await require('./sprite.js').spriteTests(check, assert);
     await require('./map.js').mapTests(check, assert);
     await require('./amigaView.js').amigaViewTests(check, assert);
+    await require('./forja.js').forjaTests(check, assert);
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();

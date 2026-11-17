@@ -156,6 +156,54 @@ async function run() {
         assert.strictEqual(range.start.character, 5);
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('errors with ./dash --check: its words, each error once (not also the language server\'s)', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'comprueba.dash');
+        fs.writeFileSync(file, 'Main\n    y = foo(1)\n    Print nada\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        let ds = [];
+        for (let i = 0; i < 150 && ds.length < 2; i++) {
+            ds = vscode.languages.getDiagnostics(doc.uri);
+            if (ds.length < 2) await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 1500));            // the language server has spoken by now
+        ds = vscode.languages.getDiagnostics(doc.uri);
+        assert.deepStrictEqual(ds.map((d) => [d.range.start.line, d.message]).sort(),
+                               [[1, 'la función foo no existe'], [2, 'la variable nada no existe']]);
+        // its quick fixes are there with these words too (compiler/lsp.py)
+        const actions = await vscode.commands.executeCommand('vscode.executeCodeActionProvider', doc.uri, ds.find((d) => d.range.start.line === 1).range);
+        assert(actions.some((a) => a.title === 'Crear la función foo(a)'), actions.map((a) => a.title).join());
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    await check('help: the hover of a builtin has DashOS and its ficha; the help view opens on it', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'ayuda.dash');
+        fs.writeFileSync(file, 'Main\n    var l: [String] = ["a"]\n    Print str_join(l, ", ")\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        let text = '';
+        for (let i = 0; i < 200 && !/En DashOS/.test(text); i++) {          // (the help is made the first time)
+            const hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(2, 12));
+            text = hovers.map((h) => h.contents.map((c) => c.value || c).join(' ')).join(' ');
+            if (!/En DashOS/.test(text)) await new Promise((r) => setTimeout(r, 150));
+        }
+        assert.match(text, /str_join\(list, sep\)/);
+        assert.match(text, /En DashOS: sí/);
+        assert.match(text, /command:dash\.help\.show/);
+        await vscode.commands.executeCommand('dash.help.show', 'file_seek');
+        let tabs = [];
+        for (let i = 0; i < 50 && !tabs.includes('Ayuda: file_seek'); i++) {
+            tabs = vscode.window.tabGroups.all.flatMap((g) => g.tabs.map((t) => t.label));
+            if (!tabs.includes('Ayuda: file_seek')) await new Promise((r) => setTimeout(r, 100));
+        }
+        assert(tabs.includes('Ayuda: file_seek'), tabs.join());
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     await check('language server: outline and rename', async () => {
         const path = require('path');
         const os = require('os');
@@ -208,7 +256,7 @@ async function run() {
         await vscode.window.showTextDocument(doc);
         const tasks = await vscode.tasks.fetchTasks({ type: 'dash' });
         const kinds = tasks.map((t) => t.definition.task).sort();
-        assert.deepStrictEqual(kinds, ['compile', 'memcheck', 'profile', 'run'], JSON.stringify(tasks.map((t) => [t.name, t.definition])));
+        assert.deepStrictEqual(kinds, ['compile', 'dashos', 'dashos-run', 'memcheck', 'profile', 'run'], JSON.stringify(tasks.map((t) => [t.name, t.definition])));
         const compile = tasks.find((t) => t.definition.task === 'compile');
         const done = new Promise((resolve) => {
             const sub = vscode.tasks.onDidEndTaskProcess((e) => {
@@ -246,6 +294,19 @@ async function run() {
         fs.writeFileSync(file, 'Main\n    Print "hola desde el Amiga"\nend\n');
         await runKind(file, 'run');
         assert((await vscode.commands.getCommands(true)).includes('dash.chooseMachine'));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    await check('tasks: DashOS, compiled with --dashos and run in QEMU', async () => {
+        const path = require('path');
+        const os = require('os');
+        const { which } = require(path.join(__dirname, '..', '..', 'tasks.js'));
+        if (!which('qemu-aarch64') || !which('ld.lld')) return;
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'arm.dash');
+        fs.writeFileSync(file, 'Main\n    Print "hola desde DashOS"\nend\n');
+        await runKind(file, 'dashos');
+        assert.strictEqual(fs.readFileSync(path.join(dir, 'bin', 'dashos', 'arm')).slice(1, 4).toString(), 'ELF');
+        await runKind(file, 'dashos-run');
         fs.rmSync(dir, { recursive: true, force: true });
     });
     await check('tasks: a --memcheck error lands on its line', async () => {

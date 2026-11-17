@@ -16,7 +16,8 @@ function cleanName(name) {
  * The files of a new project: { relative path: text }
  * @param {string} name
  * @param {string} [dashPath] the Dash compiler's folder, for .vscode/settings.json (when it is not the workspace)
- * @param {string} [kind] 'mui' (a program with a MUI window, the default) or 'game'
+ * @param {string} [kind] 'mui' (a program with a MUI window, the default), 'game', 'cli' (a Shell command), 'demo'
+ *   (raster bars in inline assembler), '3d' (MiniGL) or 'dashos' (a program for DashOS, run in QEMU)
  */
 function projectFiles(name, dashPath, kind) {
     const n = cleanName(name);
@@ -74,7 +75,12 @@ function projectFiles(name, dashPath, kind) {
             { type: 'dash', request: 'attach', name: 'Amiga real', target: 'amiga.local:2345', program: `\${workspaceFolder}/${n}.dash` },
         ],
     };
-    const files = kind === 'game' ? gameFiles(n) : {
+    if (kind === 'dashos') {          // first, running it in DashOS; debugging is on the Amiga
+        launch.configurations.unshift({ type: 'dash', request: 'launch', name: 'Ejecutar en DashOS (QEMU)', target: 'dashos',
+                                        program: `\${workspaceFolder}/${n}.dash` });
+    }
+    const other = OTHER_KINDS[kind];
+    const files = kind === 'game' ? gameFiles(n) : other ? { [`${n}.dash`]: other(n) } : {
         [`${n}.dash`]: program,
         'ventana.dashui': JSON.stringify(dashui, null, 2) + '\n',
     };
@@ -85,6 +91,189 @@ function projectFiles(name, dashPath, kind) {
     if (dashPath) files['.vscode/settings.json'] = JSON.stringify({ 'dash.path': dashPath }, null, 2) + '\n';
     return { name: n, files };
 }
+
+// --- the other kinds: one program each (FORJA_LOOP 3.2 and 6.1: command, demo, 3D, DashOS) ---------------------------
+
+/** The kinds of project, for the question of "Dash: Nuevo proyecto" */
+const KINDS = [
+    { id: 'mui', label: 'Aplicación con ventana MUI', detail: 'Un programa con su ventana del editor visual (MUI y un 68020)', name: 'hola' },
+    { id: 'cli', label: 'Orden del Shell', detail: 'Un programa sin ventana que lee sus argumentos y escribe en el Shell', name: 'orden' },
+    { id: 'game', label: 'Juego', detail: 'Un jugador (sprite de hardware), un nivel (mapa de tiles con choques) y el programa que lo mueve con el joystick', name: 'juego' },
+    { id: 'demo', label: 'Demo', detail: 'Barras de raster con la parte que corre en cada línea en ensamblador 68000 en línea (asm ... end)', name: 'demo' },
+    { id: '3d', label: '3D con MiniGL', detail: 'Un cubo que gira con gl_* (minigl.library y una FPU)', name: 'cubo' },
+    { id: 'dashos', label: 'Programa para DashOS', detail: 'Se compila con ./dash --dashos y se ejecuta en QEMU (qemu-aarch64) desde VS Code', name: 'hola_dashos' },
+];
+
+const OTHER_KINDS = {
+    cli: (n) => [
+        `# ${n}: una orden del Shell. Escribe sus argumentos al revés y cuántas letras tienen.`,
+        `#   ${n} hola amiga      ->   amiga hola (9 letras)`,
+        '# ▶ lo ejecuta en el Amiga emulado (sin argumentos) y F5 lo depura.',
+        '',
+        'func letras(palabras: [String]) -> Int',
+        '    total = 0',
+        '    for p in palabras',
+        '        total = total + p.length',
+        '    end',
+        '    return total',
+        'end',
+        '',
+        'Main',
+        '    if arg_count() == 0',
+        `        Print "Uso: ${n} palabra [palabra...]"`,
+        '        return',
+        '    end',
+        '    var palabras: [String] = []',
+        '    for i in (arg_count() - 1..0)',
+        '        palabras.push(arg(i))',
+        '    end',
+        '    Print str_join(palabras, " ") + " (#{letras(palabras)} letras)"',
+        'end',
+        '',
+    ].join('\n'),
+    demo: (n) => [
+        `# ${n}: una barra de raster que sube y baja (como las demos). Dash calcula dónde va; el bloque asm espera`,
+        '# a cada línea de la pantalla (VHPOSR, $DFF006) y cambia el color de fondo (COLOR00, $DFF180) a su paso.',
+        '# Dura 10 segundos, o hasta pulsar el botón izquierdo del ratón. Ensamblador: docs/ASM_DISEÑO.md de Dash.',
+        '',
+        'const ARRIBA = 0x40     # la primera línea en la que puede estar la barra',
+        'const ALTO = 0xA0       # y cuántas hay',
+        '',
+        'Main',
+        '    fase = 0',
+        '    for cuadro in (1..500)',
+        '        wait_vblank()',
+        '        centro = ARRIBA + 8 + Int(fx_sin(Fixed(fase * 4 % 360)) * 64) + 64',
+        '        asm in d5 = centro out salir = d0 uses d1-d3/a0',
+        '            lea     $dff000,a0',
+        '            move.w  #ARRIBA,d1          ; la línea que toca',
+        '        .linea:',
+        '            move.b  6(a0),d0            ; VHPOSR: la línea, en el byte alto',
+        '            cmp.b   d1,d0',
+        '            bne.s   .linea',
+        '            moveq   #0,d2               ; el color: más claro cerca del centro',
+        '            move.w  d1,d3',
+        '            sub.w   d5,d3',
+        '            bpl.s   .positivo',
+        '            neg.w   d3',
+        '        .positivo:',
+        '            cmp.w   #8,d3',
+        '            bge.s   .pon',
+        '            add.w   d3,d3',
+        '            neg.w   d3',
+        '            add.w   #15,d3',
+        '            move.w  d3,d2',
+        '            lsl.w   #8,d2               ; rojo',
+        '            lsl.w   #4,d3',
+        '            or.w    d3,d2               ; y verde: naranja',
+        '        .pon:',
+        '            move.w  d2,$180(a0)         ; COLOR00',
+        '            addq.w  #1,d1',
+        '            cmp.w   #ARRIBA+ALTO,d1',
+        '            bne.s   .linea',
+        '            clr.w   $180(a0)',
+        '            moveq   #0,d0               ; el botón izquierdo del ratón (CIA-A, bit 6 a 0) acaba',
+        '            btst    #6,$bfe001',
+        '            bne.s   .sigue',
+        '            moveq   #1,d0',
+        '        .sigue:',
+        '        end',
+        '        if salir == 1',
+        '            break',
+        '        end',
+        '        fase = fase + 1',
+        '    end',
+        '    Print "Fin de la demo"',
+        'end',
+        '',
+    ].join('\n'),
+    '3d': (n) => [
+        `# ${n}: un cubo que gira con MiniGL (lib/amiga/gl.dash de Dash): caras de colores y el Z-buffer.`,
+        '# Hace falta minigl.library 29 o más (MiniGL con Warp3D o Wazp3D, PiStorm3D...) y una FPU; con --fpu, sus',
+        '# cuentas van mucho más deprisa. Se cierra con la ventana, con Esc o con q.',
+        'import "lib/amiga/gl.dash"',
+        '',
+        '# Una cara: su color y sus cuatro esquinas (x, y, z de cada una)',
+        'func cara(r: Float, g: Float, b: Float, p: [Float])',
+        '    gl_color(r, g, b)',
+        '    for i in (0..3)',
+        '        gl_vertex(p[i * 3], p[i * 3 + 1], p[i * 3 + 2])',
+        '    end',
+        'end',
+        '',
+        'Main',
+        '    if not gl_open(320, 240)',
+        '        Print "Hace falta minigl.library y una FPU"',
+        '        program_exit(5)',
+        '    end',
+        '    gl_enable(GL_DEPTH_TEST)',
+        '    gl_enable(GL_CULL_FACE)',
+        '    angulo = 0.0',
+        '    seguir = true',
+        '    while seguir',
+        '        gl_clear_color(0.05, 0.05, 0.2)',
+        '        gl_clear()',
+        '        gl_load_identity()',
+        '        gl_translate(0, 0, -5)',
+        '        gl_rotate(angulo, 1, 0, 0)',
+        '        gl_rotate(angulo * 1.3, 0, 1, 0)',
+        '        gl_begin(GL_QUADS)',
+        '        cara(1, 0.2, 0.2, [-1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0])',
+        '        cara(0.2, 1, 0.2, [-1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0])',
+        '        cara(0.2, 0.2, 1, [-1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0])',
+        '        cara(1, 1, 0.2, [-1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0])',
+        '        cara(1, 0.2, 1, [1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0])',
+        '        cara(0.2, 1, 1, [-1.0, -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0])',
+        '        gl_end()',
+        '        gl_swap()                       # se ve, y espera al refresco de la pantalla',
+        '        angulo = angulo + 2.0',
+        '        k = gl_key()',
+        '        if gl_closed() or k == 27 or k == 113',
+        '            seguir = false',
+        '        end',
+        '    end',
+        '    gl_close()',
+        'end',
+        '',
+    ].join('\n'),
+    dashos: (n) => [
+        `# ${n}: un programa para DashOS. "DashOS" sobre Main (o Dash: Ejecutar en DashOS) lo compila con`,
+        '# ./dash --dashos y lo ejecuta en el PC con QEMU (qemu-aarch64); su salida sale en el panel.',
+        '# En QEMU no hay compositor: las ventanas (mui_*) se hacen pero no se ven. El mismo programa compila',
+        '# para el Amiga (▶).',
+        '',
+        'struct Cuenta',
+        '    palabra: String',
+        '    veces: Int = 0',
+        'end',
+        '',
+        'Main',
+        '    texto = "el amiga y dashos comparten el lenguaje y el lenguaje es dash"',
+        '    var cuentas: [Cuenta] = []',
+        '    var vistas: [String] = []',
+        '    for p in str_split(texto, " ")',
+        '        if not vistas.has(p)',
+        '            vistas.push(p)',
+        '            cuentas.push(Cuenta(p, 0))',
+        '        end',
+        '        for c in cuentas',
+        '            if c.palabra == p',
+        '                c.veces = c.veces + 1',
+        '            end',
+        '        end',
+        '    end',
+        '    var repetidas: [String] = []',
+        '    for c in cuentas',
+        '        if c.veces > 1',
+        '            repetidas.push("#{c.palabra} (#{c.veces})")',
+        '        end',
+        '    end',
+        '    Print "#{vistas.length} palabras distintas"',
+        '    Print "Repetidas: " + str_join(repetidas, ", ")',
+        'end',
+        '',
+    ].join('\n'),
+};
 
 // --- a game: a player (a hardware sprite), a tileset (a BOB), a level (a tile map with collisions and the player's
 // start) and a program that moves the player with the joystick or the arrow keys (V6 of docs/VSCODE_JUEGOS_LOOP.md)
@@ -260,4 +449,4 @@ function writeProject(folder, name, dashPath, kind) {
     return path.join(folder, `${n}.dash`);
 }
 
-module.exports = { projectFiles, writeProject, cleanName };
+module.exports = { projectFiles, writeProject, cleanName, KINDS };

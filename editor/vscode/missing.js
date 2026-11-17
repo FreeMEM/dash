@@ -5,6 +5,15 @@
 const KNOWN = [
     [/dash: falta el compilador; /,
      () => 'Falta construir el compilador de Dash: en la carpeta de Dash, ejecuta make -C dashc (una vez, y tras cada git pull).'],
+    [/falta el compilador para DashOS/,
+     () => 'Falta construir el compilador para DashOS: en la carpeta de Dash, ejecuta make -C dashc dashc-a64.'],
+    [/falta libkit_c\.a de DashOS/,
+     () => 'El programa tiene ventanas (mui_*) y falta libkit_c.a de DashOS: make -C kernel kit-c en la carpeta de ' +
+           'DashOS, y esa carpeta en el ajuste "dash.dashos.folder" (o el fichero en "dash.dashos.kitC").'],
+    [/No such file or directory: '(qemu-aarch64(?:_be)?|clang|ld\.lld|llvm-[a-z]+)'/,
+     (m) => m[1].startsWith('qemu')
+         ? `Falta QEMU para ARM (${m[1]}), que ejecuta los programas de DashOS en el PC: instala el paquete qemu-user.`
+         : `Falta ${m[1]} (LLVM), que hace los programas de DashOS: instala clang, lld y llvm.`],
     [/m68k-amigaos-gcc not found|Falta el compilador de Amiga/,
      () => 'Falta el compilador de Amiga (m68k-amigaos-gcc, en /opt/amiga/bin): instálalo como dice el README de Dash ' +
            '(o pon su carpeta en DASH_TOOLCHAIN).'],

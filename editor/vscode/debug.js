@@ -190,6 +190,11 @@ function setupDebugger(vscode, context, helpers) {
         },
         resolveDebugConfigurationWithSubstitutedVariables: async (folder, config) => {
             if (config.request === 'attach') return attach(config);
+            // "Ejecutar en DashOS": not a debug session, the task that compiles it for DashOS and runs it in QEMU
+            if (config.request === 'launch' && config.target === 'dashos') {
+                if (helpers.runTask) await helpers.runTask(config.compileOnly ? 'dashos' : 'dashos-run', config.program);
+                return undefined;
+            }
             if (config.request !== 'launch') return config;
             if (!helpers.trusted()) {
                 vscode.window.showWarningMessage('Carpeta sin confianza (modo restringido): para depurar, confía en ella.');
