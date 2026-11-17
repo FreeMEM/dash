@@ -33,6 +33,23 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.17.0 (2026-11-17)
+
+La orden `dash` del Amiga gasta menos de la mitad de memoria, y Forja 0.8. Todo lo que compilaba sigue compilando
+igual, con los mismos bytes.
+
+- **Mejora:** compilar Forja entera pasa de 18 MB a 7,6 MB de memoria: ya cabe en un A1200 con 8 MB de fast. El
+  código generado no cambia.
+- **Nuevo:** `dbg_set(i, expr, valor)` cambia una variable al depurar (Int, Char, Bool, Fixed o Float); también la
+  orden `set` del servidor de depuración. 1063 funciones.
+- **Nuevo:** `icon_save(ruta, base, tipo, herramienta, tooltypes)` escribe un icono `.info` con icon.library.
+- **Arreglo:** un texto hecho de muchos trozos sumados agotaba la pila de la orden `dash` del Amiga (Software
+  Failure).
+- **Arreglo:** con `--gcc`, `not` de una función que devuelve un puntero ya no da aviso de gcc.
+- **Forja 0.8:** pestañas que no caben con botones y lista, la sesión recuerda marcadores, plegados y los ficheros
+  de las extensiones, Demos mucho más rápida y con varias pistas abiertas, Cambiar valor al depurar, tope de tamaño
+  del ejecutable para intros de 4 y 64 KB, y una prueba de punta a punta en CoffinOS.
+
 ### 2.16.0 (2026-11-17)
 
 Ensamblador en línea, 3D con MiniGL, la ayuda dentro del Amiga y compilar el doble de rápido. Todo lo que compilaba
