@@ -614,6 +614,7 @@ typedef struct {
     int nopnd;
     int big;          /* un salto sin tamaño que no llega con 8 bits: .w */
     int full;         /* un (d,An,Xn) del 68020 que no cabe en 8 bits: formato completo */
+    int bdlong, odlong;   /* la indirección de memoria del 68020: bd y od van en 32 bits (no caben en 16) */
 } ALine;
 
 static struct { ASym *v; int n, cap; } asyms;
@@ -844,7 +845,7 @@ static long const_expr(const char *s)
 
 /* ---- direcciones efectivas ---- */
 enum { M_DN, M_AN, M_IND, M_POST, M_PRE, M_D16, M_IDX, M_ABSW, M_ABSL, M_PCD, M_PCIDX, M_IMM,
-       M_SR, M_CCR, M_USP, M_LIST, M_PAIR };
+       M_SR, M_CCR, M_USP, M_LIST, M_PAIR, M_FP, M_FPLIST, M_FPC, M_FPPAIR, M_CTRLREG };
 #define B(m) (1u << (m))
 #define A_ALL (B(M_DN) | B(M_AN) | B(M_IND) | B(M_POST) | B(M_PRE) | B(M_D16) | B(M_IDX) | B(M_ABSW) | B(M_ABSL) | \
                B(M_PCD) | B(M_PCIDX) | B(M_IMM))
@@ -864,6 +865,12 @@ typedef struct {
     unsigned list;       /* M_LIST: bit 0 d0 ... bit 15 a7 */
     int r2;              /* M_PAIR: Dh:Dl -> reg Dh, r2 Dl */
     int bf, bfo_d, bfo, bfw_d, bfw;   /* {offset:width}; *_d: es un registro */
+    /* la indirección de memoria del 68020 ([bd,An,Xn],od): mind; bs, sin registro base; is, sin índice; post, el
+       índice va detrás de ] */
+    int mind, bs, is, post, has_od;
+    int fimm;            /* #1.5: un inmediato con decimales (solo .s, .d y .x de la FPU) */
+    AVal od;
+    unsigned fpmask;     /* M_FPLIST: bit i fpi; M_FPC: 4 fpcr, 2 fpsr, 1 fpiar */
     const char *text;
 } Ea;
 
@@ -920,6 +927,128 @@ static int parse_index(const char *s, const char *e, Ea *ea)
     return p == e;
 }
 
+static void parse_ea(const char *s, Ea *e);
+static int fimm_ok;   /* una instrucción de la FPU: #1.5 vale (Ea.fimm) */
+
+/* fp0-fp7, fpcr/fpsr/fpiar, listas (fp0-fp3/fp7, fpcr/fpsr) y fp1:fp2 (fsincos) */
+static int parse_fp(const char *s, size_t n, Ea *e)
+{
+    unsigned m = 0;
+    int ctrl = 0, regs = 0, many = 0;
+    const char *p = s, *c;
+    if (n < 3 || a_lower(s[0]) != 'f' || a_lower(s[1]) != 'p') return 0;
+    if ((c = strchr(s, ':')) != NULL) {
+        int a = fp_num(s, (size_t)(c - s)), b = fp_num(c + 1, strlen(c + 1));
+        if (a < 0 || b < 0) return 0;
+        e->mode = M_FPPAIR;
+        e->reg = a;
+        e->r2 = b;
+        return 1;
+    }
+    while (*p) {
+        const char *q = p, *dash;
+        int a, b, k;
+        while (*q && *q != '/') q++;
+        for (dash = p; dash < q && *dash != '-'; dash++) ;
+        if (dash < q) {
+            a = fp_num(p, (size_t)(dash - p));
+            b = fp_num(dash + 1, (size_t)(q - dash - 1));
+            if (a < 0 || b < 0 || b < a) return 0;
+            for (k = a; k <= b; k++) m |= 1u << k;
+            regs = many = 1;
+        } else if ((a = fp_num(p, (size_t)(q - p))) >= 0) {
+            m |= 1u << a;
+            regs = 1;
+            e->reg = a;
+        } else if (ieq(p, "fpcr", (size_t)(q - p))) { ctrl |= 4; }
+        else if (ieq(p, "fpsr", (size_t)(q - p))) { ctrl |= 2; }
+        else if (ieq(p, "fpiar", (size_t)(q - p))) { ctrl |= 1; }
+        else return 0;
+        if (*q == '/') { q++; many = 1; }
+        p = q;
+    }
+    if (regs && ctrl) aerr("operando no válido: %s", s);
+    if (ctrl) {
+        e->mode = M_FPC;
+        e->fpmask = (unsigned)ctrl;
+    } else {
+        e->mode = many ? M_FPLIST : M_FP;
+        e->fpmask = m;
+    }
+    (void)n;
+    return 1;
+}
+
+/* ([bd,An,Xn],od), ([bd,An],Xn,od), ([bd,pc,Xn],od)...: la indirección de memoria del 68020 */
+static void parse_mind(const char *s, size_t n, Ea *e)
+{
+    const char *rb = NULL, *p, *q;
+    int depth = 0, base = -1, idx = 0;
+    for (p = s + 2; p < s + n; p++) {
+        if (*p == '(') depth++;
+        else if (*p == ')') depth--;
+        else if (*p == ']' && !depth) { rb = p; break; }
+    }
+    if (!rb || (rb[1] != ',' && rb[1] != ')')) aerr("operando no válido: %s", s);
+    need020("la indirección de memoria");
+    e->mind = 1;
+    /* dentro de [ ]: bd, el registro base, el índice */
+    for (p = s + 2; p < rb; p = q + 1) {
+        const char *x, *xe;
+        Ea t;
+        size_t len;
+        q = top_comma(p, rb);
+        x = p;
+        xe = q;
+        trim(&x, &xe);
+        len = (size_t)(xe - x);
+        if (!len) aerr("operando no válido: %s", s);
+        if (ieq(x, "pc", len) || (reg_num(x, len) >= 8)) {
+            if (base >= 0 || idx) aerr("operando no válido: %s", s);
+            base = ieq(x, "pc", len) ? 16 : reg_num(x, len) & 7;
+        } else if (reg_num(x, len) >= 0 || parse_index(x, xe, &t)) {
+            if (idx || !parse_index(x, xe, e)) aerr("operando no válido: %s", s);
+            idx = 1;
+        } else {
+            if (e->has_d || base >= 0) aerr("operando no válido: %s", s);
+            e->d = expr(x, xe);
+            e->has_d = 1;
+        }
+        if (q >= rb) break;
+    }
+    /* detrás: el índice (postindexado) y od */
+    for (p = rb + 1; p < s + n - 1; p = q + 1) {
+        const char *x, *xe;
+        Ea t;
+        if (*p == ',') p++;
+        q = top_comma(p, s + n - 1);
+        x = p;
+        xe = q;
+        trim(&x, &xe);
+        if (x == xe) aerr("operando no válido: %s", s);
+        if (parse_index(x, xe, &t) && !e->has_od) {
+            if (idx) aerr("operando no válido: %s", s);
+            parse_index(x, xe, e);
+            idx = 1;
+            e->post = 1;
+        } else {
+            if (e->has_od) aerr("operando no válido: %s", s);
+            e->od = expr(x, xe);
+            e->has_od = 1;
+        }
+        if (q >= s + n - 1) break;
+    }
+    e->is = !idx;
+    if (base == 16) {
+        e->mode = M_PCIDX;
+    } else {
+        e->mode = M_IDX;
+        e->bs = base < 0;
+        e->reg = base < 0 ? 0 : base;
+    }
+    if (!idx) { e->xreg = 0; e->xlong = 0; e->scale = 1; }
+}
+
 static void parse_ea(const char *s, Ea *e)
 {
     size_t n = strlen(s);
@@ -928,9 +1057,16 @@ static void parse_ea(const char *s, Ea *e)
     e->text = s;
     if (!n) aerr("falta un operando");
     if (s[0] == '#') {
+        const char *f = s + 1;
         e->mode = M_IMM;
-        e->d = expr(s + 1, s + n);
         e->has_d = 1;
+        if (*f == '-' || *f == '+') f++;
+        if (fimm_ok && isdigit((unsigned char)*f) && !(f[0] == '0' && (f[1] == 'x' || f[1] == 'X')) &&
+            (strchr(f, '.') || strchr(f, 'e') || strchr(f, 'E'))) {
+            e->fimm = 1;                               /* 1.5: de la FPU (out_fimm lee el texto) */
+            return;
+        }
+        e->d = expr(s + 1, s + n);
         return;
     }
     /* un campo de bits: <ea>{offset:width} */
@@ -972,6 +1108,19 @@ static void parse_ea(const char *s, Ea *e)
         e->mode = e->reg < 8 ? M_DN : M_AN;
         e->reg &= 7;
         return;
+    }
+    if (parse_fp(s, n, e)) return;
+    {
+        static const struct { const char *n; int code; } cr[] = {
+            {"sfc", 0x000}, {"dfc", 0x001}, {"cacr", 0x002}, {"vbr", 0x801}, {"caar", 0x802}, {"msp", 0x803},
+            {"isp", 0x804}, {NULL, 0}};
+        int i;
+        for (i = 0; cr[i].n; i++)
+            if (ieq(s, cr[i].n, n)) {
+                e->mode = M_CTRLREG;
+                e->reg = cr[i].code;
+                return;
+            }
     }
     if (ieq(s, "sr", n)) { e->mode = M_SR; return; }
     if (ieq(s, "ccr", n)) { e->mode = M_CCR; return; }
@@ -1033,8 +1182,11 @@ static void parse_ea(const char *s, Ea *e)
             if (c >= close) break;
             p = c + 1;
         }
-        if (open > s && open[-1] == '[') aerr("la indirección de memoria del 68020 no se admite: %s", s);
-        if (*(open + 1) == '[') aerr("la indirección de memoria del 68020 no se admite: %s", s);
+        if (open == s && open[1] == '[') {
+            parse_mind(s, n, e);
+            return;
+        }
+        if (strchr(s, '[')) aerr("operando no válido: %s", s);
         /* ¿hay un registro? si no, es una expresión entre paréntesis */
         for (i = 0; i < np; i++) {
             const char *q = parts[i];
@@ -1188,6 +1340,43 @@ static void out_index(Ea *e, long d, int pcrel)
     }
 }
 
+/* el formato completo con indirección de memoria: la palabra de extensión, bd y od (pc: el de la palabra) */
+static void out_full(Ea *e, int pcrel)
+{
+    long pc = (long)obp->n;
+    int top = e->is ? 0 : ((e->xreg >= 8 ? 0x8000 : 0) | (e->xreg & 7) << 12 | e->xlong << 11 |
+              (e->scale == 2 ? 1 : e->scale == 4 ? 2 : e->scale == 8 ? 3 : 0) << 9);
+    int bdsz = 1, odsz = 1, iis;
+    long bd = 0;
+    if (e->has_d) {
+        if (pcrel && e->d.rel) {
+            code_label(&e->d, e->text);
+            bd = e->d.v - pc;
+        } else {
+            bd = e->d.v;
+        }
+        if ((e->d.rel && !pcrel) || bd < -32768 || bd > 32767) {
+            if (!cur->bdlong) { cur->bdlong = 1; achanged = 1; }
+        }
+        bdsz = cur->bdlong ? 3 : 2;
+    }
+    if (e->has_od) {
+        if (e->od.rel || e->od.v < -32768 || e->od.v > 32767) {
+            if (!cur->odlong) { cur->odlong = 1; achanged = 1; }
+        }
+        odsz = cur->odlong ? 3 : 2;
+    }
+    iis = e->is ? odsz : e->post ? 4 + odsz : odsz;
+    ow(top | 0x0100 | e->bs << 7 | e->is << 6 | bdsz << 4 | iis);
+    if (bdsz == 2) ow((int)(bd & 0xFFFF));
+    else if (bdsz == 3) {
+        if (pcrel) ol((uint32_t)bd);
+        else out_long(&e->d);
+    }
+    if (odsz == 2) ow((int)(e->od.v & 0xFFFF));
+    else if (odsz == 3) out_long(&e->od);
+}
+
 /* las palabras de extensión de e (size: el de la operación, para un inmediato) */
 static void out_ea(Ea *e, int size)
 {
@@ -1201,6 +1390,10 @@ static void out_ea(Ea *e, int size)
         ow((int)(e->d.v & 0xFFFF));
         break;
     case M_IDX:
+        if (e->mind) {
+            out_full(e, 0);
+            break;
+        }
         if (e->d.rel) aerr("una etiqueta como desplazamiento de An no se admite: %s", e->text);
         out_index(e, e->has_d ? e->d.v : 0, 0);
         break;
@@ -1221,6 +1414,10 @@ static void out_ea(Ea *e, int size)
         break;
     }
     case M_PCIDX:
+        if (e->mind) {
+            out_full(e, 1);
+            break;
+        }
         code_label(&e->d, e->text);
         out_index(e, e->has_d ? (e->d.rel ? e->d.v - pc : e->d.v) : 0, 1);
         break;
@@ -1613,11 +1810,461 @@ static void ins_ctrl(int base)   /* jmp, jsr, pea */
     out_ea(&op1, 0);
 }
 
+/* ---- la FPU (68881/68882 y la del 68040), con --fpu ---- */
+static double float_value(const char *o);
+static void needfpu(void)
+{
+    if (afpu) return;
+    if (cur->size) aerr("%s.%c necesita --fpu", cur->op, cur->size);
+    aerr("%s necesita --fpu", cur->op);
+}
+
+static const char *fcc_names[] = {"f", "eq", "ogt", "oge", "olt", "ole", "ogl", "or", "un", "ueq", "ugt", "uge",
+                                  "ult", "ule", "ne", "t", "sf", "seq", "gt", "ge", "lt", "le", "gl", "gle", "ngle",
+                                  "ngl", "nle", "nlt", "nge", "ngt", "sne", "st", NULL};
+
+static int fcond(const char *s)
+{
+    int i;
+    for (i = 0; fcc_names[i]; i++)
+        if (!strcmp(s, fcc_names[i])) return i;
+    return -1;
+}
+
+static int fmt_code(int sz)       /* el formato del dato: l s x p w d b */
+{
+    switch (sz) {
+    case 'l': return 0;
+    case 's': return 1;
+    case 'x': return 2;
+    case 'p': return 3;
+    case 'w': return 4;
+    case 'd': return 5;
+    case 'b': return 6;
+    }
+    aerr("tamaño .%c no válido en %s", sz, cur->op);
+    return 0;
+}
+
+/* un inmediato de la FPU: un entero (.b .w .l) o un número (.s .d .x: 1.5, 2, -3e4) */
+static void out_fimm(const char *text, int sz)
+{
+    if (sz == 'b' || sz == 'w' || sz == 'l') {
+        AVal v = expr(text, text + strlen(text));
+        if (v.rel) aerr("una etiqueta como inmediato necesita .l");
+        out_imm(&v, sz == 'b' ? 1 : sz == 'w' ? 2 : 4);
+        return;
+    }
+    {
+        double d = float_value(text);
+        if (sz == 's') {
+            float f = (float)d;
+            uint32_t u;
+            memcpy(&u, &f, 4);
+            ol(u);
+        } else if (sz == 'd') {
+            uint64_t u;
+            memcpy(&u, &d, 8);
+            ol((uint32_t)(u >> 32));
+            ol((uint32_t)u);
+        } else {                                       /* .x: signo, exponente de 15 bits, 64 de mantisa */
+            uint64_t u, man;
+            int ex;
+            memcpy(&u, &d, 8);
+            ex = (int)(u >> 52 & 0x7FF);
+            man = (u & 0xFFFFFFFFFFFFFull) << 11;
+            if (ex == 0x7FF) { ex = 0x7FFF; man |= 1ull << 63; }
+            else if (ex == 0 && !man) ex = 0;
+            else if (ex == 0) aerr("número no válido: %s", text);
+            else { ex = ex - 1023 + 16383; man |= 1ull << 63; }
+            ow((int)((u >> 63) << 15 | (unsigned)ex));
+            ow(0);
+            ol((uint32_t)(man >> 32));
+            ol((uint32_t)man);
+        }
+    }
+}
+
+/* <ea> de origen de una operación de la FPU (una palabra ya escrita: la de operación) */
+static void fpu_src(Ea *e, const char *text, int sz)
+{
+    if (e->mode == M_IMM) {
+        if (e->fimm && (sz == 'b' || sz == 'w' || sz == 'l')) aerr("un número con decimales va con .s, .d o .x: %s", text);
+        out_fimm(text + 1, sz);
+    } else {
+        out_ea(e, 0);
+    }
+}
+
+static int fpu_ins(void)
+{
+    static const struct { const char *n; int code, mono; } ops[] = {
+        {"fint", 0x01, 1}, {"fsinh", 0x02, 1}, {"fintrz", 0x03, 1}, {"fsqrt", 0x04, 1}, {"flognp1", 0x06, 1},
+        {"fetoxm1", 0x08, 1}, {"ftanh", 0x09, 1}, {"fatan", 0x0A, 1}, {"fasin", 0x0C, 1}, {"fatanh", 0x0D, 1},
+        {"fsin", 0x0E, 1}, {"ftan", 0x0F, 1}, {"fetox", 0x10, 1}, {"ftwotox", 0x11, 1}, {"ftentox", 0x12, 1},
+        {"flogn", 0x14, 1}, {"flog10", 0x15, 1}, {"flog2", 0x16, 1}, {"fabs", 0x18, 1}, {"fcosh", 0x19, 1},
+        {"fneg", 0x1A, 1}, {"facos", 0x1C, 1}, {"fcos", 0x1D, 1}, {"fgetexp", 0x1E, 1}, {"fgetman", 0x1F, 1},
+        {"fdiv", 0x20, 0}, {"fmod", 0x21, 0}, {"fadd", 0x22, 0}, {"fmul", 0x23, 0}, {"fsgldiv", 0x24, 0},
+        {"frem", 0x25, 0}, {"fscale", 0x26, 0}, {"fsglmul", 0x27, 0}, {"fsub", 0x28, 0}, {"fcmp", 0x38, 0},
+        {NULL, 0, 0}};
+    const char *op = cur->op;
+    int i, cc, sz;
+    Ea a, b;
+    for (i = 0; ops[i].n; i++)
+        if (!strcmp(op, ops[i].n)) break;
+    fimm_ok = ops[i].n || !strcmp(op, "fmove") || !strcmp(op, "ftst") || !strcmp(op, "fsincos");
+    if (ops[i].n || !strcmp(op, "fmove") || !strcmp(op, "ftst") || !strcmp(op, "fsincos")) {
+        int code = ops[i].n ? ops[i].code : !strcmp(op, "ftst") ? 0x3A : !strcmp(op, "fsincos") ? 0x30 : 0;
+        needfpu();
+        sz = cur->size ? cur->size : 'x';
+        if (sz == 'p') aerr("el formato .p (BCD) no se admite");
+        if (!strcmp(op, "ftst")) {
+            nops(1);
+            parse_ea(cur->opnd[0], &a);
+            if (a.mode == M_FP) {
+                if (sz != 'x') aerr("tamaño .%c no válido con un registro de la FPU", sz);
+                ow(0xF200);
+                ow(a.reg << 10 | code);
+                return 1;
+            }
+            check_ea(&a, A_DATA);
+            if (a.mode == M_DN && (sz == 'x' || sz == 'd')) aerr("tamaño .%c no válido con un registro de datos", sz);
+            ow(0xF200 | ea_bits(&a));
+            ow(0x4000 | fmt_code(sz) << 10 | code);
+            fpu_src(&a, cur->opnd[0], sz);
+            return 1;
+        }
+        if (ops[i].n && ops[i].mono && cur->nopnd == 1) {
+            parse_ea(cur->opnd[0], &a);
+            if (a.mode != M_FP) aerr("operando no válido: %s", a.text);
+            if (sz != 'x') aerr("tamaño .%c no válido con un registro de la FPU", sz);
+            ow(0xF200);
+            ow(a.reg << 10 | a.reg << 7 | code);
+            return 1;
+        }
+        nops(2);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        if (!strcmp(op, "fmove") && (b.mode == M_FPC || a.mode == M_FPC)) {
+            /* fmove.l a o desde fpcr, fpsr, fpiar */
+            Ea *m = b.mode == M_FPC ? &a : &b, *c = b.mode == M_FPC ? &b : &a;
+            if (sz != 'l') aerr("tamaño .%c no válido en fmove (fpcr, fpsr, fpiar van con .l)", sz);
+            if (c->fpmask != 1 && c->fpmask != 2 && c->fpmask != 4) aerr("operando no válido: %s", c->text);
+            if (m->mode == M_AN && c->fpmask != 1) aerr("operando no válido: %s", m->text);
+            check_ea(m, b.mode == M_FPC ? A_ALL : A_ALT);
+            ow(0xF200 | ea_bits(m));
+            ow(0x8000 | (b.mode != M_FPC) << 13 | (int)c->fpmask << 10);
+            if (m->mode == M_IMM) out_imm(&m->d, 4);
+            else out_ea(m, 0);
+            return 1;
+        }
+        if (!strcmp(op, "fsincos")) {
+            if (b.mode != M_FPPAIR) aerr("fsincos va con <ea>,fpc:fps");
+            if (a.mode == M_FP) {
+                if (sz != 'x') aerr("tamaño .%c no válido con un registro de la FPU", sz);
+                ow(0xF200);
+                ow(a.reg << 10 | b.r2 << 7 | 0x30 | b.reg);
+                return 1;
+            }
+            check_ea(&a, A_DATA);
+            if (a.mode == M_DN && (sz == 'x' || sz == 'd')) aerr("tamaño .%c no válido con un registro de datos", sz);
+            ow(0xF200 | ea_bits(&a));
+            ow(0x4000 | fmt_code(sz) << 10 | b.r2 << 7 | 0x30 | b.reg);
+            fpu_src(&a, cur->opnd[0], sz);
+            return 1;
+        }
+        if (!strcmp(op, "fmove") && a.mode == M_FP && b.mode != M_FP) {
+            /* fmove.fmt fpn,<ea> */
+            check_ea(&b, A_DALT);
+            if (b.mode == M_DN && (sz == 'x' || sz == 'd')) aerr("tamaño .%c no válido con un registro de datos", sz);
+            ow(0xF200 | ea_bits(&b));
+            ow(0x6000 | fmt_code(sz) << 10 | a.reg << 7);
+            out_ea(&b, 0);
+            return 1;
+        }
+        if (b.mode != M_FP) aerr("operando no válido: %s", b.text);
+        if (a.mode == M_FP) {
+            if (sz != 'x') aerr("tamaño .%c no válido con un registro de la FPU", sz);
+            ow(0xF200);
+            ow(a.reg << 10 | b.reg << 7 | code);
+            return 1;
+        }
+        check_ea(&a, A_DATA);
+        if (a.mode == M_DN && (sz == 'x' || sz == 'd')) aerr("tamaño .%c no válido con un registro de datos", sz);
+        ow(0xF200 | ea_bits(&a));
+        ow(0x4000 | fmt_code(sz) << 10 | b.reg << 7 | code);
+        fpu_src(&a, cur->opnd[0], sz);
+        return 1;
+    }
+    if (!strcmp(op, "fmovem")) {
+        int dr;
+        Ea *l, *m;
+        needfpu();
+        nops(2);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        dr = a.mode == M_FP || a.mode == M_FPLIST || a.mode == M_FPC;     /* 1: a memoria */
+        l = dr ? &a : &b;
+        m = dr ? &b : &a;
+        if (l->mode == M_FPC) {
+            if (cur->size && cur->size != 'l') aerr("tamaño .%c no válido en fmovem", cur->size);
+            check_ea(m, dr ? A_ALT : A_ALL);
+            if (m->mode == M_AN && l->fpmask != 1) aerr("operando no válido: %s", m->text);
+            if ((m->mode == M_DN || m->mode == M_AN || m->mode == M_IMM) && (l->fpmask & (l->fpmask - 1)))
+                aerr("operando no válido: %s", m->text);
+            ow(0xF200 | ea_bits(m));
+            ow(0x8000 | dr << 13 | (int)l->fpmask << 10);
+            if (m->mode == M_IMM) out_imm(&m->d, 4);
+            else out_ea(m, 0);
+            return 1;
+        }
+        if (l->mode != M_FP && l->mode != M_FPLIST) aerr("fmovem pide una lista de registros de la FPU");
+        if (cur->size && cur->size != 'x') aerr("tamaño .%c no válido en fmovem", cur->size);
+        {
+            unsigned mask = l->fpmask, rev = 0;
+            int k;
+            if (l->mode == M_FP) mask = 1u << l->reg;
+            for (k = 0; k < 8; k++)
+                if (mask & 1u << k) rev |= 1u << (7 - k);
+            if (dr) check_ea(m, A_CALT | B(M_PRE));
+            else check_ea(m, A_CTRL | B(M_POST));
+            ow(0xF200 | ea_bits(m));
+            if (m->mode == M_PRE) ow(0xC000 | dr << 13 | (int)mask);
+            else ow(0xC000 | dr << 13 | 0x1000 | (int)rev);
+            out_ea(m, 0);
+        }
+        return 1;
+    }
+    if (!strcmp(op, "fmovecr")) {
+        needfpu();
+        nops(2);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        if (cur->size && cur->size != 'x') aerr("tamaño .%c no válido en fmovecr", cur->size);
+        need_imm(&a);
+        if (a.d.rel || a.d.v < 0 || a.d.v > 63) aerr("fmovecr va de #0 a #63");
+        if (b.mode != M_FP) aerr("operando no válido: %s", b.text);
+        ow(0xF200);
+        ow(0x5C00 | b.reg << 7 | (int)a.d.v);
+        return 1;
+    }
+    if (!strcmp(op, "fnop")) {
+        needfpu();
+        if (cur->nopnd) aerr("fnop pide 0 operandos");
+        if (cur->size) aerr("tamaño .%c no válido en fnop", cur->size);
+        ow(0xF280);
+        ow(0);
+        return 1;
+    }
+    if (!strcmp(op, "fsave") || !strcmp(op, "frestore")) {
+        needfpu();
+        nops(1);
+        if (cur->size) aerr("tamaño .%c no válido en %s", cur->size, op);
+        parse_ea(cur->opnd[0], &a);
+        if (op[1] == 's') check_ea(&a, A_CALT | B(M_PRE));
+        else check_ea(&a, A_CTRL | B(M_POST));
+        ow((op[1] == 's' ? 0xF300 : 0xF340) | ea_bits(&a));
+        out_ea(&a, 0);
+        return 1;
+    }
+    if (op[1] == 'b' && (cc = fcond(op + 2)) >= 0) {
+        /* fbcc etiqueta: .w, o .l si no llega */
+        long d;
+        uint32_t at = (uint32_t)obp->n;
+        needfpu();
+        nops(1);
+        if (cur->size && cur->size != 'w' && cur->size != 'l') aerr("tamaño .%c no válido en %s", cur->size, op);
+        d = branch_disp(cur->opnd[0], (long)at + 2);
+        if (cur->size == 'l' || (!cur->size && cur->big)) {
+            ow(0xF2C0 | cc);
+            ol((uint32_t)d);
+        } else {
+            if (d < -32768 || d > 32767) {
+                if (cur->size == 'w' && afinal) aerr("el salto no llega (%ld bytes)", d);
+                if (!cur->size) { cur->big = 1; achanged = 1; }
+            }
+            ow(0xF280 | cc);
+            ow((int)(d & 0xFFFF));
+        }
+        return 1;
+    }
+    if (op[1] == 'd' && op[2] == 'b' && (cc = fcond(op + 3)) >= 0) {
+        long d;
+        needfpu();
+        nops(2);
+        parse_ea(cur->opnd[0], &a);
+        if (cur->size && cur->size != 'w') aerr("tamaño .%c no válido en %s", cur->size, op);
+        if (a.mode != M_DN) aerr("operando no válido: %s", a.text);
+        d = branch_disp(cur->opnd[1], (long)obp->n + 4);
+        if (afinal && (d < -32768 || d > 32767)) aerr("el salto no llega (%ld bytes)", d);
+        ow(0xF248 | a.reg);
+        ow(cc);
+        ow((int)(d & 0xFFFF));
+        return 1;
+    }
+    if (op[1] == 's' && (cc = fcond(op + 2)) >= 0) {
+        needfpu();
+        nops(1);
+        if (cur->size && cur->size != 'b') aerr("tamaño .%c no válido en %s", cur->size, op);
+        parse_ea(cur->opnd[0], &a);
+        check_ea(&a, A_DALT);
+        ow(0xF240 | ea_bits(&a));
+        ow(cc);
+        out_ea(&a, 0);
+        return 1;
+    }
+    if (!strncmp(op, "ftrap", 5) && (cc = fcond(op + 5)) >= 0) {
+        needfpu();
+        if (!cur->nopnd) {
+            if (cur->size) aerr("tamaño .%c no válido en %s", cur->size, op);
+            ow(0xF27C);
+            ow(cc);
+            return 1;
+        }
+        nops(1);
+        parse_ea(cur->opnd[0], &a);
+        need_imm(&a);
+        if (cur->size != 'w' && cur->size != 'l') aerr("%s con un operando va con .w o .l", op);
+        ow(cur->size == 'w' ? 0xF27A : 0xF27B);
+        ow(cc);
+        out_imm(&a.d, cur->size == 'w' ? 2 : 4);
+        return 1;
+    }
+    return 0;
+}
+
+/* ---- lo demás del 68020: cas, cas2, cmp2, chk2, pack, unpk, trapcc, bkpt, movec ---- */
+static int more020(void)
+{
+    const char *op = cur->op;
+    Ea a, b, c;
+    int cc;
+    if (!strcmp(op, "cas")) {
+        need020(op);
+        nops(3);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        parse_ea(cur->opnd[2], &c);
+        sizes("bwl", 'w');
+        if (a.mode != M_DN) aerr("operando no válido: %s", a.text);
+        if (b.mode != M_DN) aerr("operando no válido: %s", b.text);
+        check_ea(&c, A_MALT);
+        ow(0x08C0 | (cur->size == 'b' ? 1 : cur->size == 'w' ? 2 : 3) << 9 | ea_bits(&c));
+        ow(b.reg << 6 | a.reg);
+        out_ea(&c, 0);
+        return 1;
+    }
+    if (!strcmp(op, "cas2")) {
+        const char *x[3];
+        int r[6], i;
+        need020(op);
+        nops(3);
+        sizes("wl", 'w');
+        for (i = 0; i < 3; i++) {
+            const char *colon;
+            const char *o = cur->opnd[i];
+            x[i] = o;
+            colon = strchr(o, ':');
+            if (!colon) aerr("cas2 va con Dc1:Dc2,Du1:Du2,(Rn1):(Rn2)");
+            if (i < 2) {
+                r[2 * i] = reg_num(o, (size_t)(colon - o));
+                r[2 * i + 1] = reg_num(colon + 1, strlen(colon + 1));
+                if (r[2 * i] < 0 || r[2 * i] > 7 || r[2 * i + 1] < 0 || r[2 * i + 1] > 7) aerr("operando no válido: %s", o);
+            } else {
+                size_t l1 = (size_t)(colon - o), l2 = strlen(colon + 1);
+                if (l1 < 4 || o[0] != '(' || o[l1 - 1] != ')' || l2 < 4 || colon[1] != '(' || colon[l2] != ')')
+                    aerr("operando no válido: %s", o);
+                r[4] = reg_num(o + 1, l1 - 2);
+                r[5] = reg_num(colon + 2, l2 - 2);
+                if (r[4] < 0 || r[5] < 0) aerr("operando no válido: %s", o);
+            }
+        }
+        (void)x;
+        ow(cur->size == 'w' ? 0x0CFC : 0x0EFC);
+        ow((r[4] >= 8 ? 0x8000 : 0) | (r[4] & 7) << 12 | r[2] << 6 | r[0]);
+        ow((r[5] >= 8 ? 0x8000 : 0) | (r[5] & 7) << 12 | r[3] << 6 | r[1]);
+        return 1;
+    }
+    if (!strcmp(op, "cmp2") || !strcmp(op, "chk2")) {
+        need020(op);
+        nops(2);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        sizes("bwl", 'w');
+        check_ea(&a, A_CTRL);
+        if (b.mode != M_DN && b.mode != M_AN) aerr("operando no válido: %s", b.text);
+        ow(0x00C0 | (cur->size == 'b' ? 0 : cur->size == 'w' ? 1 : 2) << 9 | ea_bits(&a));
+        ow((b.mode == M_AN ? 0x8000 : 0) | b.reg << 12 | (op[1] == 'h' ? 0x0800 : 0));
+        out_ea(&a, 0);
+        return 1;
+    }
+    if (!strcmp(op, "pack") || !strcmp(op, "unpk")) {
+        need020(op);
+        nops(3);
+        if (cur->size) aerr("tamaño .%c no válido en %s", cur->size, op);
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        parse_ea(cur->opnd[2], &c);
+        need_imm(&c);
+        if (a.mode == M_DN && b.mode == M_DN) ow((op[0] == 'p' ? 0x8140 : 0x8180) | b.reg << 9 | a.reg);
+        else if (a.mode == M_PRE && b.mode == M_PRE) ow((op[0] == 'p' ? 0x8148 : 0x8188) | b.reg << 9 | a.reg);
+        else aerr("operandos no válidos en %s", op);
+        out_imm(&c.d, 2);
+        return 1;
+    }
+    if (!strncmp(op, "trap", 4) && (cc = cond_code(op + 4)) >= 0) {
+        need020(op);
+        if (!cur->nopnd) {
+            if (cur->size) aerr("tamaño .%c no válido en %s", cur->size, op);
+            ow(0x50FC | cc << 8);
+            return 1;
+        }
+        nops(1);
+        parse_ea(cur->opnd[0], &a);
+        need_imm(&a);
+        if (cur->size != 'w' && cur->size != 'l') aerr("%s con un operando va con .w o .l", op);
+        ow((cur->size == 'w' ? 0x50FA : 0x50FB) | cc << 8);
+        out_imm(&a.d, cur->size == 'w' ? 2 : 4);
+        return 1;
+    }
+    if (!strcmp(op, "bkpt")) {
+        nops(1);
+        if (cur->size) aerr("tamaño .%c no válido en bkpt", cur->size);
+        parse_ea(cur->opnd[0], &a);
+        need_imm(&a);
+        if (a.d.rel || a.d.v < 0 || a.d.v > 7) aerr("bkpt va de #0 a #7");
+        ow(0x4848 | (int)a.d.v);
+        return 1;
+    }
+    if (!strcmp(op, "movec")) {
+        Ea *r, *k;
+        need020(op);
+        nops(2);
+        sizes("l", 'l');
+        parse_ea(cur->opnd[0], &a);
+        parse_ea(cur->opnd[1], &b);
+        if (a.mode == M_CTRLREG || a.mode == M_USP) { k = &a; r = &b; }
+        else { k = &b; r = &a; }
+        if ((k->mode != M_CTRLREG && k->mode != M_USP) || (r->mode != M_DN && r->mode != M_AN))
+            aerr("operandos no válidos en movec");
+        ow(k == &a ? 0x4E7A : 0x4E7B);
+        ow((r->mode == M_AN ? 0x8000 : 0) | r->reg << 12 | (k->mode == M_USP ? 0x800 : k->reg));
+        return 1;
+    }
+    return 0;
+}
+
 static int instruction(void)
 {
     const char *op = cur->op;
     size_t n = strlen(op);
     int cc;
+    if (op[0] == 'f') {
+        int r = fpu_ins();
+        fimm_ok = 0;
+        if (r) return 1;
+    }
+    if (more020()) return 1;
     if (!strcmp(op, "move")) { ins_move(); return 1; }
     if (!strcmp(op, "movea")) {
         nops(2);
@@ -2153,7 +2800,7 @@ static void parse_lines(AsmBlock *bk)
                         if (dot < me) {
                             if (me - dot != 2) aerr("tamaño no válido: %.*s", (int)(me - m), m);
                             al.size = a_lower((unsigned char)dot[1]);
-                            if (!strchr("bwls", al.size)) aerr("tamaño .%c no válido en %s", dot[1], al.op);
+                            if (!strchr("bwlsdxp", al.size)) aerr("tamaño .%c no válido en %s", dot[1], al.op);
                         }
                     }
                 }
