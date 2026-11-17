@@ -16460,6 +16460,8 @@ static BOOL _dash_video_pal(void) {
 
 static volatile ULONG _dash_vbl_count = 0;
 static struct Interrupt _dash_vbl_int;
+static char _dash_vbl_name[] = "dash vblank_count";   /* (an array: in the runtime of ./dash, a literal would go
+                                                         with the strings that every program takes) */
 static BOOL _dash_vbl_on = FALSE;
 
 static LONG _dash_vbl_server(void) {
@@ -16480,7 +16482,7 @@ static LONG _dash_vblank_count(void) {
     if (!_dash_vbl_on) {
         _dash_vbl_int.is_Node.ln_Type = NT_INTERRUPT;
         _dash_vbl_int.is_Node.ln_Pri = 0;
-        _dash_vbl_int.is_Node.ln_Name = (char *)"dash vblank_count";
+        _dash_vbl_int.is_Node.ln_Name = _dash_vbl_name;
         _dash_vbl_int.is_Code = (void (*)())_dash_vbl_server;
         _dash_vbl_int.is_Data = NULL;
         _dash_vbl_count = 0;
