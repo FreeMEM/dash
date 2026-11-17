@@ -1172,6 +1172,13 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       el directo no copia en línea las funciones pequeñas (el perfil solo veía Main; lo vio Forja,
       `tests/unit/test_perfil_copias.py`). Medidas y
       detalle: `docs/DASHC_LOOP.md`
+- [x] Menos memoria al compilar en el Amiga (2026-11-17, lo pidió Forja): Forja pedía 18 MB al compilar y 13 MB con
+      `--check`; ahora, 7,7 y 5,5 MB, con los mismos bytes. Nodos de 40 bytes (eran 100) de corrido, lo que llevan pocos
+      aparte; nombres de una vez; textos y tokens del tamaño justo; el código, los datos y las reubicaciones de cada
+      función, aparte al generar; el árbol, suelto antes de enlazar. `--tiempos` dice el pico. Además, `dbg_set`
+      (cambiar una variable desde el depurador, también `set` en dbgserver), `icon_save` (escribir un `.info` con
+      icon.library) y `not` de un builtin que en C es `f(...) != NULL` por `--gcc` (`tests/test_not_puntero.dash`).
+      Detalle: `docs/DASHC_LOOP.md`
 
 ## Notas y Decisiones
 
