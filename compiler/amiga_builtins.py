@@ -923,6 +923,55 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Free copper list"
     ),
+    "copper_set": BuiltinFunc(
+        name="copper_set",
+        params=["i", "value"],
+        return_type="void",
+        c_template="_dash_copper_set(${i}, ${value})",
+        needs_gfx=True,
+        description="Change instruction i (from 0) of the copper list, also installed: a move or color takes value, "
+                    "a wait the line value"
+    ),
+    "copper_count": BuiltinFunc(
+        name="copper_count",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_copper_count()",
+        needs_gfx=True,
+        description="Instructions in the copper list (the number of the next one, for copper_set)"
+    ),
+    "beam_line": BuiltinFunc(
+        name="beam_line",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_beam_line()",
+        needs_gfx=True,
+        description="The line the video beam is drawing now (0 at the top of the frame)"
+    ),
+    "beam_lines": BuiltinFunc(
+        name="beam_lines",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_beam_lines()",
+        needs_gfx=True,
+        description="Lines in a frame of the display: 313 on PAL, 263 on NTSC"
+    ),
+    "video_pal": BuiltinFunc(
+        name="video_pal",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_video_pal()",
+        needs_gfx=True,
+        description="true on a PAL Amiga (50 frames a second), false on NTSC (60)"
+    ),
+    "vblank_count": BuiltinFunc(
+        name="vblank_count",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_vblank_count()",
+        needs_gfx=True,
+        description="Frames shown (VBlanks) since the first call, which returns 0"
+    ),
 
     # Bitmap Operations
     "bitmap_create": BuiltinFunc(
@@ -3071,6 +3120,46 @@ AUDIO_FUNCTIONS = {
         needs_audio=True,
         description="Pattern row the music is playing (0-63)"
     ),
+    "music_seek": BuiltinFunc(
+        name="music_seek",
+        params=["pos", "row"],
+        return_type="void",
+        c_template="_dash_music_seek(${pos}, ${row})",
+        needs_audio=True,
+        description="Jump to row (0-63) of the song position pos while it plays, with the speed the song has there"
+    ),
+    "music_tick": BuiltinFunc(
+        name="music_tick",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_music_tick()",
+        needs_audio=True,
+        description="Ticks of the playing row already played (0 to music_speed() - 1): the fraction of the row"
+    ),
+    "music_speed": BuiltinFunc(
+        name="music_speed",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_music_speed()",
+        needs_audio=True,
+        description="Ticks a row lasts (the song's speed, 6 at the start)"
+    ),
+    "music_bpm": BuiltinFunc(
+        name="music_bpm",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_music_bpm()",
+        needs_audio=True,
+        description="The song's tempo (125 at the start: a tick each frame on PAL)"
+    ),
+    "music_playing": BuiltinFunc(
+        name="music_playing",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_music_playing()",
+        needs_audio=True,
+        description="true while the music plays (not stopped nor paused)"
+    ),
     "music_free": BuiltinFunc(
         name="music_free",
         params=[],
@@ -4221,9 +4310,9 @@ MUI_FUNCTIONS = {
     "mui_menu_separator": BuiltinFunc(
         name="mui_menu_separator",
         params=[],
-        return_type="void",
+        return_type="APTR",
         c_template="_dash_mui_menu_separator()",
-        description="Separator line in the menu"
+        description="Separator line in the menu; returns it (for mui_menu_remove)"
     ),
     "mui_context_menu_begin": BuiltinFunc(
         name="mui_context_menu_begin",
@@ -4489,6 +4578,13 @@ MUI_FUNCTIONS = {
         return_type="void",
         c_template="_dash_mui_timer(${ms}, ${id})",
         description="In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels)"
+    ),
+    "mui_post_event": BuiltinFunc(
+        name="mui_post_event",
+        params=["id"],
+        return_type="void",
+        c_template="_dash_mui_post_event(${id})",
+        description="An event for the program itself: mui_wait_event returns id after the ones already waiting"
     ),
     "mui_image": BuiltinFunc(
         name="mui_image",
@@ -5492,6 +5588,10 @@ TASK_FUNCTIONS = {
         reads_only=True,
         description="An environment variable (of the program's Shell, else of ENV:), up to its first line "
                     "end; \"\" if there is none"),
+    "env_get_text": BuiltinFunc(
+        name="env_get_text", params=["name"], return_type="STRPTR", c_template="_dash_env_get_text(${name})",
+        reads_only=True,
+        description="An environment variable with all its lines (without the last line end); \"\" if there is none"),
     "env_set": BuiltinFunc(
         name="env_set", params=["name", "value", "save"], return_type="BOOL",
         c_template="_dash_env_set(${name}, ${value}, ${save})", reads_only=True,
@@ -6229,7 +6329,7 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "chipset_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
-    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_send_wait", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
+    "run_finish", "run_rc", "env_get", "env_get_text", "env_set", "rexx_send", "rexx_send_wait", "rexx_rc", "rexx_port", "rexx_get", "rexx_signal", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
     "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
     "assigns_read", "assign_name", "assign_path", "int_server_add", "int_server_remove", "vblank_server"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [

@@ -1,0 +1,51 @@
+# mui_post_event (lo pidió Forja): un evento para el propio programa, después de los que ya esperaban y antes que el
+# reloj; mui_menu_separator devuelve su raya y mui_menu_remove la quita (con la ventana abierta).
+# emu-needs: muimaster.library
+# expect-out: eventos: 5 6 8 7
+# expect-out: raya: true
+# expect-out: opciones: 3 2
+# expect-out: fin
+
+@native func opciones(menu: Pointer) -> Int
+"""
+    struct MinList *l = NULL;
+    Object *state, *o;
+    LONG n = 0;
+    GetAttr(MUIA_Family_List, (Object *)menu, (IPTR *)&l);
+    if (!l) return -1;
+    state = (Object *)l->mlh_Head;
+    while ((o = NextObject(&state))) n++;
+    return n;
+"""
+end
+
+Main
+    if mui_app_begin("Eventos", "DASHPOST") == 0
+        Print "sin MUI"
+        return
+    end
+    w = mui_window_begin("Eventos propios", 0)
+        menu = mui_menu_begin("Proyecto")
+            mui_menu_item("Abrir", "", 11)
+            raya = mui_menu_separator()
+            mui_menu_item("Salir", "", 12)
+        mui_menu_end()
+        mui_text("Hola")
+    mui_window_end()
+    mui_window_open(w)
+    mui_post_event(5)
+    mui_post_event(6)
+    a = mui_wait_event()
+    b = mui_wait_event()
+    mui_timer(300, 7)
+    mui_post_event(8)
+    c = mui_wait_event()
+    d = mui_wait_event()
+    Print "eventos: #{a} #{b} #{c} #{d}"
+    Print "raya: #{raya != 0}"
+    n1 = opciones(menu)
+    mui_menu_remove(raya)
+    Print "opciones: #{n1} #{opciones(menu)}"
+    mui_app_end()
+    Print "fin"
+end

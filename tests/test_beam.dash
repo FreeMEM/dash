@@ -1,0 +1,39 @@
+# El haz y las imágenes, para demos (lo pidió Forja): beam_line (VPOSR y VHPOSR leídos a la vez, siempre dentro de la
+# imagen), beam_lines y video_pal (PAL en el emulador) y vblank_count (0 en la primera llamada; unas 50 en un
+# segundo en PAL).
+# expect-out: PAL: true 313
+# expect-out: líneas dentro: true
+# expect-out: arriba y abajo: true true
+# expect-out: primera: 0
+# expect-out: un segundo: true
+# expect-out: espera una imagen: true
+
+Main
+    Print "PAL: #{video_pal()} #{beam_lines()}"
+    n = beam_lines()
+    dentro = true
+    bajo = false
+    alto = false
+    for i in (1..20000)
+        l = beam_line()
+        if l < 0 or l >= n
+            dentro = false
+        end
+        if l < 100
+            bajo = true
+        end
+        if l > 250
+            alto = true
+        end
+    end
+    Print "líneas dentro: #{dentro}"
+    Print "arriba y abajo: #{bajo} #{alto}"
+    Print "primera: #{vblank_count()}"
+    time_delay_ms(1000)
+    v = vblank_count()
+    Print "un segundo: #{v >= 45 and v <= 56}"
+    a = vblank_count()
+    wait_vblank()
+    b = vblank_count()
+    Print "espera una imagen: #{b - a >= 1 and b - a <= 2}"
+end

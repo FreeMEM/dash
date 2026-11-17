@@ -1,0 +1,23 @@
+# The same as test_env_get_text.dash, built by ./dash straight to hunk.
+# dash-direct:
+# env_get_text (lo pidió Forja): la variable entera, con todas sus líneas, sin el fin de línea de la última (el que
+# deja echo); env_get sigue dando la primera línea.
+# expect-out: env_get: uno
+# expect-out: env_get_text: uno|dos|tres
+# expect-out: con fin de línea: a|b
+# expect-out: una línea: sola
+# expect-out: no existe: []
+
+Main
+    env_set("DashPrueba/varias", "uno\ndos\ntres", false)
+    Print "env_get: #{env_get("DashPrueba/varias")}"
+    Print "env_get_text: #{str_replace(env_get_text("DashPrueba/varias"), "\n", "|")}"
+    file_write_text("ENV:DashPrueba/fin", "a\nb\n")
+    Print "con fin de línea: #{str_replace(env_get_text("DashPrueba/fin"), "\n", "|")}"
+    env_set("DashPrueba/una", "sola", false)
+    Print "una línea: #{env_get_text("DashPrueba/una")}"
+    Print "no existe: [#{env_get_text("DashPrueba/no_hay")}]"
+    file_delete("ENV:DashPrueba/varias")
+    file_delete("ENV:DashPrueba/fin")
+    file_delete("ENV:DashPrueba/una")
+end

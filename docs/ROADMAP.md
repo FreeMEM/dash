@@ -1186,6 +1186,16 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       (cambiar una variable desde el depurador, también `set` en dbgserver), `icon_save` (escribir un `.info` con
       icon.library) y `not` de un builtin que en C es `f(...) != NULL` por `--gcc` (`tests/test_not_puntero.dash`).
       Detalle: `docs/DASHC_LOOP.md`
+- [x] Lo que Forja apuntó que le faltaba a Dash para demos y juegos (2026-11-17, lo pidió Forja, paso 5.2 de su
+      `docs/FORJA_LOOP.md`): música (`music_seek(pos, fila)` con la velocidad y el tempo que tiene la canción ahí,
+      `music_tick`, `music_speed`, `music_bpm`, `music_playing`), el haz (`beam_line` sin carreras entre VPOSR y
+      VHPOSR, `beam_lines`, `video_pal`, `vblank_count` por una interrupción), copper en vivo (`copper_set(i,
+      valor)` en la lista ya instalada: en el sitio si el valor está una vez en la lista del copper, si no
+      RethinkDisplay; `copper_count`; `copper_create` deja la lista de antes a la vista hasta `copper_install`),
+      `mui_post_event(id)`, `mui_menu_separator` devuelve su raya, `env_get_text` (todas las líneas). Por `--gcc`,
+      Forja transpila (hilo con pila grande y sin coste cúbico en las cadenas de `+`) y `f().campo = x`. 1079
+      funciones. `tests/test_music_sync*`, `test_beam*`, `test_copper_set*`, `test_env_get_text*`,
+      `test_mui_post_event*`, `test_call_member_assign*`, `tests/unit/test_deep_expr.py`
 
 ## Notas y Decisiones
 

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1066 functions, 1066 implemented, 0 not implemented.
+Total: 1079 functions, 1079 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -480,7 +480,8 @@ on it with `bitmap_draw_to`.
 in Forja or the extension. It is painted with the frames of a BOB.
 
 **The copper** (`copper_*`): a list of instructions that change video chip registers at a given line of the
-screen, for background gradients and other effects.
+screen, for background gradients and other effects. `copper_set` changes an instruction of the list already
+installed. For demos: `beam_line` (the line the beam draws), `beam_lines` and `vblank_count` (the frames shown).
 
 **Bitmaps** (`bitmap_*`): off-screen pictures, to load an IFF picture, prepare something unseen and copy it in one
 go.
@@ -722,6 +723,12 @@ end
 | [`copper_end()`](#copper_end) | — | End copper list |  |
 | [`copper_install()`](#copper_install) | — | Install copper list |  |
 | [`copper_free()`](#copper_free) | — | Free copper list |  |
+| [`copper_set(i, value)`](#copper_set) | — | Change instruction i (from 0) of the copper list, also installed: a move or color takes value, a wait the line value |  |
+| [`copper_count()`](#copper_count) | Int | Instructions in the copper list (the number of the next one, for copper_set) |  |
+| [`beam_line()`](#beam_line) | Int | The line the video beam is drawing now (0 at the top of the frame) |  |
+| [`beam_lines()`](#beam_lines) | Int | Lines in a frame of the display: 313 on PAL, 263 on NTSC |  |
+| [`video_pal()`](#video_pal) | Bool | true on a PAL Amiga (50 frames a second), false on NTSC (60) |  |
+| [`vblank_count()`](#vblank_count) | Int | Frames shown (VBlanks) since the first call, which returns 0 |  |
 | [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Create bitmap (depth 0: like the screen being drawn on, a graphics card's too) |  |
 | [`bitmap_load(id, filename)`](#bitmap_load) | Bool | Load IFF bitmap |  |
 | [`bitmap_save(id, filename)`](#bitmap_save) | Bool | Save IFF bitmap |  |
@@ -1522,8 +1529,9 @@ See also: [`sprite_collision`](#sprite_collision).
 
 - `size`: how many instructions fit; 0 = 64. Each `copper_wait`, `copper_move` or `copper_color` is one.
 
-Starts an empty copper list; any previous one is removed. Then come the instructions, `copper_end` and
-`copper_install`. There is a single list. Returns `false` without memory.
+Starts an empty copper list. Then come the instructions, `copper_end` and `copper_install`. There is a single
+list: if one was installed, it stays on screen until `copper_install` puts the new one in its place (with no frame
+without a list between them). Returns `false` without memory.
 
 See also: [`copper_wait`](#copper_wait), [`copper_color`](#copper_color), [`copper_install`](#copper_install).
 
@@ -1576,10 +1584,11 @@ See also: [`copper_install`](#copper_install).
 ### `copper_install()`
 
 Starts the list on the program's screen (or on the window's, which may be the Workbench: better a screen of your
-own). It goes through the system, without taking it over. An installed list does not change: for another one,
-`copper_free` and start again.
+own). It goes through the system, without taking it over. An instruction of the installed list changes with
+`copper_set`; for another list, `copper_create` and the new instructions: the old one shows until this
+`copper_install`.
 
-See also: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
+See also: [`copper_free`](#copper_free), [`copper_create`](#copper_create), [`copper_set`](#copper_set).
 
 <a id="copper_free"></a>
 
@@ -1588,6 +1597,66 @@ See also: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
 Removes the list from the screen and frees its memory. It is removed on its own when the program ends.
 
 See also: [`copper_install`](#copper_install).
+
+<a id="copper_set"></a>
+
+### `copper_set(i, value)`
+
+- `i`: the instruction, from 0, in the order they were added (`copper_wait`, `copper_move`, `copper_color` and
+  `copper_end` count one each). `copper_count()` before adding one gives its number.
+- `value`: in a `copper_move` or a `copper_color`, the new value (`0xRGB` in a colour); in a `copper_wait`, the new
+  line.
+
+Changes that instruction. If the list is installed it shows at once: the screen is made again through the system
+(`MakeScreen` and `RethinkDisplay`, a few milliseconds), so it is for changes now and then (an editor sending
+colours to a running demo), not for every frame. A number outside the list does nothing.
+
+See also: [`copper_count`](#copper_count), [`copper_install`](#copper_install).
+
+<a id="copper_count"></a>
+
+### `copper_count()` → `Int`
+
+Returns how many instructions the list has: the number the next one will have, for `copper_set`.
+
+See also: [`copper_set`](#copper_set).
+
+<a id="beam_line"></a>
+
+### `beam_line()` → `Int`
+
+Returns the line the video beam is drawing now: 0 at the top of the frame, up to 312 on PAL (262 on NTSC). It reads
+`VPOSR` and `VHPOSR` until they come from the same line: never half the number of one and half of the next. To
+measure how much of the frame a part of a demo takes: the line before and after.
+
+See also: [`beam_lines`](#beam_lines), [`vblank_count`](#vblank_count).
+
+<a id="beam_lines"></a>
+
+### `beam_lines()` → `Int`
+
+Returns the lines of a frame of the display: 313 on PAL, 263 on NTSC (those of the monitor graphics uses; otherwise,
+the machine's). With `beam_line`, the part of the frame used up.
+
+See also: [`beam_line`](#beam_line), [`video_pal`](#video_pal).
+
+<a id="video_pal"></a>
+
+### `video_pal()` → `Bool`
+
+Returns `true` on a PAL Amiga (50 frames a second) and `false` on an NTSC one (60).
+
+See also: [`beam_lines`](#beam_lines).
+
+<a id="vblank_count"></a>
+
+### `vblank_count()` → `Int`
+
+Returns the frames shown (the VBlank interrupts) since the first call, which returns 0: an interrupt server counts
+them, and goes away when the program ends. If a one-frame loop takes longer, the count goes up by 2: that is how
+lost frames are known, which a time does not tell.
+
+See also: [`beam_line`](#beam_line), [`wait_vblank`](#wait_vblank).
 
 <a id="bitmap_create"></a>
 
@@ -8130,6 +8199,7 @@ end
 | [`run_finish(run)`](#run_finish) | String | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
 | [`run_rc()`](#run_rc) | Int | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
 | [`env_get(name)`](#env_get) | String | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
+| [`env_get_text(name)`](#env_get_text) | String | An environment variable with all its lines (without the last line end); "" if there is none |  |
 | [`env_set(name, value, save)`](#env_set) | Bool | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
 | [`rexx_send(port, command)`](#rexx_send) | String | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
 | [`rexx_send_wait(port, command, ms)`](#rexx_send_wait) | String | As rexx_send, but waiting ms milliseconds at most (0: it does not wait): if there is no answer by then, "" and rexx_rc() -3. The late answer is taken and freed by Dash |  |
@@ -8383,7 +8453,17 @@ See also: [`run_capture`](#run_capture).
 
 Returns its value, from the program's Shell or from `ENV:`, up to the first line end; `""` if it does not exist.
 
-See also: [`env_set`](#env_set).
+See also: [`env_set`](#env_set), [`env_get_text`](#env_get_text).
+
+<a id="env_get_text"></a>
+
+### `env_get_text(name)` → `String`
+
+- `name`: the name, as in `env_get`.
+
+Returns the whole value, with all its lines (without the line end of the last one, the one `echo` leaves); `""` if it does not exist.
+
+See also: [`env_get`](#env_get), [`env_set`](#env_set).
 
 <a id="env_set"></a>
 
@@ -9996,6 +10076,8 @@ asynchronous: `sound_play` returns at once and the sound goes on while the progr
 
 **Music.** `music_load` loads a 4-channel ProTracker module; while it plays, the channels are its own: a `sound_*`
 at the same time would clash with it. The most used effects are there (the list in the manual, section 15).
+To sync a demo: `music_pos`, `music_row`, `music_tick` and `music_speed` tell where it is, and `music_seek` jumps to
+a row.
 
 **Example** (`tests/test_doc_audio.dash`, which is also a test: it runs with the others):
 
@@ -10048,6 +10130,11 @@ end
 | [`music_position(pos)`](#music_position) | — | Set music position |  |
 | [`music_pos()`](#music_pos) | Int | Song position the music is playing (index in the order list) |  |
 | [`music_row()`](#music_row) | Int | Pattern row the music is playing (0-63) |  |
+| [`music_seek(pos, row)`](#music_seek) | — | Jump to row (0-63) of the song position pos while it plays, with the speed the song has there |  |
+| [`music_tick()`](#music_tick) | Int | Ticks of the playing row already played (0 to music_speed() - 1): the fraction of the row |  |
+| [`music_speed()`](#music_speed) | Int | Ticks a row lasts (the song's speed, 6 at the start) |  |
+| [`music_bpm()`](#music_bpm) | Int | The song's tempo (125 at the start: a tick each frame on PAL) |  |
+| [`music_playing()`](#music_playing) | Bool | true while the music plays (not stopped nor paused) |  |
 | [`music_free()`](#music_free) | — | Free music data |  |
 | [`tone_play(channel, freq, vol, duration)`](#tone_play) | — | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
 
@@ -10222,9 +10309,9 @@ See also: [`music_play`](#music_play).
 - `pos`: the position in the song's order list, from 0; outside it, 0.
 
 While it plays, jumps there, to the start of the pattern: to switch sections in a game (the menu's, the level's).
-`music_play` always starts from the beginning.
+`music_play` always starts from the beginning. To a given row: `music_seek`.
 
-See also: [`music_pos`](#music_pos), [`music_row`](#music_row).
+See also: [`music_pos`](#music_pos), [`music_row`](#music_row), [`music_seek`](#music_seek).
 
 <a id="music_pos"></a>
 
@@ -10241,6 +10328,54 @@ See also: [`music_row`](#music_row), [`music_position`](#music_position).
 Returns the pattern row playing, 0 to 63. To sync something with the music.
 
 See also: [`music_pos`](#music_pos).
+
+<a id="music_seek"></a>
+
+### `music_seek(pos, row)`
+
+- `pos`: the position in the order list, from 0; outside it, 0.
+- `row`: the pattern row, 0 to 63; outside, 0.
+
+While it plays, jumps to that row. The speed and tempo are the ones the song has there: its `F` effects are read
+from the start, following its jumps (`B`, `D`) as when it plays. To go to a moment of a demo while making it
+(position × 64 + row).
+
+See also: [`music_position`](#music_position), [`music_pos`](#music_pos), [`music_row`](#music_row).
+
+<a id="music_tick"></a>
+
+### `music_tick()` → `Int`
+
+Returns how many ticks of the playing row have already played, 0 to `music_speed() - 1`. `music_tick()` divided by
+`music_speed()` is the part of the row already gone: to move something smoothly from one row to the next. A tick is
+a frame at tempo 125 (on PAL).
+
+See also: [`music_speed`](#music_speed), [`music_row`](#music_row), [`music_bpm`](#music_bpm).
+
+<a id="music_speed"></a>
+
+### `music_speed()` → `Int`
+
+Returns the ticks a row lasts: the song's speed (its `F` effects below 32), 6 at the start.
+
+See also: [`music_tick`](#music_tick), [`music_bpm`](#music_bpm).
+
+<a id="music_bpm"></a>
+
+### `music_bpm()` → `Int`
+
+Returns the song's tempo (its `F` effects from 32), 125 at the start. At 125 there is one tick each frame on PAL;
+otherwise, `bpm / 125` ticks per frame.
+
+See also: [`music_speed`](#music_speed), [`music_tick`](#music_tick).
+
+<a id="music_playing"></a>
+
+### `music_playing()` → `Bool`
+
+Returns `true` while the music plays: after `music_play` and with no `music_stop` or `music_pause`.
+
+See also: [`music_play`](#music_play), [`music_pause`](#music_pause).
 
 <a id="music_free"></a>
 
@@ -11531,7 +11666,7 @@ end
 | [`mui_menu_radio(title, key, id, checked)`](#mui_menu_radio) | Int (address) | Menu option: the options one after another (nothing between them) are a group, and choosing one marks it and unmarks the others; mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
 | [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (address) | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
 | [`mui_submenu_end()`](#mui_submenu_end) | — | End the submenu |  |
-| [`mui_menu_separator()`](#mui_menu_separator) | — | Separator line in the menu |  |
+| [`mui_menu_separator()`](#mui_menu_separator) | Int (address) | Separator line in the menu; returns it (for mui_menu_remove) |  |
 | [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (address) | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
 | [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
 | [`mui_menu_end()`](#mui_menu_end) | — | End the menu |  |
@@ -11567,6 +11702,7 @@ end
 | [`mui_wait_event_signals(mask)`](#mui_wait_event_signals) | Int | Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which |  |
 | [`mui_signals()`](#mui_signals) | Int | Signals of the mask that woke the last mui_wait_event_signals |  |
 | [`mui_timer(ms, id)`](#mui_timer) | — | In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels) |  |
+| [`mui_post_event(id)`](#mui_post_event) | — | An event for the program itself: mui_wait_event returns id after the ones already waiting |  |
 | [`mui_image(file)`](#mui_image) | Int (address) | Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file |  |
 | [`mui_image_button(file)`](#mui_image_button) | Int (address) | Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture |  |
 | [`mui_image_toggle(file, group, selected)`](#mui_image_toggle) | Int (address) | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
@@ -12356,11 +12492,11 @@ See also: [`mui_submenu_begin`](#mui_submenu_begin).
 
 <a id="mui_menu_separator"></a>
 
-### `mui_menu_separator()`
+### `mui_menu_separator()` → `Int (address)`
 
-A line between menu items.
+A line between menu items. Returns the line: `mui_menu_remove` takes it away.
 
-See also: [`mui_menu_item`](#mui_menu_item).
+See also: [`mui_menu_item`](#mui_menu_item), [`mui_menu_remove`](#mui_menu_remove).
 
 <a id="mui_context_menu_begin"></a>
 
@@ -12753,7 +12889,19 @@ See also: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
 `mui_wait_event` will return `id` once that time has passed. To repeat it, call it again when it arrives.
 
-See also: [`mui_wait_event`](#mui_wait_event).
+See also: [`mui_wait_event`](#mui_wait_event), [`mui_post_event`](#mui_post_event).
+
+<a id="mui_post_event"></a>
+
+### `mui_post_event(id)`
+
+- `id`: the event number, greater than 0.
+
+`mui_wait_event` will return `id` after the events already waiting (MUI keeps them in order), without waiting for
+anything. To tell yourself about something from another part of the program (an ARexx command asking to quit)
+without using up the only `mui_timer`.
+
+See also: [`mui_wait_event`](#mui_wait_event), [`mui_timer`](#mui_timer).
 
 <a id="mui_image"></a>
 

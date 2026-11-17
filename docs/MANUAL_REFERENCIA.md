@@ -50,7 +50,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1066 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1079 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -1806,6 +1806,23 @@ copper_install()               # en la pantalla actual (la propia o la del Workb
 copper_free()                  # quitarla (al salir se quita sola)
 ```
 
+La lista se puede cambiar ya instalada (para un editor que manda el copper a una demo en marcha; lo pidió Forja).
+`copper_set(i, valor)` cambia la instrucción `i` (desde 0, en el orden en que se añadieron; `copper_count()` antes
+de añadir una da su número): en un `copper_move` o un `copper_color`, el valor; en un `copper_wait`, la línea. Un
+valor que está una sola vez en la lista del copper se cambia allí mismo (20 cambios, 10 ms en un A1200); si no, se
+rehace la pantalla (unos 20 ms en un A1200, 60 en un A500). Un `copper_create` con una lista instalada la deja a la
+vista hasta que `copper_install` pone la nueva, sin una imagen sin lista entre las dos.
+
+```
+copper_create(32)
+copper_wait(40, 0)
+rojo = copper_count()          # el número de la instrucción que viene
+copper_color(0, 0xF00)
+copper_end()
+copper_install()
+copper_set(rojo, 0x00F)        # ahora azul
+```
+
 ### Sprites de hardware
 
 Los sprites del chip grafico (hasta 8, numeros 0..7): 16 pixeles de ancho y 3 colores mas el
@@ -2098,8 +2115,12 @@ music_volume(64)
 
 # Posicion
 music_position(0)       # Ir al inicio
+music_seek(2, 16)       # a la fila 16 de la posicion 2 (con la velocidad que tiene ahi la cancion)
 Print music_pos()       # posicion en la lista de patrones
 Print music_row()       # fila del patron (0-63)
+Print music_tick()      # tics de la fila que ya sonaron (0 a music_speed() - 1)
+Print music_speed()     # tics por fila; music_bpm(), el tempo
+Print music_playing()   # true mientras suena
 
 # Liberar
 music_free()
@@ -2671,6 +2692,11 @@ time_delay_ms(500)          # Esperar 500 milisegundos
 wait_vblank()               # Esperar vertical blank
 wait_blit()                 # Esperar que termine el blitter
 ```
+
+Para demos (lo pidió Forja): `beam_line()` es la línea que dibuja el haz (lee `VPOSR` y `VHPOSR` sin mezclar dos
+líneas), `beam_lines()` las líneas de una imagen (313 en PAL, 263 en NTSC), `video_pal()` si el Amiga es PAL y
+`vblank_count()` las imágenes mostradas desde su primera llamada (que da 0), contadas por una interrupción: si un
+bucle de una imagen tarda dos, se ve.
 
 ### Numeros Aleatorios
 
@@ -3586,6 +3612,7 @@ Cada una explicada, con sus parámetros y dos ejemplos que se prueban: [BUILTINS
 | `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Eventos. |
 | `mui_wait_event()`, `mui_poll_event()`, `mui_press(boton)` | Esperar, consultar o lanzar eventos. |
 | `mui_timer(ms, id)` | Dentro de `ms` milisegundos, `mui_wait_event` devuelve `id` (una vez; para repetir, volver a llamar; 0 = cancelar). |
+| `mui_post_event(id)` | Un evento para el propio programa: `mui_wait_event` da `id` tras los que ya esperaban. |
 | `mui_wait_event_signals(mascara)` | Como `mui_wait_event`, pero también vuelve con 0 cuando llega una de esas señales (red...). |
 | `mui_signals()` | Qué señales de la máscara despertaron la última espera. |
 | `mui_app_end()` | Libera la aplicación, sus ventanas y objetos (también se hace al salir). |

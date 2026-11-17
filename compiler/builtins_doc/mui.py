@@ -903,7 +903,20 @@ Returns the mask signals that woke the last `mui_wait_event_signals`: check them
 - `id`: the event number.
 
 `mui_wait_event` will return `id` once that time has passed. To repeat it, call it again when it arrives.
-""", ["mui_wait_event"]),
+""", ["mui_wait_event", "mui_post_event"]),
+    "mui_post_event": _f("""\
+- `id`: el número de evento, mayor que 0.
+
+`mui_wait_event` devolverá `id` después de los eventos que ya esperaban (MUI los guarda en orden), sin esperar a
+nada. Para avisarse de algo desde otra parte del programa (una orden ARexx que pide salir) sin gastar el único
+`mui_timer`.
+""", """\
+- `id`: the event number, greater than 0.
+
+`mui_wait_event` will return `id` after the events already waiting (MUI keeps them in order), without waiting for
+anything. To tell yourself about something from another part of the program (an ARexx command asking to quit)
+without using up the only `mui_timer`.
+""", ["mui_wait_event", "mui_timer"]),
     # ------------------------------------------------------------ menús
     "mui_menu_begin": _f("""\
 - `title`: el título del menú en la barra.
@@ -958,8 +971,9 @@ to 16. Choosing one checks it, unchecks the others and gives `id`. `mui_get_valu
 `mui_set_value(option, 1)` checks it and unchecks the rest of its group. On the Amiga it is Intuition's mutual
 exclusion (`MUIA_Menuitem_Exclude`); on DashOS, the options of its menu.
 """, ["mui_menu_check", "mui_menu_item"]),
-    "mui_menu_separator": _f("Una raya entre opciones del menú.\n", "A line between menu items.\n",
-                             ["mui_menu_item"]),
+    "mui_menu_separator": _f("Una raya entre opciones del menú. Devuelve la raya: `mui_menu_remove` la quita.\n",
+                             "A line between menu items. Returns the line: `mui_menu_remove` takes it away.\n",
+                             ["mui_menu_item", "mui_menu_remove"]),
     "mui_submenu_begin": _f("""\
 - `title`: el texto de la opción que abre el submenú.
 

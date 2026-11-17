@@ -50,7 +50,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1066 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1079 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -1806,6 +1806,23 @@ copper_install()               # on the current screen (your own or the Workbenc
 copper_free()                  # remove it (it is removed automatically on exit)
 ```
 
+The list can be changed once installed (for an editor that sends the copper to a running demo; asked for by Forja).
+`copper_set(i, value)` changes instruction `i` (from 0, in the order they were added; `copper_count()` before adding
+one gives its number): in a `copper_move` or a `copper_color`, the value; in a `copper_wait`, the line. A value that
+is only once in the copper's list is changed right there (20 changes, 10 ms on an A1200); otherwise the display is
+made again (some 20 ms on an A1200, 60 on an A500). A `copper_create` with a list installed leaves it on screen until
+`copper_install` puts the new one in its place, with no frame without a list between them.
+
+```
+copper_create(32)
+copper_wait(40, 0)
+red = copper_count()           # the number of the coming instruction
+copper_color(0, 0xF00)
+copper_end()
+copper_install()
+copper_set(red, 0x00F)         # blue now
+```
+
 ### Hardware sprites
 
 The graphics chip's sprites (up to 8, numbers 0..7): 16 pixels wide and 3 colors plus
@@ -2098,6 +2115,10 @@ music_volume(64)
 
 # Position
 music_position(0)       # Go to the start
+music_seek(2, 16)       # to row 16 of position 2 (with the speed the song has there)
+Print music_tick()      # ticks of the row already played (0 to music_speed() - 1)
+Print music_speed()     # ticks per row; music_bpm(), the tempo
+Print music_playing()   # true while it plays
 Print music_pos()       # position in the pattern list
 Print music_row()       # pattern row (0-63)
 
@@ -2671,6 +2692,11 @@ time_delay_ms(500)          # Wait 500 milliseconds
 wait_vblank()               # Wait for vertical blank
 wait_blit()                 # Wait for the blitter to finish
 ```
+
+For demos (asked for by Forja): `beam_line()` is the line the beam draws (it reads `VPOSR` and `VHPOSR` without
+mixing two lines), `beam_lines()` the lines of a frame (313 on PAL, 263 on NTSC), `video_pal()` whether the Amiga is
+PAL and `vblank_count()` the frames shown since its first call (which returns 0), counted by an interrupt: if a
+one-frame loop takes two, it shows.
 
 ### Random Numbers
 
@@ -3585,6 +3611,7 @@ Each one explained, with its parameters and two examples run by the tests: [BUIL
 | `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Events. |
 | `mui_wait_event()`, `mui_poll_event()`, `mui_press(boton)` | Wait for, check or fire events. |
 | `mui_timer(ms, id)` | In `ms` milliseconds, `mui_wait_event` returns `id` (once; to repeat, call it again; 0 = cancel). |
+| `mui_post_event(id)` | An event for the program itself: `mui_wait_event` returns `id` after the ones already waiting. |
 | `mui_wait_event_signals(mascara)` | Like `mui_wait_event`, but also returns 0 when one of those signals arrives (network...). |
 | `mui_signals()` | Which signals of the mask woke up the last wait. |
 | `mui_app_end()` | Frees the application, its windows and objects (also done on exit). |

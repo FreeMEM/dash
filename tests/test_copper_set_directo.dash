@@ -1,0 +1,85 @@
+# The same as test_copper_set.dash, built by ./dash straight to hunk.
+# dash-direct:
+# Copper en vivo (lo pidió Forja): copper_set cambia una instrucción de la lista ya instalada (un color, una espera)
+# y se ve en la lista del copper que hace graphics.library (GfxBase->LOFlist); copper_count da el número de la
+# siguiente. Un MOVE cuyo valor está una sola vez en esa lista se cambia allí mismo; si está repetido (el otro rojo),
+# se rehace la pantalla. copper_create con una lista instalada la deja a la vista hasta que copper_install pone la nueva.
+# expect-out: cuenta: 0 2 7
+# expect-out: instalada: 1 1
+# expect-out: rápido: 0 1
+# expect-out: repetido: 1 1
+# expect-out: espera: 20
+# expect-out: fuera de la lista: 1
+# expect-out: nueva sin instalar: 1 0
+# expect-out: nueva instalada: 0 1
+# expect-out: libre: 0
+
+@header "#include <graphics/gfxbase.h>"
+
+Window W
+    title "Copper en vivo"
+    width 200
+    height 100
+end
+
+# 1 si la lista del copper de la pantalla tiene el MOVE reg, valor
+@native func en_copper(reg: Int, valor: Int) -> Int
+"""
+    UWORD *c = GfxBase->LOFlist;
+    LONG n;
+    if (!c) return 0;
+    for (n = 0; n < 4096 && !(c[0] == 0xFFFF && c[1] == 0xFFFE); n++, c += 2)
+        if (c[0] == (UWORD)reg && c[1] == (UWORD)valor) return 1;
+    return 0;
+"""
+end
+
+# la línea de la espera de antes de ese MOVE (-1 si no está)
+@native func linea_de(reg: Int, valor: Int) -> Int
+"""
+    UWORD *c = GfxBase->LOFlist;
+    LONG n, linea = -1;
+    if (!c) return -1;
+    for (n = 0; n < 4096 && !(c[0] == 0xFFFF && c[1] == 0xFFFE); n++, c += 2) {
+        if (c[0] & 1) linea = c[0] >> 8;
+        else if (c[0] == (UWORD)reg && c[1] == (UWORD)valor) return linea;
+    }
+    return -1;
+"""
+end
+
+Main
+    W.open
+    copper_create(16)
+    a = copper_count()
+    copper_wait(40, 0)
+    copper_color(0, 0xF00)
+    b = copper_count()
+    copper_wait(80, 0)
+    copper_move(0x182, 0x0F0)
+    copper_wait(90, 0)
+    copper_color(0, 0xF00)
+    copper_end()
+    Print "cuenta: #{a} #{b} #{copper_count()}"
+    copper_install()
+    Print "instalada: #{en_copper(0x180, 0xF00)} #{en_copper(0x182, 0x0F0)}"
+    copper_set(3, 0x0FF)
+    Print "rápido: #{en_copper(0x182, 0x0F0)} #{en_copper(0x182, 0x0FF)}"
+    copper_set(5, 0x00F)
+    Print "repetido: #{en_copper(0x180, 0xF00)} #{en_copper(0x180, 0x00F)}"
+    antes = linea_de(0x180, 0x00F)
+    copper_set(4, 110)
+    Print "espera: #{linea_de(0x180, 0x00F) - antes}"
+    copper_set(99, 0x111)
+    copper_set(-1, 0x111)
+    Print "fuera de la lista: #{en_copper(0x182, 0x0FF)}"
+    copper_create(8)
+    copper_wait(50, 0)
+    copper_color(0, 0xFF0)
+    copper_end()
+    Print "nueva sin instalar: #{en_copper(0x180, 0x00F)} #{en_copper(0x180, 0xFF0)}"
+    copper_install()
+    Print "nueva instalada: #{en_copper(0x180, 0x00F)} #{en_copper(0x180, 0xFF0)}"
+    copper_free()
+    Print "libre: #{en_copper(0x180, 0xFF0)}"
+end

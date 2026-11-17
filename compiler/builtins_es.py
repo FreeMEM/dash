@@ -113,6 +113,13 @@ DESC_ES = {
     "copper_end": "Termina la lista del copper",
     "copper_install": "Pone en marcha la lista del copper",
     "copper_free": "Libera la lista del copper",
+    "copper_set": "Cambia la instrucción i (desde 0) de la lista del copper, también instalada: un move o un color toma "
+                  "value, una espera la línea value",
+    "copper_count": "Las instrucciones de la lista del copper (el número de la siguiente, para copper_set)",
+    "beam_line": "La línea que dibuja ahora el haz de vídeo (0 arriba de la imagen)",
+    "beam_lines": "Las líneas de una imagen de la pantalla: 313 en PAL, 263 en NTSC",
+    "video_pal": "true en un Amiga PAL (50 imágenes por segundo), false en NTSC (60)",
+    "vblank_count": "Las imágenes mostradas (VBlanks) desde la primera llamada, que da 0",
     "bitmap_create": "Crea un bitmap",
     "bitmap_load": "Carga un bitmap IFF",
     "bitmap_save": "Guarda un bitmap IFF",
@@ -618,6 +625,7 @@ DESC_ES = {
               "se le acabó el tiempo",
     "env_get": "Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; \"\" "
                "si no existe",
+    "env_get_text": "Una variable de entorno con todas sus líneas (sin el fin de línea de la última); \"\" si no existe",
     "env_set": "Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso "
                "si no pudo",
     "program_exit": "Acaba el programa ya con ese código de retorno (5 aviso, 10 error, 20 fallo), tras la limpieza de "
@@ -729,6 +737,11 @@ DESC_ES = {
     "music_position": "Pone la posición de la música",
     "music_pos": "La posición de la canción que suena (en la lista de orden)",
     "music_row": "La fila del patrón que suena (0-63)",
+    "music_seek": "Mientras suena, salta a la fila row (0-63) de la posición pos, con la velocidad que tiene la canción ahí",
+    "music_tick": "Los tics de la fila que suena que ya han sonado (0 a music_speed() - 1): la fracción de la fila",
+    "music_speed": "Los tics que dura una fila (la velocidad de la canción; 6 al empezar)",
+    "music_bpm": "El tempo de la canción (125 al empezar: un tic en cada imagen en PAL)",
+    "music_playing": "true mientras la música suena (ni parada ni en pausa)",
     "music_free": "Libera los datos de la música",
     "tone_play": "Toca un tono senoidal: frecuencia en Hz, volumen 0-64, duración en milisegundos (vuelve en seguida)",
     # Tareas, reloj, traducciones y escritorio
@@ -1240,7 +1253,7 @@ DESC_ES = {
     "mui_submenu_begin": "Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta "
                          "mui_submenu_end",
     "mui_submenu_end": "Acaba el submenú",
-    "mui_menu_separator": "Una raya de separación en el menú",
+    "mui_menu_separator": "Una raya de separación en el menú; la devuelve (para mui_menu_remove)",
     "mui_context_menu_begin": "Empieza un menú contextual (en cualquier sitio, no solo en una ventana): sus opciones como "
                               "en un menú (mui_menu_item, mui_menu_check, mui_submenu_begin...) hasta mui_menu_end; se da "
                               "a un objeto con mui_set_context_menu (Lorraine D15)",
@@ -1297,6 +1310,7 @@ DESC_ES = {
                               "(sockets...); mui_signals dice cuál",
     "mui_signals": "Las señales de la máscara que despertaron al último mui_wait_event_signals",
     "mui_timer": "Dentro de ms milisegundos mui_wait_event da id, una vez (otra: llamarla otra vez; 0 la cancela)",
+    "mui_post_event": "Un evento para el propio programa: mui_wait_event da id después de los que ya esperaban",
     "mui_image": "Una imagen de un fichero con los datatypes (ILBM; PNG, JPEG, GIF si están sus datatypes); "
                  "mui_set_text cambia el fichero",
     "mui_image_button": "Un botón con una imagen (un icono de barra de herramientas; ILBM, o lo que lean los datatypes): "
