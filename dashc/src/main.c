@@ -328,6 +328,7 @@ int main(int argc, char **argv)
     }
     tiempo("leer");
     gen_program(prog, &obj);
+    node_free_all();                                   /* (el árbol ya no hace falta: su memoria, para enlazar) */
     tiempo("generar");
     if (check) {
         check_flush();

@@ -10,9 +10,14 @@
 #include <setjmp.h>
 
 /* ---- utilidades (util.c) ---- */
+/* Un Buf puede tener lo de antes de base fuera (buf_spill): en trozos aparte (segs), sin moverlo más al crecer. p
+   está corrido base bytes: p[i] vale para i >= base (lo de antes, tras buf_flatten) */
+struct BufSeg;
 typedef struct {
     uint8_t *p;
-    size_t n, cap;
+    size_t n, cap;     /* cap: lo que cabe desde base */
+    size_t base;
+    struct BufSeg *segs, *segs_end;
 } Buf;
 
 void buf_byte(Buf *b, int v);
@@ -20,6 +25,11 @@ void buf_word(Buf *b, int v);
 void buf_long(Buf *b, uint32_t v);
 void buf_bytes(Buf *b, const void *p, size_t n);
 char *buf_text(Buf *b);   /* lo de b como texto del tamaño justo (y b, vacío) */
+/* el código y los datos de un programa grande (gen68k.c): entre función y función, lo ya hecho (menos los últimos
+   keep bytes) sale aparte, y el Buf no tiene que crecer copiándolo todo (con dos veces su tamaño a la vez); se junta
+   otra vez con buf_flatten antes de volver a tocarlo */
+void buf_spill(Buf *b, size_t keep);
+void buf_flatten(Buf *b);
 /* (en línea: se llaman cientos de miles de veces al leer el runtime y escribir el código) */
 static inline void put_word(uint8_t *p, int v)
 {
@@ -59,9 +69,11 @@ void nidx_sync(NameIdx *x, const void *base, size_t stride, size_t off, int n);
     } while (0)
 
 /* lista dinámica: struct { T *v; int n, cap; } */
+/* (crece al doble; desde 4.096 elementos, la mitad más: con listas de decenas de miles, menos sitio sin usar y menos
+   memoria a la vez al crecer, la vieja y la nueva) */
 #define VEC_PUSH(vec, x) do { \
         if ((vec).n == (vec).cap) { \
-            (vec).cap = (vec).cap ? (vec).cap * 2 : 8; \
+            (vec).cap = (vec).cap ? (vec).cap + ((vec).cap < 4096 ? (vec).cap : (vec).cap / 2) : 8; \
             (vec).v = xrealloc((vec).v, (vec).cap * sizeof(*(vec).v)); \
         } \
         (vec).v[(vec).n++] = (x); \
@@ -213,6 +225,7 @@ struct Node {
 };
 Node *node_alloc(void);   /* util.c: un nodo a 0 */
 void *node_arena(size_t size);   /* util.c: de donde salen los nodos (a 0): un NodeExt */
+void node_free_all(void);        /* util.c: suelta todos los nodos (tras generar: el árbol ya no hace falta) */
 
 typedef struct {
     char *name;
@@ -341,9 +354,16 @@ extern size_t rt_blob_len;
 enum { HK_CODE = 0, HK_DATA = 1 };
 
 typedef struct {
-    uint32_t off;      /* dónde está el long que hay que reubicar */
-    int hunk;          /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
+#ifndef DASH_A64
+    /* (8 bytes: un programa grande lleva decenas de miles) */
+    uint32_t off : 30; /* dónde está el long que hay que reubicar */
+    int hunk : 2;      /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
     const char *sym;
+#else
+    uint32_t off;
+    int hunk;
+    const char *sym;
+#endif
 #ifdef DASH_A64
     int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
     long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */

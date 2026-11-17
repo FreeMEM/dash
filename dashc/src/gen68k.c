@@ -6500,6 +6500,14 @@ static int assigns(Node *n, const char *name)
 
 static void gen_one(int idx, int label, Func *f, NodeList *body)
 {
+#ifndef DASH_A64
+    /* lo ya hecho, aparte (menos lo último, que aún pueden mirar las mejoras de def_label y load_var): con un programa
+       grande, el código y los datos no crecen copiándolo todo (gen_program los junta al acabar) */
+    buf_spill(&obj->code, 64);
+    buf_spill(&obj->data, 64);
+    rel_spill();
+    lpos_trim((long)obj->code.n - 64);
+#endif
     VEC_PUSH(inl_stack, idx);
     gen_function(label, f, body);
     inl_stack.n--;
@@ -7122,6 +7130,12 @@ void gen_program(Program *p, Obj *o)
         code_data_ptr(add_string("Main", 4));
         for (i = 0; i < p->funcs.n; i++) code_data_ptr(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
     }
+#ifndef DASH_A64
+    node_free_all();                                   /* (el árbol ya no hace falta: su sitio, para juntar el código) */
+    buf_flatten(&obj->code);
+    buf_flatten(&obj->data);
+    rel_flatten();
+#endif
     resolve_fixups();
     {
         /* el NodeExt de los nodos que no tienen el suyo, compartido: nadie puede haber escrito en él */
@@ -7137,6 +7151,9 @@ void gen_program(Program *p, Obj *o)
             e.off = (uint32_t)labels.v[func_label[i]];
             VEC_PUSH(obj->exports, e);
         }
+#ifndef DASH_A64
+    labels_free();
+#endif
 }
 
 /* ---- dashc --cabecera: los structs del programa para el C de @link ---- */
