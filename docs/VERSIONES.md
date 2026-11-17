@@ -33,6 +33,22 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.17.1 (2026-11-17)
+
+Arreglos que salieron al grabar el vídeo de Forja 0.8 en CoffinOS. Todo lo que compilaba sigue compilando igual.
+
+- **Arreglo:** en CoffinOS, Esc cerraba Forja (y cualquier ventana MUI con un lienzo que recoge teclas) porque una
+  commodity convierte Esc en cerrar la ventana activa. Ahora ese cierre justo tras un Esc no se hace; el botón de
+  cerrar sigue cerrando.
+- **Arreglo:** con el teclado castellano, Ctrl con un signo (Ctrl+/) da el signo, no un código de control.
+- **Arreglo:** con MUI 3.8, `mui_app_field_colors` ya no deja los campos de texto negro sobre negro (solo se aplica con
+  MUI 4 o más).
+- **Arreglo:** los sprites se esconden y se liberan al acabar el programa, también tras Ctrl-C.
+- **Forja 0.8.1:** "Arreglar el error" del copiloto pasa a Ctrl Alt G (CoffinOS se queda con Ctrl Alt F) y plantillas
+  en inglés cuando Forja va en inglés. El paquete se hace siempre con Forja e Inferencia al día.
+- **Vídeo:** todo lo nuevo de Forja 0.8 en castellano (https://www.youtube.com/watch?v=DvtbXxg0bA8) y en inglés
+  (https://www.youtube.com/watch?v=TKwCyB3B76s).
+
 ### 2.17.0 (2026-11-17)
 
 El ensamblador en línea, completo para demos; la orden `dash` del Amiga gasta menos de la mitad de memoria, y

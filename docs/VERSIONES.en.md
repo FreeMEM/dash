@@ -32,6 +32,22 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.17.1 (2026-11-17)
+
+Fixes that came up while recording the Forja 0.8 video on CoffinOS. Everything that compiled still compiles the
+same.
+
+- **Fix:** on CoffinOS, Esc closed Forja (and any MUI window with a canvas that takes keys) because a commodity turns
+  Esc into closing the active window. Now that close right after an Esc is not done; the close button still closes.
+- **Fix:** with the Spanish keymap, Ctrl with a symbol (Ctrl+/) gives the symbol, not a control code.
+- **Fix:** on MUI 3.8, `mui_app_field_colors` no longer leaves text fields black on black (it only applies on MUI 4
+  or later).
+- **Fix:** sprites are hidden and freed when the program ends, also after Ctrl-C.
+- **Forja 0.8.1:** the copilot's "Fix the error" moves to Ctrl Alt G (CoffinOS keeps Ctrl Alt F) and English
+  templates when Forja runs in English. The package is always built with up-to-date Forja and Inferencia.
+- **Video:** everything new in Forja 0.8 in Spanish (https://www.youtube.com/watch?v=DvtbXxg0bA8) and English
+  (https://www.youtube.com/watch?v=TKwCyB3B76s).
+
 ### 2.17.0 (2026-11-17)
 
 The inline assembler, complete for demos; the Amiga `dash` command uses less than half the memory, and Forja 0.8.
