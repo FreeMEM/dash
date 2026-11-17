@@ -24,7 +24,7 @@ import re as _re
 # Words of C (and main) that a Dash name can be: the compiler renames them in the C (compiler/main.py,
 # _rename_c_keywords); the messages give the Dash name back
 C_KEYWORDS = frozenset("""asm auto break case char const continue default do double else enum extern float for goto
-    if inline int long register restrict return short signed sizeof static struct switch typedef typeof union unsigned
+    if inline int long register restrict return short signed static struct switch typedef typeof union unsigned
     void volatile while main""".split())
 C_KEYWORD_SUFFIX = "__kw"
 _C_KEYWORD_RE = _re.compile(r"\b(" + "|".join(sorted(C_KEYWORDS)) + r")" + C_KEYWORD_SUFFIX + r"\b")
