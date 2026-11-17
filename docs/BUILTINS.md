@@ -12811,7 +12811,8 @@ Ver también: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#
 
 `mui_wait_event` devuelve `id` mientras se arrastra (se pulsa en la zona y se mueve con el botón pulsado) y al
 soltar. `mui_canvas_drag` dice cuál de los dos y `mui_canvas_mouse_x`, `_y` dónde, aunque sea fuera de la zona. Se
-llama antes de abrir la ventana.
+llama antes de abrir la ventana. Lo que llega mientras el programa está ocupado (dibujando entero al pulsar) se junta
+en un evento, con el estado y la posición de ahora: si ya se soltó, uno solo de soltar.
 
 Ver también: [`mui_canvas_drag`](#mui_canvas_drag).
 

@@ -119,14 +119,16 @@ arriving while the program is busy count as one. Call it before opening the wind
 
 `mui_wait_event` devuelve `id` mientras se arrastra (se pulsa en la zona y se mueve con el botón pulsado) y al
 soltar. `mui_canvas_drag` dice cuál de los dos y `mui_canvas_mouse_x`, `_y` dónde, aunque sea fuera de la zona. Se
-llama antes de abrir la ventana.
+llama antes de abrir la ventana. Lo que llega mientras el programa está ocupado (dibujando entero al pulsar) se junta
+en un evento, con el estado y la posición de ahora: si ya se soltó, uno solo de soltar.
 """, """\
 - `canvas`: the drawing area.
 - `id`: the event number.
 
 `mui_wait_event` returns `id` while dragging (pressing on the area and moving with the button held) and on release.
 `mui_canvas_drag` says which and `mui_canvas_mouse_x`, `_y` where, even outside the area. Call it before opening the
-window.
+window. What comes while the program is busy (drawing everything on the press) is gathered in one event, with the
+state and position of now: if it was already let go, a single release.
 """, ["mui_canvas_drag"]),
     "mui_canvas_drag": _f(_C_ES + """\
 Devuelve el último evento de arrastre: 1 moviéndose con el botón pulsado, 2 al soltarlo, 0 antes de ninguno.

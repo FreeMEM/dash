@@ -12802,7 +12802,8 @@ See also: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#mui_
 
 `mui_wait_event` returns `id` while dragging (pressing on the area and moving with the button held) and on release.
 `mui_canvas_drag` says which and `mui_canvas_mouse_x`, `_y` where, even outside the area. Call it before opening the
-window.
+window. What comes while the program is busy (drawing everything on the press) is gathered in one event, with the
+state and position of now: if it was already let go, a single release.
 
 See also: [`mui_canvas_drag`](#mui_canvas_drag).
 
