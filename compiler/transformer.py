@@ -1087,6 +1087,17 @@ class DashASTBuilder(Transformer):
         return MemberAssign(object_name=names[0], member=after[-1], value=items[-1],
                             location=self._get_location(items[0]), target=target)
 
+    def call_member_assign(self, items) -> MemberAssign:
+        """f().x = 5, f(a).b.c = 5: the owner of the last field is the call's result, read like any expression
+        (lo pidió Forja). object_name is the function's: there is no variable at the root."""
+        call = items[0]
+        names = [t.value if isinstance(t, Token) else str(t) for t in items[1:-1]]
+        target = call
+        for member in names[:-1]:
+            target = PropertyAccess(object=target, property=member)
+        return MemberAssign(object_name=call.name, member=names[-1], value=items[-1],
+                            location=self._get_location(items[1]), target=target)
+
     def self_member_assign(self, items) -> MemberAssign:
         """Build a self member assignment node (self.x = 10, self.a.b = 10)."""
         names = [i.value if isinstance(i, Token) else str(i) for i in items[:-1]]

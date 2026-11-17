@@ -119,6 +119,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_poll_event() -> Int` | Igual sin esperar: 0 si no hay nada. |
 | `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales: `net_signal()` (red), `task_signal()` (tareas), `file_notify_signal()` (ficheros vigilados). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |
 | `mui_timer(ms, id)` | Dentro de `ms` milisegundos `mui_wait_event` devuelve `id`, una vez (otra: llamarla otra vez; 0 la anula). |
+| `mui_post_event(id)` | Un evento para el propio programa: `mui_wait_event` da `id` tras los que ya esperaban (MUI los guarda en orden). |
 | `mui_press(obj)` | Lanza el evento de `mui_on_press` de ese objeto como si se pulsara (atajos, tests). |
 
 Los números de evento son del programa (`const ID_ATRAS = 1`), mayores que 0.

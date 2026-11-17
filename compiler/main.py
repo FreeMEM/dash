@@ -1008,5 +1008,35 @@ def main():
         sys.exit(1)
 
 
+def run_deep(fn):
+    """fn() en un hilo con 256 MB de pila y un tope de recursión de 200000 (lo pidió Forja). Los pasos del
+    compilador recorren el árbol de forma recursiva, y una expresión larga es un árbol hondo: las 562 líneas de
+    "texto" + "texto" de un fichero de Forja pasaban del tope de Python (1000). La memoria de la pila se reserva
+    pero solo se usa la que hace falta. La salida de sys.exit pasa al proceso."""
+    import threading
+    box = {}
+
+    def body():
+        try:
+            fn()
+        except SystemExit as e:
+            box["exit"] = e.code
+        except BaseException as e:   # (lo de main que no sea un error de compilación)
+            box["error"] = e
+
+    old = threading.stack_size(256 * 1024 * 1024)
+    sys.setrecursionlimit(200000)
+    try:
+        t = threading.Thread(target=body)
+        t.start()
+    finally:
+        threading.stack_size(old)
+    t.join()
+    if "error" in box:
+        raise box["error"]
+    if "exit" in box:
+        sys.exit(box["exit"])
+
+
 if __name__ == "__main__":
-    main()
+    run_deep(main)

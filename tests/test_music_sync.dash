@@ -1,0 +1,69 @@
+# Para sincronizar demos con la música (lo pidió Forja): music_seek(pos, fila) salta a una fila con la velocidad y el
+# tempo que tiene la canción ahí, music_tick/music_speed/music_bpm (la fracción de la fila) y music_playing.
+# Un módulo de dos patrones hecho aquí: F03 en la fila 0 del primero; F05 en la 0 del segundo y F50 (tempo 80) en
+# su fila 32.
+# expect-out: cargado: true
+# expect-out: sonando: true
+# expect-out: velocidad al empezar: 3 125
+# expect-out: tics dentro de la fila: true
+# expect-out: seek 1 40: 1 true 5 80
+# expect-out: seek 0 20: 0 true 3 125
+# expect-out: en pausa: false
+# expect-out: sigue: true
+# expect-out: parada: false
+
+func pon(buf: Pointer, patron: Int, fila: Int, efecto: Int, valor: Int)
+    o = 1084 + patron * 1024 + fila * 16
+    buffer_set_byte(buf, o + 2, efecto)
+    buffer_set_byte(buf, o + 3, valor)
+end
+
+Main
+    n = 1084 + 2 * 1024
+    buf = buffer_alloc(n)
+    buffer_fill(buf, 0, n, 0)
+    buffer_set_byte(buf, 950, 2)          # dos posiciones: patrones 0 y 1
+    buffer_set_byte(buf, 951, 127)
+    buffer_set_byte(buf, 953, 1)
+    buffer_set_byte(buf, 1080, 77)        # M.K.
+    buffer_set_byte(buf, 1081, 46)
+    buffer_set_byte(buf, 1082, 75)
+    buffer_set_byte(buf, 1083, 46)
+    pon(buf, 0, 0, 15, 3)
+    pon(buf, 1, 0, 15, 5)
+    pon(buf, 1, 32, 15, 0x50)
+    file_save("RAM:sync.mod", buf, n)
+    Print "cargado: #{music_load("RAM:sync.mod")}"
+    music_play()
+    Print "sonando: #{music_playing()}"
+    time_delay_ms(200)
+    Print "velocidad al empezar: #{music_speed()} #{music_bpm()}"
+    bien = true
+    visto = 0
+    for i in (1..300)
+        t = music_tick()
+        if t < 0 or t >= music_speed()
+            bien = false
+        end
+        if t > visto
+            visto = t
+        end
+        wait_vblank()
+    end
+    Print "tics dentro de la fila: #{bien and visto >= 2}"
+    music_seek(1, 40)
+    p = music_pos()
+    f = music_row()
+    Print "seek 1 40: #{p} #{f >= 40 and f <= 42} #{music_speed()} #{music_bpm()}"
+    music_seek(0, 20)
+    p = music_pos()
+    f = music_row()
+    Print "seek 0 20: #{p} #{f >= 20 and f <= 22} #{music_speed()} #{music_bpm()}"
+    music_pause()
+    Print "en pausa: #{music_playing()}"
+    music_resume()
+    Print "sigue: #{music_playing()}"
+    music_stop()
+    Print "parada: #{music_playing()}"
+    music_free()
+end

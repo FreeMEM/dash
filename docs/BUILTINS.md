@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1066 funciones, 1066 implementadas, 0 sin implementar.
+Total: 1079 funciones, 1079 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -480,7 +480,9 @@ bitmap con su máscara, y se puede dibujar en él con `bitmap_draw_to`.
 mapas de Forja o de la extensión. Se pinta con los fotogramas de un BOB.
 
 **El copper** (`copper_*`): una lista de instrucciones que cambian registros del chip de vídeo en una línea concreta
-de la pantalla, para degradados de fondo y otros efectos.
+de la pantalla, para degradados de fondo y otros efectos. `copper_set` cambia una instrucción de la lista ya
+instalada. Para demos: `beam_line` (la línea que dibuja el haz), `beam_lines` y `vblank_count` (las imágenes
+mostradas).
 
 **Bitmaps** (`bitmap_*`): imágenes fuera de pantalla, para cargar una imagen IFF, preparar algo sin que se vea y
 copiarlo de golpe.
@@ -722,6 +724,12 @@ end
 | [`copper_end()`](#copper_end) | — | Termina la lista del copper |  |
 | [`copper_install()`](#copper_install) | — | Pone en marcha la lista del copper |  |
 | [`copper_free()`](#copper_free) | — | Libera la lista del copper |  |
+| [`copper_set(i, value)`](#copper_set) | — | Cambia la instrucción i (desde 0) de la lista del copper, también instalada: un move o un color toma value, una espera la línea value |  |
+| [`copper_count()`](#copper_count) | Int | Las instrucciones de la lista del copper (el número de la siguiente, para copper_set) |  |
+| [`beam_line()`](#beam_line) | Int | La línea que dibuja ahora el haz de vídeo (0 arriba de la imagen) |  |
+| [`beam_lines()`](#beam_lines) | Int | Las líneas de una imagen de la pantalla: 313 en PAL, 263 en NTSC |  |
+| [`video_pal()`](#video_pal) | Bool | true en un Amiga PAL (50 imágenes por segundo), false en NTSC (60) |  |
+| [`vblank_count()`](#vblank_count) | Int | Las imágenes mostradas (VBlanks) desde la primera llamada, que da 0 |  |
 | [`bitmap_create(id, width, height, depth)`](#bitmap_create) | Bool | Crea un bitmap |  |
 | [`bitmap_load(id, filename)`](#bitmap_load) | Bool | Carga un bitmap IFF |  |
 | [`bitmap_save(id, filename)`](#bitmap_save) | Bool | Guarda un bitmap IFF |  |
@@ -1524,8 +1532,9 @@ Ver también: [`sprite_collision`](#sprite_collision).
 
 - `size`: cuántas instrucciones caben; 0 = 64. Cada `copper_wait`, `copper_move` o `copper_color` es una.
 
-Empieza una lista del copper vacía; la que hubiera se quita. Después van las instrucciones, `copper_end` y
-`copper_install`. Hay una sola lista. Devuelve `false` sin memoria.
+Empieza una lista del copper vacía. Después van las instrucciones, `copper_end` y `copper_install`. Hay una sola
+lista: si había una instalada, se sigue viendo hasta que `copper_install` pone la nueva en su sitio (sin una imagen
+sin lista entre las dos). Devuelve `false` sin memoria.
 
 Ver también: [`copper_wait`](#copper_wait), [`copper_color`](#copper_color), [`copper_install`](#copper_install).
 
@@ -1578,10 +1587,11 @@ Ver también: [`copper_install`](#copper_install).
 ### `copper_install()`
 
 Pone la lista en marcha en la pantalla del programa (o en la de la ventana, que puede ser el Workbench: mejor una
-pantalla propia). Funciona por el sistema, sin quitarle el control. Una lista instalada no se cambia: para otra,
-`copper_free` y empezar de nuevo.
+pantalla propia). Funciona por el sistema, sin quitarle el control. Una instrucción de la lista instalada se cambia
+con `copper_set`; para otra lista, `copper_create` y las instrucciones nuevas: la de antes se ve hasta este
+`copper_install`.
 
-Ver también: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
+Ver también: [`copper_free`](#copper_free), [`copper_create`](#copper_create), [`copper_set`](#copper_set).
 
 <a id="copper_free"></a>
 
@@ -1590,6 +1600,66 @@ Ver también: [`copper_free`](#copper_free), [`copper_create`](#copper_create).
 Quita la lista de la pantalla y libera su memoria. Al acabar el programa se quita sola.
 
 Ver también: [`copper_install`](#copper_install).
+
+<a id="copper_set"></a>
+
+### `copper_set(i, value)`
+
+- `i`: la instrucción, desde 0, en el orden en que se añadieron (`copper_wait`, `copper_move`, `copper_color` y
+  `copper_end` cuentan una cada una). `copper_count()` antes de añadir una da su número.
+- `value`: en un `copper_move` o un `copper_color`, el valor nuevo (`0xRGB` en un color); en un `copper_wait`, la
+  línea nueva.
+
+Cambia esa instrucción. Si la lista está instalada se ve enseguida: la pantalla se rehace por el sistema
+(`MakeScreen` y `RethinkDisplay`, unos milisegundos), así que es para cambios de vez en cuando (un editor que manda
+colores a una demo en marcha), no para cada imagen. Un número que no es de la lista no hace nada.
+
+Ver también: [`copper_count`](#copper_count), [`copper_install`](#copper_install).
+
+<a id="copper_count"></a>
+
+### `copper_count()` → `Int`
+
+Devuelve cuántas instrucciones tiene la lista: el número que tendrá la siguiente, para `copper_set`.
+
+Ver también: [`copper_set`](#copper_set).
+
+<a id="beam_line"></a>
+
+### `beam_line()` → `Int`
+
+Devuelve la línea que dibuja ahora el haz de vídeo: 0 arriba de la imagen, hasta 312 en PAL (262 en NTSC). Lee
+`VPOSR` y `VHPOSR` hasta que salen de la misma línea: nunca medio número de una y medio de la siguiente. Para medir
+cuánto de la imagen gasta una parte de una demo: la línea antes y después.
+
+Ver también: [`beam_lines`](#beam_lines), [`vblank_count`](#vblank_count).
+
+<a id="beam_lines"></a>
+
+### `beam_lines()` → `Int`
+
+Devuelve las líneas de una imagen de la pantalla: 313 en PAL, 263 en NTSC (las del monitor que usa graphics; si no,
+las de la máquina). Con `beam_line`, la parte de la imagen que se ha gastado.
+
+Ver también: [`beam_line`](#beam_line), [`video_pal`](#video_pal).
+
+<a id="video_pal"></a>
+
+### `video_pal()` → `Bool`
+
+Devuelve `true` en un Amiga PAL (50 imágenes por segundo) y `false` en uno NTSC (60).
+
+Ver también: [`beam_lines`](#beam_lines).
+
+<a id="vblank_count"></a>
+
+### `vblank_count()` → `Int`
+
+Devuelve las imágenes mostradas (las interrupciones de VBlank) desde la primera llamada, que da 0: un servidor de
+interrupción las cuenta, y se quita al acabar el programa. Si un bucle de una imagen tarda más, la cuenta sube 2: así
+se saben las imágenes perdidas, lo que no dice un tiempo.
+
+Ver también: [`beam_line`](#beam_line), [`wait_vblank`](#wait_vblank).
 
 <a id="bitmap_create"></a>
 
@@ -8128,6 +8198,7 @@ end
 | [`run_finish(run)`](#run_finish) | String | Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida |  |
 | [`run_rc()`](#run_rc) | Int | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
 | [`env_get(name)`](#env_get) | String | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
+| [`env_get_text(name)`](#env_get_text) | String | Una variable de entorno con todas sus líneas (sin el fin de línea de la última); "" si no existe |  |
 | [`env_set(name, value, save)`](#env_set) | Bool | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
 | [`rexx_send(port, command)`](#rexx_send) | String | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
 | [`rexx_send_wait(port, command, ms)`](#rexx_send_wait) | String | Como rexx_send, pero espera ms milisegundos como mucho (0: no espera): si no contesta a tiempo, "" y rexx_rc() -3. Dash recoge y libera la respuesta tardía |  |
@@ -8381,7 +8452,17 @@ Ver también: [`run_capture`](#run_capture).
 
 Devuelve su valor, de la Shell del programa o de `ENV:`, hasta el primer fin de línea; `""` si no existe.
 
-Ver también: [`env_set`](#env_set).
+Ver también: [`env_set`](#env_set), [`env_get_text`](#env_get_text).
+
+<a id="env_get_text"></a>
+
+### `env_get_text(name)` → `String`
+
+- `name`: el nombre, como en `env_get`.
+
+Devuelve el valor entero, con todas sus líneas (sin el fin de línea de la última, el que deja `echo`); `""` si no existe.
+
+Ver también: [`env_get`](#env_get), [`env_set`](#env_set).
 
 <a id="env_set"></a>
 
@@ -9996,6 +10077,8 @@ acabar el programa.
 
 **Música.** `music_load` carga un módulo de ProTracker de 4 canales; mientras suena, los canales son suyos: un
 `sound_*` a la vez se pisaría con ella. Los efectos más usados están (los de la tabla del manual, sección 15).
+Para sincronizar una demo: `music_pos`, `music_row`, `music_tick` y `music_speed` dicen por dónde va, y `music_seek`
+salta a una fila.
 
 **Ejemplo** (`tests/test_doc_audio.dash`, que también es un test: se prueba con los demás):
 
@@ -10048,6 +10131,11 @@ end
 | [`music_position(pos)`](#music_position) | — | Pone la posición de la música |  |
 | [`music_pos()`](#music_pos) | Int | La posición de la canción que suena (en la lista de orden) |  |
 | [`music_row()`](#music_row) | Int | La fila del patrón que suena (0-63) |  |
+| [`music_seek(pos, row)`](#music_seek) | — | Mientras suena, salta a la fila row (0-63) de la posición pos, con la velocidad que tiene la canción ahí |  |
+| [`music_tick()`](#music_tick) | Int | Los tics de la fila que suena que ya han sonado (0 a music_speed() - 1): la fracción de la fila |  |
+| [`music_speed()`](#music_speed) | Int | Los tics que dura una fila (la velocidad de la canción; 6 al empezar) |  |
+| [`music_bpm()`](#music_bpm) | Int | El tempo de la canción (125 al empezar: un tic en cada imagen en PAL) |  |
+| [`music_playing()`](#music_playing) | Bool | true mientras la música suena (ni parada ni en pausa) |  |
 | [`music_free()`](#music_free) | — | Libera los datos de la música |  |
 | [`tone_play(channel, freq, vol, duration)`](#tone_play) | — | Toca un tono senoidal: frecuencia en Hz, volumen 0-64, duración en milisegundos (vuelve en seguida) |  |
 
@@ -10223,9 +10311,9 @@ Ver también: [`music_play`](#music_play).
 - `pos`: la posición en la lista de orden de la canción, desde 0; fuera de ella, 0.
 
 Mientras suena, salta ahí, al principio del patrón: para cambiar de parte en un juego (la del menú, la del nivel).
-`music_play` empieza siempre desde el principio.
+`music_play` empieza siempre desde el principio. A una fila concreta: `music_seek`.
 
-Ver también: [`music_pos`](#music_pos), [`music_row`](#music_row).
+Ver también: [`music_pos`](#music_pos), [`music_row`](#music_row), [`music_seek`](#music_seek).
 
 <a id="music_pos"></a>
 
@@ -10242,6 +10330,54 @@ Ver también: [`music_row`](#music_row), [`music_position`](#music_position).
 Devuelve la fila del patrón que suena, de 0 a 63. Para sincronizar algo con la música.
 
 Ver también: [`music_pos`](#music_pos).
+
+<a id="music_seek"></a>
+
+### `music_seek(pos, row)`
+
+- `pos`: la posición en la lista de orden, desde 0; fuera de ella, 0.
+- `row`: la fila del patrón, de 0 a 63; fuera, 0.
+
+Mientras suena, salta a esa fila. La velocidad y el tempo son los que tiene la canción ahí: se leen sus efectos `F`
+desde el principio, siguiendo sus saltos (`B`, `D`) como al tocarla. Para ir a un momento de una demo mientras se
+prepara (posición × 64 + fila).
+
+Ver también: [`music_position`](#music_position), [`music_pos`](#music_pos), [`music_row`](#music_row).
+
+<a id="music_tick"></a>
+
+### `music_tick()` → `Int`
+
+Devuelve cuántos tics de la fila que suena ya han sonado, de 0 a `music_speed() - 1`. `music_tick()` dividido por
+`music_speed()` es la parte de la fila que ya pasó: para mover algo suave entre una fila y la siguiente. Un tic es
+una imagen con el tempo 125 (en PAL).
+
+Ver también: [`music_speed`](#music_speed), [`music_row`](#music_row), [`music_bpm`](#music_bpm).
+
+<a id="music_speed"></a>
+
+### `music_speed()` → `Int`
+
+Devuelve los tics que dura una fila: la velocidad de la canción (sus efectos `F` menores de 32), 6 al empezar.
+
+Ver también: [`music_tick`](#music_tick), [`music_bpm`](#music_bpm).
+
+<a id="music_bpm"></a>
+
+### `music_bpm()` → `Int`
+
+Devuelve el tempo de la canción (sus efectos `F` desde 32), 125 al empezar. Con 125 hay un tic en cada imagen en
+PAL; con otro, `bpm / 125` tics por imagen.
+
+Ver también: [`music_speed`](#music_speed), [`music_tick`](#music_tick).
+
+<a id="music_playing"></a>
+
+### `music_playing()` → `Bool`
+
+Devuelve `true` mientras la música suena: tras `music_play` y sin `music_stop` ni `music_pause`.
+
+Ver también: [`music_play`](#music_play), [`music_pause`](#music_pause).
 
 <a id="music_free"></a>
 
@@ -11537,7 +11673,7 @@ end
 | [`mui_menu_radio(title, key, id, checked)`](#mui_menu_radio) | Int (dirección) | Una opción de menú de un grupo: las seguidas (sin nada entre medias) son un grupo, y elegir una la marca y desmarca las otras; mui_wait_event da id; mui_get_value / mui_set_value leen y ponen la marca |  |
 | [`mui_submenu_begin(title)`](#mui_submenu_begin) | Int (dirección) | Empieza un submenú en el menú que se está haciendo (un nivel): sus opciones van dentro hasta mui_submenu_end |  |
 | [`mui_submenu_end()`](#mui_submenu_end) | — | Acaba el submenú |  |
-| [`mui_menu_separator()`](#mui_menu_separator) | — | Una raya de separación en el menú |  |
+| [`mui_menu_separator()`](#mui_menu_separator) | Int (dirección) | Una raya de separación en el menú; la devuelve (para mui_menu_remove) |  |
 | [`mui_context_menu_begin(title)`](#mui_context_menu_begin) | Int (dirección) | Empieza un menú contextual (en cualquier sitio, no solo en una ventana): sus opciones como en un menú (mui_menu_item, mui_menu_check, mui_submenu_begin...) hasta mui_menu_end; se da a un objeto con mui_set_context_menu (Lorraine D15) |  |
 | [`mui_set_context_menu(object, menu)`](#mui_set_context_menu) | — | El botón derecho sobre el objeto abre ese menú contextual (0: ninguno); sus opciones dan sus eventos; en un lienzo, mui_canvas_mouse_x/_y dicen dónde se pulsó y mui_canvas_button es 2 |  |
 | [`mui_menu_end()`](#mui_menu_end) | — | Acaba el menú |  |
@@ -11573,6 +11709,7 @@ end
 | [`mui_wait_event_signals(mask)`](#mui_wait_event_signals) | Int | Como mui_wait_event, pero también da 0 cuando llega una de las señales de mask (sockets...); mui_signals dice cuál |  |
 | [`mui_signals()`](#mui_signals) | Int | Las señales de la máscara que despertaron al último mui_wait_event_signals |  |
 | [`mui_timer(ms, id)`](#mui_timer) | — | Dentro de ms milisegundos mui_wait_event da id, una vez (otra: llamarla otra vez; 0 la cancela) |  |
+| [`mui_post_event(id)`](#mui_post_event) | — | Un evento para el propio programa: mui_wait_event da id después de los que ya esperaban |  |
 | [`mui_image(file)`](#mui_image) | Int (dirección) | Una imagen de un fichero con los datatypes (ILBM; PNG, JPEG, GIF si están sus datatypes); mui_set_text cambia el fichero |  |
 | [`mui_image_button(file)`](#mui_image_button) | Int (dirección) | Un botón con una imagen (un icono de barra de herramientas; ILBM, o lo que lean los datatypes): mui_on_press como un botón, mui_set_text cambia la imagen |  |
 | [`mui_image_toggle(file, group, selected)`](#mui_image_toggle) | Int (dirección) | Un botón con imagen que se queda pulsado (negrita, cursiva): valor 1/0 con mui_get_value / mui_set_value, mui_on_change cuando cambia; group > 0: pulsar uno suelta los demás de ese grupo (alineación), y mui_on_change solo salta en el pulsado |  |
@@ -12367,11 +12504,11 @@ Ver también: [`mui_submenu_begin`](#mui_submenu_begin).
 
 <a id="mui_menu_separator"></a>
 
-### `mui_menu_separator()`
+### `mui_menu_separator()` → `Int (dirección)`
 
-Una raya entre opciones del menú.
+Una raya entre opciones del menú. Devuelve la raya: `mui_menu_remove` la quita.
 
-Ver también: [`mui_menu_item`](#mui_menu_item).
+Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_remove`](#mui_menu_remove).
 
 <a id="mui_context_menu_begin"></a>
 
@@ -12674,7 +12811,8 @@ Ver también: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#
 
 `mui_wait_event` devuelve `id` mientras se arrastra (se pulsa en la zona y se mueve con el botón pulsado) y al
 soltar. `mui_canvas_drag` dice cuál de los dos y `mui_canvas_mouse_x`, `_y` dónde, aunque sea fuera de la zona. Se
-llama antes de abrir la ventana.
+llama antes de abrir la ventana. Lo que llega mientras el programa está ocupado (dibujando entero al pulsar) se junta
+en un evento, con el estado y la posición de ahora: si ya se soltó, uno solo de soltar.
 
 Ver también: [`mui_canvas_drag`](#mui_canvas_drag).
 
@@ -12761,7 +12899,19 @@ Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
 `mui_wait_event` devolverá `id` una vez pasado ese tiempo. Para que se repita, se vuelve a llamar al recibirlo.
 
-Ver también: [`mui_wait_event`](#mui_wait_event).
+Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_post_event`](#mui_post_event).
+
+<a id="mui_post_event"></a>
+
+### `mui_post_event(id)`
+
+- `id`: el número de evento, mayor que 0.
+
+`mui_wait_event` devolverá `id` después de los eventos que ya esperaban (MUI los guarda en orden), sin esperar a
+nada. Para avisarse de algo desde otra parte del programa (una orden ARexx que pide salir) sin gastar el único
+`mui_timer`.
+
+Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_timer`](#mui_timer).
 
 <a id="mui_image"></a>
 

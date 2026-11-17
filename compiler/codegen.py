@@ -22,7 +22,7 @@ from compiler.ast_nodes import (AmigaCast, AmigaStructDef, InExpr, InRangeExpr,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type
+from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type, memo_pred as _memo_pred
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -7232,6 +7232,28 @@ static STRPTR _dash_env_get(STRPTR name) {
         size *= 8;
     }
     if (n < 0) buf[0] = 0;
+    r = _dash_str_dup(buf, TRUE);
+    FreeVec(buf);
+    return r;
+}
+
+/* The whole variable, all its lines (env_get stops at the first line end; lo pidió Forja), without the line end of
+   the last one */
+static STRPTR _dash_env_get_text(STRPTR name) {
+    LONG size = 1024, n;
+    STRPTR buf, r;
+    if (!name || !*name) return _dash_str_dup((STRPTR)"", TRUE);
+    for (;;) {
+        if (!(buf = (STRPTR)AllocVec(size, MEMF_ANY))) return _dash_str_dup((STRPTR)"", TRUE);
+        n = GetVar(name, buf, size, GVF_BINARY_VAR);
+        if (n < size - 1 || size >= 4194304) break;
+        FreeVec(buf);          /* it may not have fitted */
+        size *= 8;
+    }
+    if (n < 0) n = 0;
+    if (n > size - 1) n = size - 1;
+    if (n > 0 && buf[n - 1] == '\\n') n--;
+    buf[n] = 0;
     r = _dash_str_dup(buf, TRUE);
     FreeVec(buf);
     return r;
@@ -16401,6 +16423,78 @@ static void _dash_bitmaps_cleanup(void) {
 
 """
 
+    # The beam and the frames, for demos (lo pidió Forja): the line the beam draws, VBlanks counted by an interrupt
+    # server (put in at the first vblank_count, taken away at exit) and the lines of a frame
+    BEAM_RUNTIME = """\
+/* Dash beam */
+#include <exec/interrupts.h>
+#include <hardware/intbits.h>
+#include <graphics/gfxbase.h>
+#include <graphics/monitor.h>
+
+/* The line the beam is drawing (0 at the top of the frame; up to 312 on PAL, 262 on NTSC). VPOSR (line bit 8, and
+   9 and 10 on ECS) and VHPOSR (bits 0-7) are read until VPOSR is the same before and after: never half of one line
+   and half of the next */
+static LONG _dash_beam_line(void) {
+    volatile UWORD *vposr = (volatile UWORD *)0xDFF004, *vhposr = (volatile UWORD *)0xDFF006;
+    UWORD hi, lo;
+    do {
+        hi = *vposr;
+        lo = *vhposr;
+    } while (hi != *vposr);
+    return ((LONG)(hi & 7) << 8) | (lo >> 8);
+}
+
+/* The lines of a frame of the display: 313 on PAL, 263 on NTSC (graphics' current monitor; else the machine's) */
+static LONG _dash_beam_lines(void) {
+    struct MonitorSpec *m = GfxBase->current_monitor;
+    LONG rows = m ? m->total_rows : 0;
+    if (rows < 200 || rows > 1100) rows = (GfxBase->DisplayFlags & PAL) ? STANDARD_PAL_ROWS : STANDARD_NTSC_ROWS;
+    return rows + 1;
+}
+
+/* true on a PAL Amiga (50 frames a second), false on NTSC (60) */
+static BOOL _dash_video_pal(void) {
+    return (GfxBase->DisplayFlags & PAL) != 0;
+}
+
+static volatile ULONG _dash_vbl_count = 0;
+static struct Interrupt _dash_vbl_int;
+static char _dash_vbl_name[] = "dash vblank_count";   /* (an array: in the runtime of ./dash, a literal would go
+                                                         with the strings that every program takes) */
+static BOOL _dash_vbl_on = FALSE;
+
+static LONG _dash_vbl_server(void) {
+    _dash_vbl_count++;
+    return 0;
+}
+
+static void _dash_vbl_cleanup(void) {
+    if (_dash_vbl_on) {
+        RemIntServer(INTB_VERTB, &_dash_vbl_int);
+        _dash_vbl_on = FALSE;
+    }
+}
+
+/* VBlanks (frames shown) since the first call, which returns 0: an interrupt server counts them (frames lost by a
+   slow loop show up here, not in a time) */
+static LONG _dash_vblank_count(void) {
+    if (!_dash_vbl_on) {
+        _dash_vbl_int.is_Node.ln_Type = NT_INTERRUPT;
+        _dash_vbl_int.is_Node.ln_Pri = 0;
+        _dash_vbl_int.is_Node.ln_Name = _dash_vbl_name;
+        _dash_vbl_int.is_Code = (void (*)())_dash_vbl_server;
+        _dash_vbl_int.is_Data = NULL;
+        _dash_vbl_count = 0;
+        AddIntServer(INTB_VERTB, &_dash_vbl_int);
+        _dash_vbl_on = TRUE;
+        _dash_atexit(_dash_vbl_cleanup);
+    }
+    return (LONG)_dash_vbl_count;
+}
+
+"""
+
     # A user copper list (UCopList) on the screen's ViewPort, the system-friendly
     # way: graphics merges it into the display; removed (and freed) at exit.
     COPPER_RUNTIME = """\
@@ -16409,6 +16503,10 @@ static void _dash_bitmaps_cleanup(void) {
 #include <hardware/custom.h>
 static struct UCopList *_dash_ucl = NULL;
 static struct ViewPort *_dash_ucl_vp = NULL;   /* where it is installed */
+/* copper_create with a list on screen (lo pidió Forja, copper en vivo): that one stays until copper_install puts
+   the new one in its place, with no frame without a list */
+static struct UCopList *_dash_ucl_old = NULL;
+static struct ViewPort *_dash_ucl_old_vp = NULL;
 
 static struct ViewPort *_dash_copper_vp(void) {
     if (_dash_screen) return &_dash_screen->ViewPort;
@@ -16416,7 +16514,27 @@ static struct ViewPort *_dash_copper_vp(void) {
     return NULL;
 }
 
+static void _dash_ucl_dispose(struct UCopList *u) {
+    if (u->FirstCopList) FreeCopList(u->FirstCopList);
+    FreeMem(u, sizeof(struct UCopList));
+}
+
+/* the list that was on screen, once the new one is there (or to take it away) */
+static void _dash_copper_drop_old(void) {
+    if (!_dash_ucl_old) return;
+    if (_dash_ucl_old_vp->UCopIns == _dash_ucl_old) {
+        Forbid();
+        _dash_ucl_old_vp->UCopIns = NULL;
+        Permit();
+        RethinkDisplay();
+    }
+    _dash_ucl_dispose(_dash_ucl_old);
+    _dash_ucl_old = NULL;
+    _dash_ucl_old_vp = NULL;
+}
+
 static void _dash_copper_free(void) {
+    _dash_copper_drop_old();
     if (!_dash_ucl) return;
     if (_dash_ucl_vp) {
         Forbid();
@@ -16425,13 +16543,22 @@ static void _dash_copper_free(void) {
         RethinkDisplay();
         _dash_ucl_vp = NULL;
     }
-    if (_dash_ucl->FirstCopList) FreeCopList(_dash_ucl->FirstCopList);
-    FreeMem(_dash_ucl, sizeof(struct UCopList));
+    _dash_ucl_dispose(_dash_ucl);
     _dash_ucl = NULL;
 }
 
 static BOOL _dash_copper_create(LONG size) {
-    _dash_copper_free();
+    if (_dash_ucl && _dash_ucl_vp && !_dash_ucl_old) {
+        _dash_ucl_old = _dash_ucl;          /* on screen until copper_install */
+        _dash_ucl_old_vp = _dash_ucl_vp;
+        _dash_ucl = NULL;
+        _dash_ucl_vp = NULL;
+    } else if (_dash_ucl && !_dash_ucl_vp) {
+        _dash_ucl_dispose(_dash_ucl);       /* one being built, never shown */
+        _dash_ucl = NULL;
+    } else {
+        _dash_copper_free();
+    }
     _dash_ucl = (struct UCopList *)AllocMem(sizeof(struct UCopList), MEMF_PUBLIC | MEMF_CLEAR);
     if (!_dash_ucl) return FALSE;
     if (!UCopperListInit(_dash_ucl, size > 0 ? size : 64)) {
@@ -16472,6 +16599,76 @@ static void _dash_copper_install(void) {
     vp->UCopIns = _dash_ucl;
     Permit();
     _dash_ucl_vp = vp;
+    RethinkDisplay();
+    _dash_copper_drop_old();
+}
+
+/* Instruction i (from 0, in the order they were added: copper_wait, copper_move, copper_color, copper_end) of the list
+   being built or installed; NULL if there is no such one. *count: how many there are. */
+static struct CopIns *_dash_copper_ins(LONG i, LONG *count) {
+    struct CopList *cl;
+    LONG n = 0, k;
+    struct CopIns *r = NULL;
+    if (_dash_ucl)
+        for (cl = _dash_ucl->FirstCopList; cl; cl = cl->Next)
+            for (k = 0; k < cl->Count; k++) {
+                if ((cl->CopIns[k].OpCode & 3) == CPRNXTBUF) continue;
+                if (n++ == i) r = &cl->CopIns[k];
+            }
+    if (count) *count = n;
+    return r;
+}
+
+/* How many instructions the list has (the number copper_set gives the next one) */
+static LONG _dash_copper_count(void) {
+    LONG n;
+    _dash_copper_ins(-1, &n);
+    return n;
+}
+
+/* The value word of the MOVE reg, old in a copper list of graphics (LOFlist, SHFlist), if it is the only one there;
+   NULL if there is none, -1 if there are more */
+static UWORD *_dash_copper_hw(UWORD *c, UWORD reg, UWORD old) {
+    UWORD *hit = NULL;
+    LONG n;
+    if (!c) return NULL;
+    for (n = 0; n < 8192 && !(c[0] == 0xFFFF && c[1] == 0xFFFE); n++, c += 2)
+        if (c[0] == reg && c[1] == old) {
+            if (hit) return (UWORD *)-1;
+            hit = c + 1;
+        }
+    return hit;
+}
+
+/* Copper en vivo (lo pidió Forja): instruction i takes value (a move or copper_color: the register's value; a wait:
+   the line). With the list installed it shows at once. A move whose old value is only once in the list the copper
+   runs is changed there too (as fast as a poke); else, and for a wait, the display is made again (RethinkDisplay:
+   some 20 ms on an A1200, 60 on an A500) */
+static void _dash_copper_set(LONG i, LONG value) {
+    struct CopIns *c = i >= 0 ? _dash_copper_ins(i, NULL) : NULL;
+    if (!c) return;
+    if ((c->OpCode & 3) == COPPER_MOVE) {
+        UWORD reg = c->DESTADDR & 0x1FE, old = c->DESTDATA, *lof, *shf;
+        BOOL lace, done = FALSE;
+        c->DESTDATA = (WORD)value;
+        if (!_dash_ucl_vp) return;
+        Forbid();     /* (graphics makes its lists again in other tasks: not meanwhile) */
+        lace = GfxBase->ActiView && (GfxBase->ActiView->Modes & LACE);
+        lof = _dash_copper_hw(GfxBase->LOFlist, reg, old);
+        shf = lace ? _dash_copper_hw(GfxBase->SHFlist, reg, old) : NULL;
+        if (lof && lof != (UWORD *)-1 && (!lace || (shf && shf != (UWORD *)-1))) {
+            *lof = (UWORD)value;
+            if (shf) *shf = (UWORD)value;
+            done = TRUE;
+        }
+        Permit();
+        if (done) return;
+    } else if ((c->OpCode & 3) == COPPER_WAIT) {
+        c->VWAITPOS = (WORD)value;
+        if (!_dash_ucl_vp) return;
+    } else {
+        return;
+    }
     RethinkDisplay();
 }
 
@@ -17028,6 +17225,54 @@ static void _dash_music_volume(LONG vol) {
 
 static LONG _dash_music_pos(void) { return _dash_mod_pos; }
 static LONG _dash_music_row(void) { return _dash_mod_row; }
+
+/* Lo que pidió Forja para sincronizar demos: saltar a una fila, la fracción de la fila que ya sonó y si suena */
+
+/* Jumps to row (0-63) of the song position pos. The speed and tempo there are the song's: its Fxx from the start,
+   following its Bxx and Dxx as it plays (128 * 64 rows at most; if it never gets there, they stay as they are) */
+static void _dash_music_seek(LONG pos, LONG row) {
+    LONG p = 0, r = 0, speed = 6, bpm = 125, n, c;
+    if (!_dash_mod) return;
+    if (pos < 0 || pos >= _dash_mod_songlen) pos = 0;
+    if (row < 0 || row > 63) row = 0;
+    for (n = 0; n < 128 * 64 && !(p == pos && r == row); n++) {
+        UBYTE *q = _dash_mod_pat + (ULONG)_dash_mod_order[p] * 1024 + r * 16;
+        LONG jump = -1, brk = -1;
+        for (c = 0; c < 4; c++, q += 4) {
+            LONG fx = q[2] & 0x0F, prm = q[3];
+            if (fx == 0xF && prm) { if (prm < 32) speed = prm; else bpm = prm; }
+            else if (fx == 0xB) jump = prm;
+            else if (fx == 0xD) brk = (prm >> 4) * 10 + (prm & 0x0F);
+        }
+        if (jump >= 0 || brk >= 0) {
+            p = jump >= 0 ? jump : p + 1;
+            r = brk >= 0 && brk < 64 ? brk : 0;
+        } else if (++r >= 64) {
+            r = 0;
+            p++;
+        }
+        if (p >= _dash_mod_songlen) p = 0;
+    }
+    Disable();
+    if (p == pos && r == row) {
+        _dash_mod_speed = speed;
+        _dash_mod_bpm = bpm;
+    }
+    _dash_mod_pos = pos;
+    _dash_mod_row = row;
+    _dash_mod_tick = 0;
+    _dash_mod_jump = _dash_mod_break = -1;
+    Enable();
+}
+
+/* The ticks of the row that have already played (0 .. music_speed() - 1): with music_speed, the fraction of the row */
+static LONG _dash_music_tick(void) { return _dash_mod_tick; }
+/* Ticks a row lasts (the song's Fxx below 32; 6 at the start) */
+static LONG _dash_music_speed(void) { return _dash_mod_speed; }
+/* The tempo (Fxx from 32; 125 at the start: one tick each VBlank, 50 a second on PAL) */
+static LONG _dash_music_bpm(void) { return _dash_mod_bpm; }
+/* Playing now (not stopped, not paused) */
+static BOOL _dash_music_playing(void) { return _dash_mod_playing && !_dash_mod_paused; }
 
 """
 
@@ -23255,8 +23500,9 @@ static APTR _dash_mui_menu_item(STRPTR title, STRPTR key, LONG id) {
     return item;
 }
 
-static void _dash_mui_menu_separator(void) {
-    _dash_mui_menu_add((STRPTR)NM_BARLABEL, NULL);
+/* (its object: mui_menu_remove takes it away, lo pidió Forja) */
+static APTR _dash_mui_menu_separator(void) {
+    return _dash_mui_menu_add((STRPTR)NM_BARLABEL, NULL);
 }
 
 /* An item with a check mark (Lorraine D13): choosing it toggles the mark and mui_wait_event returns id;
@@ -24566,6 +24812,12 @@ static void _dash_mui_press(APTR obj) {
             _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, _dash_mui_press_id[i]);
 }
 
+/* An event for the program itself (lo pidió Forja): mui_wait_event gives id after the ones already waiting (MUI keeps
+   them in order) */
+static void _dash_mui_post_event(LONG id) {
+    if (_dash_mui_app && id > 0) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, id);
+}
+
 static void _dash_mui_on_close(APTR win, LONG id) {
     if (!win || !_dash_mui_app) return;
     _DASH_MUI_DO(win, MUIM_KillNotify, MUIA_Window_CloseRequest);
@@ -25802,6 +26054,7 @@ _RUNTIME_FLAGS = [
     ("WINMGR_RUNTIME", "uses_winmgr"),
     ("BITMAP_RUNTIME", "uses_bitmaps"),
     ("COPPER_RUNTIME", "uses_copper"),
+    ("BEAM_RUNTIME", "uses_beam"),          # beam_line, vblank_count (lo pidió Forja)
     ("SOUND_RUNTIME", "uses_sound"),
     ("MUSIC_RUNTIME", "uses_music"),
     ("DIR_RUNTIME", "uses_dirs"),
@@ -26208,6 +26461,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_gadget_keys: bool = False  # a button or checkbox label with "_": its key presses it
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
         self.uses_copper: bool = False   # copper_create()...
+        self.uses_beam: bool = False     # beam_line, vblank_count (BEAM_RUNTIME, Forja)
         self.uses_sound: bool = False    # sound_*, tone_play
         self.uses_music: bool = False    # music_* (MOD player; needs the sound runtime)
         self.uses_dirs: bool = False    # dir_change() / dir_current()
@@ -26568,6 +26822,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BITMAP_RUNTIME)
         if self.uses_copper:
             parts.append(CTemplates.COPPER_RUNTIME)
+        if self.uses_beam:
+            parts.append(CTemplates.BEAM_RUNTIME)
         if self.uses_sound:
             parts.append("static ULONG _dash_iff_u32(UBYTE *p);\n")
             parts.append(CTemplates.SOUND_RUNTIME)
@@ -27186,7 +27442,7 @@ static _DashP _dash_mui_menu_begin(STRPTR title) { return dash_ui_menu_begin(_DA
 static _DashP _dash_mui_menu_item(STRPTR title, STRPTR key, LONG id) {
     return dash_ui_menu_item(_DASH_UI_S(title), _DASH_UI_S(key), id);
 }
-static void _dash_mui_menu_separator(void) { dash_ui_menu_separator(); }
+static _DashP _dash_mui_menu_separator(void) { dash_ui_menu_separator(); return 0; }
 static void _dash_mui_menu_end(void) { dash_ui_menu_end(); }
 /* (S10, dashos_menus_v1 of DashOS: a check, an option, a submenu; mui_get_value / mui_set_value on them, the mark.
    A kit-c from before them: plain items, and the submenu's items in its menu) */
@@ -29663,6 +29919,13 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_expression(self, node: ASTNode) -> str:
         """Generate code for an expression."""
+        if self.__dict__.get("_pred_memo") is None:
+            # the answers of _memo_pred last the whole expression (each level of a + b + c... asks again)
+            self._pred_memo = {}
+            try:
+                return self._generate_expression(node)
+            finally:
+                self._pred_memo = None
         if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":
             return f"_dasm{node.arguments[0].value}_o{node.arguments[1].value}"
         amiga = self._amiga_expr(node)
@@ -30096,7 +30359,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # TEXT_RUNTIME builds on the string runtimes
         if self.uses_music:
             self.uses_sound = True   # channels are allocated through audio.device
-        if self.uses_bitmaps or self.uses_copper or self.uses_sound:
+        if self.uses_bitmaps or self.uses_copper or self.uses_sound or self.uses_beam:
             self.needs_gfx = True   # sound: GfxBase->DisplayFlags (PAL/NTSC clock)
         # Gadget handles live on GadTools (opened by the GadTools main template)
         if self.uses_gadgets:
@@ -30572,6 +30835,7 @@ static {ret_type} {method_name}({params_str}) {{
                 return True
         return False
 
+    @_memo_pred
     def _is_string_expr(self, node: ASTNode) -> bool:
         """Check if an expression evaluates to a string."""
         if isinstance(node, StringLiteral):
@@ -31062,6 +31326,7 @@ static {ret_type} {method_name}({params_str}) {{
             return bool(field and field.field_type == "Bool")
         return False
 
+    @_memo_pred
     def _is_fixed_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Fixed (16.16 in a LONG)."""
         if isinstance(node, VarRef):
@@ -31210,6 +31475,7 @@ static {ret_type} {method_name}({params_str}) {{
         finally:
             self._dbl_ctx -= 1
 
+    @_memo_pred
     def _is_double_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Double (C double, Lorraine D1)."""
         if isinstance(node, VarRef):
@@ -31242,6 +31508,7 @@ static {ret_type} {method_name}({params_str}) {{
             return bool(method and self._method_c_type(method) == "double")
         return False
 
+    @_memo_pred
     def _is_float_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Float (C float); a Float with a Double is a Double."""
         if isinstance(node, FloatLiteral):

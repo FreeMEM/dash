@@ -120,6 +120,7 @@ for it).
 | `mui_poll_event() -> Int` | The same without waiting: 0 if there is nothing. |
 | `mui_wait_event_signals(mascara) -> Int` | Also waits for other signals: `net_signal()` (network), `task_signal()` (tasks), `file_notify_signal()` (watched files). Returns 0 when one of them arrives; `mui_signals()` tells which. |
 | `mui_timer(ms, id)` | In `ms` milliseconds `mui_wait_event` returns `id`, once (for another one, call it again; 0 cancels it). |
+| `mui_post_event(id)` | An event for the program itself: `mui_wait_event` returns `id` after the ones already waiting (MUI keeps them in order). |
 | `mui_press(obj)` | Fires that object's `mui_on_press` event as if it had been pressed (shortcuts, tests). |
 
 Event numbers belong to the program (`const ID_ATRAS = 1`) and are greater than 0.

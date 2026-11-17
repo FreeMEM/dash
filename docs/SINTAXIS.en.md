@@ -93,6 +93,7 @@ end
 
 e = Enemy(10, 50)
 e.move(5)
+boss().x = 0                   # the field of what a function returns (-> Enemy)
 
 enum State
     IDLE = 0

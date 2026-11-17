@@ -1,0 +1,104 @@
+# The same as test_mui_canvas_drag_lento.dash, built by ./dash straight to hunk.
+# dash-direct:
+# Un arrastre sobre un lienzo con búfer que se redibuja entero (y despacio) al pulsar (como la vista del copper de la
+# extensión Demos de Forja: lo pidió Forja, que no veía llegar el arrastre). Mientras dibuja, el arrastre de input_drag
+# ya ha acabado: los movimientos y el soltar llegan después, juntos en un suceso (mui_canvas_drag 2, donde se soltó).
+# Forja leía el suceso antes de que el programa acabara de dibujar; aquí se espera a que llegue.
+# emu-needs: muimaster.library
+# expect-out: ventana: true
+# expect-out: clic 1 dibujos 1
+# expect-out: soltado en 0 70
+# expect-out: fin
+
+const ID_RATON = 30
+const ID_ARRASTRE = 31
+
+var lento: Bool = false
+
+var dibujos: Int = 0
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    dibujos = dibujos + 1
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    if lento
+        t = time_ms()
+        i = 0
+        while time_ms() - t < 1500
+            gfx_pen(i % 4)
+            gfx_line(x, y + i % alto, x + ancho - 1, y + (i * 7) % alto)
+            i = i + 1
+        end
+    end
+end
+
+func objetivo()
+    if mui_app_begin("Objetivo", "DASHDRAGLENTO") == 0
+        return
+    end
+    win = mui_window_begin("Objetivo arrastre", 0)
+        lienzo = mui_canvas(240, 140)
+    mui_window_end()
+    mui_canvas_on_draw(lienzo, pinta)
+    mui_canvas_on_input(lienzo, ID_RATON)
+    mui_canvas_on_drag(lienzo, ID_ARRASTRE)
+    mui_canvas_take_keys(lienzo, true)
+    mui_canvas_buffered(lienzo, true)
+    mui_window_open(win)
+    dibujos = 0
+    clics = 0
+    x0 = 0
+    y0 = 0
+    linea = ""
+    mui_timer(30000, 99)
+    while linea == ""
+        ev = mui_wait_event()
+        if ev == -1 or ev == 99
+            linea = "sin soltar"
+        elif ev == ID_RATON and mui_canvas_button(lienzo) == 1
+            clics = clics + 1
+            x0 = mui_canvas_mouse_x(lienzo)
+            y0 = mui_canvas_mouse_y(lienzo)
+            lento = true
+            mui_canvas_redraw(lienzo)      # todo otra vez, despacio
+            lento = false
+        elif ev == ID_ARRASTRE and mui_canvas_drag(lienzo) == 2
+            linea = "soltado en #{mui_canvas_mouse_x(lienzo) - x0} #{mui_canvas_mouse_y(lienzo) - y0}"
+        end
+    end
+    mui_app_end()
+    file_write_text("RAM:arrastre.txt", "clic #{clics} dibujos #{dibujos}\n" + linea + "\nfin\n")
+end
+
+Main
+    if arg(0) == "objetivo"
+        objetivo()
+    else
+        file_delete("RAM:arrastre.txt")
+        run_program("\"" + program_path() + "\" objetivo")
+        vista = false
+        for i in (1..200)
+            if input_active_title() == "Objetivo arrastre"
+                vista = true
+                break
+            end
+            time_delay_ms(50)
+        end
+        Print "ventana: #{vista}"
+        time_delay_ms(300)
+        input_drag(60, 30, 60, 100)
+        r = ""
+        for i in (1..400)
+            if file_exists("RAM:arrastre.txt")
+                r = file_read_text("RAM:arrastre.txt")
+                if str_ends(r, "fin\n")
+                    break
+                end
+            end
+            time_delay_ms(50)
+        end
+        for l in str_split(str_trim(r), "\n")
+            Print l
+        end
+    end
+end

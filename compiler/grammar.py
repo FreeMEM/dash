@@ -101,6 +101,7 @@ dash_grammar_minimal = r"""
                 | self_member_assign
                 | member_assign
                 | indexed_member_assign
+                | call_member_assign
                 | var_assign
                 | local_var_decl
                 | if_stmt
@@ -125,6 +126,8 @@ dash_grammar_minimal = r"""
     // a field of a list element: l[0].x = 5, a.items[i].nombre = "b" (dashweb D4c)
     indexed_member_assign: ID ("." ID)* index_chain ("." ID)+ "=" expression
     self_member_assign: "self" ("." ID)+ "=" expression
+    // a field of what a function returns: f().x = 5, f(a).b.c = 5 (lo pidió Forja)
+    call_member_assign: function_call ("." ID)+ "=" expression
 
     // Return statement
     return_stmt: "return" expression?

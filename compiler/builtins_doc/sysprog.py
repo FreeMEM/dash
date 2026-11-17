@@ -175,7 +175,10 @@ start. When the program ends it waits for any still running.
                  ["run_capture"]),
     "env_get": _f("- `name`: el nombre: `\"Language\"`, `\"Forja/ejecutables\"`.\n\nDevuelve su valor, de la Shell del programa o de `ENV:`, hasta el primer fin de línea; `\"\"` si no existe.\n",
                   "- `name`: the name: `\"Language\"`, `\"Forja/ejecutables\"`.\n\nReturns its value, from the program's Shell or from `ENV:`, up to the first line end; `\"\"` if it does not exist.\n",
-                  ["env_set"]),
+                  ["env_set", "env_get_text"]),
+    "env_get_text": _f("- `name`: el nombre, como en `env_get`.\n\nDevuelve el valor entero, con todas sus líneas (sin el fin de línea de la última, el que deja `echo`); `\"\"` si no existe.\n",
+                       "- `name`: the name, as in `env_get`.\n\nReturns the whole value, with all its lines (without the line end of the last one, the one `echo` leaves); `\"\"` if it does not exist.\n",
+                       ["env_get", "env_set"]),
     "env_set": _f("""\
 - `name`: el nombre; con `/` va en un cajón de `ENV:`.
 - `value`: el valor.

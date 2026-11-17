@@ -27,7 +27,9 @@ bitmap con su máscara, y se puede dibujar en él con `bitmap_draw_to`.
 mapas de Forja o de la extensión. Se pinta con los fotogramas de un BOB.
 
 **El copper** (`copper_*`): una lista de instrucciones que cambian registros del chip de vídeo en una línea concreta
-de la pantalla, para degradados de fondo y otros efectos.
+de la pantalla, para degradados de fondo y otros efectos. `copper_set` cambia una instrucción de la lista ya
+instalada. Para demos: `beam_line` (la línea que dibuja el haz), `beam_lines` y `vblank_count` (las imágenes
+mostradas).
 
 **Bitmaps** (`bitmap_*`): imágenes fuera de pantalla, para cargar una imagen IFF, preparar algo sin que se vea y
 copiarlo de golpe.
@@ -58,7 +60,8 @@ on it with `bitmap_draw_to`.
 in Forja or the extension. It is painted with the frames of a BOB.
 
 **The copper** (`copper_*`): a list of instructions that change video chip registers at a given line of the
-screen, for background gradients and other effects.
+screen, for background gradients and other effects. `copper_set` changes an instruction of the list already
+installed. For demos: `beam_line` (the line the beam draws), `beam_lines` and `vblank_count` (the frames shown).
 
 **Bitmaps** (`bitmap_*`): off-screen pictures, to load an IFF picture, prepare something unseen and copy it in one
 go.

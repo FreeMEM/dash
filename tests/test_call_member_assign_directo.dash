@@ -1,0 +1,53 @@
+# The same as test_call_member_assign.dash, built by ./dash straight to hunk.
+# dash-direct: --memcheck
+# f().campo = x (lo pidió Forja): a field of what a function returns, also through more fields (f().a.b = x),
+# with Int, String and struct fields; a function that makes a new struct leaves nothing alive (memcheck).
+# memcheck
+# expect-out: 10 7 33
+# expect-out: nombre: Ana
+# expect-out: punto: 5 6
+# expect-out: nueva: 1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int = 0
+    y: Int = 0
+    nombre: String = ""
+end
+
+struct Caja
+    p: Punto = nil
+end
+
+var g: Punto = nil
+var c: Caja = nil
+
+func dame() -> Punto
+    return g
+end
+
+func la_caja() -> Caja
+    return c
+end
+
+func nueva() -> Caja
+    n = Caja()
+    n.p = Punto(1, 1)
+    return n
+end
+
+Main
+    g = Punto(1, 2)
+    c = Caja()
+    c.p = Punto(0, 0)
+    dame().x = 10
+    dame().y = dame().y + 5
+    la_caja().p.x = 33
+    Print "#{g.x} #{g.y} #{c.p.x}"
+    dame().nombre = "Ana"
+    Print "nombre: #{g.nombre}"
+    la_caja().p = Punto(5, 6)
+    Print "punto: #{c.p.x} #{c.p.y}"
+    nueva().p.x = 9
+    Print "nueva: #{nueva().p.x}"
+end

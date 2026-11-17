@@ -41,7 +41,12 @@ Forja 0.8. Todo lo que compilaba sigue compilando igual.
 - **Nuevo:** `asm func`, funciones enteras en ensamblador; `jsr` a funciones de Dash desde un bloque; secciones
   (`data`, `bss` y en memoria chip `data_c`, `bss_c`); `cnop`; la FPU (`--fpu`) y el resto del 68020; e
   interrupciones con `vblank_server`, `int_server_add` e `int_server_remove`, que se quitan solas al salir.
-  Ejemplo `examples/asm_copper.dash`. 1066 funciones.
+  Ejemplo `examples/asm_copper.dash`.
+- **Nuevo, para demos:** `music_seek(pos, fila)`, `music_tick`, `music_speed`, `music_bpm`, `music_playing`;
+  `beam_line`, `beam_lines`, `video_pal`, `vblank_count`; `copper_set` y `copper_count` para cambiar el copper ya
+  instalado. Y `mui_post_event`, `env_get_text`; `mui_menu_separator` devuelve su raya. 1079 funciones.
+- **Arreglo:** `--gcc` compila programas grandes como Forja (antes se quedaba sin recursión) y acepta
+  `f().campo = x`.
 
 - **Mejora:** compilar Forja entera pasa de 18 MB a 7,6 MB de memoria: ya cabe en un A1200 con 8 MB de fast. El
   código generado no cambia.

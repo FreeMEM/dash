@@ -40,7 +40,11 @@ Everything that compiled still compiles the same.
 - **New:** `asm func`, whole functions in assembler; `jsr` to Dash functions from a block; sections (`data`, `bss`
   and in chip memory `data_c`, `bss_c`); `cnop`; the FPU (`--fpu`) and the rest of the 68020; and interrupts with
   `vblank_server`, `int_server_add` and `int_server_remove`, removed on exit by themselves. Example
-  `examples/asm_copper.dash`. 1066 functions.
+  `examples/asm_copper.dash`.
+- **New, for demos:** `music_seek(pos, row)`, `music_tick`, `music_speed`, `music_bpm`, `music_playing`;
+  `beam_line`, `beam_lines`, `video_pal`, `vblank_count`; `copper_set` and `copper_count` to change the installed
+  copper. Also `mui_post_event`, `env_get_text`; `mui_menu_separator` returns its bar. 1079 functions.
+- **Fix:** `--gcc` compiles large programs like Forja (it ran out of recursion before) and accepts `f().field = x`.
 
 - **Improvement:** compiling the whole of Forja drops from 18 MB to 7.6 MB of memory: it now fits on an A1200 with
   8 MB of fast. The generated code does not change.

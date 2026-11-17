@@ -16,6 +16,8 @@ acabar el programa.
 
 **Música.** `music_load` carga un módulo de ProTracker de 4 canales; mientras suena, los canales son suyos: un
 `sound_*` a la vez se pisaría con ella. Los efectos más usados están (los de la tabla del manual, sección 15).
+Para sincronizar una demo: `music_pos`, `music_row`, `music_tick` y `music_speed` dicen por dónde va, y `music_seek`
+salta a una fila.
 """,
         "en": """\
 Sound with the Amiga's four channels (Paula), through the system's `audio.device`: effects (`sound_*`), ProTracker
@@ -31,6 +33,8 @@ asynchronous: `sound_play` returns at once and the sound goes on while the progr
 
 **Music.** `music_load` loads a 4-channel ProTracker module; while it plays, the channels are its own: a `sound_*`
 at the same time would clash with it. The most used effects are there (the list in the manual, section 15).
+To sync a demo: `music_pos`, `music_row`, `music_tick` and `music_speed` tell where it is, and `music_seek` jumps to
+a row.
 """,
         "example": "tests/test_doc_audio.dash",
     },
@@ -137,17 +141,54 @@ if it cannot be read, is not that kind or does not fit.
 - `pos`: la posición en la lista de orden de la canción, desde 0; fuera de ella, 0.
 
 Mientras suena, salta ahí, al principio del patrón: para cambiar de parte en un juego (la del menú, la del nivel).
-`music_play` empieza siempre desde el principio.
+`music_play` empieza siempre desde el principio. A una fila concreta: `music_seek`.
 """, """\
 - `pos`: the position in the song's order list, from 0; outside it, 0.
 
 While it plays, jumps there, to the start of the pattern: to switch sections in a game (the menu's, the level's).
-`music_play` always starts from the beginning.
-""", ["music_pos", "music_row"]),
+`music_play` always starts from the beginning. To a given row: `music_seek`.
+""", ["music_pos", "music_row", "music_seek"]),
     "music_pos": _f("Devuelve la posición de la lista de orden que suena ahora.\n",
                     "Returns the position in the order list playing now.\n", ["music_row", "music_position"]),
     "music_row": _f("Devuelve la fila del patrón que suena, de 0 a 63. Para sincronizar algo con la música.\n",
                     "Returns the pattern row playing, 0 to 63. To sync something with the music.\n", ["music_pos"]),
+    "music_seek": _f("""\
+- `pos`: la posición en la lista de orden, desde 0; fuera de ella, 0.
+- `row`: la fila del patrón, de 0 a 63; fuera, 0.
+
+Mientras suena, salta a esa fila. La velocidad y el tempo son los que tiene la canción ahí: se leen sus efectos `F`
+desde el principio, siguiendo sus saltos (`B`, `D`) como al tocarla. Para ir a un momento de una demo mientras se
+prepara (posición × 64 + fila).
+""", """\
+- `pos`: the position in the order list, from 0; outside it, 0.
+- `row`: the pattern row, 0 to 63; outside, 0.
+
+While it plays, jumps to that row. The speed and tempo are the ones the song has there: its `F` effects are read
+from the start, following its jumps (`B`, `D`) as when it plays. To go to a moment of a demo while making it
+(position × 64 + row).
+""", ["music_position", "music_pos", "music_row"]),
+    "music_tick": _f("""\
+Devuelve cuántos tics de la fila que suena ya han sonado, de 0 a `music_speed() - 1`. `music_tick()` dividido por
+`music_speed()` es la parte de la fila que ya pasó: para mover algo suave entre una fila y la siguiente. Un tic es
+una imagen con el tempo 125 (en PAL).
+""", """\
+Returns how many ticks of the playing row have already played, 0 to `music_speed() - 1`. `music_tick()` divided by
+`music_speed()` is the part of the row already gone: to move something smoothly from one row to the next. A tick is
+a frame at tempo 125 (on PAL).
+""", ["music_speed", "music_row", "music_bpm"]),
+    "music_speed": _f("Devuelve los tics que dura una fila: la velocidad de la canción (sus efectos `F` menores de 32), 6 al empezar.\n",
+                      "Returns the ticks a row lasts: the song's speed (its `F` effects below 32), 6 at the start.\n",
+                      ["music_tick", "music_bpm"]),
+    "music_bpm": _f("""\
+Devuelve el tempo de la canción (sus efectos `F` desde 32), 125 al empezar. Con 125 hay un tic en cada imagen en
+PAL; con otro, `bpm / 125` tics por imagen.
+""", """\
+Returns the song's tempo (its `F` effects from 32), 125 at the start. At 125 there is one tick each frame on PAL;
+otherwise, `bpm / 125` ticks per frame.
+""", ["music_speed", "music_tick"]),
+    "music_playing": _f("Devuelve `true` mientras la música suena: tras `music_play` y sin `music_stop` ni `music_pause`.\n",
+                        "Returns `true` while the music plays: after `music_play` and with no `music_stop` or `music_pause`.\n",
+                        ["music_play", "music_pause"]),
     "music_free": _f("Para la música si sonaba y libera su memoria.\n", "Stops the music if it was playing and frees its memory.\n",
                      ["music_load"]),
     "tone_play": _f(_CH_ES.replace("`channel`", "`channel`") + """\
