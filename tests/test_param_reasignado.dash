@@ -1,0 +1,20 @@
+# Parámetros que la función cambia (lo encontró Forja), por ./dash --gcc. El mismo programa directo a hunk:
+# test_param_reasignado_directo.dash.
+# expect-out: 16732240
+# expect-out: 7895176
+# expect-out: 30405
+# expect-out: 90807
+# expect-out: 50607
+# expect-out: 54321
+# expect-out: 50 90
+# expect-out: 10 10
+# expect-out: hola 28
+# expect-out: nada 28
+# expect-out: 328
+# expect-out: 102
+# expect-out: 12345
+import "lib/param_reasignado.dash"
+
+Main
+    param_reasignado()
+end

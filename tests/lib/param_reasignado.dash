@@ -1,0 +1,140 @@
+# Parámetros que la función cambia (lo encontró Forja). En el directo, una función sin marco (todas sus variables en
+# registros) lee los parámetros que no caben en registros de la pila, sobre sp; guardar en uno de ellos un valor
+# calculado lo mandaba a otra dirección y el parámetro seguía con el de antes. Lo usan test_param_reasignado.dash
+# (por C) y test_param_reasignado_directo.dash (directo).
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+# el caso de Forja: r, g y b de un texto "r g b" dentro de un if
+func _pr_color(v: String, r: Int, g: Int, b: Int) -> Int
+    if v != ""
+        p = str_split(v, " ")
+        r = Int(p[0])
+        g = Int(p[1])
+        b = Int(p[2])
+    end
+    return r * 65536 + g * 256 + b
+end
+
+# if/else, con una lista en cada rama
+func _pr_rama(n: Int, r: Int, g: Int, b: Int) -> Int
+    if n > 0
+        p = [n, n + 1, n + 2]
+        r = p[0]
+        g = p[1]
+        b = p[2]
+    else
+        q = [7, 8, 9]
+        r = q[2]
+        g = q[1]
+        b = q[0]
+    end
+    return r * 10000 + g * 100 + b
+end
+
+# en un bucle, con llamadas
+func _pr_bucle(n: Int, a: Int, b: Int, c: Int) -> Int
+    i = 0
+    while i < n
+        l = [a, b, c]
+        a = l[1] + 1
+        b = l[2] + l.length
+        c = l[0]
+        i = i + 1
+    end
+    return a * 10000 + b * 100 + c
+end
+
+# seis parámetros
+func _pr_seis(v: String, a: Int, b: Int, c: Int, d: Int, e: Int) -> Int
+    if v.length > 0
+        p = str_split(v, ",")
+        a = Int(p[0])
+        b = Int(p[1])
+        c = Int(p[2])
+        d = Int(p[3])
+        e = Int(p[4])
+    end
+    return a + b * 10 + c * 100 + d * 1000 + e * 10000
+end
+
+# Float, texto y struct, con seis variables en registros (d2-d7) y los parámetros en la pila
+func _pr_float(v: String, x: Float, y: Float) -> String
+    a = 0
+    b = 0
+    c = 0
+    while a < 3
+        a = a + 1
+        b = b + a
+        c = c + b
+    end
+    if v != ""
+        x = Float(c) / 2.0
+        y = Float(b) * 1.5
+    end
+    return "#{Int(x * 10.0)} #{Int(y * 10.0)}"
+end
+
+func _pr_texto(v: String, s: String) -> String
+    a = 0
+    b = 0
+    c = 0
+    d = 0
+    e = 0
+    f = 0
+    while a < 3
+        a = a + 1
+        b = b + a
+        c = c + b
+        d = d + c
+        e = e + d
+        f = f + e
+    end
+    if v != ""
+        s = v
+    end
+    return s + " #{f}"
+end
+
+func _pr_punto(v: Int, k: Punto) -> Int
+    a = 0
+    b = 0
+    c = 0
+    d = 0
+    e = 0
+    f = 0
+    while a < 3
+        a = a + 1
+        b = b + a
+        c = c + b
+        d = d + c
+        e = e + d
+        f = f + e
+    end
+    if v > 0
+        k = Punto(v, f)
+    end
+    return k.x * 100 + k.y
+end
+
+# una global de los datos que el fallo pisaba (el valor iba a una dirección de los datos)
+var pr_guarda: Int = 12345
+
+func param_reasignado()
+    Print _pr_color("255 80 80", 120, 120, 136)
+    Print _pr_color("", 120, 120, 136)
+    Print _pr_rama(3, 0, 0, 0)
+    Print _pr_rama(0, 1, 2, 3)
+    Print _pr_bucle(3, 1, 2, 3)
+    Print _pr_seis("1,2,3,4,5", 9, 9, 9, 9, 9)
+    Print _pr_float("x", 1.0, 1.0)
+    Print _pr_float("", 1.0, 1.0)
+    Print _pr_texto("hola", "nada")
+    Print _pr_texto("", "nada")
+    Print _pr_punto(3, Punto(1, 2))
+    Print _pr_punto(0, Punto(1, 2))
+    Print pr_guarda
+end

@@ -115,6 +115,11 @@ static void store_d0(Var *v)
     } else if (v->kind == V_LOCAL) {
         w(0x2B40);                                     /* move.l d0,off(a5) */
         w(v->off);
+    } else if (v->kind == V_STACK) {
+        /* un parámetro de una función sin marco (en la pila, sobre sp): antes caía en "global" y el valor iba a
+           otra dirección; el parámetro seguía con el de antes (Forja: b = Int(p[2]) en un if no cambiaba b) */
+        w(0x2F40);                                     /* move.l d0,off(sp) */
+        ea_ext(v);
     } else {
         w(0x23C0);                                     /* move.l d0,global */
         add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
