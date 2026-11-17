@@ -129,7 +129,7 @@ def main():
             a = c.aviso("stopped")
             check("parado en la línea 12", a == ["*stopped", "breakpoint", fuente, "12", "mira"], a)
             _, frames = c.orden("frames")
-            check("pila", frames == [["frame", "12", "mira", fuente], ["frame", "23", "Main", fuente]], frames)
+            check("pila", frames == [["frame", "12", "mira", fuente], ["frame", "24", "Main", fuente]], frames)
             _, vs = c.orden("vars", 0)
             check("variables", vs == [["var", "p", "Punto", 'Punto(x: 4, nombre: "dos \\"x\\"", hijos: [Punto(...)])'],
                                       ["var", "n", "Int", "2"]], vs)
@@ -155,7 +155,7 @@ def main():
             check("pasar", a[1:] == ["step", fuente, "13", "mira"], a)
             c.orden("out")
             a = c.aviso("stopped")
-            check("salir", a[1:] == ["step", fuente, "24", "Main"], a)
+            check("salir", a[1:] == ["step", fuente, "25", "Main"], a)
             _, vals = c.orden("values", 0, "r")
             check("r tras la llamada", vals == [["val", "Int", "14"]], vals)
             c.orden("unbreak", fuente, 12)
