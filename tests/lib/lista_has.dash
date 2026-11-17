@@ -1,0 +1,40 @@
+# l.has(x) de una lista, como x in l (lo pidió Forja). Lo usan test_lista_has.dash (por C) y
+# test_lista_has_directo.dash (directo).
+
+struct Caja
+    nombres: [String]
+    n: Int = 0
+end
+
+func _lh_esta(l: [Int], x: Int) -> Bool
+    return l.has(x)
+end
+
+func lista_has()
+    l = [3, 5, 7]
+    Print l.has(5)
+    Print l.has(4)
+    hay = l.has(7)
+    Print hay
+    if not l.has(9)
+        Print "sin 9"
+    end
+    t = ["a", "bb"]
+    Print t.has("bb")
+    Print t.has("c")
+    f = [1.5, 2.5]
+    Print f.has(2.5)
+    c = Caja(["x", "y"])
+    Print c.nombres.has("y")
+    Print _lh_esta([1, 2], 2)
+    Print _lh_esta([], 2)
+    var vacia: [Int] = []
+    Print vacia.has(0)
+    n = 0
+    for i in (1..10)
+        if l.has(i)
+            n = n + 1
+        end
+    end
+    Print n
+end

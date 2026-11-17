@@ -16,7 +16,8 @@ from compiler.grammar import dash_grammar_minimal
 TYPE_NAMES = sorted(SemanticAnalyzer._TYPE_NAMES)
 LIST_MEMBERS = [("push", "push(valor)", "Añade al final"), ("pop", "pop()", "Quita y devuelve el último"),
                 ("insert", "insert(i, valor)", "Inserta en la posición i"),
-                ("remove", "remove(i)", "Quita el de la posición i"), ("clear", "clear()", "Vacía la lista")]
+                ("remove", "remove(i)", "Quita el de la posición i"), ("clear", "clear()", "Vacía la lista"),
+                ("has", "has(valor)", "true si algún elemento es igual (como valor in lista)")]
 DICT_MEMBERS = [("get", "get(clave, defecto)", "El valor de esa clave, o el defecto si no está (una sola búsqueda)"),
                 ("has", "has(clave)", "true si tiene esa clave"), ("keys", "keys()", "Lista de las claves"),
                 ("remove", "remove(clave)", "Quita esa clave"), ("clear", "clear()", "Vacía el diccionario")]

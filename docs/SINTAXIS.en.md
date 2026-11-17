@@ -72,6 +72,8 @@ arr = [1, 2, 3, 4, 5]
 arr[2] = 99
 n = arr.length
 part = arr[1:3]                # slicing: [a:b], [:b], [a:] (also in strings: s[5:])
+arr.push(6)                    # also pop(), insert(i, x), remove(i), clear(), sort(f)
+yes = arr.has(99)              # true if it is there: as 99 in arr
 
 s = "Hello, " + name           # concatenation
 c = name[0]                    # character

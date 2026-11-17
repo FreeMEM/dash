@@ -167,6 +167,7 @@ arr + [6, 7]                # Lista nueva con las dos (mismo tipo de elemento)
 var l: [String] = []        # tipos de lista [T]: [Int] [String] [Nodo] [[Int]] (parámetros, retornos, campos)
 for x in obj.lista          # for-each sobre cualquier expresión de lista
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # listas que crecen
+l.has(x)                                                     # true si está (como x in l)
 l.sort(f)                   # estable; f(a, b) -> Bool (a antes que b) o Int (<0 antes, 0 igual, >0 después)
 d = {"a": 1, "b": 2}        # diccionario {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # clave que no está: 0 / nil

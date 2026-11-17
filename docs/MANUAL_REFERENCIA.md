@@ -1156,6 +1156,7 @@ Cada suma copia la lista entera: para ir anadiendo uno a uno, `push`.
 | `l.remove(i)` | Quita el de la posicion `i` |
 | `l.clear()` | Deja la lista vacia |
 | `l.sort(f)` | La ordena con la funcion `f(a, b)`, sin cambiar el orden de los iguales |
+| `l.has(x)` | `true` si algun elemento es igual a `x`: lo mismo que `x in l` (lo pidio Forja) |
 
 Funcionan tambien a traves de campos (`nodo.hijos.push(h)`, `self.lista.clear()`). Al llenarse,
 la lista pasa a un bloque del doble de tamano: anadir 20.000 elementos uno a uno tarda menos de

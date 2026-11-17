@@ -1771,13 +1771,22 @@ class SemanticAnalyzer(ASTVisitor):
         kind = self._list_kind(node.object)
         if kind is None or self._struct_name_of(node.object):
             return
+        if node.method == "has" and len(node.arguments) == 1:
+            # l.has(x) is x in l (lo pidió Forja): the node turns into an InExpr, as d.get(k, v) into d[k]
+            obj, x = node.object, node.arguments[0]
+            node.__class__ = InExpr
+            for name in ("object", "method", "arguments"):
+                node.__dict__.pop(name, None)
+            node.value, node.container = x, obj
+            self.visit(node)
+            return
         self.visit(node.object)
         for arg in node.arguments:
             self.visit(arg)
         wanted = self._LIST_METHODS.get(node.method)
         if wanted is None:
             self.error(f"Lists have no method '{node.method}' (they have push, pop, insert, remove, "
-                       f"clear and sort)", node)
+                       f"clear, sort and has)", node)
             return
         if len(node.arguments) != wanted:
             self.error(f"{node.method}() on a list takes {wanted} argument(s), got {len(node.arguments)}", node)

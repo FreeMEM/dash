@@ -1155,6 +1155,7 @@ Each addition copies the whole list: to add items one at a time, use `push`.
 | `l.remove(i)` | Removes the one at position `i` |
 | `l.clear()` | Leaves the list empty |
 | `l.sort(f)` | Sorts it with the function `f(a, b)`, keeping the order of equal ones |
+| `l.has(x)` | `true` if some element equals `x`: the same as `x in l` (asked for by Forja) |
 
 They also work through fields (`nodo.hijos.push(h)`, `self.lista.clear()`). When it fills up,
 the list moves to a block twice the size: adding 20,000 elements one at a time takes less than
