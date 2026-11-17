@@ -56,7 +56,7 @@ Everything that compiled still compiles the same.
 - **Fix:** with `--gcc`, `not` of a function returning a pointer no longer gives a gcc warning.
 - **Forja 0.8:** tabs that do not fit get buttons and a list, the session remembers bookmarks, folds and extension
   files, Demos is much faster and holds several track files, Change value while debugging, an executable size limit
-  for 4 and 64 KB intros, and an end-to-end test on CoffinOS.
+  for 4 and 64 KB intros, and an end-to-end test on CoffinOS. With Inferencia 0.2, Forja's copilot.
 
 ### 2.16.0 (2026-11-17)
 

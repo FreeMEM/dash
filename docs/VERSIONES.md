@@ -58,7 +58,8 @@ Forja 0.8. Todo lo que compilaba sigue compilando igual.
 - **Arreglo:** con `--gcc`, `not` de una función que devuelve un puntero ya no da aviso de gcc.
 - **Forja 0.8:** pestañas que no caben con botones y lista, la sesión recuerda marcadores, plegados y los ficheros
   de las extensiones, Demos mucho más rápida y con varias pistas abiertas, Cambiar valor al depurar, tope de tamaño
-  del ejecutable para intros de 4 y 64 KB, y una prueba de punta a punta en CoffinOS.
+  del ejecutable para intros de 4 y 64 KB, y una prueba de punta a punta en CoffinOS. Con Inferencia 0.2, el
+  copiloto de Forja.
 
 ### 2.16.0 (2026-11-17)
 
