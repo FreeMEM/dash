@@ -33,6 +33,33 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.16.0 (2026-11-17)
+
+Ensamblador en línea, 3D con MiniGL, la ayuda dentro del Amiga y compilar el doble de rápido. Todo lo que compilaba
+sigue compilando igual.
+
+- **Nuevo:** ensamblador 68k en línea: bloques `asm ... end` con la sintaxis de Devpac y ASM-One, con `in`, `out` y
+  `uses` para pasar variables; todo el 68000 y lo común del 68020, `incbin` y `dc`. Por los dos caminos. Manual,
+  sección 26.
+- **Nuevo:** 3D con MiniGL: 41 funciones `gl_*` (ventana o pantalla, matrices, figuras, texturas, luces, niebla).
+  Constantes en `lib/amiga/gl.dash`. `gl_open` da falso si falta la biblioteca o la FPU.
+- **Nuevo:** la ayuda de Dash para el Amiga, dentro del paquete (`Dash/Ayuda/`): `Dash.guide` para MultiView y
+  `Dash.ayuda` para Forja, en castellano y en inglés, con las 1277 fichas.
+- **Nuevo:** `./dash --check` comprueba sin compilar y da todos los errores (hasta 20); con `--texto ruta=fichero`
+  lee el texto sin guardar de un módulo.
+- **Nuevo:** `mui_on_activate` y `mui_on_deactivate`; menús MUI que cambian con la ventana abierta
+  (`mui_menu_add`, `mui_menu_extend`, `mui_menu_remove`); `mui_list_add_lines` (300 líneas en 0,6 s en un A1200,
+  antes 10,6 s); `mui_request_text`; `rexx_send_wait` (ARexx con tiempo límite); `str_join`; `l.has(x)`.
+  1061 funciones.
+- **Mejora:** la orden `dash` compila en la mitad de tiempo o menos en el Amiga, con los mismos bytes.
+- **Mejora:** `input_menu` elige en los menús de MUI; `mui_text_editor` sin Textinput da un campo de una línea.
+- **Arreglo:** con `./dash`, una función que cambiaba un parámetro (por ejemplo dentro de un `if`) podía dejarlo con
+  su valor de antes y pisar un dato del programa. Conviene recompilar lo hecho con `./dash`.
+- **Arreglo:** `l.sort(fn(a, b) -> a < b)` con textos ordena; `--profile` ve todas las funciones; nombres que son
+  palabras de C (`int`, `main`...) valen por `--gcc`.
+- **Extensión de VS Code 0.6.0** (en el repositorio, aún no en la tienda): ejecutar en DashOS, la ayuda de Dash y
+  errores con `--check`.
+
 ### 2.15.0 (2026-11-16)
 
 Programas de Dash con ventanas en DashOS, el espacio libre de un disco y elegir un cajón. Todo lo que compilaba
