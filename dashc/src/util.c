@@ -40,7 +40,10 @@ int lex_file;
    aparte (AllocMem), en una lista para soltarlos al acabar. */
 #ifdef __amigaos__
 #define HDR 4                     /* el tamaño del trozo, delante (con el bit 0 si es grande) */
-#define sys_alloc(n) AllocMem((n), MEMF_ANY)
+/* (los bloques de los nodos, desde arriba de la memoria: juntos, para que al soltarlos quede un hueco grande donde
+   juntar el código; si no, con 8 MB no había 700 KB seguidos) */
+static int alloc_top;
+#define sys_alloc(n) AllocMem((n), MEMF_ANY | (alloc_top ? MEMF_REVERSE : 0))
 #define sys_free(p, n) FreeMem((p), (n))
 #else
 #define HDR 8                     /* (8: los double y punteros del PC, alineados) */
@@ -207,7 +210,14 @@ void *node_arena(size_t size)
     sz = (size + 7) & ~(size_t)7;                  /* (los double y punteros del PC, alineados) */
 #endif
     if ((size_t)(end - at) < sz) {
-        struct NodeBlock *b = xmalloc(32 * 1024);
+        struct NodeBlock *b;
+#ifdef __amigaos__
+        alloc_top = 1;
+#endif
+        b = xmalloc(32 * 1024);
+#ifdef __amigaos__
+        alloc_top = 0;
+#endif
         b->next = node_blocks;
         node_blocks = b;
         at = (uint8_t *)(b + 1);
