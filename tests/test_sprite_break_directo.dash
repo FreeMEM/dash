@@ -1,0 +1,72 @@
+# The same as test_sprite_break.dash, built by ./dash straight to hunk.
+# dash-direct:
+# Un programa con un sprite de hardware que acaba con Ctrl-C (Break, o Parar en Forja) o sin sprite_hide ni
+# sprite_free: el sprite se quita de la pantalla y se libera al cerrarse la suya (se quedaba suelto encima de lo que
+# viniera después: lo vio el vídeo de Forja). El programa se arranca a sí mismo con run_start; el padre cuenta cuántos
+# sprites puede pedir antes y después de cada hijo: si el hijo dejara el suyo, habría uno menos.
+# expect-out: libres: igual tras Break
+# expect-out: libres: igual tras acabar sin quitarlo
+# expect-out: fin
+
+func libres() -> Int
+    if not screen_open_custom(320, 256, 2, "Cuenta")
+        return -1
+    end
+    n = 0
+    for i in (0..7)
+        if sprite_create(i, 16, 16)
+            n = n + 1
+        end
+    end
+    for i in (0..7)
+        sprite_free(i)
+    end
+    screen_close()
+    return n
+end
+
+func hijo(que: String)
+    if not screen_open_custom(320, 256, 2, "Hijo")
+        Print "sin pantalla"
+        return
+    end
+    sprite_create(0, 16, 16)
+    for f in (0..15)
+        sprite_set_row(0, f, 0xFFFF, 0)
+    end
+    sprite_pos(0, 100, 100)
+    sprite_show(0)
+    Print "hijo: con sprite"
+    if que == "break"
+        while true
+            wait_vblank()
+        end
+    end
+    wait_vblank()
+end
+
+func probar(que: String, texto: String)
+    antes = libres()
+    h = run_start("\"" + program_path() + "\" hijo " + que, 0)
+    time_delay(100)
+    if que == "break"
+        run_break(h)
+    end
+    run_finish(h)
+    despues = libres()
+    if antes == despues and antes > 0
+        Print "libres: igual " + texto
+    else
+        Print "libres: #{antes} antes, #{despues} después " + texto
+    end
+end
+
+Main
+    if arg(0) == "hijo"
+        hijo(arg(1))
+    else
+        probar("break", "tras Break")
+        probar("solo", "tras acabar sin quitarlo")
+        Print "fin"
+    end
+end

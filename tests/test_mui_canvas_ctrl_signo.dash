@@ -1,0 +1,57 @@
+# Ctrl con un signo que el mapa de teclado no da con Ctrl: mui_canvas_char da el signo (sin Ctrl). En el mapa
+# castellano ("e", el de CoffinOS) "/" es Mayúsculas+6, y con Ctrl no daba nada: el Ctrl / (comentar) de Forja no
+# iba allí (lo vio el vídeo de Forja). Ctrl con una letra sigue dando su código de control.
+# emu-needs: muimaster.library
+# emu-needs: Keymaps/e
+# expect-out: ctrl shift 6: /
+# expect-out: shift 6: /
+# expect-out: ctrl f: 6
+# expect-out: fin
+
+const PASO = 99
+const T_LIENZO = 5
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+end
+
+Main
+    if mui_app_begin("CtrlSigno", "DASHCTRLSIGNO") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("CtrlSigno", 0)
+        mui_vgroup_begin()
+        lienzo = mui_canvas(160, 80)
+        mui_group_end()
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, dibuja)
+        mui_canvas_on_input(lienzo, T_LIENZO)
+        mui_canvas_take_keys(lienzo, true)
+        mui_window_open(win)
+        var nombres: [String] = ["ctrl shift 6", "shift 6", "ctrl f"]
+        var codigos: [Int] = [0x06, 0x06, 0x23]
+        var quals: [Int] = [3, 1, 2]
+        paso = 0
+        k = 0
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1 and paso < 8
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                if paso >= 2 and paso - 2 < codigos.length
+                    k = paso - 2
+                    input_key(codigos[k], quals[k])
+                end
+                mui_timer(500, PASO)
+            elif ev == T_LIENZO
+                c = mui_canvas_char(lienzo)
+                if c != "" and str_code(c, 0) < 32
+                    c = "#{str_code(c, 0)}"
+                end
+                Print nombres[k] + ": " + c
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

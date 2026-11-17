@@ -19062,6 +19062,10 @@ static BOOL _dash_screen_flip(void) {
    releasing them after CloseScreen, at exit, touched a freed ColorMap: Forja D15c) */
 #define _DASH_HAS_SCREEN_CLOSING 1
 static void (*_dash_screen_closing)(struct Screen *) = NULL;
+/* and the hardware sprites (SPRITES: sprite_create): hidden and freed before the screen goes. A program that ends
+   with Ctrl-C (Break) or without sprite_hide left its sprite on the display, over whatever came after (the video of
+   Forja saw it) */
+static void (*_dash_screen_sprites_off)(void) = NULL;
 
 static void _dash_close_screen(void) {
     if (_dash_screen && _dash_own_screen && _dash_screen_public) {
@@ -19074,6 +19078,7 @@ static void _dash_close_screen(void) {
         _dash_screen_public = FALSE;
     }
     if (_dash_screen && _dash_own_screen) {
+        if (_dash_screen_sprites_off) _dash_screen_sprites_off();
         _dash_dbuf_free();
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
         if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
@@ -19332,6 +19337,8 @@ static BOOL _dash_is_rtg_screen(void) {
     return FALSE;
 }
 
+static void _dash_cleanup_sprites(void);
+
 static BOOL _dash_sprite_create(LONG id, LONG width, LONG height) {
     WORD sprnum;
     ULONG datasize;
@@ -19340,6 +19347,7 @@ static BOOL _dash_sprite_create(LONG id, LONG width, LONG height) {
 
     if (id < 0 || id >= DASH_MAX_SPRITES) return FALSE;
     if (!_dash_screen) return FALSE;
+    _dash_screen_sprites_off = _dash_cleanup_sprites;
     if (_dash_sprite_frames[id]) { FreeVec(_dash_sprite_frames[id]); _dash_sprite_frames[id] = NULL; }
     _dash_sprite_nframes[id] = 0;
 
@@ -19543,6 +19551,7 @@ static BOOL _dash_sprite_create_pair(LONG id, LONG height) {
     ULONG size = (height + 2) * 4;
     WORD n;
     if (id < 0 || id >= DASH_MAX_SPRITES || !_dash_screen || height < 1) return FALSE;
+    _dash_screen_sprites_off = _dash_cleanup_sprites;
     _dash_sprite_free(id);
     s1 = (struct SimpleSprite *)AllocMem(sizeof(struct SimpleSprite), MEMF_CLEAR);
     s2 = (struct SimpleSprite *)AllocMem(sizeof(struct SimpleSprite), MEMF_CLEAR);
@@ -19622,6 +19631,7 @@ static void _dash_sprite_pos(LONG id, LONG x, LONG y) {
 static void _dash_cleanup_sprites(void) {
     int i;
     for (i = 0; i < DASH_MAX_SPRITES; i++) {
+        _dash_sprite_hide(i);            /* off the display first: FreeSprite leaves the last image there */
         _dash_sprite_free(i);
     }
 }
@@ -19926,6 +19936,20 @@ static LONG _dash_map_key(UWORD code, UWORD qualifier, APTR prev, UBYTE *buf, LO
     ie.ie_Qualifier = qualifier;
     ie.ie_EventAddress = prev;
     n = MapRawKey(&ie, (STRPTR)buf, size - 1, NULL);
+    if ((qualifier & IEQUALIFIER_CONTROL) && (n <= 0 || (n == 1 && (buf[0] < 32 || buf[0] == 127)))) {
+        /* Ctrl with a sign gives the sign (Ctrl with a letter keeps its control code): Ctrl + "/" in the Spanish
+           keymap (Shift+6) gave 0x1E, and Forja's Ctrl / (comment) did not work there (the video of Forja) */
+        UBYTE plain[8];
+        LONG m;
+        ie.ie_Qualifier = qualifier & ~IEQUALIFIER_CONTROL;
+        ie.ie_EventAddress = prev;
+        m = MapRawKey(&ie, (STRPTR)plain, sizeof(plain) - 1, NULL);
+        if (m == 1 && plain[0] > 32 && plain[0] != 127 &&
+            !((plain[0] | 0x20) >= 'a' && (plain[0] | 0x20) <= 'z') && !(plain[0] >= 0xC0 && plain[0] != 0xD7 && plain[0] != 0xF7)) {
+            buf[0] = plain[0];
+            n = 1;
+        }
+    }
     if (n < 0) n = 0;
     buf[n] = 0;
     return n;
@@ -23210,6 +23234,38 @@ static APTR _dash_mui_add(Object *obj) {
     return obj;
 }
 
+/* Esc in a drawing area that takes keys is the program's (Lorraine), also when something turns it into a close of
+   the window right after: CoffinOS has a commodity that closes the active window with Esc, and Forja (whose editor
+   takes Esc) closed (the video of Forja saw it). The area notes its window and when; a close request of that window
+   within half a second is let go. The close gadget, or Esc with no area that takes it, still closes. */
+static Object *_dash_mui_esc_win = NULL;
+static ULONG _dash_mui_esc_s = 0, _dash_mui_esc_us = 0;
+static struct Hook _dash_mui_close_hook;
+
+static BOOL _dash_mui_esc_close(Object *win) {
+    ULONG s, us;
+    LONG ms;
+    if (!_dash_mui_esc_win || _dash_mui_esc_win != win) return FALSE;
+    CurrentTime(&s, &us);
+    ms = (LONG)(s - _dash_mui_esc_s) * 1000 + ((LONG)us - (LONG)_dash_mui_esc_us) / 1000;
+    return ms >= 0 && ms < 500;
+}
+
+/* args[0]: 0 gives the event args[1] (ReturnID), 1 closes the window */
+static ULONG _dash_mui_close_entry(struct Hook *h __asm("a0"), Object *obj __asm("a2"), IPTR *args __asm("a1")) {
+    (void)h;
+    if (_dash_mui_esc_close(obj)) return 0;
+    if (args[0]) SetAttrs(obj, MUIA_Window_Open, FALSE, TAG_DONE);
+    else if (_dash_mui_app) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, args[1]);
+    return 0;
+}
+
+static void _dash_mui_close_notify(Object *win, LONG close, LONG id) {
+    _dash_mui_close_hook.h_Entry = (ULONG (*)())_dash_mui_close_entry;
+    _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, MUIV_Notify_Self, 4,
+                 MUIM_CallHook, (IPTR)&_dash_mui_close_hook, close, id);
+}
+
 static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
     Object *root, *strip, *win;
     if (!_dash_mui_app) { _dash_mui_error("mui_window_begin before mui_app_begin"); return NULL; }
@@ -23235,11 +23291,9 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
     if (_dash_mui_nwins < _DASH_MUI_WINS) _dash_mui_wins[_dash_mui_nwins++] = win;
     if (!_dash_mui_first_win) {
         _dash_mui_first_win = win;
-        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
-                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
+        _dash_mui_close_notify(win, 0, MUIV_Application_ReturnID_Quit);
     } else {   /* the other windows just close */
-        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
-                     MUIV_Notify_Self, 3, MUIM_Set, MUIA_Window_Open, FALSE);
+        _dash_mui_close_notify(win, 1, 0);
     }
     _dash_mui_groups[0] = root;
     _dash_mui_depth = 1;
@@ -24728,10 +24782,11 @@ static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
    (strings, text editors, combos) inactive and active and their cursor, for the whole application. MUI keeps them in
    its config, not per object (MUIA_Background of a field goes back to the prefs' on activating it), and the text
    stays black: these are the ids of its "Strings" page (not in the SDK; 0x84, 0x86, 0xf0 in MUI 5). The windows
-   take them when they open. */
+   take them when they open. Only MUI 4 or newer: MUI 3.8 (CoffinOS) has other ids, and the fields came out black
+   with their black text on them (the video of Forja saw it); there the fields keep the user's prefs. */
 static void _dash_mui_app_field_colors(LONG r, LONG g, LONG b, LONG ar, LONG ag, LONG ab, LONG cr, LONG cg, LONG cb) {
     char spec[32];
-    if (!_dash_mui_app) return;
+    if (!_dash_mui_app || MUIMasterBase->lib_Version < 20) return;
     sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
             (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
     _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x84, (IPTR)_dash_mui_keep((STRPTR)spec));
@@ -24821,8 +24876,7 @@ static void _dash_mui_post_event(LONG id) {
 static void _dash_mui_on_close(APTR win, LONG id) {
     if (!win || !_dash_mui_app) return;
     _DASH_MUI_DO(win, MUIM_KillNotify, MUIA_Window_CloseRequest);
-    _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
-                 (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+    _dash_mui_close_notify((Object *)win, 0, id);
 }
 
 #ifndef _DASH_NET_DOWN_MASK                    /* (the network's NetShutdown signal: NET_RUNTIME) */
@@ -25275,6 +25329,10 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->button = 0; data->wheel = 0; data->key = im->Code;
             data->qual = im->Qualifier;
             data->prev = im->IAddress ? *(APTR *)im->IAddress : NULL;
+            if (im->Code == 0x45) {          /* Esc: a close of the window right after is not one */
+                _dash_mui_esc_win = _DASH_MRI(obj)->mri_WindowObject;
+                CurrentTime(&_dash_mui_esc_s, &_dash_mui_esc_us);
+            }
         } else {
             return 0;
         }
@@ -25762,6 +25820,7 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
         _dash_dbuf_free();
 #endif
 #ifdef _DASH_HAS_SCREEN_CLOSING
+        if (_dash_screen_sprites_off) _dash_screen_sprites_off();
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
 #endif
         if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;

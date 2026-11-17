@@ -3876,7 +3876,8 @@ MUI_FUNCTIONS = {
                    "${cursor_r}, ${cursor_g}, ${cursor_b})",
         description="The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, "
                     "combo), inactive and active, and their cursor; the windows opened after it take them. The text "
-                    "stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128"),
+                    "stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128. MUI 4 or newer: with MUI 3.8 the "
+                    "fields keep the user's prefs"),
     # Dash 2.0 (Inferencia): the application's own ARexx commands
     "mui_app_rexx": BuiltinFunc(
         name="mui_app_rexx", params=["app", "func"], return_type="void",
@@ -4476,7 +4477,8 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_take_keys(${canvas}, ${on})",
         description="The area gets the window's keys also with the pointer away from it (needs mui_canvas_on_input): "
                     "those that no other area under the pointer takes, while no other gadget is active (Forja, told by "
-                    "David Martínez)"
+                    "David Martínez). Esc in an area with keys is the program's: a close of the window right after it "
+                    "(a commodity of CoffinOS closes the active window with Esc) does not close it"
     ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
@@ -4542,7 +4544,8 @@ MUI_FUNCTIONS = {
         params=["canvas"],
         return_type="STRPTR",
         c_template="_dash_mui_canvas_char(${canvas})",
-        description="Character of the last key in the area, with shift and the keymap (\"\" if none; dashweb D31)"
+        description="Character of the last key in the area, with shift and the keymap (\"\" if none; dashweb D31). "
+                    "With Ctrl, a letter gives its control code and a sign the sign (Ctrl + \"/\")"
     ),
     "mui_scrollbar": BuiltinFunc(
         name="mui_scrollbar",

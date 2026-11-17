@@ -135,7 +135,8 @@ Rules checked by the compiler (`compiler/dashui.py`; the editor flags the same o
   nearest one of its palette. Text fields (`string`, `text_editor`, `combo`) don't take them: their colours are the
   whole application's, with `"field_colors": [[r, g, b], [r, g, b], [r, g, b]]` on a window (`mui_app_field_colors`:
   the background without the cursor, with it, and the cursor). Their text stays black, so use a grey where it reads,
-  like `[96, 96, 104]` and `[120, 120, 128]`.
+  like `[96, 96, 104]` and `[120, 120, 128]`. Only with MUI 4 or newer: with MUI 3.8 (CoffinOS's) the fields keep
+  the user's prefs (its config ids are others, and they came out black).
 - **Translations** (dashweb D71): `"tr": N` on an object, a window, a menu or a menu item gives the main
   text (`text`, `label`, `title`, `titles`, `options`) catalog number `N`: the code requests it with
   `tr(N, "texto")`. For several strings of the same object, `"tr": { "label": 12, "help": 13 }`. They are extracted by

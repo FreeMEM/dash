@@ -19,7 +19,7 @@ A test can list the exact output it must print when run on the Amiga with
 given; "# no-memcheck" leaves the test out of --memcheck runs). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
-"# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library
+"# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library ("Keymaps/e": Devs/Keymaps/e)
 (Devs/ for a .device, Classes/ for a .class, .gadget or .image; tools/emu_sys_from_hdf.sh extracts them
 from a Workbench hard file).
 
@@ -743,6 +743,8 @@ def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -
         if name.endswith(".library"):
             return any((Path(system) / d / name).exists() for d in ("Libs", "MUI/Libs", "AmiSSL/Libs"))
         if name.endswith(".device"):
+            return (Path(system) / "Devs" / name).exists()
+        if name.startswith("Keymaps/"):     # a keymap (only the CoffinOS disk has them: "Keymaps/e")
             return (Path(system) / "Devs" / name).exists()
         return any(p.name.lower() == name.lower() for p in (Path(system) / "Classes").rglob("*"))
 

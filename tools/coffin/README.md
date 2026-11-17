@@ -17,7 +17,10 @@ El disco sale del de Coffin R65: System entero, Programs sin `Games`, `Demos` ni
 ni `Music`. Lleva instalados Dash (con Forja, Inferencia y dashgit), Trasfondo y Tachyon, y el fondo de `fondo.py`.
 
 Las dos configuraciones son las de Coffin con el disco nuevo. A la de FS-UAE le hace falta `uae_rtg_modes = 0x112`
-(la misma lista de modos que Amiberry): sin ella, el Workbench se abre en AGA.
+(la misma lista de modos que Amiberry): sin ella, el Workbench se abre en AGA. Amiberry 8.5 lee la tarjeta gráfica de
+`gfxcard0_type` y `gfxcard0_size` (van en `coffin.uae.in`) y, con Wayland a la vista, también deja el Workbench en AGA:
+`tools/emu_run.py` lo arranca con `-G` y sin `WAYLAND_DISPLAY` (en su pantalla virtual, o por XWayland con
+`--window`), como el vídeo de Forja.
 
 ## Usarlo
 

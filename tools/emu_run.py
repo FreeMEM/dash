@@ -504,6 +504,11 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                     command = ["xvfb-run", "-a", "-s", "-screen 0 1920x1200x24 -nolisten tcp"] + command
                     env = dict(env, SDL_VIDEODRIVER="x11")
                     env.pop("WAYLAND_DISPLAY", None)
+                elif window and env.get("WAYLAND_DISPLAY") and env.get("DISPLAY"):
+                    # Amiberry 8.5 on Wayland also leaves the Workbench on AGA: through X (XWayland), as the video
+                    # of Forja does (its tools/video/preparar.py)
+                    env = dict(env, SDL_VIDEODRIVER="x11")
+                    env.pop("WAYLAND_DISPLAY", None)
             else:
                 command = ["amiberry", "-G", "--model", model, "-r", kickstart,
                            "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true", "-s", "fastmem_size=8"]
