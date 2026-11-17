@@ -861,9 +861,24 @@ static int var_type(const char *name)
 
 static int dict_val(int t);
 
+/* el tipo de a op b (E_BIN), con los de a y b */
+static int bin_type(Node *n, int ta, int tb)
+{
+    if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
+    if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
+        return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
+    if ((ta == TY_DOUBLE || tb == TY_DOUBLE) &&
+        (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
+    if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
+        (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
+    if ((ta == TY_FIXED || tb == TY_FIXED) && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR ||
+                                               n->op == P_SLASH || n->op == P_PERCENT)) return TY_FIXED;
+    return TY_INT;
+}
+
 static int expr_type(Node *n)
 {
-    int ta, tb, idx;
+    int ta, idx;
     switch (n->kind) {
     case E_NEG:
         ta = expr_type(n->a);
@@ -897,19 +912,31 @@ static int expr_type(Node *n)
         return TY_VOID;
     case E_NN:
         return expr_type(n->a);
-    case E_BIN:
-        ta = expr_type(n->a);
-        tb = expr_type(n->b);
-        if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
-        if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
-            return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
-        if ((ta == TY_DOUBLE || tb == TY_DOUBLE) &&
-            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
-        if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
-            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
-        if ((ta == TY_FIXED || tb == TY_FIXED) && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR ||
-                                                   n->op == P_SLASH || n->op == P_PERCENT)) return TY_FIXED;
-        return TY_INT;
+    case E_BIN: {
+        /* a + b + c...: por la izquierda, sin recursión (un texto de mil trozos sumados, como los datos de las
+           plantillas de Forja, agotaba la pila de dash en el Amiga); el mismo orden que antes: a, b, el b de arriba... */
+        Node *spine[32], **sp = spine;
+        int ns = 0, cap = 32;
+        Node *m = n;
+        while (m->kind == E_BIN) {
+            if (ns == cap) {
+                Node **bigger = xmalloc(sizeof(Node *) * (size_t)cap * 2);
+                memcpy(bigger, sp, sizeof(Node *) * (size_t)cap);
+                if (sp != spine) xfree(sp);
+                sp = bigger;
+                cap *= 2;
+            }
+            sp[ns++] = m;
+            m = m->a;
+        }
+        ta = expr_type(m);
+        while (ns) {
+            m = sp[--ns];
+            ta = bin_type(m, ta, expr_type(m->b));
+        }
+        if (sp != spine) xfree(sp);
+        return ta;
+    }
     case E_INDEX:
         ta = expr_type(n->a);
         if (ta == TY_STR) return TY_CHAR;

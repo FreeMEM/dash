@@ -13,10 +13,14 @@
 #include <sys/stat.h>
 #endif
 #ifdef __amigaos__
-/* en el Amiga: 64 KB de pila (el shell da 4 KB); libnix cambia de pila antes de main */
+/* en el Amiga: 128 KB de pila (el shell da 4 KB); libnix cambia de pila antes de main. Con 64 KB, Forja (un texto de
+   mil trozos sumados) la agotaba */
 extern void __stkinit(void);
 void *__stkinit_ref = (void *)__stkinit;
-unsigned long __stack = 65536;
+#ifndef DASHC_STACK
+#define DASHC_STACK 131072
+#endif
+unsigned long __stack = DASHC_STACK;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */

@@ -81,6 +81,17 @@ void mem_init(void) { atexit(mem_free_all); }
 
 static void *alloc_raw(size_t n, size_t *got);
 
+/* sin memoria: cuánto se pedía y cuánto llevaba (para saber cuánta hace falta) */
+static void no_memory(size_t want)
+{
+#if defined(__amigaos__) && defined(DIAG_MEM)
+    printf("diag: pide %lu, en uso %ld, libre %lu, mayor %lu, chip mayor %lu\n", (unsigned long)want, mem_in_use,
+           (unsigned long)AvailMem(MEMF_ANY), (unsigned long)AvailMem(MEMF_ANY | MEMF_LARGEST),
+           (unsigned long)AvailMem(MEMF_CHIP | MEMF_LARGEST));
+#endif
+    fatal("sin memoria (%lu KB más, con %ld KB pedidos)", (unsigned long)(want + 1023) / 1024, mem_in_use / 1024);
+}
+
 void *xmalloc(size_t n)
 {
     size_t need;
@@ -113,7 +124,7 @@ static void *alloc_raw(size_t n, size_t *got)
         } else {
             if ((size_t)(bump_end - bump) < need + HDR) {
                 Chunk *c = sys_alloc(CHUNK_SIZE);
-                if (!c) fatal("sin memoria");
+                if (!c) no_memory(CHUNK_SIZE);
                 mem_in_use += CHUNK_SIZE;
                 if (mem_in_use > mem_peak) mem_peak = mem_in_use;
                 c->next = chunks;
@@ -128,9 +139,9 @@ static void *alloc_raw(size_t n, size_t *got)
     } else {
         size_t total = sizeof(Big) + HDR + need;
         Big *b;
-        if (total < need) fatal("sin memoria");
+        if (total < need) no_memory(need);
         b = sys_alloc(total);
-        if (!b) fatal("sin memoria");
+        if (!b) no_memory(total);
         mem_in_use += (long)total;
         if (mem_in_use > mem_peak) mem_peak = mem_in_use;
         b->size = total;
