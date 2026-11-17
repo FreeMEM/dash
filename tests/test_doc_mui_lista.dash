@@ -1,0 +1,32 @@
+# MUI: una lista con unas líneas; al elegir una, el evento dice cuál.
+# emu-needs: muimaster.library
+# expect-out: 3 lineas
+# expect-out: elegida: Lorraine
+# expect-out: fin
+
+const ID_LISTA = 1
+
+Main
+    if mui_app_begin("Lista", "LISTA") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Máquinas", 0)
+        maquinas = mui_list()
+    mui_window_end()
+    mui_list_add(maquinas, "A500")                 # al final, una a una
+    mui_list_add(maquinas, "Lorraine")
+    mui_list_add(maquinas, "A1200")
+    Print "#{mui_list_count(maquinas)} lineas"
+    mui_on_change(maquinas, ID_LISTA)              # un evento al elegir una
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+    mui_set_value(maquinas, 1)                     # para la prueba: elige la segunda
+    if mui_wait_event() == ID_LISTA
+        Print "elegida: " + mui_list_get(maquinas, mui_get_value(maquinas))
+    end
+    mui_app_end()
+    Print "fin"
+end

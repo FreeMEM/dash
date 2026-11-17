@@ -639,6 +639,8 @@ Main
 end
 ```
 
+**Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los enseña en la ficha de cada función que usan): `tests/test_doc_sprite.dash`, `tests/test_doc_bob.dash`.
+
 **Índice.** Las que tienen enlace están explicadas más abajo.
 
 | Función | Devuelve | Descripción | Estado |
@@ -11407,6 +11409,8 @@ Main
     Print "fin"
 end
 ```
+
+**Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los enseña en la ficha de cada función que usan): `tests/test_doc_mui_boton.dash`, `tests/test_doc_mui_formulario.dash`, `tests/test_doc_mui_lista.dash`.
 
 **Índice.** Las que tienen enlace están explicadas más abajo.
 

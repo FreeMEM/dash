@@ -639,6 +639,8 @@ Main
 end
 ```
 
+**More examples**, small ones, of some functions (they are tests too; the Amiga help shows them in the page of each function they use): `tests/test_doc_sprite.dash`, `tests/test_doc_bob.dash`.
+
 **Index.** The ones with a link are explained further down.
 
 | Function | Returns | Description | Status |
@@ -11401,6 +11403,8 @@ Main
     Print "fin"
 end
 ```
+
+**More examples**, small ones, of some functions (they are tests too; the Amiga help shows them in the page of each function they use): `tests/test_doc_mui_boton.dash`, `tests/test_doc_mui_formulario.dash`, `tests/test_doc_mui_lista.dash`.
 
 **Index.** The ones with a link are explained further down.
 

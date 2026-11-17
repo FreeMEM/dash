@@ -52,6 +52,8 @@ option, the chosen line...); `mui_get_text` and `mui_set_text`, its text.
 `docs/MUI_DISEÑO.md`.
 """,
         "example": ["tests/test_doc_mui.dash", "tests/test_doc_mui_lienzo.dash"],
+        "function_examples": ["tests/test_doc_mui_boton.dash", "tests/test_doc_mui_formulario.dash",
+                              "tests/test_doc_mui_lista.dash"],
     },
 }
 

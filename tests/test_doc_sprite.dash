@@ -1,0 +1,25 @@
+# Un sprite de hardware: se dibuja fila a fila, se le dan colores y se mueve por la pantalla.
+# expect-out: sprite: true
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 3, "Sprite")
+    ok = sprite_create(0, 16, 8)                   # el sprite 0: 16 píxeles de ancho y 8 filas
+    fila = 0
+    while fila < 8
+        sprite_set_row(0, fila, 0x3C3C, 0x0FF0)    # cada fila, sus dos planos: colores 1, 2 y 3
+        fila = fila + 1
+    end
+    sprite_color(0, 0, 15, 15, 0)                  # el color 1 del sprite, amarillo
+    sprite_show(0)
+    x = 20
+    while x < 300
+        sprite_pos(0, x, 80)                       # se mueve hacia la derecha
+        time_delay(1)
+        x = x + 8
+    end
+    Print "sprite: #{ok}"
+    sprite_free(0)
+    screen_close()
+    Print "fin"
+end

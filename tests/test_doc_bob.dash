@@ -1,0 +1,27 @@
+# Un BOB (un dibujo que se mueve sobre el fondo y lo devuelve al quitarlo): se dibuja con gfx_ y se pasea.
+# expect-out: bob: 16 x 16
+# expect-out: fondo devuelto: 3
+# expect-out: fin
+
+Main
+    screen_open_custom(320, 200, 3, "BOB")
+    gfx_clear_color(3)                             # el fondo
+    bob_create(0, 16, 16, 3)                       # el BOB 0: 16 x 16, 3 planos
+    bitmap_draw_to(0)                              # los gfx_ dibujan ahora en el BOB
+    gfx_pen(1)
+    gfx_circle_fill(7, 7, 6)
+    bitmap_draw_screen()                           # y otra vez en la pantalla
+    Print "bob: #{bob_width(0)} x #{bob_height(0)}"
+    x = 10
+    while x < 300
+        bob_pos(0, x, 90)
+        bob_draw(0)                                # quita el de antes y lo pinta en el sitio nuevo
+        time_delay(1)
+        x = x + 6
+    end
+    bob_erase(0)                                   # lo quita: el fondo vuelve a estar como antes
+    Print "fondo devuelto: #{gfx_pixel_read(x - 6 + 7, 97)}"
+    bob_free(0)
+    screen_close()
+    Print "fin"
+end

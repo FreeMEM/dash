@@ -6,7 +6,9 @@ La descripción corta de cada builtin sigue en compiler/amiga_builtins.py (ingl�
 - GROUPS: por grupo (el nombre de su diccionario en amiga_builtins.py), una introducción en los dos idiomas (para
   qué sirve, qué hace falta antes, el flujo de siempre) y un ejemplo. El ejemplo es un test del runner
   (tests/test_doc_*.dash): compila por los dos caminos y su salida se comprueba en el emulador. Las líneas de
-  órdenes del runner (# expect-out:, # emu-needs:...) no salen en la documentación.
+  órdenes del runner (# expect-out:, # emu-needs:...) no salen en la documentación. Con "function_examples", unos
+  ejemplos pequeños de unas funciones del grupo (también tests): la ficha de la ayuda de cada función que usan lo
+  enseña entero, con su botón "Probar" en Forja (tools/gen_ayuda.py).
 - FUNCS: por builtin, qué es cada parámetro y su rango, qué devuelve, qué pasa si falla, y "see", las funciones
   relacionadas.
 
