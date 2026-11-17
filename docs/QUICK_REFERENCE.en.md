@@ -140,7 +140,7 @@ end
 
 enemy = Enemy(10, 50)
 enemy.move(5)
-boss.pos.x = 5              # nested structs (pos: Punto); l[0].x = 5 (a field of a list element)
+boss.pos.x = 5              # nested structs (pos: Punto); l[0].x = 5 (a field of a list element); f().x = 5
 d["k"].push(x)              # methods of elements too: l[0].mover(1), filas[i].clear()
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```

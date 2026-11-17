@@ -972,6 +972,7 @@ Print s.pos.x
 var lista: [Punto] = [Punto(1, 2), Punto(3, 4)]
 lista[0].x = 5          # the field of a list element (also caja.items[i].nombre)
 lista[0].mover(1)       # and its methods; d["k"].push(x) in a {String: [T]}
+jugador().pos.x = 0     # the field of what a function returns (-> Sprite)
 ```
 
 To assign `a.b.c` the compiler has to know that `a.b` is a struct: the variable

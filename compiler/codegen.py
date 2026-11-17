@@ -22,7 +22,7 @@ from compiler.ast_nodes import (AmigaCast, AmigaStructDef, InExpr, InRangeExpr,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type
+from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type, memo_pred as _memo_pred
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -29663,6 +29663,13 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_expression(self, node: ASTNode) -> str:
         """Generate code for an expression."""
+        if self.__dict__.get("_pred_memo") is None:
+            # the answers of _memo_pred last the whole expression (each level of a + b + c... asks again)
+            self._pred_memo = {}
+            try:
+                return self._generate_expression(node)
+            finally:
+                self._pred_memo = None
         if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":
             return f"_dasm{node.arguments[0].value}_o{node.arguments[1].value}"
         amiga = self._amiga_expr(node)
@@ -30572,6 +30579,7 @@ static {ret_type} {method_name}({params_str}) {{
                 return True
         return False
 
+    @_memo_pred
     def _is_string_expr(self, node: ASTNode) -> bool:
         """Check if an expression evaluates to a string."""
         if isinstance(node, StringLiteral):
@@ -31062,6 +31070,7 @@ static {ret_type} {method_name}({params_str}) {{
             return bool(field and field.field_type == "Bool")
         return False
 
+    @_memo_pred
     def _is_fixed_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Fixed (16.16 in a LONG)."""
         if isinstance(node, VarRef):
@@ -31210,6 +31219,7 @@ static {ret_type} {method_name}({params_str}) {{
         finally:
             self._dbl_ctx -= 1
 
+    @_memo_pred
     def _is_double_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Double (C double, Lorraine D1)."""
         if isinstance(node, VarRef):
@@ -31242,6 +31252,7 @@ static {ret_type} {method_name}({params_str}) {{
             return bool(method and self._method_c_type(method) == "double")
         return False
 
+    @_memo_pred
     def _is_float_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Float (C float); a Float with a Double is a Double."""
         if isinstance(node, FloatLiteral):

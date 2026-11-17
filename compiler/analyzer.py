@@ -196,6 +196,47 @@ class AnalysisResult:
         return not self.has_errors
 
 
+def memo_pred(f):
+    """A question about an expression (is it a String, a Double...?) remembered for each node while the outermost
+    question lasts: they ask each other about both sides of every + and a long a + b + c... cost n^4 (a sum of 80
+    variables, 10 s; lo pidió Forja). The memo goes with the outermost call (the analyzer and the code generator
+    open it for a whole expression): the variables' types do not change meanwhile. The node is kept with the
+    answer, so its id cannot be another node's."""
+    name = f.__name__
+
+    def wrapper(self, node):
+        memo = self.__dict__.get("_pred_memo")
+        if memo is None:
+            self._pred_memo = {}
+            try:
+                return wrapper(self, node)
+            finally:
+                self._pred_memo = None
+        key = (name, id(node))
+        hit = memo.get(key)
+        if hit is not None and hit[0] is node:
+            return hit[1]
+        r = f(self, node)
+        memo[key] = (node, r)
+        return r
+    wrapper.__name__ = name
+    wrapper.__doc__ = f.__doc__
+    return wrapper
+
+
+def _plus_operands(expr):
+    """The pieces of a + b + c... from the left, in a loop (a long chain is a deep tree)."""
+    out, stack = [], [expr]
+    while stack:
+        e = stack.pop()
+        if isinstance(e, BinaryOp) and e.operator == "+":
+            stack.append(e.right)
+            stack.append(e.left)
+        else:
+            out.append(e)
+    return out
+
+
 class SemanticAnalyzer(ASTVisitor):
     """
     Performs semantic analysis on the Dash AST.
@@ -1168,6 +1209,7 @@ class SemanticAnalyzer(ASTVisitor):
     def _is_fixed_list(self, expr: Optional[ASTNode]) -> bool:
         return self._num_list(expr) == "Fixed"
 
+    @memo_pred
     def _num_list(self, expr: Optional[ASTNode]) -> Optional[str]:
         """"Fixed", "Float" or "Double" if the expression is a list of those: a [Fixed]... variable,
         parameter, call or field, a literal with such an element (the rest of that type or numbers;
@@ -1186,7 +1228,12 @@ class SemanticAnalyzer(ASTVisitor):
         if isinstance(expr, ArraySlice):
             return self._num_list(expr.array)
         if isinstance(expr, BinaryOp) and expr.operator == "+":
-            return self._num_list(expr.left) or self._num_list(expr.right)
+            # (the first one, from the left; without recursion: a + b + ... can be hundreds long)
+            for op in _plus_operands(expr):
+                num = self._num_list(op)
+                if num:
+                    return num
+            return None
         if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)):
             return _num_kind(list_elem_type(self._declared_list_type(expr)))
         return None
@@ -1309,10 +1356,16 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_MemberAssign(self, node: MemberAssign):
         """Visit a member assignment (player.x = 10, a.b.c = 10)."""
         # Check if the object variable exists
-        symbol = self.lookup_symbol(node.object_name)
-        if not symbol:
-            self._not_defined("Variable", node.object_name, node)
-            return
+        root = node.target
+        while isinstance(root, PropertyAccess):
+            root = root.object
+        if isinstance(root, FunctionCall):
+            symbol = None       # f().x = 5: no variable at the root, the call is checked with the target
+        else:
+            symbol = self.lookup_symbol(node.object_name)
+            if not symbol:
+                self._not_defined("Variable", node.object_name, node)
+                return
 
         if self._amiga_type_of(node.target if node.target is not None else VarRef(name=node.object_name)):
             # a field of an @amiga struct (A6): checked by the code generator, which knows the layout
@@ -1453,21 +1506,28 @@ class SemanticAnalyzer(ASTVisitor):
             return t if ptr_target(t) else None
         return None
 
+    @memo_pred
     def _list_kind(self, expr: ASTNode) -> Optional[str]:
         """What a list expression holds: "int", "string", "struct:Name", "list", "any"
         (empty or unknown), "fixed", "float" or "double" (a list of those), or None if expr is not a list."""
-        if self._num_list(expr):
-            return self._num_list(expr).lower()
+        num = self._num_list(expr)
+        if num:
+            return num.lower()
         if isinstance(expr, MethodCall) and expr.method == "keys" and self._dict_value_of(expr.object) is not None:
             return "int" if self._dict_key_of(expr.object) == "Int" else "string"
         if isinstance(expr, ArraySlice):
             return self._list_kind(expr.array)
         if isinstance(expr, BinaryOp) and expr.operator == "+":
-            kinds = [self._list_kind(expr.left), self._list_kind(expr.right)]
-            if None in kinds:
-                return None
-            known = [k for k in kinds if k != "any"]
-            return known[0] if known else "any"
+            # each piece of a + b + c... (without recursion, and stopping at the first that is no list: 562 lines of
+            # "text" + "text" in a file of Forja cost seconds)
+            known = None
+            for op in _plus_operands(expr):
+                kind = self._list_kind(op)
+                if kind is None:
+                    return None
+                if kind != "any" and known is None:
+                    known = kind
+            return known or "any"
         if isinstance(expr, ArrayLiteral):
             if not expr.elements:
                 return "any"
@@ -1650,6 +1710,13 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_BinaryOp(self, node: BinaryOp):
         """Visit a binary operation."""
+        if self.__dict__.get("_pred_memo") is None:
+            # the answers of memo_pred last the whole expression (each level of a + b + c... asks again)
+            self._pred_memo = {}
+            try:
+                return self.visit_BinaryOp(node)
+            finally:
+                self._pred_memo = None
         self.visit(node.left)
         self.visit(node.right)
         left, right = self._infer_type(node.left), self._infer_type(node.right)
@@ -1866,6 +1933,7 @@ class SemanticAnalyzer(ASTVisitor):
         except asm68k.AsmError as e:
             self.error(e.message, Comment(text="", location=SourceLocation(e.line, e.col, block.filename)))
 
+    @memo_pred
     def _infer_type(self, node: ASTNode) -> DashType:
         """Infer the type of an expression."""
         if isinstance(node, FunctionCall) and node.name == "__dash_asm_out":

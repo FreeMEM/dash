@@ -973,6 +973,7 @@ Print s.pos.x
 var lista: [Punto] = [Punto(1, 2), Punto(3, 4)]
 lista[0].x = 5          # el campo de un elemento de una lista (también caja.items[i].nombre)
 lista[0].mover(1)       # y sus métodos; d["k"].push(x) en un {String: [T]}
+jugador().pos.x = 0     # el campo de lo que devuelve una función (-> Sprite)
 ```
 
 Para asignar `a.b.c` el compilador tiene que saber que `a.b` es un struct: la variable
