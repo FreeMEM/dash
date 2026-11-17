@@ -26,9 +26,17 @@ dashc-a64: $(SRC) src/elf.c src/dashc.h src/ta64_base.c src/ta64_ops.c src/ta64_
 
 amiga: build/dashc.amiga
 # (los runtimes de --memcheck y --fpu van aparte, en build/dashc_mc.drt y build/dashc_fpu.drt: se copian junto a dashc)
-build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/dashc_fpu_mc.drt build/builtins_tab.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -fno-branch-count-reg -DDASH_FECHA='"$(FECHA)"' -o $@ $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
-		build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
+# -fomit-frame-pointer: sin link/unlk en cada función (un 4 % menos al compilar en un A1200, docs/DASHC_LOOP.md)
+AMIGA_DEPS = $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/dashc_fpu_mc.drt build/builtins_tab.c
+AMIGA_CC = -O2 -fomit-frame-pointer -noixemul -std=c99 -fno-branch-count-reg -DDASH_FECHA='"$(FECHA)"'
+AMIGA_IN = $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
+	build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
+build/dashc.amiga: $(AMIGA_DEPS)
+	$(AMIGA)gcc -m68000 $(AMIGA_CC) -o $@ $(AMIGA_IN)
+# para 68020 o más (no va en el paquete: solo un 3 % más rápido que el de 68000 en un A1200)
+amiga020: build/dashc020.amiga
+build/dashc020.amiga: $(AMIGA_DEPS)
+	$(AMIGA)gcc -m68020 $(AMIGA_CC) -o $@ $(AMIGA_IN)
 
 # lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
 build/builtins_tab.c: runtime/builtins_tab.c

@@ -259,6 +259,15 @@ char *asm_extract(const char *src)
     Buf out = {0};
     const char *s = src;
     int line = 1, in_native = 0, any = 0;
+    /* sin ninguna línea que empiece por "asm" no hay nada que hacer (y no se copia el fuente entero) */
+    for (;;) {
+        while (*s == ' ' || *s == '\t') s++;
+        if (s[0] == 'a' && s[1] == 's' && s[2] == 'm') break;
+        s = strchr(s, '\n');
+        if (!s) return NULL;
+        s++;
+    }
+    s = src;
     while (*s) {
         const char *e = strchr(s, '\n'), *h, *t;
         if (!e) e = s + strlen(s);
@@ -300,8 +309,8 @@ char *asm_extract(const char *src)
             VEC_PUSH(asm_blocks, bk);
             buf_bytes(&out, call.p, call.n);
             if (outs.n) buf_bytes(&out, outs.p, outs.n);
-            free(call.p);
-            free(outs.p);
+            xfree(call.p);
+            xfree(outs.p);
             buf_byte(&out, '\n');
             while (nlines--) buf_byte(&out, '\n');
             {
@@ -325,7 +334,7 @@ char *asm_extract(const char *src)
     }
     buf_byte(&out, 0);
     if (!any) {
-        free(out.p);
+        xfree(out.p);
         return NULL;
     }
     return (char *)out.p;

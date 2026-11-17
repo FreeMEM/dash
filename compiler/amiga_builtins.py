@@ -6446,9 +6446,14 @@ GL_FUNCTIONS = {
 }
 
 
+# not in DashOS yet, besides mui_* and gl_*: the program's arguments (their runtime reads the Workbench's message,
+# and DashOS's start does not pass argc/argv to the runtime; the help said "yes", asked by Forja)
+DASHOS_NOT_YET = {"arg", "arg_count"}
+
+
 def dashos_missing(name: str) -> bool:
     """A builtin of the Amiga that DashOS does not have yet (./dash --dashos: a compile error)"""
-    return name.startswith("mui_") and name not in DASHOS_MUI or name.startswith("gl_")
+    return name.startswith("mui_") and name not in DASHOS_MUI or name.startswith("gl_") or name in DASHOS_NOT_YET
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,

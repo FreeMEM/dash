@@ -105,6 +105,10 @@ static int new_label(void)
     return labels.n - 1;
 }
 
+/* (lo que en el 68000 lleva las etiquetas por posición: t68k_base.c) */
+static void label_put(int l, long v) { labels.v[l] = v; }
+static void labels_undo(int labels_n, int fixups_n) { (void)labels_n; (void)fixups_n; }
+
 /* Las banderas, como en el 68000 (donde mover a d0 las pone): cada camino que llega a una etiqueta las deja puestas
    (si x0 cambió tras la última comparación, se compara con 0 antes de saltar o de seguir), y así en la etiqueta valen */
 static void cmp_x0_zero(void);

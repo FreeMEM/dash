@@ -33,6 +33,8 @@ typedef struct {
 typedef struct { const char *name; int hunk; uint32_t val; int abs; } Sym;
 
 static struct { Hunk *v; int n, cap; } hunks;
+static Hunk *hk(int i);   /* hunks.v[i], leído si es del runtime preparado */
+static Sym *sy(int i);    /* syms.v[i], ídem (con SIDX) */
 static struct { Sym *v; int n, cap; } syms;
 
 typedef struct { int hunk; uint32_t off; char *name; } Ref;
@@ -72,10 +74,120 @@ static void add_sym(const char *name, int hunk, uint32_t val, int abs)
     VEC_PUSH(syms, s);
 }
 
+/* El runtime preparado en DRT2 trae al final sus símbolos ordenados por nombre ("SIDX", runtime/rt_blob.py): un
+   nombre se busca partiendo en dos, sin recorrer (ni calcular nada de) los miles que tiene. sidx_find: en el blob p,
+   el número del primer símbolo con ese nombre (el de menor número entre los iguales), o -1; -2 si no trae SIDX. */
+static long sidx_find(const uint8_t *p, size_t len, const char *name)
+{
+    uint32_t nh, ns, nr, nrel, stl, dl, n;
+    const uint8_t *sp0, *strs, *idx;
+    long lo, hi;
+    if (len < 28 || get_long(p) != DRT2_MAGIC) return -2;
+    nh = get_long(p + 4);
+    ns = get_long(p + 8);
+    nr = get_long(p + 12);
+    nrel = get_long(p + 16);
+    stl = get_long(p + 20);
+    dl = get_long(p + 24);
+    sp0 = p + 28 + nh * 28 + nrel * 8;
+    strs = sp0 + ns * 12 + nr * 12 + nh * 4;
+    idx = strs + stl + dl;
+    if (idx + 8 > p + len || get_long(idx) != 0x53494458u || (n = get_long(idx + 4)) != ns ||
+        idx + 8 + 4 * (size_t)ns > p + len)
+        return -2;
+    idx += 8;
+    lo = 0;
+    hi = (long)ns;
+    while (lo < hi) {                                  /* el primero que no es menor */
+        long mid = (lo + hi) / 2;
+        if (strcmp((const char *)strs + get_long(sp0 + get_long(idx + 4 * mid) * 12), name) < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    if (lo < (long)ns && !strcmp((const char *)strs + get_long(sp0 + get_long(idx + 4 * lo) * 12), name))
+        return (long)get_long(idx + 4 * lo);
+    return -1;
+}
+
+/* Por posición en el orden: sidx_at, el número del símbolo; sidx_first, la primera posición cuyo nombre empieza por
+   pre (o -1); sidx_next_prefix, la siguiente que aún empieza por pre (o -1). (Solo con SIDX.) */
+static const uint8_t *sidx_tab(const uint8_t *p, const uint8_t **sp0, const uint8_t **strs, uint32_t *ns)
+{
+    uint32_t nh = get_long(p + 4), nr = get_long(p + 12), nrel = get_long(p + 16);
+    *ns = get_long(p + 8);
+    *sp0 = p + 28 + nh * 28 + nrel * 8;
+    *strs = *sp0 + *ns * 12 + nr * 12 + nh * 4;
+    return *strs + get_long(p + 20) + get_long(p + 24) + 8;
+}
+
+static uint32_t sidx_at(const uint8_t *p, long k)
+{
+    const uint8_t *sp0, *strs;
+    uint32_t ns;
+    return get_long(sidx_tab(p, &sp0, &strs, &ns) + 4 * k);
+}
+
+static long sidx_next_prefix(const uint8_t *p, long k, const char *pre, size_t n)
+{
+    const uint8_t *sp0, *strs, *idx = NULL;
+    uint32_t ns;
+    idx = sidx_tab(p, &sp0, &strs, &ns);
+    k++;
+    if (k >= (long)ns) return -1;
+    return strncmp((const char *)strs + get_long(sp0 + get_long(idx + 4 * k) * 12), pre, n) ? -1 : k;
+}
+
+static long sidx_first(const uint8_t *p, size_t len, const char *pre)
+{
+    const uint8_t *sp0, *strs, *idx;
+    uint32_t ns;
+    long lo = 0, hi;
+    (void)len;
+    idx = sidx_tab(p, &sp0, &strs, &ns);
+    hi = (long)ns;
+    while (lo < hi) {
+        long mid = (lo + hi) / 2;
+        if (strcmp((const char *)strs + get_long(sp0 + get_long(idx + 4 * mid) * 12), pre) < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    if (lo < (long)ns && !strncmp((const char *)strs + get_long(sp0 + get_long(idx + 4 * lo) * 12), pre, strlen(pre)))
+        return lo;
+    return -1;
+}
+
+/* los símbolos del runtime preparado con SIDX: desde sidx_base, sidx_n (load_prepared) */
+static const uint8_t *sidx_blob;
+static size_t sidx_len;
+static int sidx_base = -1, sidx_n;
+static NameIdx idx_syms, idx_syms_after;   /* (NameIdx: los que no son de ahí) */
+
 static Sym *find_sym(const char *name)
 {
     int i;
-    for (i = 0; i < syms.n; i++)
+    if (sidx_base >= 0 && syms.n >= sidx_base + sidx_n) {
+        int after = sidx_base + sidx_n;
+        long k;
+        for (i = 0; i < sidx_base; i++)                /* (los de antes del runtime: ninguno, al enlazar) */
+            if (!strcmp(syms.v[i].name, name)) return &syms.v[i];
+        {
+            /* (un mismo nombre llega muchas veces, con el mismo puntero: las reubicaciones del programa) */
+            static struct { const char *p; long k; } cache[256];
+            unsigned c = (unsigned)(((size_t)name >> 2) & 255);
+            if (cache[c].p == name && !strcmp(sy(sidx_base + (int)cache[c].k)->name, name))
+                return sy(sidx_base + (int)cache[c].k);
+            k = sidx_find(sidx_blob, sidx_len, name);
+            if (k >= 0) {
+                cache[c].p = name;
+                cache[c].k = k;
+                return sy(sidx_base + (int)k);
+            }
+        }
+        nidx_sync(&idx_syms_after, syms.v + after, sizeof(Sym), offsetof(Sym, name), syms.n - after);
+        NIDX_FOR(&idx_syms_after, name, i)
+            if (!strcmp(syms.v[after + i].name, name)) return &syms.v[after + i];
+        return NULL;
+    }
+    NIDX_SYNC(&idx_syms, syms, name);
+    NIDX_FOR(&idx_syms, name, i)
         if (!strcmp(syms.v[i].name, name)) return &syms.v[i];
     return NULL;
 }
@@ -237,19 +349,35 @@ static void read_linked(const char *path)
 int runtime_has(const char *sym)
 {
     static struct { char **v; int n, cap; } names;
+    static NameIdx idx;
     static int loaded;
     int i;
     if (!loaded) {
         loaded = 1;
-        if (rt_blob_len >= 4 && (get_long(rt_blob) == DRT_MAGIC || get_long(rt_blob) == DRT2_MAGIC))
-            load_prepared(rt_blob, rt_blob_len);
-        else read_object(rt_blob, rt_blob_len);
-        for (i = 0; i < syms.n; i++) VEC_PUSH(names, (char *)syms.v[i].name);
-        hunks.n = 0;
-        syms.n = 0;
-        refs.n = 0;
+        if (sidx_find(rt_blob, rt_blob_len, "") != -2) {
+            /* con SIDX: se busca ahí (abajo), sin leer los nombres */
+        } else if (rt_blob_len >= 28 && (get_long(rt_blob) == DRT_MAGIC || get_long(rt_blob) == DRT2_MAGIC)) {
+            /* el runtime preparado: solo los nombres de sus símbolos (load_prepared lo carga entero al enlazar) */
+            const uint8_t *p = rt_blob;
+            uint32_t nh = get_long(p + 4), ns = get_long(p + 8), nr = get_long(p + 12), nrel = get_long(p + 16);
+            const uint8_t *sp0 = p + 28 + nh * 28 + nrel * 8, *fp = sp0 + ns * 12;
+            const uint8_t *strs = fp + nr * 12 + (get_long(p) == DRT2_MAGIC ? nh * 4 : 0);
+            uint32_t k;
+            for (k = 0; k < ns; k++) VEC_PUSH(names, (char *)strs + get_long(sp0 + k * 12));
+        } else {
+            read_object(rt_blob, rt_blob_len);
+            for (i = 0; i < syms.n; i++) VEC_PUSH(names, (char *)syms.v[i].name);
+            hunks.n = 0;
+            syms.n = 0;
+            refs.n = 0;
+        }
+        nidx_sync(&idx, names.v, sizeof(char *), 0, names.n);
     }
-    for (i = 0; i < names.n; i++)
+    if (!names.n) {
+        long k = sidx_find(rt_blob, rt_blob_len, sym);
+        if (k != -2) return k >= 0;
+    }
+    NIDX_FOR(&idx, sym, i)
         if (!strcmp(names.v[i], sym)) return 1;
     return 0;
 }
@@ -277,15 +405,39 @@ static void bind(int hunk, uint32_t off, const char *name)
         HReloc r;
         r.off = off;
         r.target = s->hunk;
-        VEC_PUSH(hunks.v[hunk].relocs, r);
+        VEC_PUSH(hk(hunk)->relocs, r);
     }
+}
+
+/* lo que se escribe del ejecutable pasa por wbuf (un fwrite por cada long costaba en el Amiga: un programa grande
+   lleva cientos de miles de reubicaciones) */
+static uint8_t wbuf[8192];
+static size_t wbuf_n;
+
+static void wflush(FILE *f)
+{
+    if (wbuf_n) fwrite(wbuf, 1, wbuf_n, f);
+    wbuf_n = 0;
+}
+
+static void wbytes(FILE *f, const void *p, size_t n)
+{
+    if (wbuf_n + n > sizeof wbuf) {
+        wflush(f);
+        if (n > sizeof wbuf) {
+            fwrite(p, 1, n, f);
+            return;
+        }
+    }
+    memcpy(wbuf + wbuf_n, p, n);
+    wbuf_n += n;
 }
 
 static void wl(FILE *f, uint32_t v)
 {
-    uint8_t b[4];
-    put_long(b, v);
-    fwrite(b, 1, 4, f);
+    if (wbuf_n + 4 > sizeof wbuf) wflush(f);
+    put_long(wbuf + wbuf_n, v);
+    wbuf_n += 4;
 }
 
 static Hunk own_hunk(int type, Buf *b)
@@ -304,12 +456,39 @@ static Hunk own_hunk(int type, Buf *b)
 static int *why;
 static const char *hunk_name(int i)
 {
-    const char *name = hunks.v[i].secname ? hunks.v[i].secname : "?";
+    const char *name = hk(i)->secname ? hk(i)->secname : "?";
     int j;
     for (j = 0; j < syms.n; j++)                     /* el símbolo del principio, si lo hay */
-        if (syms.v[j].hunk == i && (name == hunks.v[i].secname || !syms.v[j].val)) name = syms.v[j].name;
+        if (sy(j)->hunk == i && (name == hk(i)->secname || !sy(j)->val)) name = sy(j)->name;
     return name;
 }                                  /* DASHC_MAPA: quién trajo cada hunk */
+/* las referencias (refs) de cada hunk, en orden: ref_head[h] la primera y ref_next[j] la siguiente del mismo hunk
+   (sin recorrer todas las del runtime por cada hunk que se mira) */
+static int *ref_head, *ref_next, ref_hunks = -1, ref_count = -1;
+
+static void refs_by_hunk(void)
+{
+    int j, *tail;
+    if (ref_hunks == hunks.n && ref_count == refs.n) return;
+    xfree(ref_head);
+    xfree(ref_next);
+    ref_head = xmalloc(sizeof(int) * (hunks.n + 1));
+    ref_next = xmalloc(sizeof(int) * (refs.n + 1));
+    tail = xmalloc(sizeof(int) * (hunks.n + 1));
+    for (j = 0; j < hunks.n; j++) ref_head[j] = -1;
+    for (j = 0; j < refs.n; j++) {
+        int h = refs.v[j].hunk;
+        ref_next[j] = -1;
+        if (h < 0 || h >= hunks.n) continue;
+        if (ref_head[h] < 0) ref_head[h] = j;
+        else ref_next[tail[h]] = j;
+        tail[h] = j;
+    }
+    xfree(tail);
+    ref_hunks = hunks.n;
+    ref_count = refs.n;
+}
+
 static void reach(int *keep, int *stack, int sp, const int *weak)
 {
     int j;
@@ -317,8 +496,9 @@ static void reach(int *keep, int *stack, int sp, const int *weak)
         int cur = stack[--sp];
         Hunk *h;
         relocs_ready(cur);
-        h = &hunks.v[cur];
-        for (j = 0; j < refs.n; j++)
+        h = hk(cur);
+        refs_by_hunk();
+        for (j = ref_head[cur]; j >= 0; j = ref_next[j])
             if (refs.v[j].hunk == cur) {
                 bind(cur, refs.v[j].off, refs.v[j].name);
                 refs.v[j].hunk = -1;               /* ya está */
@@ -348,32 +528,36 @@ static int shared_data(int d)
 
 /* ¿usa el hunk t datos o BSS que van en el programa y no son del arranque? (sus reubicaciones y sus
    símbolos aún sin atar) */
+static int own_data_of(int t, int d, const int *keep, const int *core)
+{
+    if (keep[d] && !core[d] && hk(d)->type != HUNK_CODE && !shared_data(d)) {
+        if (getenv("DASHC_MAPA")) {
+            const char *a = hk(t)->secname, *b = hk(d)->secname;
+            int k;
+            for (k = 0; k < syms.n; k++)
+                if (sy(k)->hunk == d) b = sy(k)->name;
+            err_printf("limpieza %s por %s\n", a ? a : "?", b ? b : "?");
+        }
+        return 1;
+    }
+    return 0;
+}
+
 static int touches_own_data(int t, const int *keep, const int *core)
 {
-    int j, d;
+    int j;
     Hunk *h;
     relocs_ready(t);
-    h = &hunks.v[t];
-    for (j = 0; j < h->relocs.n + refs.n; j++) {
-        if (j < h->relocs.n) {
-            d = h->relocs.v[j].target;
-        } else {
-            Sym *s;
-            if (refs.v[j - h->relocs.n].hunk != t) continue;
-            s = find_sym(refs.v[j - h->relocs.n].name);
-            if (!s || s->abs) continue;
-            d = s->hunk;
-        }
-        if (keep[d] && !core[d] && hunks.v[d].type != HUNK_CODE && !shared_data(d)) {
-            if (getenv("DASHC_MAPA")) {
-                const char *a = hunks.v[t].secname, *b = hunks.v[d].secname;
-                int k;
-                for (k = 0; k < syms.n; k++)
-                    if (syms.v[k].hunk == d) b = syms.v[k].name;
-                err_printf("limpieza %s por %s\n", a ? a : "?", b ? b : "?");
-            }
-            return 1;
-        }
+    h = hk(t);
+    for (j = 0; j < h->relocs.n; j++)
+        if (own_data_of(t, h->relocs.v[j].target, keep, core)) return 1;
+    refs_by_hunk();
+    for (j = ref_head[t]; j >= 0; j = ref_next[j]) {
+        Sym *s;
+        if (refs.v[j].hunk != t) continue;
+        s = find_sym(refs.v[j].name);
+        if (!s || s->abs) continue;
+        if (own_data_of(t, s->hunk, keep, core)) return 1;
     }
     return 0;
 }
@@ -425,7 +609,7 @@ static void split_strings(int first)
             ns = k;
         }
         if (bad || ns < 2) {                           /* (con un solo texto, nada que partir) */
-            free(starts);
+            xfree(starts);
             continue;
         }
         /* las referencias, a su trozo (el primero se queda en este hunk; los demás, hunks nuevos tras los
@@ -457,7 +641,7 @@ static void split_strings(int first)
         }
         hunks.v[i].size = starts[1];
         hunks.v[i].align2 = 1;
-        free(starts);
+        xfree(starts);
     }
 }
 
@@ -555,6 +739,60 @@ void prepare_runtime(const uint8_t *rt, size_t len, const char *out)
     if (fclose(f)) fatal("no se puede escribir %s", out);
 }
 
+/* el runtime preparado que se cargó (load_prepared): sus tablas y qué hunks son suyos (y sus símbolos, con SIDX:
+   pr_slazy, desde sidx_base) */
+static const uint8_t *pr_hp, *pr_rp0, *pr_strs, *pr_data, *pr_zl, *pr_sp0;
+static int pr_base = 0, pr_end = 0, pr_slazy;
+static uint8_t *pr_hfilled, *pr_sfilled;
+
+static Sym *sy(int i)
+{
+    Sym *sm = &syms.v[i];
+    if (pr_slazy && i >= sidx_base && i < sidx_base + sidx_n && !pr_sfilled[i - sidx_base]) {
+        const uint8_t *e = pr_sp0 + (uint32_t)(i - sidx_base) * 12;
+        uint32_t h = get_long(e + 4);
+        pr_sfilled[i - sidx_base] = 1;
+        sm->name = (const char *)pr_strs + get_long(e);
+        sm->hunk = h == ~0u ? -1 : pr_base + (int)h;
+        sm->val = get_long(e + 8);
+        sm->abs = h == ~0u;
+    }
+    return sm;
+}
+
+/* el hunk i, leído de la tabla del runtime preparado si aún no lo estaba */
+static Hunk *hk(int i)
+{
+    Hunk *h = &hunks.v[i];
+    if (i >= pr_base && i < pr_end && !pr_hfilled[i - pr_base]) {
+        uint32_t k = (uint32_t)(i - pr_base);
+        const uint8_t *e = pr_hp + k * 28;
+        uint32_t flags = get_long(e + 8), name = get_long(e + 12), d = get_long(e + 16);
+        uint32_t r0 = get_long(e + 20), rn = get_long(e + 24);
+        pr_hfilled[k] = 1;
+        memset(h, 0, sizeof *h);
+        h->type = (int)get_long(e);
+        h->size = get_long(e + 4);
+        h->align2 = flags & 1;
+        h->memflags = flags & 0xC0000000u;
+        h->secname = name == ~0u ? NULL : (const char *)pr_strs + name;
+        if (d != ~0u && pr_zl && get_long(pr_zl + k * 4)) {
+            h->zdata = pr_data + d;
+            h->zlen = get_long(pr_zl + k * 4);
+        } else if (d != ~0u) {
+            h->data = (uint8_t *)(pr_data + d);
+            h->shared = 1;
+        }
+        if (rn) {
+            /* (se leen solo las de los hunks que se miran: casi todos se quedan fuera) */
+            h->lazy = pr_rp0 + r0 * 8;
+            h->lazy_n = (int)rn;
+            h->lazy_base = pr_base;
+        }
+    }
+    return h;
+}
+
 /* carga el runtime preparado tras los hunks que ya hay; los datos se quedan en el blob hasta que se cambian */
 static void load_prepared(const uint8_t *p, size_t len)
 {
@@ -584,29 +822,28 @@ static void load_prepared(const uint8_t *p, size_t len)
         syms.cap = syms.n + (int)ns + 64;
         syms.v = xrealloc(syms.v, sizeof(Sym) * syms.cap);
     }
-    for (i = 0; i < nh; i++, hp += 28) {
-        Hunk h = {0};
-        uint32_t flags = get_long(hp + 8), name = get_long(hp + 12), d = get_long(hp + 16);
-        uint32_t r0 = get_long(hp + 20), rn = get_long(hp + 24);
-        h.type = (int)get_long(hp);
-        h.size = get_long(hp + 4);
-        h.align2 = flags & 1;
-        h.memflags = flags & 0xC0000000u;
-        h.secname = name == ~0u ? NULL : (const char *)strs + name;
-        if (d != ~0u && zl && get_long(zl + i * 4)) {
-            h.zdata = data + d;
-            h.zlen = get_long(zl + i * 4);
-        } else if (d != ~0u) {
-            h.data = (uint8_t *)(data + d);
-            h.shared = 1;
-        }
-        if (rn) {
-            /* (se leen solo las de los hunks que se miran: casi todos se quedan fuera) */
-            h.lazy = rp0 + r0 * 8;
-            h.lazy_n = (int)rn;
-            h.lazy_base = base;
-        }
-        VEC_PUSH(hunks, h);
+    /* los hunks se leen de su tabla al mirarlos (hk): casi todos se quedan fuera, y leerlos todos (4.500) costaba
+       en el A1200 más que el resto de enlazar un programa pequeño */
+    hunks.n += (int)nh;
+    pr_hfilled = xmalloc(nh + 1);
+    pr_hp = hp;
+    pr_rp0 = rp0;
+    pr_strs = strs;
+    pr_data = data;
+    pr_zl = zl;
+    pr_base = base;
+    pr_end = base + (int)nh;
+    if (sidx_find(p, len, "") != -2) {                 /* (trae SIDX: find_sym busca ahí) */
+        sidx_blob = p;
+        sidx_len = len;
+        sidx_base = syms.n;
+        sidx_n = (int)ns;
+        /* y sus símbolos se leen al mirarlos (sy) */
+        pr_sp0 = sp0;
+        pr_slazy = 1;
+        pr_sfilled = xmalloc(ns + 1);
+        syms.n += (int)ns;
+        ns = 0;
     }
     for (i = 0; i < ns; i++, sp0 += 12) {
         uint32_t hk = get_long(sp0 + 4);
@@ -624,7 +861,7 @@ static void load_prepared(const uint8_t *p, size_t len)
 /* las reubicaciones del hunk i, leídas del runtime preparado si aún no lo estaban */
 static void relocs_ready(int i)
 {
-    Hunk *h = &hunks.v[i];
+    Hunk *h = hk(i);
     int j;
     if (!h->lazy) return;
     h->relocs.v = xmalloc(sizeof(HReloc) * h->lazy_n);
@@ -639,19 +876,23 @@ static void relocs_ready(int i)
 /* los datos del hunk i, propios (copiados del runtime preparado si hacía falta) para cambiarlos */
 static uint8_t *own_data(int i)
 {
-    Hunk *h = &hunks.v[i];
+    Hunk *h = hk(i);
     if (h->zdata) {
-        /* DRT2: sus datos, descomprimidos ahora (deflate crudo) */
-        z_stream z;
-        memset(&z, 0, sizeof z);
+        /* DRT2: sus datos, descomprimidos ahora (deflate crudo). Con el mismo z_stream para todos: abrir uno por hunk
+           pedía y ponía a 0 sus 7 KB cada vez */
+        static z_stream z;
+        static int z_ready;
+        int ok;
         h->data = xmalloc(h->size);
+        if (!z_ready) ok = inflateInit2(&z, -MAX_WBITS) == Z_OK;
+        else ok = inflateReset(&z) == Z_OK;
+        z_ready = 1;
         z.next_in = (Bytef *)h->zdata;
         z.avail_in = h->zlen;
         z.next_out = h->data;
         z.avail_out = h->size;
-        if (inflateInit2(&z, -MAX_WBITS) != Z_OK || inflate(&z, Z_FINISH) != Z_STREAM_END || z.total_out != h->size)
+        if (!ok || inflate(&z, Z_FINISH) != Z_STREAM_END || z.total_out != h->size)
             fatal("el runtime de dentro está estropeado");
-        inflateEnd(&z);
         h->zdata = NULL;
         h->shared = 0;
     }
@@ -710,7 +951,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             HReloc h;
             h.off = r->off;
             h.target = r->hunk;
-            VEC_PUSH(hunks.v[HK_CODE].relocs, h);
+            VEC_PUSH(hk(HK_CODE)->relocs, h);
         }
     }
 
@@ -722,8 +963,22 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
        apuntan no cuenta como usado */
     weak = xmalloc(sizeof(int) * hunks.n);
     memset(weak, 0, sizeof(int) * hunks.n);
-    for (i = 0; i < syms.n; i++)
-        if (syms.v[i].hunk >= 0 && !strncmp(syms.v[i].name, "__dash_weak_", 12)) weak[syms.v[i].hunk] = 1;
+    if (pr_slazy) {
+        /* con SIDX, los __dash_weak_* van juntos en el orden por nombre: solo esos */
+        long k = sidx_first(sidx_blob, sidx_len, "__dash_weak_");
+        for (; k >= 0; k = sidx_next_prefix(sidx_blob, k, "__dash_weak_", 12)) {
+            Sym *sm = sy(sidx_base + (int)sidx_at(sidx_blob, k));
+            if (sm->hunk >= 0) weak[sm->hunk] = 1;
+        }
+        for (i = 0; i < syms.n; i++)                   /* (los que no son del runtime preparado) */
+            if ((i < sidx_base || i >= sidx_base + sidx_n) && syms.v[i].hunk >= 0 &&
+                !strncmp(syms.v[i].name, "__dash_weak_", 12))
+                weak[syms.v[i].hunk] = 1;
+    } else {
+        for (i = 0; i < syms.n; i++)
+            if (syms.v[i].hunk >= 0 && syms.v[i].name[0] == '_' && !strncmp(syms.v[i].name, "__dash_weak_", 12))
+                weak[syms.v[i].hunk] = 1;
+    }
     if (getenv("DASHC_MAPA")) {
         why = xmalloc(sizeof(int) * hunks.n);
         for (i = 0; i < hunks.n; i++) why[i] = -1;
@@ -748,11 +1003,18 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             reach(core, stack, 1, weak);
         }
     }
+    {
+        /* (los débiles, en orden: sin recorrer los miles de hunks en cada vuelta) */
+        int *wl = xmalloc(sizeof(int) * (hunks.n + 1)), nw = 0, w;
+        for (i = 0; i < hunks.n; i++)
+            if (weak[i]) wl[nw++] = i;
     for (more = !getenv("DASHC_SIN_LIMPIEZAS"); more; ) {
         more = 0;
-        for (i = 0; i < hunks.n; i++) {
-            Hunk *h = &hunks.v[i];
-            if (!keep[i] || !weak[i]) continue;
+        for (w = 0; w < nw; w++) {
+            Hunk *h;
+            i = wl[w];
+            if (!keep[i]) continue;
+            h = hk(i);
             for (j = 0; j < h->relocs.n; j++) {
                 int t = h->relocs.v[j].target;
                 if (!keep[t] && touches_own_data(t, keep, core)) {
@@ -763,6 +1025,8 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                 }
             }
         }
+    }
+        xfree(wl);
     }
 
     if (missing.n) {
@@ -777,7 +1041,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         if (keep[i] && weak[i]) {
             Hunk *h;
             relocs_ready(i);
-            h = &hunks.v[i];
+            h = hk(i);
             for (j = 0; j < h->relocs.n; j++)
                 if (!keep[h->relocs.v[j].target]) {
                     put_long(own_data(i) + h->relocs.v[j].off, 0);
@@ -790,8 +1054,9 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     base = xmalloc(sizeof(uint32_t) * hunks.n);
     outh = xmalloc(sizeof(int) * hunks.n);
     for (i = 0; i < hunks.n; i++) {
-        Hunk *h = &hunks.v[i];
+        Hunk *h;
         if (!keep[i]) continue;
+        h = hk(i);
         if (h->memflags) fatal("%s: un hunk con memoria chip o fast aún no se admite", h->secname ? h->secname : "?");
         outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? 1 : 2;
         base[i] = outsize[outh[i]];
@@ -803,7 +1068,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         Hunk *h;
         if (!keep[i]) continue;
         relocs_ready(i);
-        h = &hunks.v[i];
+        h = hk(i);
         for (j = 0; j < h->relocs.n; j++) {
             HReloc r;
             int t = h->relocs.v[j].target;
@@ -820,7 +1085,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         for (i = 2; i < hunks.n; i++)
             if (keep[i]) {
                 int by = why[i];
-                err_printf("%6u %c %06x %s", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE],
+                err_printf("%6u %c %06x %s", (unsigned)hk(i)->size, "CDB"[hk(i)->type - HUNK_CODE],
                            (unsigned)base[i], hunk_name(i));
                 err_printf(" <- %s\n", by < 0 ? "(limpieza)" : by < 2 ? "(programa)" : hunk_name(by));
             }
@@ -849,16 +1114,17 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         if (k < 2) {
             uint32_t done = 0;
             for (i = 0; i < hunks.n; i++) {
-                Hunk *h = &hunks.v[i];
+                Hunk *h;
                 uint32_t padded;
                 if (!keep[i] || outh[i] != k) continue;
+                h = hk(i);
                 padded = h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
                 if (h->zdata) own_data(i);
-                fwrite(h->data, 1, h->size, f);
-                fwrite(zero, 1, padded - h->size, f);
+                wbytes(f, h->data, h->size);
+                wbytes(f, zero, padded - h->size);
                 done += padded;
             }
-            fwrite(zero, 1, outsize[k] - done, f);
+            wbytes(f, zero, outsize[k] - done);
         }
         if (outrel[k].n) {
             /* agrupadas por el hunk al que apuntan, en grupos de RELOC_GRUPO como mucho: LoadSeg (3.1 y 3.2) da
@@ -889,10 +1155,11 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             uint32_t n = ((uint32_t)debug_info.n + 3) / 4;
             wl(f, HUNK_DEBUG);
             wl(f, n);
-            fwrite(debug_info.p, 1, debug_info.n, f);
-            fwrite(zero, 1, n * 4 - debug_info.n, f);
+            wbytes(f, debug_info.p, debug_info.n);
+            wbytes(f, zero, n * 4 - debug_info.n);
         }
         wl(f, HUNK_END);
     }
+    wflush(f);
     if (fclose(f)) fatal("no se puede escribir %s", out);
 }

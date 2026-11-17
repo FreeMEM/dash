@@ -19,13 +19,42 @@ void buf_byte(Buf *b, int v);
 void buf_word(Buf *b, int v);
 void buf_long(Buf *b, uint32_t v);
 void buf_bytes(Buf *b, const void *p, size_t n);
-void put_word(uint8_t *p, int v);
-void put_long(uint8_t *p, uint32_t v);
-uint32_t get_long(const uint8_t *p);
+/* (en línea: se llaman cientos de miles de veces al leer el runtime y escribir el código) */
+static inline void put_word(uint8_t *p, int v)
+{
+    p[0] = (uint8_t)(v >> 8);
+    p[1] = (uint8_t)v;
+}
+static inline void put_long(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+static inline uint32_t get_long(const uint8_t *p)
+{
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
 
 void *xmalloc(size_t n);
 void *xrealloc(void *p, size_t n);
+void xfree(void *p);      /* lo de xmalloc y xrealloc (no el free de C) */
+void mem_init(void);      /* al empezar main: suelta la memoria al acabar */
 char *xstrndup(const char *s, size_t n);
+/* índice de nombres de una lista (util.c): nidx_sync(&x, lista.v, sizeof(*lista.v), offsetof(T, name), lista.n) antes de
+   buscar (vale con la lista crecida o rehecha); NIDX_FOR recorre, en orden, los elementos del cubo de name (hay que
+   comparar el nombre: un cubo puede tener otros) */
+typedef struct { int *head, *tail, *next; int nb, n, cap; const void *base; } NameIdx;
+unsigned name_hash(const char *s);
+void nidx_sync(NameIdx *x, const void *base, size_t stride, size_t off, int n);
+#define NIDX_FOR(x, name, i) NIDX_FOR_H(x, name_hash(name), i)
+/* (con el hash ya hecho: el mismo nombre se busca en varias listas) */
+#define NIDX_FOR_H(x, h, i) for ((i) = (x)->nb ? (x)->head[(h) & (unsigned)((x)->nb - 1)] : -1; (i) >= 0; (i) = (x)->next[i])
+#define NIDX_SYNC(x, list, field) do { \
+        if ((x)->base != (const void *)(list).v || (x)->n != (list).n) \
+            nidx_sync((x), (list).v, sizeof(*(list).v), offsetof(__typeof__(*(list).v), field), (list).n); \
+    } while (0)
 
 /* lista dinámica: struct { T *v; int n, cap; } */
 #define VEC_PUSH(vec, x) do { \
@@ -82,6 +111,7 @@ typedef struct {
 } Token;
 
 Token *lex(const char *src);
+void lex_rename_private(Token *t);   /* (con lex_priv y lex_npriv puestos) */
 extern const char **lex_priv;  /* los nombres privados del módulo que se lee (rename_private) */
 extern int lex_npriv;
 const char *tok_name(int kind);
@@ -285,9 +315,11 @@ typedef struct {
     uint32_t off;      /* dónde está el long que hay que reubicar */
     int hunk;          /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
     const char *sym;
+#ifdef DASH_A64
     int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
     long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */
     int in_data;       /* AArch64: el sitio está en los datos (si no, en el código) */
+#endif
 } Reloc;
 
 typedef struct {

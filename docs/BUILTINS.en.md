@@ -4774,7 +4774,7 @@ end
 | [`str_replace(s, from, to)`](#str_replace) | String | Copy with every from replaced by to |  |
 | [`str_contains(s, sub)`](#str_contains) | Bool | Whether sub is in s ("" is in every text) |  |
 | [`str_join(list, sep)`](#str_join) | String | The texts of a [String] list one after another, with sep between each two; "" for an empty list (the opposite of str_split) |  |
-| [`str_split(s, sep)`](#str_split) | [Int] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
+| [`str_split(s, sep)`](#str_split) | [String] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
 | [`file_read_text(filename)`](#file_read_text) | String | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
 | [`file_write_text(filename, text)`](#file_write_text) | Bool | Write the text as the whole file; true if it was all written |  |
 | [`str_from_buffer(buffer, offset, length)`](#str_from_buffer) | String | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
@@ -4937,7 +4937,7 @@ See also: [`str_split`](#str_split).
 
 <a id="str_split"></a>
 
-### `str_split(s, sep)` → `[Int]`
+### `str_split(s, sep)` → `[String]`
 
 - `s`: the text.
 - `sep`: the separator.
@@ -7682,7 +7682,7 @@ full syntax is in the manual (section 5).
 | [`regex_find(pattern, text, from, ignore_case)`](#regex_find) | Int | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
 | [`regex_length()`](#regex_length) | Int | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
 | [`regex_group(n)`](#regex_group) | String | Text of group n of the last match (0: the whole match); "" if it did not take part |  |
-| [`regex_groups()`](#regex_groups) | [Int] | The texts of the groups of the last match, 1 to regex_group_count(), as a new [String] |  |
+| [`regex_groups()`](#regex_groups) | [String] | The texts of the groups of the last match, 1 to regex_group_count(), as a new [String] |  |
 | [`regex_group_count()`](#regex_group_count) | Int | How many groups that capture the last pattern has ((?: ) does not count) |  |
 | [`regex_group_start(n)`](#regex_group_start) | Int | Byte where group n of the last match starts, -1 if it did not take part |  |
 | [`regex_group_length(n)`](#regex_group_length) | Int | Length in bytes of group n of the last match (0 if it did not take part) |  |
@@ -7735,7 +7735,7 @@ See also: [`regex_groups`](#regex_groups), [`regex_group_start`](#regex_group_st
 
 <a id="regex_groups"></a>
 
-### `regex_groups()` → `[Int]`
+### `regex_groups()` → `[String]`
 
 Returns a new `[String]` with the text of groups 1 to `regex_group_count()` of the last match, like Python's
 `groups()`; empty if nothing matched. Nested ones come in their place, by the order of their `(`, and

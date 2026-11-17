@@ -973,7 +973,9 @@ class SemanticAnalyzer(ASTVisitor):
                 self.error(f"'{node.name}' is only for DashOS (./dash --dashos)", node)
             from compiler.amiga_builtins import dashos_missing
             if os.environ.get("DASH_TARGET") == "dashos" and dashos_missing(node.name):
-                self.error(f"'{node.name}' is not in DashOS yet (./dash --dashos has mui_* windows, not all)", node)
+                self.error(f"'{node.name}' is not in DashOS yet" +
+                           (" (./dash --dashos has mui_* windows, not all)" if node.name.startswith("mui_") else ""),
+                           node)
             # Validate argument count for builtin
             expected = len(builtin.params)
             actual = len(node.arguments)

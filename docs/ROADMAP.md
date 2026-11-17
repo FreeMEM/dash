@@ -1163,6 +1163,15 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       escribir con `./dash --check` (`--texto`), plantillas de orden, demo, 3D y DashOS, y fragmentos de `asm`,
       `gl_*` y lo nuevo. `compiler/lsp.py`: sus arreglos rápidos entienden también los mensajes de `--check`.
       `editor/vscode/test/forja.js`, `tests/lsp/test_lsp.py`
+- [x] Compilar más rápido en el Amiga (2026-11-17, lo pidió Forja, paso 4.3 de su `docs/FORJA_LOOP.md`): el
+      compilador del Amiga (`./dash` directo) tarda la mitad o menos y genera los mismos bytes. En un A1200: un
+      programa de 546 líneas, `--check` de 5,0 a 2,3 s y compilar de 9,1 a 3,5 s; un "hola", de 1,05 a 0,54 s. Índices
+      de nombres en vez de recorrer listas, saltos y etiquetas sin recorrer todo el código, el runtime se lee solo en
+      lo que se usa (sus símbolos van ordenados en el `.drt`), memoria propia en vez del malloc de libnix. Además,
+      `arg` y `arg_count` dicen ya que no están en DashOS, la ficha de `str_split` dice `[String]` y, con `--profile`,
+      el directo no copia en línea las funciones pequeñas (el perfil solo veía Main; lo vio Forja,
+      `tests/unit/test_perfil_copias.py`). Medidas y
+      detalle: `docs/DASHC_LOOP.md`
 
 ## Notas y Decisiones
 

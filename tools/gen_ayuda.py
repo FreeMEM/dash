@@ -26,7 +26,7 @@ import compiler  # noqa: E402
 import compiler.amiga_builtins as ab  # noqa: E402
 from compiler import builtins_doc  # noqa: E402
 from compiler.builtins_es import DESC_ES  # noqa: E402
-from gen_builtins_doc import GROUPS, TEXTS, example  # noqa: E402
+from gen_builtins_doc import GROUPS, TEXTS, example, ret_type  # noqa: E402
 
 ANCHO = 76                 # columnas del texto (con el prefijo de línea, 77; una ventana de 80 en topaz 8)
 FORMATO = 1                # versión del formato del .ayuda (docs/AYUDA_FORMATO.md)
@@ -284,7 +284,7 @@ def tabla(filas: list) -> list:
 # --- las fichas ------------------------------------------------------------------------------------------------
 
 def tipo_dash(b, lang):
-    return TEXTS[lang]["types"].get(b.return_type, b.return_type) if b.return_type != "void" else ""
+    return ret_type(b, TEXTS[lang], b.return_type) if b.return_type != "void" else ""
 
 
 def firma(nombre, lang):
