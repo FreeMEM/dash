@@ -110,7 +110,10 @@ def main():
                              "being freed, and what is still alive at exit (slower; for testing)")
     parser.add_argument("--check", action="store_true",
                         help="Only check the program: its errors, as when compiling, without making the executable "
-                             "(no -o; no gcc needed)")
+                             "(no -o; no gcc needed); a module without Main is fine")
+    parser.add_argument("--texto", "--text", action="append", default=[], metavar="PATH=FILE",
+                        help="With --check: the text of PATH (a module or the program) is read from FILE (what is "
+                             "not saved yet)")
     args = parser.parse_args()
     global QUIET
     QUIET = args.quiet
@@ -128,7 +131,10 @@ def main():
     if args.check:
         # the errors of transpiling (parse, analysis, code generation), in the same format; no C, no gcc
         QUIET = True
-        run_command(["python3", "-m", "compiler.main", input_filename, "--check"])
+        textos = []
+        for t in args.texto:
+            textos += ["--texto", t]
+        run_command(["python3", "-m", "compiler.main", input_filename, "--check", *textos])
         return
     if args.cabecera and not output_filename:
         # only the header (as the straight compiler's --cabecera): no build, no toolchain

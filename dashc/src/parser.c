@@ -849,7 +849,10 @@ Program *parse(Token *toks)
     tk = toks;
     parse_into(p);
     while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
-    if (!p->has_main && !parse_module_ok) fatal("falta el bloque Main");
+    if (!p->has_main && check_mode && !parse_module_ok)
+        /* --check de un módulo: vale sin Main (lo mismo que avisa --gcc) */
+        err_printf("Warning: el programa no tiene Main: no hace nada (un módulo para importar no lo necesita)\n");
+    else if (!p->has_main && !parse_module_ok) fatal("falta el bloque Main");
     return p;
 }
 

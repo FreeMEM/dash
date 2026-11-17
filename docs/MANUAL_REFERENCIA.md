@@ -4655,7 +4655,8 @@ línea: `dash: el programa lleva C: se compila por C con gcc`.
 | `--debug` | Un `NOP` al principio de cada línea y la información de depuración (abajo) |
 | `--debug-info prog` | Enseña la información de depuración de un ejecutable hecho con `--debug` |
 | `--cabecera x.h` | Escribe una cabecera de C con los structs del programa (abajo). Sin `-o`, solo eso |
-| `--check` | Solo comprueba: da los errores como al compilar, sin hacer el ejecutable y sin `-o` (un editor los marca al guardar). También con `--gcc`, sin llamar a gcc |
+| `--check` | Solo comprueba: da los errores como al compilar, sin hacer el ejecutable y sin `-o` (un editor los marca al guardar). También con `--gcc`, sin llamar a gcc. Da todos los que puede, por orden de línea y como mucho 20 (no los que vienen de otro, como una variable cuya asignación falló). Vale un módulo sin `Main` |
+| `--texto ruta=fichero` | Con `--check`: el texto de `ruta` (un módulo o el programa) se lee de `fichero`, lo que el editor aún no ha guardado; los errores dicen `ruta`. Así se comprueba un módulo dentro de su programa: `./dash --check principal.dash --texto lib/modulo.dash=T:copia`. Se repite para varios ficheros |
 | `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
 | `--tiempos` | Cuánto tarda cada fase de la compilación |
 | `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |

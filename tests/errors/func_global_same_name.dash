@@ -1,0 +1,12 @@
+# Test: una función con el nombre de una variable global (./dash la aceptaba; lo contó Forja)
+# expect: Symbol 'total' is already defined in this scope
+# expect-dash: total ya existe: es una variable global
+var total: Int = 5
+
+func total() -> Int
+    return 3
+end
+
+Main
+    Print total
+end

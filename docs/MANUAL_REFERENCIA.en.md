@@ -4656,7 +4656,8 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--debug` | A `NOP` at the start of each line and the debug information (below) |
 | `--debug-info prog` | Shows the debug information of an executable built with `--debug` |
 | `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
-| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc |
+| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc. It gives every error it can, in line order and at most 20 (not the ones that come from another, such as a variable whose assignment failed). A module without `Main` is fine |
+| `--texto path=file` | With `--check`: the text of `path` (a module or the program) is read from `file`, what the editor has not saved yet; the errors name `path`. This checks a module inside its program: `./dash --check main.dash --texto lib/module.dash=T:copy`. Repeat it for several files |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |

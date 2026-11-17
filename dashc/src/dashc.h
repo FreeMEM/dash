@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <setjmp.h>
 
 /* ---- utilidades (util.c) ---- */
 typedef struct {
@@ -44,6 +45,14 @@ void fatal(const char *fmt, ...);
 void tiempo(const char *fase);   /* --tiempos: lo que lleva cada fase (para medir en el Amiga) */
 extern int tiempos;
 void fatal_at(int line, int col, const char *fmt, ...);
+/* --check: los errores siguen tras el primero. fatal_at los da (cada uno una vez, hasta CHECK_MAX) y salta a
+   check_jmp, si lo hay (gen68k.c: la instrucción siguiente); check_quiet salta sin decir nada (un error que viene
+   de otro, como una variable cuya asignación falló) */
+#define CHECK_MAX 20
+extern int check_mode, check_errors;
+extern jmp_buf *check_jmp;
+void check_quiet(void);
+void check_flush(void);
 
 /* ---- léxico (lexer.c) ---- */
 enum {

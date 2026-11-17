@@ -217,7 +217,7 @@ class DashCompiler:
         if full_path in overlay:
             source = overlay[full_path]
         else:
-            source = read_source(full_path)
+            source = read_source(text_of(full_path))
         if full_path.endswith(".dashui"):
             from compiler.dashui import generate, DashUIError
             try:
@@ -514,8 +514,7 @@ class DashCompiler:
 
         # Report errors and fail if any
         if analysis.has_errors:
-            for error in analysis.errors:
-                print(error, file=sys.stderr)
+            report_errors(analysis.errors, filename)
             raise CompilationError(
                 f"Semantic analysis failed with {len(analysis.errors)} error(s)",
                 stage="analyze"
@@ -719,8 +718,7 @@ class DashCompiler:
             print(warning, file=sys.stderr)
 
         if analysis.has_errors:
-            for error in analysis.errors:
-                print(error, file=sys.stderr)
+            report_errors(analysis.errors, filename)
             raise CompilationError(
                 f"Semantic analysis failed with {len(analysis.errors)} error(s)",
                 stage="analyze"
@@ -761,6 +759,26 @@ class CompilationError(Exception):
         self.stage = stage
 
 
+# --texto path=file: the text of path (a module or the program) is read from file (Forja checks so what it has not
+# saved yet; the errors still name path)
+TEXTOS = []
+
+
+def _same_file(a: str, b: str) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return os.path.abspath(a) == os.path.abspath(b)
+
+
+def text_of(path: str) -> str:
+    """The file to read path's text from (--texto)"""
+    for name, source in TEXTOS:
+        if _same_file(name, path):
+            return source
+    return path
+
+
 def read_source(path: str) -> str:
     """The text of a source file (.dash, .dashui): UTF-8, without its BOM if it has one (Windows editors put
     it); a file that is not UTF-8 is read as Latin-1, the Amiga's (written with an editor on the Amiga)."""
@@ -793,6 +811,31 @@ def transpile(source: str, filename: str = "<input>",
     return c_code
 
 
+MAX_ERRORS = 20   # as ./dash: after that many, the rest are usually consequences of the first ones
+
+
+def report_errors(errors, main_file):
+    """The analysis errors on stderr, ordered by place (the program's file first, then its modules), each once
+    and at most MAX_ERRORS of them, as ./dash --check gives them"""
+    def key(item):
+        n, e = item
+        loc = e.location
+        if loc is None:
+            return (2, "", 0, 0, n)
+        mod = 0 if os.path.abspath(loc.filename or main_file) == os.path.abspath(main_file) else 1
+        return (mod, loc.filename or "", loc.line, loc.column, n)
+    seen = []
+    for _, error in sorted(enumerate(errors), key=key):
+        text = str(error)
+        if text in seen:
+            continue
+        seen.append(text)
+        print(text, file=sys.stderr)
+        if len(seen) == MAX_ERRORS:
+            print(f"dash: Error: demasiados errores ({MAX_ERRORS}): no se miran más", file=sys.stderr)
+            break
+
+
 def main():
     """Main entry point for the transpiler CLI."""
     parser = argparse.ArgumentParser(
@@ -808,15 +851,24 @@ def main():
     parser.add_argument("--cabecera", metavar="FILE.h",
                         help="Also write the program's structs, constants and @export prototypes for the C of @link")
     parser.add_argument("--check", action="store_true",
-                        help="Only check: the errors, without writing the C (Forja marks them on saving)")
+                        help="Only check: the errors, without writing the C (Forja marks them on saving); a module "
+                             "without Main is fine")
+    parser.add_argument("--texto", "--text", action="append", default=[], metavar="PATH=FILE",
+                        help="The text of PATH (a module or the program) is read from FILE: what is not saved yet")
     args = parser.parse_args()
+    for t in args.texto:
+        name, eq, source = t.rpartition("=")
+        if not eq or not name or not source:
+            print("Error: --texto path=file: the text of path is read from file", file=sys.stderr)
+            sys.exit(1)
+        TEXTOS.append((name, source))
 
     input_filename = args.input_file
     output_path = args.output
 
     # Read source file
     try:
-        source_code = read_source(input_filename)
+        source_code = read_source(text_of(input_filename))
     except FileNotFoundError:
         print(f"Error: File '{input_filename}' not found", file=sys.stderr)
         sys.exit(1)
