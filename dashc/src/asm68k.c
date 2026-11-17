@@ -2228,6 +2228,7 @@ static int more020(void)
         return 1;
     }
     if (!strcmp(op, "bkpt")) {
+        need020(op);
         nops(1);
         if (cur->size) aerr("tamaño .%c no válido en bkpt", cur->size);
         parse_ea(cur->opnd[0], &a);

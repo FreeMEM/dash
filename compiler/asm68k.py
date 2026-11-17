@@ -490,6 +490,33 @@ for _c in _CC + list(_CC_ALIAS) + ["ra"]:
     MNEMONICS["db" + _c] = ("w", (2,))
 for _c in _CC + list(_CC_ALIAS):
     MNEMONICS["s" + _c] = ("b", (1,))
+# the FPU (with --fpu): operations with <ea>,fpn / fpm,fpn (and fpn alone, the monadic ones)
+FPU_OPS = {"fint": 0x01, "fsinh": 0x02, "fintrz": 0x03, "fsqrt": 0x04, "flognp1": 0x06, "fetoxm1": 0x08,
+           "ftanh": 0x09, "fatan": 0x0A, "fasin": 0x0C, "fatanh": 0x0D, "fsin": 0x0E, "ftan": 0x0F, "fetox": 0x10,
+           "ftwotox": 0x11, "ftentox": 0x12, "flogn": 0x14, "flog10": 0x15, "flog2": 0x16, "fabs": 0x18,
+           "fcosh": 0x19, "fneg": 0x1A, "facos": 0x1C, "fcos": 0x1D, "fgetexp": 0x1E, "fgetman": 0x1F,
+           "fdiv": 0x20, "fmod": 0x21, "fadd": 0x22, "fmul": 0x23, "fsgldiv": 0x24, "frem": 0x25, "fscale": 0x26,
+           "fsglmul": 0x27, "fsub": 0x28, "fcmp": 0x38}
+FPU_MONADIC = {n for n, c in FPU_OPS.items() if c < 0x20}
+_FCC = ["f", "eq", "ogt", "oge", "olt", "ole", "ogl", "or", "un", "ueq", "ugt", "uge", "ult", "ule", "ne", "t", "sf",
+        "seq", "gt", "ge", "lt", "le", "gl", "gle", "ngle", "ngl", "nle", "nlt", "nge", "ngt", "sne", "st"]
+for _n in FPU_OPS:
+    MNEMONICS[_n] = ("bwlsdxp", (1, 2) if _n in FPU_MONADIC else (2,))
+MNEMONICS["fmove"] = ("bwlsdxp", (2,))
+MNEMONICS["ftst"] = ("bwlsdxp", (1,))
+MNEMONICS["fsincos"] = ("bwlsdxp", (2,))
+MNEMONICS["fmovem"] = ("lx", (2,))
+MNEMONICS["fmovecr"] = ("x", (2,))
+MNEMONICS["fnop"] = ("", (0,))
+MNEMONICS["fsave"] = ("", (1,))
+MNEMONICS["frestore"] = ("", (1,))
+for _c in _FCC:
+    MNEMONICS["fb" + _c] = ("wl", (1,))
+    MNEMONICS["fdb" + _c] = ("w", (2,))
+    MNEMONICS["fs" + _c] = ("b", (1,))
+    MNEMONICS["ftrap" + _c] = ("wl", (0, 1))
+FPU_ALL = {n for n in MNEMONICS if n.startswith("f")}
+
 DIRECTIVES = {"dc": ("bwlsd", None), "ds": ("bwl", (1,)), "even": ("", (0,)), "incbin": ("", (1, 2, 3)),
               "cnop": ("", (2,)), "section": ("", (2,))}
 # the sections (section name,type or the type alone): the code, data, chip data, bss and chip bss
@@ -502,8 +529,20 @@ _AS_SECTION = {"data": ".section .data", "data_c": ".section .datachip", "bss": 
 LIBRARY_BASES = ("SysBase", "DOSBase", "GfxBase", "IntuitionBase")
 _M020 = {"divsl", "divul", "extb", "rtd", "bftst", "bfchg", "bfclr", "bfset", "bfextu", "bfexts", "bfffo", "bfins"}
 _M020_LONG = {"muls", "mulu", "divs", "divu", "chk", "link"}       # with .l
+# the rest of the 68020
+_m("cas", "bwl", (3,))
+_m("cas2", "wl", (3,))
+_m("cmp2 chk2", "bwl", (2,))
+_m("pack unpk", "", (3,))
+_m("bkpt", "", (1,))
+_m("movec", "l", (2,))
+for _c in _CC + list(_CC_ALIAS):
+    MNEMONICS["trap" + _c] = ("wl", (0, 1))
+_M020 |= {"cas", "cas2", "cmp2", "chk2", "pack", "unpk", "movec", "bkpt"} | {"trap" + c for c in _CC + list(_CC_ALIAS)}
+_CTRL_REGS = {"sfc", "dfc", "cacr", "vbr", "caar", "msp", "isp"}
 _BRANCHES = {"b" + c for c in _CC[2:] + list(_CC_ALIAS) + ["ra", "sr"]}
-_ALIAS = {"bhs": "bcc", "blo": "bcs", "dbhs": "dbcc", "dblo": "dbcs", "shs": "scc", "slo": "scs"}
+_ALIAS = {"bhs": "bcc", "blo": "bcs", "dbhs": "dbcc", "dblo": "dbcs", "shs": "scc", "slo": "scs", "traphs": "trapcc",
+          "traplo": "trapcs"}
 
 _LABEL_RE = re.compile(r"[A-Za-z_.][A-Za-z0-9_]*")
 
@@ -768,6 +807,8 @@ class Operand:
     value: Optional[Value] = None
     needs_020: bool = False
     base_mode: str = ""          # bf: the mode of the operand with the field
+    fpmask: int = 0              # fplist: bit i fpi; fpc: 4 fpcr, 2 fpsr, 1 fpiar
+    mind: bool = False           # ([bd,An,Xn],od): the 68020's memory indirection
 
 
 # ---- addressing modes, as dashc names them (dashc/src/asm68k.c: A_ALL, A_DATA...) ----
@@ -809,8 +850,24 @@ def _mode(o) -> str:
         return "absw" if o.text.lower().endswith(".w") else "absl"
     if k == "special":
         return o.text
+    if k == "fimm":
+        return "imm"
     return {"disp": "d16", "index": "idx", "postinc": "post", "predec": "pre", "pcdisp": "pcd",
             "pcindex": "pcidx", "reglist": "list"}.get(k, k)
+
+
+def _extended_words(d: float, tr) -> List[int]:
+    """A number in the FPU's extended format (from its double, as dashc's out_fimm): 6 words."""
+    u = struct.unpack(">Q", struct.pack(">d", d))[0]
+    ex = (u >> 52) & 0x7FF
+    man = (u & 0xFFFFFFFFFFFFF) << 11
+    if ex == 0x7FF:
+        ex, man = 0x7FFF, man | 1 << 63
+    elif ex == 0 and man:
+        tr._error(f"asm: número no válido: {d!r}")
+    elif ex:
+        ex, man = ex - 1023 + 16383, man | 1 << 63
+    return [(u >> 63) << 15 | ex, 0, man >> 48, (man >> 32) & 0xFFFF, (man >> 16) & 0xFFFF, man & 0xFFFF]
 
 
 def _imm_fits(tr, v, nbytes: int):
@@ -839,6 +896,7 @@ class Translator:
         self.needs_020: List[Tuple[str, int]] = []
         self.needs_fpu: List[Tuple[str, int]] = []
         self.code_align = 2
+        self._fimm_ok = False
         self._equ_busy = set()
 
     def _float_value(self, o: str) -> float:
@@ -947,15 +1005,26 @@ class Translator:
     def operand(self, text: str) -> Operand:
         t = text.strip()
         low = t.lower()
-        bad = lambda: self._error(f"asm: operando no válido: {t}")
-        if "[" in t:
-            bad()
+        bad = lambda: self._error(f"asm: operando no válido: {_nospace(t)}")
         if t.startswith("#"):
+            body = t[1:].strip().lstrip("+-")
+            if (self._fimm_ok and body[:1].isdigit() and not body.lower().startswith("0x") and
+                    ("." in body or "e" in body.lower())):
+                return Operand("fimm", t)            # 1.5: the FPU's (instruction() writes it for as)
             v = self.expr(t[1:])
             return Operand("imm", "#" + self.value_text(v), v)
         reg = _reg_name(t)
         if reg:
             return Operand("dn" if reg[0] == "d" else "an", reg)
+        fp = self._fp_operand(_nospace(t))
+        if fp:
+            return fp
+        if low in _CTRL_REGS:
+            return Operand("ctrlreg", low)
+        if t.startswith("(") and t[1:].lstrip().startswith("["):
+            return self._mind(t)
+        if "[" in t:
+            bad()
         if low in ("sr", "ccr", "usp"):
             return Operand("special", low)
         # Dh:Dl (muls.l, divs.l)
@@ -1012,6 +1081,106 @@ class Translator:
             return self._indirect(t, bad)
         v = self.expr(t)
         return Operand("abs", self.value_text(v), v)
+
+    def _fp_operand(self, t: str) -> Optional[Operand]:
+        """fp0-fp7, fpcr/fpsr/fpiar, lists (fp0-fp3/fp7, fpcr/fpsr) and fp1:fp2 (dashc's parse_fp)."""
+        low = t.lower()
+        if not low.startswith("fp"):
+            return None
+        if ":" in low:
+            a, b = low.split(":", 1)
+            if a in _FP_ORDER and b in _FP_ORDER:
+                return Operand("fppair", f"{a}:{b}")
+            return None
+        mask, ctrl, many, single = 0, 0, False, None
+        for part in low.split("/"):
+            if "-" in part:
+                a, _, b = part.partition("-")
+                if a not in _FP_ORDER or b not in _FP_ORDER or b < a:
+                    return None
+                for k in range(int(a[2]), int(b[2]) + 1):
+                    mask |= 1 << k
+                many = True
+            elif part in _FP_ORDER:
+                mask |= 1 << int(part[2])
+                single = part
+            elif part in ("fpcr", "fpsr", "fpiar"):
+                ctrl |= {"fpcr": 4, "fpsr": 2, "fpiar": 1}[part]
+            else:
+                return None
+        if "/" in low:
+            many = True
+        if mask and ctrl:
+            self._error(f"asm: operando no válido: {t}")
+        if ctrl:
+            return Operand("fpc", low, fpmask=ctrl)
+        if many:
+            return Operand("fplist", low, fpmask=mask)
+        return Operand("fp", single, fpmask=mask)
+
+    def _mind(self, t: str) -> Operand:
+        """([bd,An,Xn],od), ([bd,An],Xn,od), ([bd,pc,Xn],od)...: the 68020's memory indirection (dashc's
+        parse_mind)."""
+        s = _nospace(t)
+        bad = lambda: self._error(f"asm: operando no válido: {s}")
+        depth, rb = 0, -1
+        for k in range(2, len(s)):
+            if s[k] == "(":
+                depth += 1
+            elif s[k] == ")":
+                depth -= 1
+            elif s[k] == "]" and not depth:
+                rb = k
+                break
+        if rb < 0 or not s.endswith(")") or s[rb + 1] not in ",)":
+            bad()
+        self._020("la indirección de memoria")
+        base = index = None
+        bd = od = None
+        for part in _split_top(s[2:rb]):
+            if not part:
+                bad()
+            low = part.lower()
+            if low == "pc" or (_reg_name(low) or "").startswith("a"):
+                if base or index:
+                    bad()
+                base = "pc" if low == "pc" else _reg_name(low)
+            elif _reg_name(low) or _INDEX_RE.match(part):
+                if index:
+                    bad()
+                index = part
+            else:
+                if bd is not None or base:
+                    bad()
+                bd = self.expr(part)
+        post = None
+        for part in (_split_top(s[rb + 2:-1]) if s[rb + 1] == "," else []):
+            if not part:
+                bad()
+            if _INDEX_RE.match(part) and od is None:
+                if index or post:
+                    bad()
+                post = part
+            else:
+                if od is not None:
+                    bad()
+                od = self.expr(part)
+        if base == "pc" and bd is not None:
+            self._code_label(bd, s)
+
+        def ix(text):
+            m = _INDEX_RE.match(text)
+            if not m:
+                bad()
+            return f"{_reg_name(m.group(1))}.{(m.group(2) or 'w').lower()}*{m.group(3) or '1'}"
+        inner = [x for x in (self.value_text(bd) if bd is not None else None, base, ix(index) if index else None) if x]
+        text = "([" + ",".join(inner) + "]"
+        if post:
+            text += "," + ix(post)
+        if od is not None:
+            text += "," + self.value_text(od)
+        text += ")"
+        return Operand("pcindex" if base == "pc" else "index", text, bd, needs_020=True, mind=True)
 
     def _is_indirect(self, t: str) -> bool:
         t = t.strip()
@@ -1262,9 +1431,17 @@ class Translator:
     def instruction(self, ln: Line) -> str:
         op, size = ln.op, ln.size
         name = _ALIAS.get(op, op)
+        if op in FPU_ALL:
+            self.needs_fpu.append((f"{op}.{size}" if size else op, ln.line))
+            if size == "p":
+                self._error("asm: el formato .p (BCD) no se admite")
+        if op == "cas2":
+            return self._cas2(ln)
+        self._fimm_ok = op in FPU_OPS or op in ("fmove", "ftst", "fsincos")
         operands = []
         for o in ln.operands:
-            if op in _BRANCHES or (op.startswith("db") and o is ln.operands[-1]):
+            if (op in _BRANCHES or (op.startswith("db") and o is ln.operands[-1]) or
+                    (op.startswith("fb") and op in FPU_ALL) or (op.startswith("fdb") and o is ln.operands[-1])):
                 operands.append(self._target(o, op))
                 continue
             opd = self.operand(o)
@@ -1275,12 +1452,181 @@ class Translator:
         texts = [o.text for o in operands]
         if op in _M020 or (op in _M020_LONG and size == "l") or (op in _BRANCHES and size == "l"):
             self._020(f"{op}.{size}" if size else op)
+        self._fimm_ok = False
+        if op in FPU_ALL:
+            return self._fpu(op, size, operands)
         self._validate(op, size, operands)
         if op in ("add", "sub", "cmp", "and", "or", "eor") and kinds[0] == "imm" and kinds[1] != "an":
             name = op + "i"
         if op in ("asl", "asr", "lsl", "lsr", "rol", "ror", "roxl", "roxr") and kinds == ["dn"]:
             texts = ["#1"] + texts                 # lsl d0: by one
         mn = name + (f".{'s' if size == 'b' and op in _BRANCHES else size}" if size else "")
+        return mn + (" " + ",".join(texts) if texts else "")
+
+    def _cas2(self, ln: Line) -> str:
+        """cas2.w/.l Dc1:Dc2,Du1:Du2,(Rn1):(Rn2) (dashc's more020)."""
+        size = ln.size or "w"
+        if size not in ("w", "l"):
+            self._error(f"asm: tamaño .{size} no válido en cas2")
+        self._020("cas2")
+        ops = [_nospace(o).lower() for o in ln.operands]
+        for k in range(2):
+            m = re.match(r"^(d[0-7]):(d[0-7])$", ops[k])
+            if not m:
+                if ":" not in ops[k]:
+                    self._error("asm: cas2 va con Dc1:Dc2,Du1:Du2,(Rn1):(Rn2)")
+                self._error(f"asm: operando no válido: {_nospace(ln.operands[k])}")
+        if ":" not in ops[2]:
+            self._error("asm: cas2 va con Dc1:Dc2,Du1:Du2,(Rn1):(Rn2)")
+        m = re.match(r"^\(([da][0-7]|sp)\):\(([da][0-7]|sp)\)$", ops[2])
+        if not m:
+            self._error(f"asm: operando no válido: {_nospace(ln.operands[2])}")
+        regs = f"({_reg_name(m.group(1))}):({_reg_name(m.group(2))})"
+        return f"cas2.{size} {ops[0]},{ops[1]},{regs}"
+
+    def _fimm_text(self, o: Operand, size: str) -> str:
+        """A FPU immediate for as: integers (.b .w .l) as they are; .s .d .x as a number (#0r3.0: as reads a plain
+        #3 as the bits)."""
+        if size in ("b", "w", "l"):
+            if o.kind == "fimm":
+                self._error(f"asm: un número con decimales va con .s, .d o .x: {_nospace(o.text)}")
+            _imm_fits(self, o.value, {"b": 1, "w": 2, "l": 4}[size])
+            return o.text
+        d = self._float_value(o.text[1:]) if o.kind == "fimm" else float(_s32(o.value.k))
+        if not o.kind == "fimm" and not o.value.const():
+            self._error("asm: una etiqueta como inmediato necesita .l")
+        if size == "x":
+            return "\x02" + ",".join(str(w) for w in _extended_words(d, self))   # (written as words: see _fpu)
+        return f"#0r{d!r}"
+
+    def _fpu(self, op: str, size: str, operands: List[Operand]) -> str:
+        """The FPU's instructions: dashc's checks (fpu_ins) and the text for as."""
+        ln = self.cur
+        raw = [_nospace(o) for o in ln.operands]
+        modes = [_mode(o) for o in operands]
+
+        def bad(i):
+            self._error(f"asm: operando no válido: {raw[i]}")
+
+        def check(i, mask):
+            if modes[i] not in mask:
+                bad(i)
+        texts = [o.text for o in operands]
+        sz = size or "x"
+        if op in FPU_OPS or op in ("fmove", "ftst", "fsincos"):
+            def src(i):
+                """<ea> of origin: data modes; Dn without .x/.d; the immediate in its format"""
+                check(i, DATA)
+                if modes[i] == "dn" and sz in ("x", "d"):
+                    self._error(f"asm: tamaño .{sz} no válido con un registro de datos")
+                if modes[i] == "imm":
+                    texts[i] = self._fimm_text(operands[i], sz)
+            if op == "ftst":
+                if modes[0] == "fp":
+                    if sz != "x":
+                        self._error(f"asm: tamaño .{sz} no válido con un registro de la FPU")
+                else:
+                    src(0)
+            elif op in FPU_MONADIC and len(operands) == 1:
+                if modes[0] != "fp":
+                    bad(0)
+                if sz != "x":
+                    self._error(f"asm: tamaño .{sz} no válido con un registro de la FPU")
+            elif op == "fmove" and "fpc" in modes:
+                m, c = (0, 1) if modes[1] == "fpc" else (1, 0)
+                if sz != "l":
+                    self._error(f"asm: tamaño .{sz} no válido en fmove (fpcr, fpsr, fpiar van con .l)")
+                if operands[c].fpmask not in (1, 2, 4):
+                    bad(c)
+                if modes[m] == "an" and operands[c].fpmask != 1:
+                    bad(m)
+                check(m, ALL if c == 1 else ALT)
+                if modes[m] == "imm":
+                    _imm_fits(self, operands[m].value, 4)
+            elif op == "fsincos":
+                if modes[1] != "fppair":
+                    self._error("asm: fsincos va con <ea>,fpc:fps")
+                if modes[0] == "fp":
+                    if sz != "x":
+                        self._error(f"asm: tamaño .{sz} no válido con un registro de la FPU")
+                else:
+                    src(0)
+            elif op == "fmove" and modes[0] == "fp" and modes[1] != "fp":
+                check(1, DALT)
+                if modes[1] == "dn" and sz in ("x", "d"):
+                    self._error(f"asm: tamaño .{sz} no válido con un registro de datos")
+            else:
+                if modes[1] != "fp":
+                    bad(1)
+                if modes[0] == "fp":
+                    if sz != "x":
+                        self._error(f"asm: tamaño .{sz} no válido con un registro de la FPU")
+                else:
+                    src(0)
+        elif op == "fmovem":
+            dr = modes[0] in ("fp", "fplist", "fpc")
+            li, mi = (0, 1) if dr else (1, 0)
+            if modes[li] == "fpc":
+                if size and size != "l":
+                    self._error(f"asm: tamaño .{size} no válido en fmovem")
+                check(mi, ALT if dr else ALL)
+                mask = operands[li].fpmask
+                if modes[mi] == "an" and mask != 1:
+                    bad(mi)
+                if modes[mi] in ("dn", "an", "imm") and mask & (mask - 1):
+                    bad(mi)
+                sz = "l"
+            else:
+                if modes[li] not in ("fp", "fplist"):
+                    self._error("asm: fmovem pide una lista de registros de la FPU")
+                if size and size != "x":
+                    self._error(f"asm: tamaño .{size} no válido en fmovem")
+                check(mi, (CALT | {"pre"}) if dr else (CTRL | {"post"}))
+        elif op == "fmovecr":
+            if modes[0] != "imm":
+                self._error(f"asm: operando no válido: {raw[0]} (va un #inmediato)")
+            v = operands[0].value
+            if not v.const() or not 0 <= _s32(v.k) <= 63:
+                self._error("asm: fmovecr va de #0 a #63")
+            if modes[1] != "fp":
+                bad(1)
+        elif op in ("fsave", "frestore"):
+            check(0, (CALT | {"pre"}) if op == "fsave" else (CTRL | {"post"}))
+        elif op.startswith("fdb"):
+            if modes[0] != "dn":
+                bad(0)
+        elif op.startswith("fs"):
+            check(0, DALT)
+        elif op.startswith("ftrap"):
+            if operands:
+                if modes[0] != "imm":
+                    self._error(f"asm: operando no válido: {raw[0]} (va un #inmediato)")
+                if size not in ("w", "l"):
+                    self._error(f"asm: {op} con un operando va con .w o .l")
+                _imm_fits(self, operands[0].value, 2 if size == "w" else 4)
+            elif size:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+        if any(t.startswith("\x02") for t in texts):
+            # an .x immediate: gcc runs as without -m68881, and then it writes 10 bytes, not 12; the words here
+            k = next(i for i, t in enumerate(texts) if t.startswith("\x02"))
+            words = [int(w) for w in texts[k][1:].split(",")]
+            if op == "ftst":
+                w2 = 0x4000 | 2 << 10 | 0x3A
+            elif op == "fsincos":
+                c, sn = operands[1].text.split(":")
+                w2 = 0x4000 | 2 << 10 | int(sn[2]) << 7 | 0x30 | int(c[2])
+            else:
+                w2 = 0x4000 | 2 << 10 | int(operands[1].text[2]) << 7 | (0 if op == "fmove" else FPU_OPS[op])
+            return ".word " + ",".join(str(w) for w in [0xF23C, w2] + words)
+        mn = op
+        if op.startswith("fb") and op != "fbf" or op == "fbf":
+            mn = op + (".l" if size == "l" else "")   # (as takes fbeq or fbeq.l; .w: it picks it when it reaches)
+        elif op in ("fmovem",):
+            mn = f"{op}.{sz}"
+        elif op in FPU_OPS or op in ("fmove", "ftst", "fsincos", "fmovecr"):
+            mn = f"{op}.{sz}"
+        elif size:
+            mn = f"{op}.{size}"
         return mn + (" " + ",".join(texts) if texts else "")
 
     # ---- the checks of each instruction, as dashc does them (ins_* in dashc/src/asm68k.c) ----
@@ -1321,6 +1667,48 @@ class Translator:
         if op.startswith("s") and op[1:] in _CC + list(_CC_ALIAS):
             cc = "s"
         if op in _BRANCHES:
+            return
+        # the rest of the 68020 (dashc's more020)
+        if op == "cas":
+            sizes("bwl", "w")
+            if modes[0] != "dn":
+                bad(0)
+            if modes[1] != "dn":
+                bad(1)
+            check(2, MALT)
+            return
+        if op in ("cmp2", "chk2"):
+            sizes("bwl", "w")
+            check(0, CTRL)
+            if modes[1] not in ("dn", "an"):
+                bad(1)
+            return
+        if op in ("pack", "unpk"):
+            need_imm(2)
+            if modes[:2] not in (["dn", "dn"], ["pre", "pre"]):
+                self._error(f"asm: operandos no válidos en {op}")
+            _imm_fits(self, operands[2].value, 2)
+            return
+        if op.startswith("trap") and op[4:] in _CC + list(_CC_ALIAS):
+            if operands:
+                need_imm(0)
+                if size not in ("w", "l"):
+                    self._error(f"asm: {op} con un operando va con .w o .l")
+                _imm_fits(self, operands[0].value, 2 if size == "w" else 4)
+            elif size:
+                self._error(f"asm: tamaño .{size} no válido en {op}")
+            return
+        if op == "bkpt":
+            need_imm(0)
+            v = operands[0].value
+            if not v.const() or not 0 <= _s32(v.k) <= 7:
+                self._error("asm: bkpt va de #0 a #7")
+            return
+        if op == "movec":
+            sizes("l", "l")
+            kinds = sorted("c" if m in ("ctrlreg", "usp") else "r" if m in ("dn", "an") else "x" for m in modes)
+            if kinds != ["c", "r"]:
+                self._error("asm: operandos no válidos en movec")
             return
         if op.startswith("db") and (op[2:] in _CC + list(_CC_ALIAS) or op == "dbra"):
             if modes[0] != "dn":

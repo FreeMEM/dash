@@ -1,0 +1,14 @@
+# Test: a una función de Dash se llega con jsr, no con un salto (bra, bsr)
+# expect: asm: a una función se llega con jsr, no con un salto: doble
+# expect-dash: asm: a una función se llega con jsr, no con un salto: doble
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+Main
+    asm in d0 = 4
+        move.l  d0,-(sp)
+        bsr     doble
+        addq.l  #4,sp
+    end
+end

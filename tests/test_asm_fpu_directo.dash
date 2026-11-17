@@ -1,0 +1,107 @@
+# La FPU y lo demás del 68020 en un bloque asm por ./dash directo a hunk (--fpu; docs/ASM_DISEÑO.md; lo pidió
+# el usuario, para demos). El mismo programa por ./dash --gcc: test_asm_fpu.dash.
+# fpu
+# dash-direct: --fpu
+# expect-out: 12 10 0 1000
+# expect-out: 7 -2 1
+# expect-out: 25 0
+# expect-out: 10 30
+# expect-out: 9 52 1 13108
+# (sin import: con --multifile el runner no compila para el 68020)
+func pruebas_fpu()
+    # la FPU: raíz, multiplicación con un inmediato .s, seno y coseno (en el 68040, de 68040.library)
+    asm in d0 = 144 out r = d0, m = d1, s = d2, c = d3 uses d2-d3/fp0-fp1
+        fmove.l d0,fp0
+        fsqrt.x fp0
+        fmove.l fp0,d0
+        fmove.l #4,fp1
+        fmul.s  #2.5,fp1
+        fmove.l fp1,d1
+        fmove.l #0,fp0
+        fsin.x  fp0,fp1
+        fmove.l fp1,d2
+        fcos.x  fp0
+        fmul.l  #1000,fp0
+        fmove.l fp0,d3
+    end
+    Print "#{r} #{m} #{s} #{c}"
+    # un bucle con fcmp y fblt, fp2 y fp3 guardados (uses), fintrz y fmovecr
+    asm out n = d0, t = d1, u = d2 uses d2/fp2-fp3
+        moveq   #0,d0
+        fmove.x #0.0,fp2
+        fmove.s #1.5,fp3
+    .vuelta:
+        addq.l  #1,d0
+        fadd.x  fp3,fp2
+        fcmp.l  #10,fp2
+        fblt    .vuelta
+        fmove.d #-2.7,fp2
+        fintrz.x fp2
+        fmove.l fp2,d1
+        fmovecr.x #$32,fp3
+        fmove.l fp3,d2
+    end
+    Print "#{n} #{t} #{u}"
+    # fmovem, fpcr y un dc.s leído con (pc)
+    asm out a = d0, b = d1 uses fp2
+        fmove.s valor(pc),fp2
+        fmovem.x fp2,-(sp)
+        fmove.l #0,fp2
+        fmovem.x (sp)+,fp2
+        fmul.l  #100,fp2
+        fmove.l fp2,d0
+        fmove.l fpcr,d1
+        bra.s   .f
+    valor:
+        dc.s    0.25
+    .f:
+    end
+    Print "#{a} #{b}"
+end
+
+func pruebas_020b()
+    # la indirección de memoria: una tabla de punteros
+    l = [10, 20, 30]
+    asm in a0 = l, d0 = 2 out v = d1, w = d2 uses d2/a1
+        lea     tabla,a1
+        move.l  a0,(a1)
+        move.l  ([a1]),d1
+        move.l  ([a1],d0.l*4,0),d2
+        bra.s   .f
+    tabla:
+        dc.l    0
+    .f:
+    end
+    Print "#{v} #{w}"
+    # cas, cmp2, pack y unpk
+    asm out x = d0, y = d1, z = d2, k = d3 uses d2-d3/a0
+        lea     sitio,a0
+        moveq   #5,d0
+        moveq   #9,d1
+        cas.l   d0,d1,(a0)
+        move.l  (a0),d0
+        moveq   #0,d2
+        moveq   #7,d3
+        cmp2.l  limites,d3
+        bcs.s   .fuera
+        moveq   #1,d2
+    .fuera:
+        move.w  #$0304,d3
+        pack    d3,d1,#0
+        and.l   #$ff,d1
+        unpk    d1,d3,#$3030
+        and.l   #$ffff,d3
+        bra.s   .f
+    sitio:
+        dc.l    5
+    limites:
+        dc.l    1,10
+    .f:
+    end
+    Print "#{x} #{y} #{z} #{k}"
+end
+
+Main
+    pruebas_fpu()
+    pruebas_020b()
+end

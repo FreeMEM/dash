@@ -1,0 +1,10 @@
+# Test: una asm func devuelve lo que queda en un registro
+# expect: asm func: devuelve Int, Bool o Pointer (lo que queda en un registro)
+# expect-dash: asm func: devuelve Int, Bool o Pointer (lo que queda en un registro)
+asm func nombre() -> String
+    lea     texto(pc),a0
+end
+
+Main
+    Print nombre()
+end
