@@ -44,7 +44,81 @@ const KINDS = {
     run: { label: 'Ejecutar en el emulador', run: true, flag: '' },
     memcheck: { label: 'Ejecutar con comprobación de memoria', run: true, flag: '--memcheck' },
     profile: { label: 'Ejecutar con perfil', run: true, flag: '--profile' },
+    // DashOS (AArch64): ./dash --dashos makes its ELF; tools/dashos_run.py runs it on the PC in qemu-aarch64 (the
+    // platform of Linux: no compositor, the windows of mui_* are not seen)
+    dashos: { label: 'Compilar para DashOS', run: false, flag: '', dashos: true },
+    'dashos-run': { label: 'Ejecutar en DashOS (QEMU)', run: true, flag: '', dashos: true },
 };
+
+/** C in the program (@native, @c, @header): DashOS goes through C with clang, not straight (dashc-a64) */
+function hasC(text) {
+    return /^\s*@(native|c|header)\b/m.test(String(text || ''));
+}
+
+/** Where the DashOS executable of a .dash goes: dashos/ inside the folder of the Amiga's */
+function dashosOutputFile(file, folder) {
+    const out = outputFile(file, folder);
+    return path.join(path.dirname(out), 'dashos', path.basename(out));
+}
+
+/** The command of the DashOS tasks */
+function dashosCommand(kind, dashDir, file, options) {
+    if (kind === 'dashos') {
+        const out = dashosOutputFile(file, options.outputFolder);
+        return `mkdir -p ${quote(path.dirname(out))} && ${quote(path.join(dashDir, 'dash'))} --dashos` +
+            (options.withC ? ' --gcc' : '') + ` ${quote(file)} -o ${quote(out)}`;
+    }
+    return `python3 ${quote(path.join(dashDir, 'tools', 'dashos_run.py'))}` + (options.withC ? '' : ' --directo') + ` ${quote(file)}`;
+}
+
+/**
+ * Programs on PATH (null: not there)
+ * @param {string} name
+ * @param {Record<string, string>} [env]
+ */
+function which(name, env) {
+    const dirs = String((env && env.PATH) || process.env.PATH || '').split(path.delimiter);
+    for (const d of dirs) {
+        if (!d) continue;
+        const p = path.join(d, name);
+        try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (e) { /* not here */ }
+    }
+    return null;
+}
+
+/** libkit_c.a of DashOS as tools/dashos_run.py looks for it (DASH_KIT_C, DASHOS_DIR, ~/Projects/dashos) */
+function kitC(env) {
+    const e = Object.assign({}, process.env, env || {});
+    const dashos = e.DASHOS_DIR || path.join(os.homedir(), 'Projects', 'dashos');
+    const cands = (e.DASH_KIT_C ? [e.DASH_KIT_C] : []).concat([path.join(dashos, 'build', 'libkit_c.a'),
+        path.join(dashos, 'kit-c', 'target', 'aarch64-unknown-none', 'release', 'libkit_c.a')]);
+    return { found: cands.find((c) => fs.existsSync(c)) || null, cands };
+}
+
+/**
+ * What is missing to compile (kind 'dashos') or run ('dashos-run') a program for DashOS, in words, or null.
+ * @param {string} kind
+ * @param {string} dashDir
+ * @param {string} text the program
+ * @param {Record<string, string>} [env]
+ */
+function dashosMissing(kind, dashDir, text, env) {
+    const withC = hasC(text);
+    if (!fs.existsSync(path.join(dashDir, 'tools', 'dashos_run.py')))
+        return `El Dash de ${dashDir} aún no compila para DashOS (falta tools/dashos_run.py): ponlo al día (git pull).`;
+    if (kind === 'dashos-run' && !which('qemu-aarch64', env))
+        return 'Falta QEMU para ARM (qemu-aarch64), que ejecuta el programa en el PC: instala el paquete qemu-user ' +
+               '(Arch: qemu-user; Debian y Ubuntu: qemu-user).';
+    const llvm = ['clang', 'ld.lld', 'llvm-ar', 'llvm-nm', 'llvm-objcopy'].filter((t) => !which(t, env));
+    if (llvm.length) return `Falta ${llvm.join(', ')} (LLVM), que enlaza los programas de DashOS: instala clang, lld y llvm.`;
+    if (!withC && !fs.existsSync(path.join(dashDir, 'dashc', 'dashc-a64')))
+        return 'Falta construir el compilador para DashOS: en la carpeta de Dash, ejecuta make -C dashc dashc-a64.';
+    if (/\bmui_[a-z_]+\s*\(|\.dashui"/.test(String(text || '')) && !kitC(env).found)
+        return 'Este programa tiene ventanas (mui_*): falta libkit_c.a de DashOS. Hazla con make -C kernel kit-c en la ' +
+               'carpeta de DashOS y pon esa carpeta en el ajuste "dash.dashos.folder" (DASHOS_DIR), o el fichero en ' +
+               '"dash.dashos.kitC" (DASH_KIT_C). Buscada en: ' + kitC(env).cands.join(', ');
+    return null;
+}
 
 const MACHINES = {
     a1200: 'A1200 (3.1)', a500: 'A500 (68000, 3.1)', 'a1200-32': 'A1200 (AmigaOS 3.2)', rtg: '68040 con RTG (3.2)',
@@ -56,11 +130,12 @@ const MACHINES = {
  * @param {string} dashDir
  * @param {string} file the .dash
  * @param {{autoclose?: number, machine?: string, emulator?: string, window?: boolean, system?: string,
- *          outputFolder?: string}} [options]
+ *          outputFolder?: string, withC?: boolean}} [options]
  */
 function taskCommand(kind, dashDir, file, options = {}) {
     const k = KINDS[kind];
     if (!k) throw new Error('tarea desconocida: ' + kind);
+    if (k.dashos) return dashosCommand(kind, dashDir, file, options);
     const out = outputFile(file, options.outputFolder);
     // a program that waits for its window to be closed ends by itself in the emulator after autoclose s
     // (test mode, DASH_TEST_AUTOCLOSE, read when it is compiled)
@@ -279,6 +354,12 @@ function setupTasks(vscode, context, helpers) {
         const doc = vscode.workspace.textDocuments.find((d) => d.fileName === file);
         if (doc) file = await savedFile(vscode, doc);
         if (!file) return;
+        if (KINDS[kind] && KINDS[kind].dashos && helpers.findDash(file)) {     // DashOS: QEMU, LLVM, kit-c...
+            let text = '';
+            try { text = fs.readFileSync(file, 'utf8'); } catch (e) { /* gone */ }
+            const lack = dashosMissing(kind, helpers.findDash(file), text, helpers.env());
+            if (lack) { vscode.window.showErrorMessage(lack); return; }
+        }
         const task = forFile(kind, file);
         if (!task) {
             vscode.window.showErrorMessage(helpers.noDash ? helpers.noDash() : 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
@@ -311,6 +392,8 @@ function setupTasks(vscode, context, helpers) {
                     lenses.push(new vscode.CodeLens(range, { title: 'Compilar', command: 'dash.compile' }));
                     lenses.push(new vscode.CodeLens(range, { title: 'Memoria', command: 'dash.runMemcheck', tooltip: 'Ejecutar con --memcheck' }));
                     lenses.push(new vscode.CodeLens(range, { title: 'Perfil', command: 'dash.runProfile', tooltip: 'Ejecutar con --profile' }));
+                    lenses.push(new vscode.CodeLens(range, { title: 'DashOS', command: 'dash.runInDashOS',
+                                                             tooltip: 'Compilar para DashOS y ejecutar en QEMU (qemu-aarch64; sin ventanas)' }));
                     break;
                 }
             }
@@ -352,6 +435,8 @@ function setupTasks(vscode, context, helpers) {
     context.subscriptions.push(
         vscode.commands.registerCommand('dash.runMemcheck', () => runTask('memcheck')),
         vscode.commands.registerCommand('dash.runProfile', () => runTask('profile')),
+        vscode.commands.registerCommand('dash.compileDashOS', () => runTask('dashos')),
+        vscode.commands.registerCommand('dash.runInDashOS', () => runTask('dashos-run')),
     );
     return runTask;
 }
@@ -370,7 +455,8 @@ function emulatorOptions(vscode, file) {
     let text = '';
     try { text = require('fs').readFileSync(file, 'utf8'); } catch (e) { /* not saved yet */ }
     if (machine === 'a1200' && config.get('muiSystem') && /\bmui_|\.dashui"/.test(text)) options.system = config.get('muiSystem');
+    options.withC = hasC(text);
     return options;
 }
 
-module.exports = { outputFile, outputFolder, taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal, savedFile };
+module.exports = { outputFile, outputFolder, dashosOutputFile, dashosMissing, hasC, which, kitC, taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal, savedFile };

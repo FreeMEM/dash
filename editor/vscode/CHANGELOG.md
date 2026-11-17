@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 (2026-11-17)
+
+On Linux and DashOS the extension is the IDE of Dash, as Forja is on the Amiga (asked by the user; FORJA_LOOP 6.1 of
+Forja). For a Dash newer than 2.15.0 (its `main` of 2026-11-17: `./dash --check` with every error and `--texto`, and
+the help of `tools/gen_ayuda.py`); with an older one, the errors are the language server's and the help says it is
+missing.
+
+- **DashOS**: **Dash: Ejecutar en DashOS** compiles the program for DashOS and runs it in QEMU (`tools/dashos_run.py`,
+  `qemu-aarch64`), with its output in the panel; **Dash: Compilar para DashOS** leaves the ELF in `bin/dashos/`. Also
+  "DashOS" over `Main`, a button in the editor's title, the tasks `dashos` and `dashos-run`, and `"target": "dashos"`
+  in `launch.json`. Before running it says what is missing: QEMU, LLVM, `dashc-a64`, or `libkit_c.a` for windows
+  (settings `dash.dashos.folder` and `dash.dashos.kitC`).
+- **Dash's help**, the same as Forja's: a view with the whole ficha (signature, parameters, text, example, see also,
+  DashOS), the index, search, links, back and forward; **Shift+F1** on a name; **Probar** runs the example in the
+  emulator or in DashOS. The hover of a builtin adds its parameters, DashOS and links. Made by `tools/gen_ayuda.py`
+  of Dash the first time (`dash.help.language`).
+- **Errors while typing with `./dash --check`**, the compiler that makes the executable: its words, every error (up
+  to 20), the unsaved text of the open files (`--texto`), in hundredths of a second. Before, the language server's
+  analyzer (the way through C) marked them; it still does with `"dash.errors.source": "languageServer"`, or with a
+  Dash without `--check`. Its quick fixes work with both messages.
+- **New project** of more kinds, as Forja's templates: a Shell command, a demo (raster bars in inline assembler),
+  3D with MiniGL, and a program for DashOS; besides the MUI application and the game.
+- Snippets for what is new in Dash: `asm ... end` (inline 68000 assembler), `gl` and `glbegin` (MiniGL), `l.has(x)`,
+  `str_join`, `mui_menu_add`, `mui_menu_extend`, `mui_on_activate`, `rexx_send_wait`, `mui_list_add_lines` and
+  `mui_request_text`. Their colours, completion and signature come from Dash as before (tested).
+
 ## 0.5.1 (2026-11-08)
 
 For Dash 2.6.2 or later: **Ejecutar en emulador** uses `tools/emu_run.py --cd`, new in 2.6.2.

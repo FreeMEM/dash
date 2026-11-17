@@ -145,5 +145,65 @@
       "end"
     ],
     "description": "Aplicación MUI con una ventana hecha en el editor visual"
+  },
+  "asm": {
+    "prefix": "asm",
+    "body": ["asm in ${1:d0} = ${2:valor} out ${3:r} = ${4:d0} uses ${5:d1}", "\t${6:add.l   d1,d0}$0", "end"],
+    "description": "Ensamblador 68000 en línea (sintaxis de Motorola): in registro = valor, out variable = registro, uses los que cambia; ; es comentario (docs/ASM_DISEÑO.md)"
+  },
+  "func con asm": {
+    "prefix": "funcasm",
+    "body": ["func ${1:suma}(a: Int, b: Int) -> Int", "\tasm in d0 = a, d1 = b out r = d0", "\t\tadd.l   d1,d0$0", "\tend", "\treturn r", "end"],
+    "description": "Una función con su cuerpo en ensamblador 68000"
+  },
+  "Programa 3D (MiniGL)": {
+    "prefix": "gl",
+    "body": ["import \"lib/amiga/gl.dash\"", "", "Main", "\tif not gl_open(${1:320}, ${2:240})", "\t\tPrint \"Hace falta minigl.library y una FPU\"", "\t\tprogram_exit(5)", "\tend", "\tgl_enable(GL_DEPTH_TEST)", "\tangulo = 0.0", "\twhile not gl_closed() and gl_key() != 27", "\t\tgl_clear_color(0, 0, 0.3)", "\t\tgl_clear()", "\t\tgl_load_identity()", "\t\tgl_translate(0, 0, -3)", "\t\tgl_rotate(angulo, 0, 1, 0)", "\t\tgl_begin(GL_TRIANGLES)", "\t\tgl_color(1, 0, 0)", "\t\tgl_vertex(0, 1, 0)", "\t\tgl_color(0, 1, 0)", "\t\tgl_vertex(-1, -1, 0)", "\t\tgl_color(0, 0, 1)", "\t\tgl_vertex(1, -1, 0)", "\t\tgl_end()$0", "\t\tgl_swap()", "\t\tangulo = angulo + 2.0", "\tend", "\tgl_close()", "end"],
+    "description": "3D con MiniGL: una ventana con Z-buffer y un triángulo que gira (gl_*, lib/amiga/gl.dash)"
+  },
+  "gl_begin": {
+    "prefix": "glbegin",
+    "body": ["gl_begin(${1|GL_TRIANGLES,GL_QUADS,GL_LINES,GL_POINTS,GL_TRIANGLE_STRIP,GL_TRIANGLE_FAN,GL_POLYGON|})", "gl_color(${2:1}, ${3:1}, ${4:1})", "gl_vertex(${5:0}, ${6:0}, ${7:0})$0", "gl_end()"],
+    "description": "Una figura de MiniGL entre gl_begin y gl_end"
+  },
+  "has": {
+    "prefix": "has",
+    "body": ["if ${1:lista}.has(${2:valor})", "\t$0", "end"],
+    "description": "Si una lista tiene un valor (o un diccionario una clave): l.has(x), como x in l"
+  },
+  "str_join": {
+    "prefix": "str_join",
+    "body": ["str_join(${1:lista}, \"${2:, }\")"],
+    "description": "Los textos de una lista [String] juntos, con un separador entre cada dos"
+  },
+  "Menú añadido con la ventana hecha": {
+    "prefix": "mui_menu_add",
+    "body": ["${1:menu} = mui_menu_add(${2:ventana}, \"${3:Extras}\")", "\tmui_menu_item(\"${4:Opción}\", \"${5}\", ${6:100})$0", "mui_menu_end()"],
+    "description": "Un menú nuevo al final de la barra de una ventana ya hecha (también abierta); mui_menu_extend añade a uno que ya está y mui_menu_remove lo quita"
+  },
+  "mui_menu_extend": {
+    "prefix": "mui_menu_extend",
+    "body": ["mui_menu_extend(${1:menu})", "\tmui_menu_item(\"${2:Opción}\", \"${3}\", ${4:101})$0", "mui_menu_end()"],
+    "description": "Más opciones al final de un menú ya hecho, hasta mui_menu_end"
+  },
+  "mui_on_activate": {
+    "prefix": "mui_on_activate",
+    "body": ["mui_on_activate(${1:ventana}, ${2:ID_ACTIVA})"],
+    "description": "mui_wait_event da ese número cuando la ventana pasa a ser la activa"
+  },
+  "rexx_send_wait": {
+    "prefix": "rexx_send_wait",
+    "body": ["${1:respuesta} = rexx_send_wait(\"${2:PUERTO}\", \"${3:ORDEN}\", ${4:2000})", "if rexx_rc() == -3", "\tPrint \"No contestó a tiempo\"$0", "end"],
+    "description": "Una orden ARexx a otro programa, esperando la respuesta como mucho unos milisegundos (rexx_rc() -3 si no llegó)"
+  },
+  "mui_list_add_lines": {
+    "prefix": "mui_list_add_lines",
+    "body": ["mui_list_add_lines(${1:lista}, str_join(${2:lineas}, \"\\n\"))"],
+    "description": "Muchas líneas a una lista de MUI de una vez (separadas por \\n): mucho más rápido que mui_list_add una a una"
+  },
+  "mui_request_text": {
+    "prefix": "mui_request_text",
+    "body": ["${1:nombre} = mui_request_text(${2:0}, \"${3:Título}\", \"${4:Escribe el nombre:}\", \"${5}\", \"${6:_Aceptar|_Cancelar}\")", "if ${1:nombre} != \"\"", "\t$0", "end"],
+    "description": "Pide una línea de texto en una ventanita de MUI; \"\" si se cancela"
   }
 }

@@ -1,8 +1,8 @@
 {
   "name": "dash-mui-editor",
   "displayName": "Dash for Amiga",
-  "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, a visual editor for MUI windows, and sprite, BOB and tile map editors for games (as in Forja).",
-  "version": "0.5.1",
+  "description": "Dash, a language for the Commodore Amiga and DashOS: highlighting, errors while typing, completion, Dash's help with its examples, compile and run in FS-UAE or in DashOS (QEMU), debugging on the emulated or a real Amiga, project templates, a visual editor for MUI windows, and sprite, BOB and tile map editors for games (as in Forja).",
+  "version": "0.6.0",
   "publisher": "FreeMEM",
   "author": {
     "name": "Francisco Antonio Tapias Bravo",
@@ -37,7 +37,9 @@
         "dash.emulator.kickstart32",
         "dash.emulator.system32",
         "dash.emulator.systemRtg",
-        "dash.debug.gdb"
+        "dash.debug.gdb",
+        "dash.dashos.folder",
+        "dash.dashos.kitC"
       ]
     }
   },
@@ -153,6 +155,33 @@
         "command": "dash.choosePath",
         "title": "Elegir la carpeta del compilador",
         "category": "Dash"
+      },
+      {
+        "command": "dash.runInDashOS",
+        "title": "Ejecutar en DashOS (QEMU)",
+        "category": "Dash",
+        "icon": "$(vm)"
+      },
+      {
+        "command": "dash.compileDashOS",
+        "title": "Compilar para DashOS",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.help.show",
+        "title": "Ayuda de Dash",
+        "category": "Dash",
+        "icon": "$(book)"
+      },
+      {
+        "command": "dash.help.search",
+        "title": "Buscar en la ayuda",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.help.try",
+        "title": "Probar el ejemplo de la ayuda",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -166,16 +195,21 @@
           "command": "dash.debug",
           "when": "resourceLangId == dash",
           "group": "navigation@2"
+        },
+        {
+          "command": "dash.runInDashOS",
+          "when": "resourceLangId == dash",
+          "group": "navigation@3"
         }
       ],
-    "explorer/context": [
-      {
-        "command": "dash.newGraphic",
-        "when": "explorerResourceIsFolder",
-        "group": "navigation@9"
-      }
-    ],
-    "commandPalette": [
+      "explorer/context": [
+        {
+          "command": "dash.newGraphic",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@9"
+        }
+      ],
+      "commandPalette": [
         {
           "command": "dash.newline",
           "when": "false"
@@ -183,6 +217,17 @@
         {
           "command": "dash.gotoEvent",
           "when": "false"
+        },
+        {
+          "command": "dash.help.try",
+          "when": "false"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "dash.help.show",
+          "when": "editorLangId == dash",
+          "group": "navigation@9"
         }
       ]
     },
@@ -232,7 +277,7 @@
         "dash.languageServer.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Errores mientras se escribe y, más adelante, autocompletado y navegación: el servidor de lenguaje del compilador Dash (python3 -m compiler.lsp). Solo en carpetas de confianza."
+          "description": "El servidor de lenguaje del compilador Dash (python3 -m compiler.lsp): autocompletado, ayuda de argumentos, ir a la definición, renombrar, formatear... y, con \"dash.errors.source\": \"languageServer\", los errores. Solo en carpetas de confianza."
         },
         "dash.python": {
           "type": "string",
@@ -304,6 +349,44 @@
           "type": "string",
           "default": "",
           "description": "Ficheros de Workbench 3.2 con MUI para \"Ver en Amiga\" en la máquina A1200 (3.2) (DASH_EMU_SYS_32_MUI; tools/emu_sys_mui.sh)."
+        },
+        "dash.errors.source": {
+          "type": "string",
+          "default": "check",
+          "enum": [
+            "check",
+            "languageServer"
+          ],
+          "enumDescriptions": [
+            "./dash --check: el compilador que hace el ejecutable (directo a 68000), hasta 20 errores, en unas centésimas; con el texto sin guardar de los .dash abiertos (--texto).",
+            "El servidor de lenguaje (el analizador del camino por C, ./dash --gcc), como antes de la 0.6."
+          ],
+          "markdownDescription": "Quién marca los errores mientras se escribe. `check` (de serie): `./dash --check`, el mismo compilador que hace el ejecutable, con sus palabras. Si ese Dash no sabe `--check`, se usan los del servidor de lenguaje."
+        },
+        "dash.help.language": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "es",
+            "en"
+          ],
+          "enumDescriptions": [
+            "El de VS Code (castellano si es es-*, si no inglés)",
+            "Castellano",
+            "Inglés"
+          ],
+          "description": "Idioma de la ayuda de Dash (la vista de ayuda y lo que añade al pasar el ratón)."
+        },
+        "dash.dashos.folder": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "La carpeta de DashOS (`DASHOS_DIR`): su `build/libkit_c.a` (`make -C kernel kit-c`) hace falta para los programas con ventanas (`mui_*`). Vacío: `~/Projects/dashos`."
+        },
+        "dash.dashos.kitC": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "El fichero `libkit_c.a` de DashOS (`DASH_KIT_C`), si no está en la carpeta de `dash.dashos.folder`."
         }
       }
     },
@@ -322,12 +405,24 @@
         "viewType": "dash.spriteEditor",
         "displayName": "Editor de sprites y BOBs",
         "selector": [
-          { "filenamePattern": "*.iff" },
-          { "filenamePattern": "*.ilbm" },
-          { "filenamePattern": "*.lbm" },
-          { "filenamePattern": "*.brush" },
-          { "filenamePattern": "*.bob" },
-          { "filenamePattern": "*.spr" }
+          {
+            "filenamePattern": "*.iff"
+          },
+          {
+            "filenamePattern": "*.ilbm"
+          },
+          {
+            "filenamePattern": "*.lbm"
+          },
+          {
+            "filenamePattern": "*.brush"
+          },
+          {
+            "filenamePattern": "*.bob"
+          },
+          {
+            "filenamePattern": "*.spr"
+          }
         ],
         "priority": "default"
       },
@@ -335,7 +430,9 @@
         "viewType": "dash.mapEditor",
         "displayName": "Editor de mapas de tiles",
         "selector": [
-          { "filenamePattern": "*.fmap" }
+          {
+            "filenamePattern": "*.fmap"
+          }
         ],
         "priority": "default"
       }
@@ -351,6 +448,11 @@
         "key": "enter",
         "command": "dash.newline",
         "when": "editorTextFocus && editorLangId == dash && !suggestWidgetVisible && !inSnippetMode && !editorHasMultipleSelections && !editorReadonly && !inlineSuggestionVisible"
+      },
+      {
+        "key": "shift+f1",
+        "command": "dash.help.show",
+        "when": "editorTextFocus && editorLangId == dash"
       }
     ],
     "taskDefinitions": [
@@ -366,9 +468,11 @@
               "compile",
               "run",
               "memcheck",
-              "profile"
+              "profile",
+              "dashos",
+              "dashos-run"
             ],
-            "description": "compile, run (en el emulador), memcheck (con --memcheck) o profile (con --profile)"
+            "description": "compile, run (en el emulador), memcheck (con --memcheck), profile (con --profile), dashos (compilar para DashOS) o dashos-run (compilar para DashOS y ejecutar en QEMU)"
           },
           "file": {
             "type": "string",
@@ -480,6 +584,24 @@
                 "type": "boolean",
                 "default": true,
                 "description": "Ver la ventana del emulador."
+              },
+              "target": {
+                "type": "string",
+                "enum": [
+                  "amiga",
+                  "dashos"
+                ],
+                "default": "amiga",
+                "enumDescriptions": [
+                  "Depurar en el Amiga emulado",
+                  "No depura: compila con ./dash --dashos y lo ejecuta en QEMU (qemu-aarch64, tools/dashos_run.py), con la salida en el panel"
+                ],
+                "description": "Dónde va el programa: el Amiga (depurar) o DashOS (ejecutar en QEMU)."
+              },
+              "compileOnly": {
+                "type": "boolean",
+                "default": false,
+                "description": "Con \"target\": \"dashos\", solo compilar para DashOS (el ELF en bin/dashos/)."
               }
             }
           },
@@ -540,6 +662,17 @@
               "target": "amiga.local:2345",
               "program": "^\"\\${workspaceFolder}/programa.dash\""
             }
+          },
+          {
+            "label": "Dash: ejecutar en DashOS (QEMU)",
+            "description": "Compila con ./dash --dashos y lo ejecuta en qemu-aarch64; la salida, en el panel",
+            "body": {
+              "type": "dash",
+              "request": "launch",
+              "name": "Ejecutar en DashOS",
+              "target": "dashos",
+              "program": "^\"\\${file}\""
+            }
           }
         ]
       }
@@ -598,6 +731,19 @@
               "onCommand:dash.debug",
               "onCommand:dash.compile"
             ]
+          },
+          {
+            "id": "ayuda",
+            "title": "La ayuda de Dash, y DashOS",
+            "description": "Mayúsculas+F1 sobre un nombre abre su ficha; \"Probar\" ejecuta su ejemplo. \"DashOS\" sobre Main lo ejecuta en QEMU.\n[Abrir la ayuda](command:dash.help.show)\n[Ejecutar en DashOS](command:dash.runInDashOS)",
+            "media": {
+              "markdown": "walkthrough/ayuda.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.help.show",
+              "onCommand:dash.help.search",
+              "onCommand:dash.runInDashOS"
+            ]
           }
         ]
       }
@@ -640,7 +786,10 @@
     "sprite",
     "tilemap",
     "pixel art",
-    "gamedev"
+    "gamedev",
+    "dashos",
+    "aarch64",
+    "help"
   ],
   "homepage": "https://github.com/FreeMEM/dash/tree/main/editor/vscode",
   "bugs": {

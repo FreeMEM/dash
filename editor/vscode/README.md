@@ -1,7 +1,8 @@
 # Dash for VS Code
 
 Support for [Dash](https://github.com/FreeMEM/dash), a high-level language for the Amiga that compiles straight to
-68000 code (or through C with gcc, `./dash --gcc`).
+68000 code (or through C with gcc, `./dash --gcc`), and also for DashOS (`./dash --dashos`). On Linux and DashOS this
+extension is the IDE of Dash, as Forja is on the Amiga: the same help, the same files, the same project kinds.
 
 By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 
@@ -38,7 +39,10 @@ reinstalling it.
 
 | In VS Code | Done by |
 |---|---|
-| Errors while typing, completion, definition, rename, formatting | `compiler/lsp.py` |
+| Errors while typing | `./dash --check` (with `--texto` for what is not saved) |
+| Completion, definition, rename, formatting | `compiler/lsp.py` |
+| Dash's help (view, hover, Probar) | `tools/gen_ayuda.py` (the `.ayuda` of Forja and the Amiga) |
+| Compile and run for DashOS | `./dash --dashos` and `tools/dashos_run.py` (QEMU) |
 | Compile | `./dash` |
 | Run, memory check, profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
@@ -53,8 +57,10 @@ reinstalling it.
    windows, the MUI SDK (`tools/get_mui_sdk.sh`) and Workbench files with MUI for the emulator
    (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`). When something is missing, the extension says
    what, and how to get it.
-2. **Dash: Nuevo proyecto** makes a folder with a program, its window (`ventana.dashui`) and a `launch.json`; or,
-   for a game, a player, a level and the program that moves the player (see below).
+2. **Dash: Nuevo proyecto** makes a folder with a program and a `launch.json`, of one of these kinds: an
+   application with a MUI window (`ventana.dashui`), a Shell command, a game (a player, a level and the program
+   that moves the player, see below), a demo (raster bars in inline assembler), 3D with MiniGL, or a program for
+   DashOS (run in QEMU).
    If the folder is not inside the Dash repository, **Dash: Elegir la carpeta del compilador** (setting
    `dash.path`).
 3. Open the window with the visual editor (**Ver en Amiga** shows it on the emulated Amiga), run the program
@@ -67,10 +73,31 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
 - Syntax highlighting of `.dash` files (with the C of `@native` blocks): every keyword, directive and builtin,
   `Window` blocks, `#{...}` with expressions. Generated from the compiler (`tools/gen_tmgrammar.py` in the Dash
   repository; do not edit `syntaxes/dash.tmLanguage.json` by hand).
-- **Errors while typing**: Dash's language server (`python3 -m compiler.lsp` in the compiler's folder, the
-  same parser and analyzer as `./dash`) marks errors and warnings a moment after you stop typing, also those of
-  imported modules in their files. Only in a trusted folder; `dash.languageServer.enabled`, `dash.python`, and
-  **Dash: Reiniciar el servidor de lenguaje** (after changing `dash.path`).
+- **Errors while typing**: `./dash --check`, the same compiler that makes the executable, marks every error (up to
+  20) a moment after you stop typing, with its own words, also those of imported modules in their files. The text
+  of the `.dash` files open and not saved goes with it (`--texto`), so a module being typed counts in the program
+  that imports it. It takes some hundredths of a second. With `"dash.errors.source": "languageServer"`, or a Dash
+  without `--check`, the language server's errors instead (the analyzer of the way through C), as before 0.6.
+  Only in a trusted folder.
+- **Dash's help** (the same as Forja's on the Amiga, made by `tools/gen_ayuda.py` of the Dash repository the first
+  time, and again when Dash's documentation changes): **Shift+F1** on a name (`file_seek`, `mui_window_begin`,
+  `if`, `struct`, `EventLoop`...) opens its ficha in the help view: signature, parameters, text, example, see also,
+  its group, and whether it is in DashOS. The list on the left is the index (groups of functions and chapters of the
+  manual) or what was found: **Dash: Buscar en la ayuda**, or the field at the top (words without accents, all of
+  them; a word that is not there counts as those that start like it). Links, and names in the examples, open their
+  ficha; ← → (or Alt+arrows) go back and forward. **Probar** opens the example in a file of its own
+  (`ejemplo_<group>.dash`, which can be changed) and runs it in the emulator; **Probar en DashOS**, in QEMU. The
+  hover of a builtin adds its parameters, DashOS and the links to its ficha and to Probar. `dash.help.language`:
+  Spanish or English (by default, VS Code's).
+- **DashOS**: **Dash: Ejecutar en DashOS** (or "DashOS" over `Main`, or ▷ in the editor's title) compiles the
+  program for DashOS and runs it on the PC with QEMU (`tools/dashos_run.py`, `qemu-aarch64`); its output shows in
+  the task's panel. **Dash: Compilar para DashOS** leaves the ELF in `bin/dashos/` (`./dash --dashos`). Also as
+  tasks (`dashos`, `dashos-run`) and as a `launch.json` configuration with `"target": "dashos"` (snippet "Dash:
+  ejecutar en DashOS"; with `"compileOnly": true`, only compiled). A program with C (`@native`) goes through C with
+  clang. It needs `qemu-user`, `clang`, `lld` and `llvm` (and `make -C dashc dashc-a64` in Dash's folder); a program
+  with windows (`mui_*`) also `libkit_c.a` of DashOS (`make -C kernel kit-c` there; settings `dash.dashos.folder`
+  and `dash.dashos.kitC`). If something is missing, the extension says what before running. In QEMU there is no
+  compositor: the windows are made but not seen.
 - **Completion** (same server): every builtin with its parameters to fill in, keywords, the program's
   functions, structs, enums, constants and the variables seen at the cursor; after `x.` the fields and
   methods of its struct (or the values of an enum, the methods of a list...); types after `:` and `->`;
@@ -86,7 +113,9 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   `mui_*_begin` ... `_end()` when they were indented), no spaces at the end; the C of `@native` untouched.
   **Quick fixes** (Ctrl+.) on "not defined": create the function (with as many parameters as the call),
   import it from the file of the workspace that has it, or "Cambiar a ..." a name that looks like it.
-- Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
+- Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`, `asm`, `funcasm`, `gl`,
+  `glbegin`, `has`, `str_join`, `mui_menu_add`, `mui_menu_extend`, `mui_on_activate`, `rexx_send_wait`,
+  `mui_list_add_lines`, `mui_request_text`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
 - **New versions of Dash**: once a day it looks at Dash's releases on GitHub and, if there is one newer than the
@@ -227,7 +256,12 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
 - `dash.emulator.machine` (`a1200`, `a500`, `a1200-32`, `rtg`), `dash.emulator.program` (`fs-uae`, `amiberry`) and
   `dash.emulator.window` (show the emulator's window and hear it; off: hidden, as in the tests).
 - `dash.editor.autoEnd`: the `end` of a block added on Enter.
-- `dash.languageServer.enabled` and `dash.python` (the Python of the language server; it needs `lark`).
+- `dash.languageServer.enabled` and `dash.python` (the Python of the language server, of `./dash --check` and of
+  the help; it needs `lark`).
+- `dash.errors.source`: `check` (`./dash --check`, the default) or `languageServer`.
+- `dash.help.language`: `auto`, `es` or `en`.
+- `dash.dashos.folder` (`DASHOS_DIR`) and `dash.dashos.kitC` (`DASH_KIT_C`): where `libkit_c.a` of DashOS is, for
+  programs with windows.
 - `dash.debug.gdb`: the `m68k-amigaos-gdb` used as debug adapter (the gdb way: programs with C).
 
 ## Development

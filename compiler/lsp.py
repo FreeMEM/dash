@@ -679,10 +679,14 @@ class Server:
         index = self.index(uri)
         actions = []
         for d in (params.get("context") or {}).get("diagnostics") or []:
-            m = re.match(r"(Function|Variable) '([A-Za-z_][A-Za-z0-9_]*)' is not defined", d.get("message", ""))
+            # the analyzer's message, or the one of ./dash --check (the VS Code extension marks the errors with it)
+            message = d.get("message", "")
+            m = re.match(r"(Function|Variable) '([A-Za-z_][A-Za-z0-9_]*)' is not defined", message) or \
+                re.match(r"la (función|variable) ([A-Za-z_][A-Za-z0-9_]*) no existe", message)
             if not m:
                 continue
             what, name = m.groups()
+            what = {"función": "Function", "variable": "Variable"}.get(what, what)
             row = d["range"]["start"]["line"]
             line_text = lines[row] if row < len(lines) else ""
             if what == "Function":
