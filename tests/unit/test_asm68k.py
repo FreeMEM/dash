@@ -115,7 +115,7 @@ class Translate(unittest.TestCase):
                  ("  nop d0", "asm: nop pide 0 operandos", 3),
                  ("  moveq #200,d0", "asm: moveq va de -128 a 127", 3),
                  ("  move.l d0,#1", "asm: operando no válido: #1", 3),
-                 ("  cnop 0,4", "asm: instrucción desconocida: cnop", 3),
+                 ("  cnop 2,4", "asm: cnop: solo cnop 0,n (el desplazamiento, 0)", 3),
                  ("  bra.s x\nx: nop", "asm: un salto .s no puede ir a la instrucción siguiente", 3),
                  ("x: nop\nx: nop", "asm: x ya está definido", 4)]
         for body, msg, line in cases:

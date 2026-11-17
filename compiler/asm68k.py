@@ -16,6 +16,7 @@ error texts.
 """
 import os
 import re
+import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -44,6 +45,8 @@ def _reg_name(text: str) -> Optional[str]:
 
 def _bind_reg(text: str, line: int) -> str:
     """A register of in/out/uses: one Dash can lend the block."""
+    if text.strip().lower() in _FP_ORDER:
+        raise AsmError(f"asm: un registro de la FPU solo va en uses: {text.strip()}", line)
     reg = _reg_name(text)
     if reg is None:
         raise AsmError(f"asm: operando no válido: {text.strip()}", line)
@@ -52,13 +55,24 @@ def _bind_reg(text: str, line: int) -> str:
     return reg
 
 
-def _reg_list(text: str, line: int) -> List[str]:
-    """d2-d4/a1, d2, d3: the registers of a list (as in movem)."""
+_FP_ORDER = [f"fp{i}" for i in range(8)]
+
+
+def _reg_list(text: str, line: int, fp: Optional[List[str]] = None) -> List[str]:
+    """d2-d4/a1, d2, d3: the registers of a list (as in movem); fp0-fp7 go to fp (uses)."""
     regs = []
     for part in re.split(r"[,/]", text):
         part = part.strip()
         if not part:
             raise AsmError(f"asm: operando no válido: {text.strip()}", line)
+        if part[:2].lower() == "fp" and fp is not None:
+            ends = [x.strip().lower() for x in part.split("-")]
+            if len(ends) > 2 or any(e not in _FP_ORDER for e in ends) or ends[0] > ends[-1]:
+                raise AsmError(f"asm: registro no válido: {part}", line)
+            for k in range(int(ends[0][2]), int(ends[-1][2]) + 1):
+                if f"fp{k}" not in fp:
+                    fp.append(f"fp{k}")
+            continue
         if "-" in part:
             a, b = part.split("-", 1)
             ra, rb = _bind_reg(a, line), _bind_reg(b, line)
@@ -184,10 +198,15 @@ class Block:
     lines: List[Line] = field(default_factory=list)
     labels: Dict[str, int] = field(default_factory=dict)        # name -> line
     equs: Dict[str, Line] = field(default_factory=dict)
+    label_sec: Dict[str, str] = field(default_factory=dict)     # name -> its section (code, data, data_c, bss, bss_c)
+    fuses: List[str] = field(default_factory=list)              # uses fp0-fp7 (FPU registers)
+    sections: bool = False                                      # section, data_c...: its function is not inlined
 
-    def clobbers(self) -> List[str]:
+    def clobbers(self, calls: bool = False) -> List[str]:
+        """The registers gcc must take as changed: uses (and, with a call to a function, d0, d1, a0 and a1)."""
         bound = {r for r, _ in self.ins} | {r for _, r in self.outs}
-        return [r for r in ALLOWED if r in self.uses and r not in bound]
+        uses = set(self.uses) | ({"d0", "d1", "a0", "a1"} if calls else set())
+        return [r for r in ALLOWED if r in uses and r not in bound] + [f for f in _FP_ORDER if f in self.fuses]
 
 
 BLOCKS: Dict[int, Block] = {}
@@ -294,7 +313,7 @@ def _parse_header(block: Block, header: str, line: int):
     if "uses" in sections:
         if not sections["uses"].strip():
             raise AsmError("asm: operando no válido: uses", line)
-        for reg in _reg_list(sections["uses"], line):
+        for reg in _reg_list(sections["uses"], line, block.fuses):
             if reg not in block.uses:
                 block.uses.append(reg)
 
@@ -345,7 +364,16 @@ for _c in _CC + list(_CC_ALIAS) + ["ra"]:
     MNEMONICS["db" + _c] = ("w", (2,))
 for _c in _CC + list(_CC_ALIAS):
     MNEMONICS["s" + _c] = ("b", (1,))
-DIRECTIVES = {"dc": ("bwl", None), "ds": ("bwl", (1,)), "even": ("", (0,)), "incbin": ("", (1, 2, 3))}
+DIRECTIVES = {"dc": ("bwlsd", None), "ds": ("bwl", (1,)), "even": ("", (0,)), "incbin": ("", (1, 2, 3)),
+              "cnop": ("", (2,)), "section": ("", (2,))}
+# the sections (section name,type or the type alone): the code, data, chip data, bss and chip bss
+SECTION_KINDS = {"code": "code", "text": "code", "data": "data", "data_c": "data_c", "bss": "bss", "bss_c": "bss_c"}
+for _k in SECTION_KINDS:
+    DIRECTIVES[_k] = ("", (0,))
+_AS_SECTION = {"data": ".section .data", "data_c": ".section .datachip", "bss": ".section .bss",
+               "bss_c": ".section .bsschip"}   # (this as has no .pushsection: back with .text)
+# the library bases a block can name (move.l GfxBase,a6): the runtime opens them
+LIBRARY_BASES = ("SysBase", "DOSBase", "GfxBase", "IntuitionBase")
 _M020 = {"divsl", "divul", "extb", "rtd", "bftst", "bfchg", "bfclr", "bfset", "bfextu", "bfexts", "bfffo", "bfins"}
 _M020_LONG = {"muls", "mulu", "divs", "divu", "chk", "link"}       # with .l
 _BRANCHES = {"b" + c for c in _CC[2:] + list(_CC_ALIAS) + ["ra", "sr"]}
@@ -367,8 +395,23 @@ def _strip_asm_comment(text: str) -> str:
     return text
 
 
+def _section_of(op: str, operands: List[str], line_no: int, col: int) -> str:
+    """The section a section/code/data... line goes to (dashc's section())."""
+    if op != "section":
+        return SECTION_KINDS[op]
+    t = operands[1].strip().lower()
+    if t in SECTION_KINDS:
+        return SECTION_KINDS[t]
+    if t in ("code_c", "code_f", "data_f", "bss_f"):
+        raise AsmError(f"asm: la sección {operands[1].strip()} no se admite: code, data, bss, data_c o bss_c",
+                       line_no, col)
+    raise AsmError(f"asm: tipo de sección no válido: {operands[1].strip()} (code, data, bss, data_c o bss_c)",
+                   line_no, col)
+
+
 def _parse_body(block: Block, body):
     pending: List[str] = []
+    sec = "code"
     for line_no, raw in body:
         text = raw.rstrip("\r")
         if text.strip().startswith("*"):
@@ -404,11 +447,12 @@ def _parse_body(block: Block, body):
             if name in block.labels or name in block.equs:
                 raise AsmError(f"asm: {name} ya está definido", line_no, col)
             block.labels[name] = line_no
+            block.label_sec[name] = sec
         rest = rest.strip()
         if not rest:
             block.lines.append(Line(line=line_no, col=col, labels=labels))
             continue
-        m = re.match(r"^([A-Za-z][A-Za-z0-9]*)(?:\.([A-Za-z]))?(?=\s|$)", rest)
+        m = re.match(r"^([A-Za-z][A-Za-z0-9_]*)(?:\.([A-Za-z]))?(?=\s|$)", rest)
         if not m:
             raise AsmError(f"asm: instrucción desconocida: {rest.split()[0]}", line_no, col)
         op = m.group(1).lower()
@@ -436,6 +480,12 @@ def _parse_body(block: Block, body):
         if any(not o for o in operands):
             raise AsmError(f"asm: operando no válido: {ops_text}", line_no, col)
         block.lines.append(Line(line=line_no, col=col, labels=labels, op=op, size=size, operands=operands))
+        if op == "section" or op in SECTION_KINDS:
+            if size:
+                raise AsmError(f"asm: tamaño .{size} no válido en {op}", line_no, col)
+            sec = _section_of(op, operands, line_no, col)
+            if op == "section" or sec != "code":
+                block.sections = True
 
 
 # ---- expressions ----
@@ -655,11 +705,26 @@ def _imm_fits(tr, v, nbytes: int):
 class Translator:
     """Checks a block against the program's constants and writes it for binutils' as."""
 
-    def __init__(self, block: Block, consts: Dict[str, int]):
+    def __init__(self, block: Block, consts: Dict[str, int], funcs: Optional[Dict[str, str]] = None):
         self.block, self.consts = block, consts
+        self.funcs = funcs or {}                 # Dash function -> its C name (jsr nombre)
+        self.func_refs: List[str] = []           # the C names the block uses, in order (asm operands %cN)
         self.cur: Optional[Line] = None
         self.needs_020: List[Tuple[str, int]] = []
+        self.needs_fpu: List[Tuple[str, int]] = []
+        self.code_align = 2
         self._equ_busy = set()
+
+    def _float_value(self, o: str) -> float:
+        """A number for dc.s, dc.d and the FPU's .s/.d/.x immediates: 1.5, -2e3, or an integer expression."""
+        t = o.strip()
+        body = t.lstrip("+-")
+        if body[:1].isdigit() and not body.lower().startswith("0x") and ("." in body or "e" in body.lower()):
+            try:
+                return float(t)
+            except ValueError:
+                self._error(f"asm: número no válido: {_nospace(t)}")
+        return float(_s32(self.const(t)))
 
     # names
     def _error(self, msg):
@@ -668,8 +733,25 @@ class Translator:
         raise AsmError(msg, line, col)
 
     def label(self, name: str) -> str:
+        if name.startswith("\x00b:"):                 # a library base: its C symbol
+            return "_" + name[3:]
+        if name.startswith("\x00f:"):                 # a Dash function: an asm operand (codegen puts %cN)
+            return f"\x01F{self.func_refs.index(name[3:])}\x01"
         # (a dot inside a name confuses as: .Ld1.x is read as .Ld1 with a size)
         return f".Ld%={'L' + name[1:] if name.startswith('.') else 'N' + name}"
+
+    def section_of(self, name: str) -> str:
+        """The section of a label of the block, or ext:name for a function or a library base."""
+        if name.startswith("\x00"):
+            return "ext:" + name[3:]
+        return self.block.label_sec.get(name, "code")
+
+    def net_section(self, v: Value) -> Optional[str]:
+        """The section of the label a value points to (None: a number)."""
+        for n, c in v.labels.items():
+            if c == 1:
+                return self.section_of(n)
+        return None
 
     def resolve(self, name: str) -> Value:
         if _reg_name(name) or name.lower() in _SPECIAL:
@@ -686,12 +768,33 @@ class Translator:
             return v
         if name in self.consts:
             return Value(self.consts[name])
+        if name in LIBRARY_BASES:
+            return Value(0, {"\x00b:" + name: 1})
+        if name in self.funcs:
+            if self.funcs[name] not in self.func_refs:
+                self.func_refs.append(self.funcs[name])
+            return Value(0, {"\x00f:" + self.funcs[name]: 1})
         self._error(f"asm: nombre desconocido: {name}")
 
     def expr(self, text: str, keep_line=False) -> Value:
         def err():
             self._error(f"asm: operando no válido: {text.strip()}")
-        return _Expr(text, self.resolve, err).parse()
+        v = _Expr(text, self.resolve, err).parse()
+        if v.labels:
+            sums: Dict[str, int] = {}
+            for n, c in v.labels.items():
+                sums[self.section_of(n)] = sums.get(self.section_of(n), 0) + c
+            if v.rel() not in (0, 1):
+                self._error(f"asm: expresión no válida: {_nospace(text)}")
+            live = {k: c for k, c in sums.items() if c}
+            if len(live) > 1 or any(c not in (0, 1) for c in live.values()):
+                if any(c < 0 for c in sums.values()):
+                    self._error("asm: solo se restan etiquetas de la misma sección")
+                self._error("asm: una etiqueta solo se puede sumar o restar")
+            sec = next(iter(live), None)
+            if sec and sec.startswith("ext:") and v.k:
+                self._error(f"asm: a una función o una base de librería no se le suma nada: {_nospace(text)}")
+        return v
 
     def value_text(self, v: Value) -> str:
         k = v.k & 0xFFFFFFFF
@@ -832,6 +935,8 @@ class Translator:
         disp = self.expr(prefix) if prefix else Value(0)
         index = parts[base_i + 1] if base_i + 1 < len(parts) else None
         need = False
+        if base_reg == "pc":
+            self._code_label(disp, t)
         if base_reg != "pc" and disp.rel():
             self._error(f"asm: una etiqueta como desplazamiento de An no se admite: {_nospace(t)}")
         if index is None:
@@ -859,7 +964,9 @@ class Translator:
         """The text for as (lines joined with \\n\\t) and what needs a 68020 (what, line)."""
         out: List[str] = []
         pending: List[str] = []
-        odd = False
+        odd_of = {k: False for k in ("code", "data", "data_c", "bss", "bss_c")}
+        sec = "code"
+        entered = set()
 
         def flush_labels():
             for name in pending:
@@ -867,10 +974,12 @@ class Translator:
             pending.clear()
 
         def align():
-            nonlocal odd
-            if odd:
+            if odd_of[sec]:
                 out.append(".even")
-                odd = False
+                odd_of[sec] = False
+
+        def flip():
+            odd_of[sec] = not odd_of[sec]
 
         for ln in self.block.lines:
             self.cur = ln
@@ -878,6 +987,53 @@ class Translator:
             if not ln.op:
                 continue
             op, size, ops = ln.op, ln.size, ln.operands
+            if op == "section" or op in SECTION_KINDS:
+                new = _section_of(op, ops, ln.line, ln.col)
+                flush_labels()
+                if sec != "code":
+                    align()
+                    out.append(".text")
+                sec = new
+                if sec != "code":
+                    out.append(_AS_SECTION[sec])
+                    if sec not in entered:
+                        out.append(".balign 4")
+                        entered.add(sec)
+                continue
+            if op == "cnop":
+                off, al = self.const(ops[0]), self.const(ops[1])
+                if al not in (2, 4, 8):
+                    self._error("asm: cnop alinea a 2, 4 u 8 (los hunks empiezan alineados a 8)")
+                if off != 0:
+                    self._error("asm: cnop: solo cnop 0,n (el desplazamiento, 0)")
+                flush_labels()
+                if sec == "code":
+                    align()
+                    out.append(f".balignw {al},0x4e71")
+                    self.code_align = max(self.code_align, al)
+                else:
+                    out.append(f".balign {al}")
+                odd_of[sec] = False
+                continue
+            if sec in ("bss", "bss_c") and op not in ("ds", "even"):
+                self._error("asm: en bss solo van ds, even y cnop")
+            if op == "dc" and size in ("s", "d"):
+                align()
+                flush_labels()
+                vals = []
+                for o in ops:
+                    d = self._float_value(o)
+                    if size == "s":
+                        try:
+                            bits = struct.unpack(">I", struct.pack(">f", d))[0]
+                        except OverflowError:
+                            bits = 0xFF800000 if d < 0 else 0x7F800000
+                        vals.append(str(bits))
+                    else:
+                        bits = struct.unpack(">Q", struct.pack(">d", d))[0]
+                        vals.extend([str(bits >> 32), str(bits & 0xFFFFFFFF)])
+                out.append(".long " + ",".join(vals))
+                continue
             if op == "dc":
                 if size == "b":
                     flush_labels()
@@ -894,7 +1050,7 @@ class Translator:
                             data.append(self.value_text(v))
                     out.append(".byte " + ",".join(data))
                     if len(data) % 2:
-                        odd = not odd
+                        flip()
                 else:
                     align()
                     flush_labels()
@@ -919,7 +1075,7 @@ class Translator:
                 if nbytes:
                     out.append(f".skip {nbytes}")
                 if size == "b" and count % 2:
-                    odd = not odd
+                    flip()
                 continue
             if op == "even":
                 align()
@@ -942,13 +1098,20 @@ class Translator:
                 full = os.path.abspath(full).replace("\\", "\\\\").replace('"', '\\"')
                 out.append(f'.incbin "{full}",{start},{count}')
                 if count % 2:
-                    odd = not odd
+                    flip()
                 continue
+            if sec != "code":
+                self._error(f"asm: en una sección de datos solo van datos (dc, ds, incbin...): {op}")
             align()
             flush_labels()
             out.append(self.instruction(ln))
             if op in _BRANCHES and size in ("s", "b"):
                 self._short_to_next(ln)
+        if sec != "code":
+            align()
+            flush_labels()
+            out.append(".text")
+            sec = "code"
         align()
         flush_labels()
         self.cur = None
@@ -1319,18 +1482,37 @@ class Translator:
 
     def _target(self, text: str, op: str):
         v = self.expr(text)
-        if len(v.labels) != 1 or list(v.labels.values())[0] != 1:
-            self._error(f"asm: un salto va a una etiqueta del bloque: {_nospace(text)}")
+        sec = self.net_section(v)
+        if sec and sec.startswith("ext:"):
+            self._error(f"asm: a una función se llega con jsr, no con un salto: {_nospace(text)}")
+        if len(v.labels) != 1 or list(v.labels.values())[0] != 1 or sec != "code":
+            self._error(f"asm: un salto va a una etiqueta del código del bloque: {_nospace(text)}")
         return Operand("target", self.value_text(v), v)
 
+    def _code_label(self, v: Value, text: str):
+        """(pc): only to the block's code (dashc's code_label)."""
+        sec = self.net_section(v)
+        if sec and sec != "code":
+            if sec.startswith("ext:"):
+                self._error(f"asm: a una función se llega con jsr (sin pc): {_nospace(text)}")
+            self._error(f"asm: (pc) y los saltos solo llegan al código del bloque, no a otra sección: {_nospace(text)}")
 
-def check(block: Block, consts: Dict[str, int]):
+
+def check(block: Block, consts: Dict[str, int], funcs: Optional[Dict[str, str]] = None):
     """Raises AsmError on the first problem (names, operands) of a block."""
-    Translator(block, consts).translate()
+    Translator(block, consts, funcs).translate()
 
 
 def translate(block: Block, consts: Dict[str, int]) -> Tuple[str, List[Tuple[str, int]]]:
     return Translator(block, consts).translate()
+
+
+def translator(block: Block, consts: Dict[str, int], funcs: Optional[Dict[str, str]] = None) -> "Translator":
+    """The block for as: .text (the lines), .needs_020, .needs_fpu, .func_refs (C names, the \\x01Fk\\x01 of the
+    text) and .code_align (its largest cnop)."""
+    tr = Translator(block, consts, funcs)
+    tr.text, _ = tr.translate()
+    return tr
 
 
 def c_string(text: str) -> str:

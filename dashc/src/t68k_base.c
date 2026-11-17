@@ -590,11 +590,14 @@ static void grow_branches(void)
     }
 }
 
+static void asm_align_code(void);   /* (gen68k.c: los bloques asm con cnop) */
+
 static void resolve_fixups(void)
 {
     int i;
     relax_branches();
     grow_branches();
+    asm_align_code();
     for (i = 0; i < fixups.n; i++) {
         Fixup *f = &fixups.v[i];
         long target = labels.v[f->label];
@@ -603,6 +606,7 @@ static void resolve_fixups(void)
         if (f->abs) {
             put_long(obj->code.p + f->at, (uint32_t)target);
         } else if (f->size == 1) {
+            if (target == (long)f->at) fatal("salto .s a la instrucción siguiente (fallo de dashc: asm_align_code)");
             obj->code.p[f->at - 1] = (uint8_t)((target - (long)f->at) & 0xFF);
         } else {
             long d = target - (long)f->at;

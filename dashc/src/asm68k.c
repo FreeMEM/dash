@@ -50,11 +50,19 @@ static void trim(const char **b, const char **e)
     while (*e > *b && isspace((unsigned char)(*e)[-1])) (*e)--;
 }
 
+/* fp0-fp7: 0-7; -1 si no lo es */
+static int fp_num(const char *s, size_t n)
+{
+    if (n == 3 && a_lower(s[0]) == 'f' && a_lower(s[1]) == 'p' && s[2] >= '0' && s[2] <= '7') return s[2] - '0';
+    return -1;
+}
+
 /* un registro de la cabecera (in, out, uses), comprobado */
 static int head_reg(const char *b, const char *e, int line)
 {
     int r;
     trim(&b, &e);
+    if (fp_num(b, (size_t)(e - b)) >= 0) fatal_at(line, 1, "asm: un registro de la FPU solo va en uses: %.*s", (int)(e - b), b);
     r = reg_num(b, (size_t)(e - b));
     if (r < 0) fatal_at(line, 1, "asm: registro no válido: %.*s", (int)(e - b), b);
     if (r == 13) fatal_at(line, 1, "asm: el registro a5 no se puede usar en un bloque asm");
@@ -192,6 +200,27 @@ static void parse_head(const char *h, const char *he, int line, AsmBlock *bk, Bu
                 const char *x = b, *xe = e;
                 trim(&x, &xe);
                 if (x == xe) fatal_at(line, 1, "asm: lista de uses vacía");
+                if (xe - x >= 3 && a_lower(x[0]) == 'f' && a_lower(x[1]) == 'p') {
+                    /* fp0-fp7: los de la FPU (los que guarda: fp2-fp7) */
+                    const char *xd = x;
+                    int f1, f2, f;
+                    while (xd < xe && *xd != '-') xd++;
+                    {
+                        const char *a1 = x, *a2 = xd;
+                        trim(&a1, &a2);
+                        f1 = fp_num(a1, (size_t)(a2 - a1));
+                    }
+                    f2 = f1;
+                    if (xd < xe) {
+                        const char *a1 = xd + 1, *a2 = xe;
+                        trim(&a1, &a2);
+                        f2 = fp_num(a1, (size_t)(a2 - a1));
+                    }
+                    if (f1 < 0 || f2 < f1) fatal_at(line, 1, "asm: registro no válido: %.*s", (int)(xe - x), x);
+                    for (f = f1; f <= f2; f++) bk->fuses |= 1u << f;
+                    if (e >= kwe[2]) break;
+                    continue;
+                }
             }
             if (dash < e) {
                 int r1 = head_reg(b, dash, line), r2 = head_reg(dash + 1, e, line), r;
@@ -254,6 +283,31 @@ static int end_line(const char *x, const char *xe)
     return x == xe || *x == '#' || *x == ';';
 }
 
+/* ¿alguna línea del cuerpo cambia de sección? (section, data, data_c, bss, bss_c; code o text no cuentan solas) */
+static int body_sections(const char *s)
+{
+    while (*s) {
+        const char *e = strchr(s, '\n'), *p = s, *w;
+        size_t n;
+        if (!e) e = s + strlen(s);
+        if (p < e && !isspace((unsigned char)*p) && *p != ';' && *p != '*') {       /* una etiqueta en la columna 1 */
+            while (p < e && !isspace((unsigned char)*p)) p++;
+        }
+        for (;;) {
+            while (p < e && isspace((unsigned char)*p)) p++;
+            w = p;
+            while (p < e && (is_idc((unsigned char)*p) || *p == '.')) p++;
+            if (p < e && *p == ':') { p++; continue; }                         /* etiqueta: */
+            break;
+        }
+        n = (size_t)(p - w);
+        if (ieq(w, "section", n) || ieq(w, "data", n) || ieq(w, "data_c", n) || ieq(w, "bss", n) || ieq(w, "bss_c", n))
+            return 1;
+        s = *e ? e + 1 : e;
+    }
+    return 0;
+}
+
 char *asm_extract(const char *src)
 {
     Buf out = {0};
@@ -306,6 +360,7 @@ char *asm_extract(const char *src)
             }
             buf_byte(&body, 0);
             bk.body = (char *)body.p;
+            bk.sections = body_sections(bk.body);
             VEC_PUSH(asm_blocks, bk);
             buf_bytes(&out, call.p, call.n);
             if (outs.n) buf_bytes(&out, outs.p, outs.n);
@@ -342,12 +397,15 @@ char *asm_extract(const char *src)
 
 /* ======================= el ensamblador ======================= */
 
-typedef struct { long v; int rel, undef; } AVal;   /* rel: cuántas etiquetas (del bloque) suma; undef: un nombre aún sin saber */
+/* rel: cuántas etiquetas (del bloque) suma; undef: un nombre aún sin saber; sec: la sección de la etiqueta (S_EXT: un
+   nombre de fuera, ext su número) */
+typedef struct { long v; int rel, undef, sec, ext; } AVal;
 
 typedef struct {
     char *name;
     long val;
-    int rel;          /* una etiqueta (desde el principio del bloque) */
+    int rel;          /* una etiqueta (desde el principio de su sección en el bloque) */
+    int sec;          /* su sección */
     int equ;          /* equ o = */
     int pass;         /* la pasada en la que se puso */
 } ASym;
@@ -365,12 +423,14 @@ typedef struct {
 
 static struct { ASym *v; int n, cap; } asyms;
 static struct { ALine *v; int n, cap; } alines;
-static Buf ob;                    /* los bytes de la pasada */
-static U32Vec *orelocs;           /* (sitio, destino) de cada long que apunta a una etiqueta del bloque */
-static int apass, afinal, acpu020, achanged;
+static AsmOut *aout;              /* las secciones y las reubicaciones */
+static Buf *obp;                  /* los bytes de la sección en la que se está */
+static int csec;                  /* y cuál es */
+static int apass, afinal, acpu020, afpu, achanged, acalign;
 static ALine *cur;
 static AsmBlock *cur_block;
 static AsmConstFn aconst;
+static AsmSymFn asymf;
 
 static void aerr(const char *fmt, ...)
 {
@@ -427,7 +487,7 @@ static long x_number(void)
 
 static AVal x_prim(void)
 {
-    AVal r = {0, 0, 0};
+    AVal r = {0, 0, 0, 0, 0};
     if (*xp == '(') {
         xp++;
         r = x_or();
@@ -471,12 +531,19 @@ static AVal x_prim(void)
         if (s) {
             r.v = s->val;
             r.rel = s->rel;
+            r.sec = s->sec;
             return r;
         }
         if (aconst && aconst(name, cur_block->file, &cv)) {
             r.v = cv;
             return r;
         }
+        if (asymf && (r.ext = asymf(name, cur_block->file)) > 0) {
+            r.rel = 1;                                 /* una función de Dash o una base de librería */
+            r.sec = S_EXT;
+            return r;
+        }
+        r.ext = 0;
         if (afinal) aerr("nombre desconocido: %s", name);
         r.undef = 1;
         return r;
@@ -509,8 +576,14 @@ static AVal x_add(void)
     while (*xp == '+' || *xp == '-') {
         char o = *xp++;
         b = x_mul();
+        if (a.rel && b.rel && !a.undef && !b.undef && (a.sec != b.sec || a.ext != b.ext)) {
+            if (o == '-') aerr("solo se restan etiquetas de la misma sección");
+            aerr("una etiqueta solo se puede sumar o restar");
+        }
+        if (!a.rel && b.rel) { a.sec = b.sec; a.ext = b.ext; }
         if (o == '+') { a.v = (long)(int32_t)((uint32_t)a.v + (uint32_t)b.v); a.rel += b.rel; }
         else { a.v = (long)(int32_t)((uint32_t)a.v - (uint32_t)b.v); a.rel -= b.rel; }
+        if (!a.rel) a.sec = a.ext = 0;
         a.undef |= b.undef;
     }
     return a;
@@ -563,6 +636,7 @@ static AVal expr(const char *s, const char *e)
         if (!r.undef || afinal) aerr("expresión no válida: %s", buf);
         r.rel = 0;
     }
+    if (r.rel && r.sec == S_EXT && r.v && afinal) aerr("a una función o una base de librería no se le suma nada: %s", buf);
     return r;
 }
 
@@ -826,22 +900,44 @@ static void check_ea(Ea *e, unsigned mask)
 }
 
 /* ---- salida ---- */
-static void ow(int v) { buf_word(&ob, v & 0xFFFF); }
-static void ol(uint32_t v) { buf_long(&ob, v); }
+static void ow(int v) { buf_word(obp, v & 0xFFFF); }
+static void ol(uint32_t v) { buf_long(obp, v); }
 
-static void reloc_here(long target)
+/* el long que va aquí apunta a una etiqueta (o a un nombre de fuera) */
+static void reloc_here(AVal *v)
 {
+    AsmReloc r;
     if (!afinal) return;
-    VEC_PUSH(*orelocs, (uint32_t)ob.n);
-    VEC_PUSH(*orelocs, (uint32_t)target);
+    if (csec == S_BSS || csec == S_CHIPBSS) aerr("en bss solo van ds, even y cnop");
+    r.from = (unsigned char)csec;
+    r.to = (unsigned char)v->sec;
+    r.ext = v->ext;
+    r.at = (uint32_t)obp->n;
+    r.off = (uint32_t)v->v;
+    VEC_PUSH(aout->relocs, r);
+}
+
+/* un long: un número, o una etiqueta (reubicada) */
+static void out_long(AVal *v)
+{
+    if (v->rel) reloc_here(v);
+    ol(v->rel ? 0 : (uint32_t)v->v);
+}
+
+/* una etiqueta a la que se llega desde el código con (pc) o un salto: del código del bloque */
+static void code_label(AVal *v, const char *text)
+{
+    if (v->rel && !v->undef && v->sec != S_CODE) {
+        if (v->sec == S_EXT) aerr("a una función se llega con jsr (sin pc): %s", text);
+        aerr("(pc) y los saltos solo llegan al código del bloque, no a otra sección: %s", text);
+    }
 }
 
 /* un valor de size bytes (1, 2, 4) en una palabra o dos */
 static void out_imm(AVal *v, int size)
 {
     if (size == 4) {
-        if (v->rel) reloc_here(v->v);
-        ol(v->rel ? 0 : (uint32_t)v->v);
+        out_long(v);
         return;
     }
     if (v->rel) aerr("una etiqueta como inmediato necesita .l");
@@ -900,7 +996,7 @@ static void out_index(Ea *e, long d, int pcrel)
 /* las palabras de extensión de e (size: el de la operación, para un inmediato) */
 static void out_ea(Ea *e, int size)
 {
-    long pc = (long)ob.n;
+    long pc = (long)obp->n;
     switch (e->mode) {
     case M_D16:
         if (e->d.rel) aerr("una etiqueta como desplazamiento de An no se admite: %s", e->text);
@@ -919,16 +1015,18 @@ static void out_ea(Ea *e, int size)
         ow((int)(e->d.v & 0xFFFF));
         break;
     case M_ABSL:
-        if (e->d.rel) reloc_here(e->d.v);
-        ol(e->d.rel ? 0 : (uint32_t)e->d.v);
+        out_long(&e->d);
         break;
     case M_PCD: {
-        long d = e->has_d ? (e->d.rel ? e->d.v - pc : e->d.v) : 0;
+        long d;
+        code_label(&e->d, e->text);
+        d = e->has_d ? (e->d.rel ? e->d.v - pc : e->d.v) : 0;
         if (afinal && !e->d.undef && (d < -32768 || d > 32767)) aerr("el desplazamiento no cabe en 16 bits: %s", e->text);
         ow((int)(d & 0xFFFF));
         break;
     }
     case M_PCIDX:
+        code_label(&e->d, e->text);
         out_index(e, e->has_d ? (e->d.rel ? e->d.v - pc : e->d.v) : 0, 1);
         break;
     case M_IMM:
@@ -972,8 +1070,9 @@ static void nops2(int a, int b)
 static long branch_disp(const char *op, long from)
 {
     AVal v = expr(op, op + strlen(op));
-    if (!v.rel) {
-        if (afinal) aerr("un salto va a una etiqueta del bloque: %s", op);
+    if (!v.rel || (v.sec != S_CODE && !v.undef)) {
+        if (v.rel && v.sec == S_EXT) aerr("a una función se llega con jsr, no con un salto: %s", op);
+        if (afinal || v.rel) aerr("un salto va a una etiqueta del código del bloque: %s", op);
         return 0;
     }
     return v.undef ? 0 : v.v - from;
@@ -982,7 +1081,7 @@ static long branch_disp(const char *op, long from)
 static void ins_branch(int cc)
 {
     long d;
-    uint32_t at = (uint32_t)ob.n;
+    uint32_t at = (uint32_t)obp->n;
     nops(1);
     if (cur->size && !strchr("swbl", cur->size)) aerr("tamaño .%c no válido en %s", cur->size, cur->op);
     d = branch_disp(cur->opnd[0], (long)at + 2);
@@ -1564,7 +1663,7 @@ static int instruction(void)
         parse_ea(cur->opnd[0], &op1);
         if (cur->size && cur->size != 'w') aerr("tamaño .%c no válido en %s", cur->size, op);
         if (op1.mode != M_DN) aerr("operando no válido: %s", op1.text);
-        d = branch_disp(cur->opnd[1], (long)ob.n + 2);
+        d = branch_disp(cur->opnd[1], (long)obp->n + 2);
         if (afinal && (d < -32768 || d > 32767)) aerr("el salto no llega (%ld bytes)", d);
         ow(0x50C8 | cc << 8 | op1.reg);
         ow((int)(d & 0xFFFF));
@@ -1576,13 +1675,115 @@ static int instruction(void)
 /* ---- las directivas ---- */
 static void align2(void)
 {
-    if (ob.n & 1) buf_byte(&ob, 0);
+    if (obp->n & 1) buf_byte(obp, 0);
+}
+
+/* section nombre,tipo (o solo el tipo: code, data, bss, data_c, bss_c): -1 si op no es eso */
+static int section_kind(const char *t)
+{
+    if (!strcmp(t, "code") || !strcmp(t, "text")) return S_CODE;
+    if (!strcmp(t, "data")) return S_DATA;
+    if (!strcmp(t, "data_c")) return S_CHIP;
+    if (!strcmp(t, "bss")) return S_BSS;
+    if (!strcmp(t, "bss_c")) return S_CHIPBSS;
+    return -1;
+}
+
+static int section_op(const char *op) { return !strcmp(op, "section") || section_kind(op) >= 0; }
+
+static void section(void)
+{
+    const char *op = cur->op;
+    int k;
+    if (cur->size) aerr("tamaño .%c no válido en %s", cur->size, op);
+    if (!strcmp(op, "section")) {
+        char t[16];
+        size_t i, n;
+        nops(2);
+        n = strlen(cur->opnd[1]);
+        if (n >= sizeof t) n = sizeof t - 1;
+        for (i = 0; i < n; i++) t[i] = (char)a_lower((unsigned char)cur->opnd[1][i]);
+        t[n] = 0;
+        k = section_kind(t);
+        if (k < 0) {
+            if (!strcmp(t, "code_c") || !strcmp(t, "code_f") || !strcmp(t, "data_f") || !strcmp(t, "bss_f"))
+                aerr("la sección %s no se admite: code, data, bss, data_c o bss_c", cur->opnd[1]);
+            aerr("tipo de sección no válido: %s (code, data, bss, data_c o bss_c)", cur->opnd[1]);
+        }
+    } else {
+        if (cur->nopnd) aerr("%s pide 0 operandos", op);
+        k = section_kind(op);
+    }
+    if (csec != S_CODE) align2();
+    csec = k;
+    obp = &aout->sec[k];
+}
+
+/* un número de coma flotante para dc.s y dc.d: 1.5, -2e3 o una expresión entera */
+static double float_value(const char *o)
+{
+    const char *p = o;
+    if (*p == '-' || *p == '+') p++;
+    if (isdigit((unsigned char)*p) && (strchr(p, '.') || strchr(p, 'e') || strchr(p, 'E')) && *p != '$' &&
+        !(p[0] == '0' && (p[1] == 'x' || p[1] == 'X'))) {
+        char *end;
+        double d = strtod(o, &end);
+        if (*end) aerr("número no válido: %s", o);
+        return d;
+    }
+    return (double)const_expr(o);
+}
+
+static void cnop(void)
+{
+    long off, al, at;
+    if (cur->size) aerr("tamaño .%c no válido en cnop", cur->size);
+    nops(2);
+    off = const_expr(cur->opnd[0]);
+    al = const_expr(cur->opnd[1]);
+    if (al != 2 && al != 4 && al != 8) aerr("cnop alinea a 2, 4 u 8 (los hunks empiezan alineados a 8)");
+    if (off != 0) aerr("cnop: solo cnop 0,n (el desplazamiento, 0)");
+    if (csec == S_CODE) {
+        if (al > acalign) acalign = (int)al;
+        while (((long)obp->n & (al - 1)) != off) {
+            align2();
+            if (((long)obp->n & (al - 1)) != off) ow(0x4E71);    /* nop */
+        }
+        return;
+    }
+    at = (long)(aout->base[csec] + obp->n);
+    while ((at & (al - 1)) != off) {
+        buf_byte(obp, 0);
+        at++;
+    }
 }
 
 static int datas(void)
 {
     const char *op = cur->op;
     int i;
+    if (section_op(op)) { section(); return 1; }
+    if (!strcmp(op, "cnop")) { cnop(); return 1; }
+    if ((csec == S_BSS || csec == S_CHIPBSS) && strcmp(op, "ds") && strcmp(op, "even"))
+        aerr("en bss solo van ds, even y cnop");
+    if (!strcmp(op, "dc") && (cur->size == 's' || cur->size == 'd')) {
+        if (!cur->nopnd) aerr("dc pide al menos un valor");
+        for (i = 0; i < cur->nopnd; i++) {
+            double d = float_value(cur->opnd[i]);
+            if (cur->size == 's') {
+                float f = (float)d;
+                uint32_t u;
+                memcpy(&u, &f, 4);
+                ol(u);
+            } else {
+                uint64_t u;
+                memcpy(&u, &d, 8);
+                ol((uint32_t)(u >> 32));
+                ol((uint32_t)u);
+            }
+        }
+        return 1;
+    }
     if (!strcmp(op, "dc")) {
         int sz = cur->size ? cur->size : 'w';
         if (!strchr("bwl", sz)) aerr("tamaño .%c no válido en dc", sz);
@@ -1592,19 +1793,18 @@ static int datas(void)
             size_t n = strlen(o);
             if (sz == 'b' && n >= 2 && (o[0] == '"' || o[0] == '\'') && o[n - 1] == o[0] && n != 3) {
                 size_t k;
-                for (k = 1; k + 1 < n; k++) buf_byte(&ob, (unsigned char)o[k]);
+                for (k = 1; k + 1 < n; k++) buf_byte(obp, (unsigned char)o[k]);
                 continue;
             }
             {
                 AVal v = expr(o, o + n);
                 if (sz == 'l') {
-                    if (v.rel) reloc_here(v.v);
-                    ol(v.rel ? 0 : (uint32_t)v.v);
+                    out_long(&v);
                 } else {
                     if (v.rel) aerr("una etiqueta en dc va con dc.l");
                     if (afinal && sz == 'b' && (v.v < -128 || v.v > 255)) aerr("el valor no cabe en un byte: %ld", v.v);
                     if (afinal && sz == 'w' && (v.v < -32768 || v.v > 65535)) aerr("el valor no cabe en 16 bits: %ld", v.v);
-                    if (sz == 'b') buf_byte(&ob, (int)(v.v & 0xFF));
+                    if (sz == 'b') buf_byte(obp, (int)(v.v & 0xFF));
                     else ow((int)v.v);
                 }
             }
@@ -1618,7 +1818,7 @@ static int datas(void)
         nops(1);
         k = const_expr(cur->opnd[0]);
         if (k < 0 || k > 0x1000000) aerr("ds: tamaño no válido");
-        for (k *= size_bytes(sz); k > 0; k--) buf_byte(&ob, 0);
+        for (k *= size_bytes(sz); k > 0; k--) buf_byte(obp, 0);
         return 1;
     }
     if (!strcmp(op, "even")) {
@@ -1658,9 +1858,9 @@ static int datas(void)
         }
         fseek(f, from, SEEK_SET);
         {
-            size_t at = ob.n;
-            for (n = 0; n < (size_t)count; n++) buf_byte(&ob, 0);
-            if (fread(ob.p + at, 1, (size_t)count, f) != (size_t)count) { fclose(f); aerr("no se puede leer %s", path); }
+            size_t at = obp->n;
+            for (n = 0; n < (size_t)count; n++) buf_byte(obp, 0);
+            if (fread(obp->p + at, 1, (size_t)count, f) != (size_t)count) { fclose(f); aerr("no se puede leer %s", path); }
         }
         fclose(f);
         return 1;
@@ -1789,12 +1989,14 @@ static void parse_lines(AsmBlock *bk)
 static int wants_even(ALine *al)
 {
     if (!al->op) return 0;
-    if (!strcmp(al->op, "equ") || !strcmp(al->op, "even") || !strcmp(al->op, "incbin")) return 0;
+    if (!strcmp(al->op, "equ") || !strcmp(al->op, "even") || !strcmp(al->op, "incbin") || !strcmp(al->op, "cnop") ||
+        section_op(al->op))
+        return 0;
     if ((!strcmp(al->op, "dc") || !strcmp(al->op, "ds")) && al->size == 'b') return 0;
     return 1;
 }
 
-static void define(ALine *al, long val, int rel)
+static void define(ALine *al, long val, int rel, int sec)
 {
     ASym *s = asym_find(al->label);
     if (s && s->pass == apass) aerr("%s ya está definido", al->label);
@@ -1804,11 +2006,12 @@ static void define(ALine *al, long val, int rel)
         ns.name = al->label;
         VEC_PUSH(asyms, ns);
         s = &asyms.v[asyms.n - 1];
-    } else if (s->val != val || s->rel != rel) {
+    } else if (s->val != val || s->rel != rel || s->sec != sec) {
         achanged = 1;
     }
     s->val = val;
     s->rel = rel;
+    s->sec = sec;
     s->equ = !rel;
     s->pass = apass;
 }
@@ -1816,7 +2019,11 @@ static void define(ALine *al, long val, int rel)
 static void one_pass(void)
 {
     int i;
-    ob.n = 0;
+    for (i = 0; i < S_NSEC; i++) aout->sec[i].n = 0;
+    aout->relocs.n = 0;
+    csec = S_CODE;
+    obp = &aout->sec[S_CODE];
+    acalign = 2;
     achanged = 0;
     for (i = 0; i < alines.n; i++) {
         ALine *al = &alines.v[i];
@@ -1827,8 +2034,9 @@ static void one_pass(void)
             if (al->nopnd != 1) aerr("equ pide 1 operando");
             if (reg_num(al->label, strlen(al->label)) >= 0) aerr("%s es un registro", al->label);
             v = expr(al->opnd[0], al->opnd[0] + strlen(al->opnd[0]));
-            define(al, v.v, v.rel);
-            if (v.rel) asyms.v[asyms.n - 1].equ = 0;
+            if (v.rel && v.sec == S_EXT) aerr("equ con una función o una base de librería no se admite");
+            define(al, v.v, v.rel, v.sec);
+            if (v.rel) asym_find(al->label)->equ = 0;
             continue;
         }
         if (wants_even(al)) align2();
@@ -1841,24 +2049,31 @@ static void one_pass(void)
         if (al->label) {
             if (reg_num(al->label, strlen(al->label)) >= 0 || ieq(al->label, "pc", strlen(al->label)))
                 aerr("%s es un registro", al->label);
-            define(al, (long)ob.n, 1);
+            define(al, (long)obp->n, 1, csec);
         }
         if (!al->op) continue;
         if (datas()) continue;
+        if (csec != S_CODE) {
+            aerr("en una sección de datos solo van datos (dc, ds, incbin...): %s", al->op);
+        }
         if (!instruction()) aerr("instrucción desconocida: %s", al->op);
     }
     cur = NULL;
-    align2();
+    for (i = 0; i < S_NSEC; i++) {
+        obp = &aout->sec[i];
+        align2();
+    }
 }
 
-void asm_assemble(AsmBlock *bk, Buf *code, int cpu, AsmConstFn cfn, U32Vec *relocs)
+void asm_assemble(AsmBlock *bk, AsmOut *o, int cpu, int fpu, AsmConstFn cfn, AsmSymFn sfn)
 {
     int i;
     cur_block = bk;
     acpu020 = cpu;
+    afpu = fpu;
     aconst = cfn;
-    orelocs = relocs;
-    relocs->n = 0;
+    asymf = sfn;
+    aout = o;
     asyms.n = 0;
     src_name = src_files.v[bk->file];
     parse_lines(bk);
@@ -1874,5 +2089,5 @@ void asm_assemble(AsmBlock *bk, Buf *code, int cpu, AsmConstFn cfn, U32Vec *relo
     apass++;
     afinal = 1;
     one_pass();
-    buf_bytes(code, ob.p, ob.n);
+    o->calign = acalign;
 }

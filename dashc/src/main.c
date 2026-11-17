@@ -221,7 +221,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--debug")) debug = 1;
         else if (!strcmp(argv[i], "--debug-info") && i + 1 < argc) return debug_info_show(argv[i + 1]);
         else if (!strcmp(argv[i], "--perfil") || !strcmp(argv[i], "--profile")) profile = 1;
-        else if (!strcmp(argv[i], "--fpu")) fpu = cpu020 = 1;   /* (la FPU pide un 68020) */
+        else if (!strcmp(argv[i], "--fpu")) fpu = cpu020 = fpu881 = 1;   /* (la FPU pide un 68020) */
         else if (!strcmp(argv[i], "--cabecera") && i + 1 < argc) header = argv[++i];
         else if (!strcmp(argv[i], "--cpu") && i + 1 < argc) {
             const char *c = argv[++i];

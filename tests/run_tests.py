@@ -322,6 +322,9 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
             timeout=60
         )
         compile_ok = result.returncode == 0
+        if compile_ok:
+            from compiler.cflags import fix_chip_hunks   # asm data_c/bss_c, as ./dash
+            fix_chip_hunks([c_file.read_text()], exe_file)
 
         if not compile_ok:
             duration = time.time() - start_time
@@ -507,6 +510,9 @@ def run_multifile_test(test_file: Path) -> TestResult:
             )
             if build.returncode != 0 and not error:
                 error = build.stderr.strip()[:200]
+            elif build.returncode == 0:
+                from compiler.cflags import fix_chip_hunks   # asm data_c/bss_c, as ./dash
+                fix_chip_hunks((Path(f).read_text() for f in c_files), out_dir / "a.out")
     return TestResult(name=name, passed=error is None, transpile_ok=error is None,
                       compile_ok=error is None, error_message=error,
                       duration=time.time() - start_time)

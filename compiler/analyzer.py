@@ -1862,7 +1862,7 @@ class SemanticAnalyzer(ASTVisitor):
         if block is None:
             return
         try:
-            asm68k.check(block, asm_consts(self.program))
+            asm68k.check(block, asm_consts(self.program), asm_funcs(self.program))
         except asm68k.AsmError as e:
             self.error(e.message, Comment(text="", location=SourceLocation(e.line, e.col, block.filename)))
 
@@ -2061,6 +2061,18 @@ def analyze(program: Program) -> AnalysisResult:
     """Convenience function to analyze a program."""
     analyzer = SemanticAnalyzer()
     return analyzer.analyze(program)
+
+
+def asm_funcs(program) -> dict:
+    """The program's Dash functions by name, with their C name (an asm block calls them: jsr nombre)."""
+    funcs = {}
+    for f in getattr(program, "functions", None) or []:
+        if "." in f.name:
+            continue
+        funcs[f.name] = f.name
+        if f.name.endswith("__kw"):             # (a C word renamed in compiler/main.py: the block says the Dash one)
+            funcs[f.name[:-4]] = f.name
+    return funcs
 
 
 def asm_consts(program) -> dict:

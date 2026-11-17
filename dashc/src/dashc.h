@@ -358,13 +358,13 @@ extern const uint8_t *rt_blob;       /* main.c: el runtime que se va a enlazar *
 extern size_t rt_blob_len;
 
 /* ---- código 68000 (gen68k.c) ---- */
-enum { HK_CODE = 0, HK_DATA = 1 };
+enum { HK_CODE = 0, HK_DATA = 1, HK_CHIP = 2, HK_BSS = 3, HK_CHIPBSS = 4 };   /* (los de asm: section) */
 
 typedef struct {
 #ifndef DASH_A64
     /* (8 bytes: un programa grande lleva decenas de miles) */
-    uint32_t off : 30; /* dónde está el long que hay que reubicar */
-    int hunk : 2;      /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
+    uint32_t off : 28; /* dónde está el long que hay que reubicar */
+    int hunk : 4;      /* HK_CODE, HK_DATA, HK_CHIP..., o -1 si va a un símbolo del runtime */
     const char *sym;
 #else
     uint32_t off;
@@ -383,9 +383,16 @@ typedef struct {
     uint32_t off;      /* en el código del programa */
 } Export;
 
+/* una reubicación en los datos de un bloque asm (section): el long de from (HK_DATA o HK_CHIP) en off apunta a
+   hunk (o al símbolo sym) */
+typedef struct { int from, hunk; uint32_t off; const char *sym; } SecReloc;
+
 typedef struct {
     Buf code, data;
     struct { Reloc *v; int n, cap; } relocs;
+    Buf chip;                                    /* los datos de chip de los bloques asm (data_c) */
+    uint32_t bss, chipbss;                       /* y el tamaño de su bss y su bss de chip */
+    struct { SecReloc *v; int n, cap; } srelocs;
     struct { Export *v; int n, cap; } exports;   /* las funciones @export */
 } Obj;
 
@@ -397,6 +404,7 @@ extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info
 extern Buf debug_info;
 extern int profile;    /* --perfil */
 extern int cpu020;     /* --fpu o --cpu 68020 y más */   /* --memcheck: como ./dash --memcheck */
+extern int fpu881;     /* --fpu: la FPU en los bloques asm */
 
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo
    que recibe (un texto o un objeto pasa escapado) */
@@ -415,15 +423,32 @@ typedef struct {
     int nin, nout;
     signed char in_reg[16], out_reg[16];   /* 0-7 d0-d7, 8-15 a0-a7 */
     unsigned uses;         /* bit r: el registro r */
+    unsigned fuses;        /* bit r: fpr (uses fp2-fp7) */
+    int sections;          /* tiene section/data_c...: su función no se copia en línea (datos de un solo sitio) */
 } AsmBlock;
 extern struct AsmBlocks { AsmBlock *v; int n, cap; } asm_blocks;
 /* el fuente con cada asm ... end cambiado por __dash_asm(n, entradas) var = __dash_asm_out(n, j)...; NULL si no hay */
 char *asm_extract(const char *src);
 /* una constante de Dash por su nombre (del fichero file), para las expresiones del bloque */
 typedef int (*AsmConstFn)(const char *name, int file, long *val);
-/* los bytes del bloque al final de code; relocs: pares (sitio, destino) desde el principio del bloque, de cada long
-   que apunta a una etiqueta suya */
-void asm_assemble(AsmBlock *bk, Buf *code, int cpu020, AsmConstFn cfn, U32Vec *relocs);
+/* un nombre de fuera del bloque al que se llega con una dirección de 32 bits (una función de Dash, una base de
+   librería): su número (> 0), o 0 */
+typedef int (*AsmSymFn)(const char *name, int file);
+/* las secciones de un bloque: el código, los datos (fast o cualquiera), los de chip, bss y bss de chip; S_EXT: un
+   nombre de fuera (AsmSymFn) */
+enum { S_CODE, S_DATA, S_CHIP, S_BSS, S_CHIPBSS, S_NSEC, S_EXT = S_NSEC };
+typedef struct {
+    unsigned char from, to;   /* la sección del long que se reubica y la de su destino (o S_EXT) */
+    int ext;                  /* S_EXT: el número de AsmSymFn */
+    uint32_t at, off;         /* dónde está (en su sección, desde el bloque) y adónde apunta (en la suya) */
+} AsmReloc;
+typedef struct {
+    Buf sec[S_NSEC];          /* los bytes de cada sección (bss: ceros, solo cuenta su tamaño) */
+    uint32_t base[S_NSEC];    /* entra: dónde empieza cada una en su hunk (para cnop; el código, en 0) */
+    int calign;               /* sale: el mayor cnop del código (el bloque tiene que empezar alineado así) */
+    struct { AsmReloc *v; int n, cap; } relocs;
+} AsmOut;
+void asm_assemble(AsmBlock *bk, AsmOut *o, int cpu020, int fpu, AsmConstFn cfn, AsmSymFn sfn);
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);

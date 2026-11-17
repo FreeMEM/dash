@@ -281,6 +281,9 @@ def main():
         "-lm",
     ])
     run_command(compile_command, env=env)
+    if not args.no_hunk:
+        from compiler.cflags import fix_chip_hunks   # asm section data_c/bss_c: their hunks in chip memory
+        fix_chip_hunks((open(f).read() for f in c_files), elf_output_file)
 
     # --- Step 3: Convert ELF to Hunk (only if gcc produced ELF) ---
     if not args.no_hunk:

@@ -913,9 +913,13 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     FILE *f;
     int i, j, k, nout;
     int *keep, *outh, *stack, *weak, *core, more, sp = 0;
-    uint32_t *base, outsize[3] = {0, 0, 0};
-    static const int outtype[3] = {HUNK_CODE, HUNK_DATA, HUNK_BSS};
-    struct { HReloc *v; int n, cap; } outrel[3] = {{0}};
+    /* los hunks que se escriben, por clase: código, datos, BSS, y los de memoria chip de los bloques asm (section
+       data_c, bss_c); onum: el número de cada clase en el ejecutable (-1 si no va) */
+    uint32_t *base, outsize[5] = {0, 0, 0, 0, 0};
+    static const int outtype[5] = {HUNK_CODE, HUNK_DATA, HUNK_BSS, HUNK_DATA, HUNK_BSS};
+    int onum[5], okind[5];
+    int xh[HK_CHIPBSS + 1] = {0, 1, -1, -1, -1};      /* el hunk de cada HK_ (los de asm, al final) */
+    struct { HReloc *v; int n, cap; } outrel[5] = {{0}};
 
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
@@ -927,6 +931,31 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     }
     tiempo("runtime");
     for (i = 0; i < link_files.n; i++) read_linked(link_files.v[i]);
+    /* los datos de chip y los bss de los bloques asm (section), si los hay */
+    if (obj->chip.n) {
+        Hunk h = own_hunk(HUNK_DATA, &obj->chip);
+        h.memflags = 1u << 30;
+        h.secname = "asm data_c";
+        VEC_PUSH(hunks, h);
+        xh[HK_CHIP] = hunks.n - 1;
+    }
+    if (obj->bss) {
+        Hunk h = {0};
+        h.type = HUNK_BSS;
+        h.size = (obj->bss + 3) & ~3u;
+        h.secname = "asm bss";
+        VEC_PUSH(hunks, h);
+        xh[HK_BSS] = hunks.n - 1;
+    }
+    if (obj->chipbss) {
+        Hunk h = {0};
+        h.type = HUNK_BSS;
+        h.size = (obj->chipbss + 3) & ~3u;
+        h.memflags = 1u << 30;
+        h.secname = "asm bss_c";
+        VEC_PUSH(hunks, h);
+        xh[HK_CHIPBSS] = hunks.n - 1;
+    }
     /* las funciones @export del programa, por su nombre de C (si ni el runtime ni lo de @link lo tienen ya) */
     for (i = 0; i < obj->exports.n; i++)
         if (!find_sym(obj->exports.v[i].name)) add_sym(obj->exports.v[i].name, HK_CODE, obj->exports.v[i].off, 0);
@@ -950,8 +979,19 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         } else {
             HReloc h;
             h.off = r->off;
-            h.target = r->hunk;
+            h.target = xh[r->hunk];
             VEC_PUSH(hk(HK_CODE)->relocs, h);
+        }
+    }
+    for (i = 0; i < obj->srelocs.n; i++) {          /* las de los datos de los bloques asm */
+        SecReloc *r = &obj->srelocs.v[i];
+        if (r->sym) {
+            bind(xh[r->from], r->off, r->sym);
+        } else {
+            HReloc h;
+            h.off = r->off;
+            h.target = xh[r->hunk];
+            VEC_PUSH(hk(xh[r->from])->relocs, h);
         }
     }
 
@@ -986,6 +1026,11 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     keep[0] = keep[1] = 1;
     stack[sp++] = 0;
     stack[sp++] = 1;
+    for (i = HK_CHIP; i <= HK_CHIPBSS; i++)
+        if (xh[i] >= 0) {
+            keep[xh[i]] = 1;
+            stack[sp++] = xh[i];
+        }
     reach(keep, stack, sp, weak);
     tiempo("alcanzar");
 
@@ -1057,12 +1102,21 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         Hunk *h;
         if (!keep[i]) continue;
         h = hk(i);
-        if (h->memflags) fatal("%s: un hunk con memoria chip o fast aún no se admite", h->secname ? h->secname : "?");
-        outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? 1 : 2;
+        if (h->memflags && i != xh[HK_CHIP] && i != xh[HK_CHIPBSS])
+            fatal("%s: un hunk con memoria chip o fast aún no se admite", h->secname ? h->secname : "?");
+        outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? (h->memflags ? 3 : 1) : (h->memflags ? 4 : 2);
         base[i] = outsize[outh[i]];
         outsize[outh[i]] += h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
     }
-    for (k = 0; k < 3; k++) outsize[k] = (outsize[k] + 3) & ~3u;
+    for (k = 0; k < 5; k++) outsize[k] = (outsize[k] + 3) & ~3u;
+    /* el número de cada clase en el ejecutable: código y datos siempre; los demás, si llevan algo */
+    nout = 0;
+    for (k = 0; k < 5; k++) {
+        onum[k] = k < 2 || outsize[k] ? nout : -1;
+        if (onum[k] >= 0) okind[nout++] = k;
+    }
+    for (i = 0; i < hunks.n; i++)
+        if (keep[i]) outh[i] = onum[outh[i]];
     /* las reubicaciones, a su sitio en los hunks juntados */
     for (i = 0; i < hunks.n; i++) {
         Hunk *h;
@@ -1079,7 +1133,6 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             VEC_PUSH(outrel[outh[i]], r);
         }
     }
-    nout = outsize[2] ? 3 : 2;
     if (why)
         /* el tamaño, el tipo, el nombre y quién lo trajo (el programa, otro hunk o, si nada, una limpieza) */
         for (i = 2; i < hunks.n; i++)
@@ -1106,12 +1159,12 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     wl(f, (uint32_t)nout);
     wl(f, 0);
     wl(f, (uint32_t)nout - 1);
-    for (k = 0; k < nout; k++) wl(f, outsize[k] / 4);
+    for (k = 0; k < nout; k++) wl(f, outsize[okind[k]] / 4 | (okind[k] >= 3 ? 1u << 30 : 0));   /* (3, 4: chip) */
     for (k = 0; k < nout; k++) {
         static const uint8_t zero[4];
-        wl(f, (uint32_t)outtype[k]);
-        wl(f, outsize[k] / 4);
-        if (k < 2) {
+        wl(f, (uint32_t)outtype[okind[k]]);
+        wl(f, outsize[okind[k]] / 4);
+        if (outtype[okind[k]] != HUNK_BSS) {
             uint32_t done = 0;
             for (i = 0; i < hunks.n; i++) {
                 Hunk *h;
@@ -1124,7 +1177,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                 wbytes(f, zero, padded - h->size);
                 done += padded;
             }
-            wbytes(f, zero, outsize[k] - done);
+            wbytes(f, zero, outsize[okind[k]] - done);
         }
         if (outrel[k].n) {
             /* agrupadas por el hunk al que apuntan, en grupos de RELOC_GRUPO como mucho: LoadSeg (3.1 y 3.2) da
