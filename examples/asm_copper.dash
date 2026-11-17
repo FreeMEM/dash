@@ -1,0 +1,109 @@
+# Una barra de copper que sube y baja, todo en ensamblador (docs/ASM_DISEÑO.md; lo pidió el usuario, para demos).
+# La lista del copper va en memoria chip (section data_c) y un servidor de VBlank escrito en asm (asm func) la
+# mueve en cada imagen. Dash quita la pantalla del sistema con LoadView, pone la lista y, al acabar (10 segundos o
+# el botón izquierdo del ratón), quita el servidor y deja la pantalla como estaba.
+# Va igual por los dos caminos: ./dash examples/asm_copper.dash y ./dash --gcc examples/asm_copper.dash.
+
+const ALTO = 16          # las líneas de la barra
+const ARRIBA = 0x40      # su primera línea más alta
+const RECORRIDO = 0x90   # cuántas líneas baja
+
+# la lista del copper, en memoria chip: su dirección
+asm func lista_copper() -> Pointer
+    lea     copper,a0
+    move.l  a0,d0
+    section copper,data_c
+copper:
+    dc.w    $01fc,$0000         ; FMODE (AGA): como en el OCS
+    dc.w    $0106,$0c00         ; BPLCON3 (AGA)
+    dc.w    $0100,$0200         ; BPLCON0: sin planos, con color
+    dc.w    $0180,$0000         ; COLOR00: negro
+barra:
+    ; ALTO veces: WAIT a la línea y su color (lo cambia mueve_barra)
+    dc.w    $4007,$fffe,$0180,$0100
+    dc.w    $4107,$fffe,$0180,$0300
+    dc.w    $4207,$fffe,$0180,$0500
+    dc.w    $4307,$fffe,$0180,$0700
+    dc.w    $4407,$fffe,$0180,$0900
+    dc.w    $4507,$fffe,$0180,$0b00
+    dc.w    $4607,$fffe,$0180,$0d00
+    dc.w    $4707,$fffe,$0180,$0f00
+    dc.w    $4807,$fffe,$0180,$0f00
+    dc.w    $4907,$fffe,$0180,$0d00
+    dc.w    $4a07,$fffe,$0180,$0b00
+    dc.w    $4b07,$fffe,$0180,$0900
+    dc.w    $4c07,$fffe,$0180,$0700
+    dc.w    $4d07,$fffe,$0180,$0500
+    dc.w    $4e07,$fffe,$0180,$0300
+    dc.w    $4f07,$fffe,$0180,$0100
+    dc.w    $5007,$fffe,$0180,$0000
+    dc.w    $ffff,$fffe         ; fin
+    code
+end
+
+# el servidor de VBlank: la barra baja una línea por imagen y, al llegar abajo, sube (corre en la interrupción:
+# solo registros y la memoria de la lista)
+asm func mueve_barra(cop: Pointer) in a0 = cop uses d2/a1
+    lea     estado,a1
+    move.w  (a1),d0             ; la posición, de 0 a RECORRIDO
+    add.w   2(a1),d0            ; más la dirección (1 o -1)
+    bne.s   .no_arriba
+    move.w  #1,2(a1)
+.no_arriba:
+    cmp.w   #RECORRIDO,d0
+    bne.s   .no_abajo
+    move.w  #-1,2(a1)
+.no_abajo:
+    move.w  d0,(a1)
+    add.w   #ARRIBA,d0          ; la primera línea
+    lea     16(a0),a0           ; el primer WAIT de la barra
+    moveq   #ALTO,d2            ; ALTO + 1 WAIT (el último vuelve a negro)
+.linea:
+    move.b  d0,(a0)             ; la línea, en el byte alto del WAIT
+    addq.w  #1,d0
+    addq.l  #8,a0
+    dbra    d2,.linea
+    bss
+estado:
+    ds.w    2                   ; la posición y la dirección
+    code
+end
+
+Main
+    cop = lista_copper()
+    # fuera la pantalla del sistema (LoadView(NULL)) y a la nuestra: COP1LC con la lista
+    asm in a0 = cop out vista = d0 uses a6
+        move.l  a0,-(sp)
+        move.l  GfxBase,a6
+        move.l  34(a6),-(sp)        ; gb_ActiView: la vista del sistema
+        sub.l   a1,a1
+        jsr     -222(a6)            ; LoadView(NULL)
+        jsr     -270(a6)            ; WaitTOF
+        jsr     -270(a6)
+        move.l  (sp)+,d0
+        move.l  (sp)+,a0
+        move.l  a0,$dff080          ; COP1LC
+    end
+    servidor = vblank_server(mueve_barra, cop)
+    for cuadro in (1..500)
+        wait_vblank()
+        asm out boton = d0
+            moveq   #0,d0
+            btst    #6,$bfe001      ; el botón izquierdo (CIA-A, a 0 pulsado)
+            seq     d0
+        end
+        if boton != 0
+            break
+        end
+    end
+    int_server_remove(servidor)
+    # la pantalla del sistema otra vez: su lista (gb_copinit) y su vista
+    asm in a1 = vista uses a6
+        move.l  GfxBase,a6
+        move.l  38(a6),$dff080      ; gb_copinit
+        jsr     -222(a6)            ; LoadView(vista)
+        jsr     -270(a6)
+        jsr     -270(a6)
+    end
+    Print "Fin de la barra"
+end

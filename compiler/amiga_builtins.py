@@ -4919,7 +4919,7 @@ TASK_FUNCTIONS = {
                     "(-1: it only runs when the program waits)"),
     "int_server_add": BuiltinFunc(
         name="int_server_add", params=["intb", "func", "data"], return_type="LONG",
-        c_template="_dash_irq_add(${intb}, (APTR)${func}, ${data})",
+        c_template="_dash_irq_add(${intb}, (APTR)${func}, (LONG)(${data}))",
         description="Puts f(data) on an interrupt chain of exec (AddIntServer): 5 VBlank, 4 copper, 3 CIA-A, 13 "
                     "CIA-B. f runs in the interrupt: an asm func, or Dash code that only does sums and peek/poke "
                     "(no Print, no texts or lists). It comes off by itself at exit. The server, or 0"),
@@ -4929,7 +4929,7 @@ TASK_FUNCTIONS = {
         description="Takes a server of int_server_add off its chain"),
     "vblank_server": BuiltinFunc(
         name="vblank_server", params=["func", "data"], return_type="LONG",
-        c_template="_dash_irq_add(5, (APTR)${func}, ${data})",
+        c_template="_dash_irq_add(5, (APTR)${func}, (LONG)(${data}))",
         description="int_server_add on the VBlank (50 times a second in PAL): f(data) in each frame"),
     "task_done": BuiltinFunc(
         name="task_done", params=["task"], return_type="BOOL",

@@ -29288,6 +29288,8 @@ static {ret_type} {method_name}({params_str}) {{
             ret_c = self._dash_type_to_c(ret, "") if ret and not getattr(self, "_lambda_depth", 0) else ""
             if ret_c.startswith("_Dash_") and isinstance(node.value, ArrayAccess) and self._infer_c_type(node.value) == "LONG":
                 value = f"(({ret_c}){value})"
+            if ret == "Pointer" and isinstance(node.value, VarRef) and node.value.name == "__dash_asm_r":
+                value = f"((APTR){value})"            # asm func -> Pointer: the register is a LONG
             head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")
