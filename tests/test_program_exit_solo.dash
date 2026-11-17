@@ -1,0 +1,10 @@
+# Test: program_exit in a program with no texts of its own (only a literal in Print): its runtime
+# (SYSINFO_RUNTIME) makes texts with _dash_str_dup, which did not come with it (the C did not compile)
+# expect-out: antes
+# expect-rc: 5
+
+Main
+    Print "antes"
+    program_exit(5)
+    Print "después"
+end

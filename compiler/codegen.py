@@ -7637,6 +7637,354 @@ static void _dash_syslist_cleanup(void) {
 
 """
 
+    # MiniGL (FORJA_LOOP 5.3): the gl_* builtins over minigl.library
+    GL_RUNTIME = """\
+/* Dash MiniGL Runtime: the gl_* builtins over minigl.library 29 or newer (docs/MINIGL.md). The library gives a
+   table of functions (its only call, at -30); each call goes through it with the context as the first argument.
+   No SDK is needed: the positions in the table are those of its dispatch ABI 5 (libraries/minigl_dispatch.h of
+   the MiniGL SDK), and the GL numbers are OpenGL's own. The library is built for a FPU: without one, gl_open
+   gives false. */
+#include <exec/execbase.h>
+#include <intuition/intuition.h>
+typedef struct { ULONG abi, size, flags, reserved; APTR *ctx; APTR f[1]; } _DashGLTab;
+static struct Library *_dash_gl_base = NULL;
+static _DashGLTab *_dash_gl_t = NULL;
+static APTR _dash_gl_c = NULL;                  /* the context (NULL: gl_open not done, each gl_* does nothing) */
+static struct Window *_dash_gl_win = NULL;
+static BOOL _dash_gl_shut = FALSE;              /* the close gadget was clicked */
+static LONG _dash_gl_h = 0;                     /* (gl_read_pixel: GL counts y from the bottom) */
+static UBYTE _dash_gl_keys[16];
+static LONG _dash_gl_nkeys = 0;
+#define _GLF(i, args) ((void (*)args)_dash_gl_t->f[i])
+#define _GL_ENUM(i, e) _GLF(i, (APTR, ULONG))(_dash_gl_c, (ULONG)(e))
+#define _GL_STATE(cap, on) _GLF(110, (APTR, ULONG, ULONG))(_dash_gl_c, (ULONG)(cap), (ULONG)(on))
+static APTR _dash_gl_dispatch(struct Library *base) {
+    register APTR d0 __asm("d0");
+    register struct Library *a6 __asm("a6") = base;
+#ifdef __HAVE_68881__
+    __asm volatile ("jsr -30(%%a6)" : "=r"(d0) : "r"(a6) : "d1", "a0", "a1", "fp0", "fp1", "cc", "memory");
+#else
+    __asm volatile ("jsr -30(%%a6)" : "=r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
+#endif
+    return d0;
+}
+
+static void _dash_gl_close(void) {
+    if (!_dash_gl_c) return;
+    *_dash_gl_t->ctx = NULL;
+    _GLF(92, (APTR))(_dash_gl_c);               /* MGLDeleteContext (the window or screen with it) */
+    _dash_gl_c = NULL;
+    _dash_gl_win = NULL;
+}
+
+static void _dash_gl_cleanup(void) {
+    _dash_gl_close();
+    if (_dash_gl_base) { CloseLibrary(_dash_gl_base); _dash_gl_base = NULL; _dash_gl_t = NULL; }
+}
+
+static void _dash_gl_perspective(float fovy, float aspect, float zn, float zf) {
+    if (_dash_gl_c) _GLF(81, (float, float, float, float))(fovy, aspect, zn, zf);   /* gluPerspective */
+}
+
+/* a white counterclockwise triangle over the middle of the view (gl_open's perspective) */
+static void _dash_gl_ccw(APTR c) {
+    _GLF(11, (APTR, float, float, float, float))(c, 1.0f, 1.0f, 1.0f, 1.0f);
+    _GL_ENUM(3, 4);                             /* glBegin(GL_TRIANGLES) */
+    _GLF(85, (APTR, float, float, float, float))(c, -1.0f, -1.0f, -2.0f, 1.0f);
+    _GLF(85, (APTR, float, float, float, float))(c, 1.0f, -1.0f, -2.0f, 1.0f);
+    _GLF(85, (APTR, float, float, float, float))(c, 0.0f, 1.0f, -2.0f, 1.0f);
+    _GLF(28, (APTR))(c);
+}
+
+/* the color of the middle pixel, 0xRRGGBB */
+static LONG _dash_gl_middle(LONG w, LONG h) {
+    UBYTE px[4];
+    px[0] = px[1] = px[2] = px[3] = 0;
+    _GLF(29, (APTR))(_dash_gl_c);                                   /* glFinish */
+    _GLF(59, (APTR, LONG, LONG, LONG, LONG, ULONG, ULONG, void *))(_dash_gl_c, w / 2, h / 2, 1, 1, 0x1908, 0x1401, px);
+    return ((LONG)px[0] << 16) | ((LONG)px[1] << 8) | px[2];
+}
+
+static BOOL _dash_gl_start(LONG w, LONG h, BOOL window) {
+    APTR c;
+    LONG k;
+    _dash_gl_close();
+    if (w <= 0 || h <= 0) return FALSE;
+    if (!(SysBase->AttnFlags & (AFF_68881 | AFF_68882 | AFF_FPU40))) return FALSE;
+    if (!_dash_gl_base) {
+        if (!(_dash_gl_base = OpenLibrary((CONST_STRPTR)"minigl.library", 29))) return FALSE;
+        _dash_gl_t = (_DashGLTab *)_dash_gl_dispatch(_dash_gl_base);
+        /* dispatch ABI 5, with the table at least up to glColorMaterial (202) */
+        if (!_dash_gl_t || _dash_gl_t->abi != 5 || _dash_gl_t->size < 20 + 4 * 203) {
+            CloseLibrary(_dash_gl_base);
+            _dash_gl_base = NULL;
+            _dash_gl_t = NULL;
+            return FALSE;
+        }
+    }
+    _GLF(123, (ULONG))(window ? 1 : 0);         /* mglChooseWindowMode */
+    _GLF(120, (int))(16);                       /* mglChoosePixelDepth (own screen) */
+    _GLF(119, (int))(2);                        /* mglChooseNumberOfBuffers */
+    _GLF(135, (int))(16);                       /* mglChooseZBufferDepth */
+    c = ((APTR (*)(int, int, int, int))_dash_gl_t->f[90])(0, 0, w, h);   /* MGLCreateContext */
+    if (!c) return FALSE;
+    *_dash_gl_t->ctx = c;
+    _dash_gl_c = c;
+    _dash_gl_h = h;
+    _dash_gl_shut = FALSE;
+    _dash_gl_nkeys = 0;
+    _GLF(88, (APTR, LONG, LONG, LONG, LONG))(c, 0, 0, w, h);             /* glViewport */
+    _GL_ENUM(47, 0x1701);                       /* glMatrixMode(GL_PROJECTION) */
+    _GLF(43, (APTR))(c);
+    _dash_gl_perspective(60.0f, (float)w / (float)h, 0.5f, 100.0f);
+    _GL_ENUM(47, 0x1700);                       /* GL_MODELVIEW */
+    _GLF(43, (APTR))(c);
+    _GL_ENUM(67, 0x1D01);                       /* glShadeModel(GL_SMOOTH) */
+    /* MiniGL Classic over Wazp3D loses the first shape drawn in a new context: one first. It also culls the
+       counterclockwise faces with GL_CULL_FACE, the front ones of OpenGL: a white counterclockwise triangle over the
+       middle, drawn and read back without culling (the read must work) and with it; if it went away, the front faces
+       are the clockwise ones there (glFrontFace(GL_CW)). Then both buffers cleared */
+    _GLF(7, (APTR, float, float, float, float))(c, 0.0f, 0.0f, 0.0f, 1.0f);
+    _dash_gl_ccw(c);
+    _GLF(6, (APTR, ULONG))(c, 0x4000 | 0x0100);
+    _dash_gl_ccw(c);
+    if ((_dash_gl_middle(w, h) & 0xC0C0C0) == 0xC0C0C0) {   /* (white comes back as 0xFEFEFE) */
+        _GLF(6, (APTR, ULONG))(c, 0x4000 | 0x0100);
+        _GL_STATE(0x0B44, 1);                   /* GL_CULL_FACE */
+        _dash_gl_ccw(c);
+        if ((_dash_gl_middle(w, h) & 0xC0C0C0) == 0) _GL_ENUM(33, 0x0900);   /* glFrontFace(GL_CW) */
+        _GL_STATE(0x0B44, 0);
+    }
+    for (k = 0; k < 2; k++) {
+        _GLF(6, (APTR, ULONG))(c, 0x4000 | 0x0100);
+        _GLF(113, (APTR))(c);
+    }
+    /* its window, for the close gadget and the keys (on its own screen, a borderless window) */
+    _dash_gl_win = (struct Window *)((APTR (*)(APTR))_dash_gl_t->f[97])(c);
+    if (_dash_gl_win)
+        ModifyIDCMP(_dash_gl_win, _dash_gl_win->IDCMPFlags | IDCMP_CLOSEWINDOW | IDCMP_VANILLAKEY);
+    return TRUE;
+}
+
+static BOOL _dash_gl_open(LONG w, LONG h) { return _dash_gl_start(w, h, TRUE); }
+static BOOL _dash_gl_open_screen(LONG w, LONG h) { return _dash_gl_start(w, h, FALSE); }
+
+static void _dash_gl_swap(void) {
+    if (_dash_gl_c) _GLF(113, (APTR))(_dash_gl_c);   /* MGLSwitchDisplay */
+}
+
+/* gl_swap waits for the screen's refresh (no tearing, at most its rate: 50 to 60 a second): on by default */
+static void _dash_gl_vsync(BOOL on) {
+    if (_dash_gl_c) _GLF(94, (APTR, ULONG))(_dash_gl_c, on ? 1 : 0);   /* MGLEnableSync */
+}
+
+static void _dash_gl_poll(void) {
+    struct IntuiMessage *m;
+    if (!_dash_gl_win || !_dash_gl_win->UserPort) return;
+    while ((m = (struct IntuiMessage *)GetMsg(_dash_gl_win->UserPort))) {
+        if (m->Class == IDCMP_CLOSEWINDOW) _dash_gl_shut = TRUE;
+        else if (m->Class == IDCMP_VANILLAKEY && _dash_gl_nkeys < 16) _dash_gl_keys[_dash_gl_nkeys++] = (UBYTE)m->Code;
+        ReplyMsg((struct Message *)m);
+    }
+}
+
+static BOOL _dash_gl_closed(void) {
+    _dash_gl_poll();
+    return _dash_gl_shut;
+}
+
+static LONG _dash_gl_key(void) {
+    LONG k;
+    _dash_gl_poll();
+    if (!_dash_gl_nkeys) return 0;
+    k = _dash_gl_keys[0];
+    memmove(_dash_gl_keys, _dash_gl_keys + 1, --_dash_gl_nkeys);
+    return k;
+}
+
+static void _dash_gl_enable(LONG cap) { if (_dash_gl_c) _GL_STATE(cap, 1); }
+static void _dash_gl_disable(LONG cap) { if (_dash_gl_c) _GL_STATE(cap, 0); }
+
+static void _dash_gl_clear_color(float r, float g, float b) {
+    if (_dash_gl_c) _GLF(7, (APTR, float, float, float, float))(_dash_gl_c, r, g, b, 1.0f);
+}
+
+static void _dash_gl_clear(void) {
+    if (_dash_gl_c) _GLF(6, (APTR, ULONG))(_dash_gl_c, 0x4000 | 0x0100);   /* color and depth */
+}
+
+static void _dash_gl_viewport(LONG x, LONG y, LONG w, LONG h) {
+    if (_dash_gl_c) _GLF(88, (APTR, LONG, LONG, LONG, LONG))(_dash_gl_c, x, y, w, h);
+}
+
+static void _dash_gl_blend_func(LONG src, LONG dst) {
+    if (_dash_gl_c) _GLF(5, (APTR, ULONG, ULONG))(_dash_gl_c, (ULONG)src, (ULONG)dst);
+}
+
+static void _dash_gl_shade_model(LONG mode) { if (_dash_gl_c) _GL_ENUM(67, mode); }
+static void _dash_gl_cull_face(LONG mode) { if (_dash_gl_c) _GL_ENUM(18, mode); }
+static void _dash_gl_matrix_mode(LONG mode) { if (_dash_gl_c) _GL_ENUM(47, mode); }
+static void _dash_gl_load_identity(void) { if (_dash_gl_c) _GLF(43, (APTR))(_dash_gl_c); }
+static void _dash_gl_push_matrix(void) { if (_dash_gl_c) _GLF(58, (APTR))(_dash_gl_c); }
+static void _dash_gl_pop_matrix(void) { if (_dash_gl_c) _GLF(57, (APTR))(_dash_gl_c); }
+
+static void _dash_gl_translate(float x, float y, float z) {
+    if (_dash_gl_c) _GLF(79, (APTR, float, float, float))(_dash_gl_c, x, y, z);
+}
+
+static void _dash_gl_rotate(float angle, float x, float y, float z) {
+    if (_dash_gl_c) _GLF(61, (APTR, float, float, float, float))(_dash_gl_c, angle, x, y, z);
+}
+
+static void _dash_gl_scale(float x, float y, float z) {
+    if (_dash_gl_c) _GLF(65, (APTR, float, float, float))(_dash_gl_c, x, y, z);
+}
+
+/* glOrtho takes doubles: the same matrix, made here in float */
+static void _dash_gl_ortho(float l, float r, float b, float t, float n, float f) {
+    float m[16];
+    if (!_dash_gl_c || r == l || t == b || f == n) return;
+    memset(m, 0, sizeof m);
+    m[0] = 2.0f / (r - l);
+    m[5] = 2.0f / (t - b);
+    m[10] = -2.0f / (f - n);
+    m[12] = -(r + l) / (r - l);
+    m[13] = -(t + b) / (t - b);
+    m[14] = -(f + n) / (f - n);
+    m[15] = 1.0f;
+    _GLF(49, (APTR, float *))(_dash_gl_c, m);   /* glMultMatrixf */
+}
+
+static void _dash_gl_look_at(float ex, float ey, float ez, float cx, float cy, float cz, float ux, float uy,
+                             float uz) {
+    if (_dash_gl_c)
+        _GLF(80, (float, float, float, float, float, float, float, float, float))(ex, ey, ez, cx, cy, cz, ux, uy, uz);
+}
+
+static void _dash_gl_begin(LONG mode) { if (_dash_gl_c) _GL_ENUM(3, mode); }
+static void _dash_gl_end(void) { if (_dash_gl_c) _GLF(28, (APTR))(_dash_gl_c); }
+
+static void _dash_gl_vertex(float x, float y, float z) {
+    if (_dash_gl_c) _GLF(85, (APTR, float, float, float, float))(_dash_gl_c, x, y, z, 1.0f);
+}
+
+static void _dash_gl_color_alpha(float r, float g, float b, float a) {
+    if (_dash_gl_c) _GLF(11, (APTR, float, float, float, float))(_dash_gl_c, r, g, b, a);
+}
+
+static void _dash_gl_color(float r, float g, float b) { _dash_gl_color_alpha(r, g, b, 1.0f); }
+
+static void _dash_gl_normal(float x, float y, float z) {
+    if (_dash_gl_c) _GLF(52, (APTR, float, float, float))(_dash_gl_c, x, y, z);
+}
+
+static void _dash_gl_tex_coord(float s, float t) {
+    if (_dash_gl_c) _GLF(68, (APTR, float, float))(_dash_gl_c, s, t);
+}
+
+/* A texture from RGB or RGBA pixels (image_decode): scaled to the powers of two that MiniGL wants (up to 256,
+   the nearest point), as RGBA. Its number, or 0. */
+static LONG _dash_gl_texture(APTR pixels, LONG w, LONG h, BOOL alpha) {
+    ULONG id = 0;
+    LONG tw = 1, th = 1, x, y, bpp = alpha ? 4 : 3;
+    UBYTE *buf, *d;
+    const UBYTE *s, *px = (const UBYTE *)pixels;
+    if (!_dash_gl_c || !px || w <= 0 || h <= 0) return 0;
+    while (tw * 2 <= w && tw < 256) tw *= 2;
+    while (th * 2 <= h && th < 256) th *= 2;
+    if (!(buf = (UBYTE *)AllocVec(tw * th * 4, MEMF_ANY))) return 0;
+    d = buf;
+    for (y = 0; y < th; y++) {
+        const UBYTE *row = px + (y * h / th) * w * bpp;
+        for (x = 0; x < tw; x++) {
+            s = row + (x * w / tw) * bpp;
+            d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = alpha ? s[3] : 255;
+            d += 4;
+        }
+    }
+    _GLF(35, (APTR, LONG, ULONG *))(_dash_gl_c, 1, &id);                    /* glGenTextures */
+    if (id) {
+        _GLF(4, (APTR, ULONG, ULONG))(_dash_gl_c, 0x0DE1, id);              /* glBindTexture(GL_TEXTURE_2D) */
+        _GLF(76, (APTR, ULONG, ULONG, LONG))(_dash_gl_c, 0x0DE1, 0x2801, 0x2601);   /* MIN_FILTER LINEAR */
+        _GLF(76, (APTR, ULONG, ULONG, LONG))(_dash_gl_c, 0x0DE1, 0x2800, 0x2601);   /* MAG_FILTER LINEAR */
+        _GLF(75, (APTR, ULONG, LONG, LONG, LONG, LONG, LONG, ULONG, ULONG, const void *))
+            (_dash_gl_c, 0x0DE1, 0, 0x1908, tw, th, 0, 0x1908, 0x1401, buf);  /* glTexImage2D RGBA */
+    }
+    FreeVec(buf);
+    return (LONG)id;
+}
+
+static void _dash_gl_texture_bind(LONG id) {
+    if (!_dash_gl_c) return;
+    if (id) {
+        _GL_STATE(0x0DE1, 1);
+        _GLF(4, (APTR, ULONG, ULONG))(_dash_gl_c, 0x0DE1, (ULONG)id);
+    } else
+        _GL_STATE(0x0DE1, 0);
+}
+
+static void _dash_gl_texture_free(LONG id) {
+    ULONG i = (ULONG)id;
+    if (_dash_gl_c && id) _GLF(19, (APTR, LONG, const ULONG *))(_dash_gl_c, 1, &i);
+}
+
+static void _dash_gl_lightv(LONG n, ULONG what, float a, float b, float c, float w) {
+    float v[4];
+    v[0] = a; v[1] = b; v[2] = c; v[3] = w;
+    _GLF(154, (APTR, ULONG, ULONG, const float *))(_dash_gl_c, 0x4000 + (ULONG)n, what, v);   /* glLightfv */
+}
+
+/* Light n (0-7) from the direction (x, y, z): lighting on, with the colors of gl_color as the material */
+static void _dash_gl_light(LONG n, float x, float y, float z) {
+    if (!_dash_gl_c || n < 0 || n > 7) return;
+    _dash_gl_lightv(n, 0x1203, x, y, z, 0.0f);                     /* GL_POSITION, w 0: a direction */
+    _GLF(202, (APTR, ULONG, ULONG))(_dash_gl_c, 0x0408, 0x1602);   /* glColorMaterial(FRONT_AND_BACK, AMB_AND_DIFF) */
+    _GL_STATE(0x0B57, 1);                                          /* GL_COLOR_MATERIAL */
+    _GL_STATE(0x4000 + n, 1);                                      /* GL_LIGHTn */
+    _GL_STATE(0x0B50, 1);                                          /* GL_LIGHTING */
+}
+
+static void _dash_gl_light_color(LONG n, float r, float g, float b) {
+    if (_dash_gl_c && n >= 0 && n <= 7) _dash_gl_lightv(n, 0x1201, r, g, b, 1.0f);   /* GL_DIFFUSE */
+}
+
+static void _dash_gl_ambient(float r, float g, float b) {
+    float v[4];
+    if (!_dash_gl_c) return;
+    v[0] = r; v[1] = g; v[2] = b; v[3] = 1.0f;
+    _GLF(158, (APTR, ULONG, const float *))(_dash_gl_c, 0x0B53, v);   /* GL_LIGHT_MODEL_AMBIENT */
+}
+
+/* Linear fog from start to end (distances from the eye), of that color */
+static void _dash_gl_fog(float start, float end, float r, float g, float b) {
+    float v[4];
+    if (!_dash_gl_c) return;
+    v[0] = r; v[1] = g; v[2] = b; v[3] = 1.0f;
+    _GLF(31, (APTR, ULONG, float))(_dash_gl_c, 0x0B65, (float)0x2601);   /* GL_FOG_MODE GL_LINEAR */
+    _GLF(31, (APTR, ULONG, float))(_dash_gl_c, 0x0B63, start);
+    _GLF(31, (APTR, ULONG, float))(_dash_gl_c, 0x0B64, end);
+    _GLF(32, (APTR, ULONG, float *))(_dash_gl_c, 0x0B66, v);
+    _GL_STATE(0x0B60, 1);                                              /* GL_FOG */
+}
+
+/* The color of a pixel of what is being drawn (before gl_swap), 0xRRGGBB; y from the top. -1 without a context */
+static LONG _dash_gl_read_pixel(LONG x, LONG y) {
+    UBYTE px[4];
+    if (!_dash_gl_c) return -1;
+    px[0] = px[1] = px[2] = px[3] = 0;
+    _GLF(29, (APTR))(_dash_gl_c);                                   /* glFinish */
+    _GLF(59, (APTR, LONG, LONG, LONG, LONG, ULONG, ULONG, void *))
+        (_dash_gl_c, x, _dash_gl_h - 1 - y, 1, 1, 0x1908, 0x1401, px);   /* glReadPixels RGBA */
+    return ((LONG)px[0] << 16) | ((LONG)px[1] << 8) | px[2];
+}
+
+static LONG _dash_gl_error(void) {
+    if (!_dash_gl_c) return 0;
+    return (LONG)((ULONG (*)(APTR))_dash_gl_t->f[37])(_dash_gl_c);
+}
+
+"""
+
     # Dash 2.0 (Forja, the IDE): debugging a program built with dashc --debug (docs/DEPURADOR_LOOP.md)
     DEBUGGER_RUNTIME = r"""/* Dash debugger runtime (docs/DEPURADOR_LOOP.md): los builtins dbg_*, en los dos Dash. El programa depurado se
    compila con dashc --debug (dash --debug); el depurador, con cualquiera de los dos.
@@ -25210,6 +25558,7 @@ _RUNTIME_FLAGS = [
     ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
     ("JSON_RUNTIME", "uses_json"),          # Dash 2.0: json_scan (lib/json.dash)
     ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
+    ("GL_RUNTIME", "uses_gl"),              # MiniGL: gl_*
     ("DEBUGGER_RUNTIME", "uses_debugger"),  # Dash 2.0: dbg_* (Forja)
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
@@ -25308,6 +25657,26 @@ def runtime_signatures() -> Dict[str, tuple]:
 
 
 _STRING_C_TYPES = ("STRPTR", "CONST_STRPTR", "char *", "const char *", "CONST char *")
+
+
+def builtin_float_params(builtin) -> set:
+    """The parameters of a builtin that are a C float in its runtime function (the gl_* of MiniGL): only for a
+    template that is a plain call to a _dash_ function, each ${p} one argument. ./dash --gcc converts in C; the
+    direct path (dashc) passes them as Float (fparams of its builtin table)."""
+    import re
+    m = re.fullmatch(r"\s*(_dash_\w+)\((.*)\)\s*", builtin.c_template)
+    if not m:
+        return set()
+    sig = runtime_signatures().get(m.group(1))
+    if not sig:
+        return set()
+    args = [a.strip() for a in m.group(2).split(",")] if m.group(2).strip() else []
+    out = set()
+    for pos, a in enumerate(args):
+        am = re.fullmatch(r"\$\{(\w+)\}", a)
+        if am and am.group(1) in builtin.params and pos < len(sig[1]) and sig[1][pos] == "float":
+            out.add(builtin.params.index(am.group(1)))
+    return out
 
 
 def builtin_string_params(builtin) -> set:
@@ -25557,6 +25926,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
         self.uses_json: bool = False     # json_scan (JSON_RUNTIME, Dash 2.0: lib/json.dash)
         self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
+        self.uses_gl: bool = False  # gl_* (GL_RUNTIME, MiniGL)
         self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
@@ -25953,6 +26323,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.JSON_RUNTIME)
         if self.uses_syslist:
             parts.append(CTemplates.SYSLIST_RUNTIME)
+        if self.uses_gl:
+            parts.append(CTemplates.GL_RUNTIME)
         if self.uses_debugger:
             parts.append(CTemplates.DEBUGGER_RUNTIME)
         if self.uses_dosreq:
@@ -26199,6 +26571,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
         if self.uses_syslist:
             cleanup.append("    _dash_syslist_cleanup();\n")
+        if self.uses_gl:
+            cleanup.append("    _dash_gl_cleanup();\n")
         if self.uses_netbg:
             cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_imgdec:
@@ -29360,6 +29734,10 @@ static {ret_type} {method_name}({params_str}) {{
             flag = runtime_index().get(name)
             if flag:
                 setattr(self, flag, True)
+        if self.uses_gl:
+            self.uses_float = True     # its runtime works in float (Dash's soft float without --fpu)
+        if self.uses_sysinfo:
+            self.uses_strings = True   # its texts come from _dash_str_dup (program_exit alone did not compile)
         # The GadTools main template also opens graphics.library (and asl.library when
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
