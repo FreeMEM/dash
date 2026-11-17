@@ -206,6 +206,9 @@ gfxcard_multithread=true
 gfxcard_zerocopy=true
 gfxcard_size=32
 gfxcard_type=ZorroIII
+; Amiberry 8.5 reads the graphics card from gfxcard0_* (as the video of Forja found)
+gfxcard0_type=ZorroIII
+gfxcard0_size=32
 chipmem_size=8
 cpu_speed=max
 cpu_throttle=0.0

@@ -1196,6 +1196,14 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       Forja transpila (hilo con pila grande y sin coste cúbico en las cadenas de `+`) y `f().campo = x`. 1079
       funciones. `tests/test_music_sync*`, `test_beam*`, `test_copper_set*`, `test_env_get_text*`,
       `test_mui_post_event*`, `test_call_member_assign*`, `tests/unit/test_deep_expr.py`
+- [x] Lo que vio el vídeo de Forja 0.8 en CoffinOS (2026-11-17): Esc en una zona MUI que recibe las teclas ya no cierra
+      la ventana aunque algo lo convierta en un cierre justo después (una commodity de CoffinOS cierra la ventana
+      activa con Esc, y Forja se cerraba); Ctrl con un signo da el signo en `mui_canvas_char` (Ctrl / no comentaba con
+      el mapa castellano); `mui_app_field_colors` solo con MUI 4 o más (en MUI 3.8 los campos salían negros); los
+      sprites de hardware se quitan y se liberan al cerrar la pantalla (con Break se quedaban sueltos); el paquete del
+      Amiga rehace Forja e Inferencia con su `tools/paquete.py` (metía una Inferencia sin `ENCARGO`); Amiberry 8.5 en
+      `tools/coffin/coffin.uae.in` y `tools/emu_run.py`. `tests/test_mui_canvas_esc_cierre`,
+      `test_mui_canvas_ctrl_signo*` (CoffinOS), `test_sprite_break*`
 
 ## Notas y Decisiones
 

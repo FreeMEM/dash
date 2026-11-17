@@ -1172,7 +1172,8 @@ DESC_ES = {
     "mui_app_field_colors": "El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, "
                             "text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas "
                             "que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, "
-                            "104 y 120, 120, 128",
+                            "104 y 120, 120, 128. MUI 4 o más: con MUI 3.8 los campos se quedan con las "
+                            "preferencias del usuario",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "
@@ -1287,7 +1288,9 @@ DESC_ES = {
                               "lados, 3 arriba y abajo, 4 ocupado; cambia ya si el puntero está sobre la zona (o "
                               "arrastrándola) y vuelve a la normal fuera de ella (Lorraine D16)",
     "mui_canvas_take_keys": "La zona recibe las teclas de la ventana aunque el puntero no esté encima (necesita "
-                            "mui_canvas_on_input): las que no coge otra zona bajo el puntero, si no hay otro objeto activo",
+                            "mui_canvas_on_input): las que no coge otra zona bajo el puntero, si no hay otro objeto activo. "
+                            "Esc en una zona con teclas es del programa: un cierre de la ventana justo después (una "
+                            "commodity de CoffinOS cierra la ventana activa con Esc) no la cierra",
     "mui_canvas_take_tab": "Con el puntero sobre la zona, Tab y Mayúsculas+Tab son teclas para ella (mui_canvas_key 66, "
                            "Mayúsculas en mui_canvas_qualifiers; necesita mui_canvas_on_input) y no el gadget siguiente "
                            "y anterior de la ventana; fuera de ella pasan de gadget en gadget como siempre (Lorraine D48)",
@@ -1303,7 +1306,8 @@ DESC_ES = {
     "mui_canvas_qualifiers": "Las teclas pulsadas en la última tecla, clic o rueda: 1 Mayúsculas, 2 Ctrl, 4 Alt, 8 "
                              "Amiga, sumadas (Mayúsculas + Ctrl = 3); q & 1 dice si había Mayúsculas",
     "mui_canvas_char": "El carácter de la última tecla en la zona, con las mayúsculas y el mapa de teclado (\"\" si no "
-                       "hay; dashweb D31)",
+                       "hay; dashweb D31). Con Ctrl, una letra da su código de control y un signo el signo "
+                       "(Ctrl + \"/\")",
     "mui_scrollbar": "Una barra de desplazamiento; su valor es la primera línea que se ve",
     "mui_set_range": "El tamaño del documento y de la parte que cabe",
     "mui_wait_event_signals": "Como mui_wait_event, pero también da 0 cuando llega una de las señales de mask "

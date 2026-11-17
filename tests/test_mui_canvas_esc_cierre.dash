@@ -1,0 +1,77 @@
+# Esc en un lienzo que recibe las teclas es del programa, también si algo lo convierte justo después en un cierre de
+# la ventana: CoffinOS tiene una commodity que cierra la ventana activa con Esc, y Forja (cuyo editor recibe Esc) se
+# cerraba (lo vio el vídeo de Forja). Aquí la commodity se imita mandando un IDCMP_CLOSEWINDOW a la ventana tras el
+# Esc: no la cierra. Un cierre sin Esc antes sí.
+# emu-needs: muimaster.library
+# expect-out: tecla 69
+# expect-out: sigue abierta
+# expect-out: cerrada
+# expect-out: fin
+
+const PASO = 99
+const T_LIENZO = 5
+
+# Lo que haría la commodity: un IDCMP_CLOSEWINDOW en el puerto de la ventana (MUI lo devuelve al nuestro)
+@native func cerrar_ventana(win: Int) -> Int
+"""
+    static struct MsgPort *port = NULL;
+    static struct IntuiMessage im;
+    struct Window *w = NULL;
+    GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (!w || !w->UserPort) return 0;
+    if (!port && !(port = CreateMsgPort())) return 0;
+    while (GetMsg(port)) ;
+    memset(&im, 0, sizeof(im));
+    im.ExecMessage.mn_ReplyPort = port;
+    im.ExecMessage.mn_Length = sizeof(im);
+    im.Class = IDCMP_CLOSEWINDOW;
+    im.IDCMPWindow = w;
+    CurrentTime(&im.Seconds, &im.Micros);
+    PutMsg(w->UserPort, (struct Message *)&im);
+    return 1;
+"""
+end
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+end
+
+Main
+    if mui_app_begin("EscCierre", "DASHESCCIERRE") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("EscCierre", 0)
+        mui_vgroup_begin()
+        lienzo = mui_canvas(160, 80)
+        mui_group_end()
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, dibuja)
+        mui_canvas_on_input(lienzo, T_LIENZO)
+        mui_canvas_take_keys(lienzo, true)
+        mui_window_open(win)
+        paso = 0
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1 and paso < 12
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                if paso == 2
+                    input_key(0x45, 0)                     # Esc, y en seguida el cierre de la commodity
+                    time_delay(3)
+                    cerrar_ventana(win)
+                elif paso == 5
+                    Print "sigue abierta"
+                    cerrar_ventana(win)                    # un cierre sin Esc: cierra
+                end
+                mui_timer(500, PASO)
+            elif ev == T_LIENZO
+                Print "tecla #{mui_canvas_key(lienzo)}"
+            end
+        end
+        if ev == -1
+            Print "cerrada"
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end
