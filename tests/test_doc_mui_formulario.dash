@@ -1,0 +1,37 @@
+# MUI: un formulario de dos columnas (etiqueta y campo) y cómo leer y cambiar sus valores.
+# emu-needs: muimaster.library
+# expect-out: cambiado: 2
+# expect-out: Amiga, 8 colores, sonido 1
+# expect-out: fin
+
+const ID_COLORES = 1
+
+Main
+    if mui_app_begin("Formulario", "FORMULARIO") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Formulario", 0)
+        mui_columns_begin(2)                       # cada fila: etiqueta y campo
+            mui_label("Nombre:")
+            nombre = mui_string("Amiga", 40)       # texto inicial y largo máximo
+            mui_label("Colores:")
+            colores = mui_cycle("2|4|8|16")        # las opciones, separadas por |
+            mui_label("Sonido:")
+            sonido = mui_checkbox(true)
+        mui_group_end()
+    mui_window_end()
+    mui_on_change(colores, ID_COLORES)             # un evento cuando cambia
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+    mui_set_value(colores, 2)                      # la tercera opción (desde 0)
+    if mui_wait_event() == ID_COLORES
+        Print "cambiado: #{mui_get_value(colores)}"
+    end
+    cuantos = [2, 4, 8, 16]
+    Print mui_get_text(nombre) + ", #{cuantos[mui_get_value(colores)]} colores, sonido #{mui_get_value(sonido)}"
+    mui_app_end()
+    Print "fin"
+end

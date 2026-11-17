@@ -333,6 +333,11 @@ def ejemplos_grupo(attr):
     return [ex] if isinstance(ex, str) else list(ex)
 
 
+def ejemplos_funciones(attr):
+    """Los ejemplos pequeños de unas funciones del grupo (builtins_doc: function_examples), con su código"""
+    return [(p, latin1(example(p))) for p in builtins_doc.GROUPS.get(attr, {}).get("function_examples", [])]
+
+
 def fichas_builtins(lang, tx):
     fichas, grupos = [], []
     for attr, t_es, t_en in GROUPS:
@@ -356,12 +361,13 @@ def fichas_builtins(lang, tx):
         g.lineas += [Linea("B"), Linea("L", tx["grupos"], "grupos")]
         fichas.append(g)
         grupos.append(g)
+        propios = ejemplos_funciones(attr)
         for nombre in grupo:
-            fichas.append(ficha_funcion(nombre, clave, titulo, codigos, lang, tx))
+            fichas.append(ficha_funcion(nombre, clave, titulo, codigos, lang, tx, propios))
     return fichas, grupos
 
 
-def ficha_funcion(nombre, grupo, titulo_grupo, codigos, lang, tx):
+def ficha_funcion(nombre, grupo, titulo_grupo, codigos, lang, tx, propios=()):
     b = ab.ALL_BUILTINS[nombre]
     f = Ficha(nombre, "F", nombre)
     f.campos = [("firma", firma(nombre, lang)), ("devuelve", tipo_dash(b, lang) or "-"), ("grupo", grupo),
@@ -376,9 +382,13 @@ def ficha_funcion(nombre, grupo, titulo_grupo, codigos, lang, tx):
     if doc:
         f.lineas += md_lineas(doc[lang]) + [Linea("B")]
     if not (doc and "```" in doc[lang]):
-        for p, codigo in codigos:
+        # su ejemplo: uno pequeño suyo (entero), o el trozo del ejemplo del grupo que la usa. Forja abre con "Probar"
+        # el programa entero de la ficha, o si no hay, el primer ejemplo del grupo: el trozo de otro va entero
+        for k, (p, codigo) in enumerate(list(propios) + list(codigos)):
             ex = extracto(nombre, codigo)
             if ex:
+                if k != len(propios):
+                    ex = codigo.splitlines()
                 f.campos.append(("ejemplo", p))
                 f.lineas += [Linea("H", tx["ejemplo_de"].format(p=p), indexar=False)]
                 f.lineas += [Linea("C", x.expandtabs(4)) for x in ex] + [Linea("B")]

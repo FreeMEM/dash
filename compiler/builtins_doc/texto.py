@@ -149,7 +149,20 @@ Con `sep` vacío, o si no aparece, la lista tiene solo `s`. `str_split(texto, "\
 
 Returns a `[String]` list with the pieces of `s` between each `sep`. Two separators in a row give a `""` piece.
 With an empty `sep`, or if it does not appear, the list holds just `s`. `str_split(text, "\\n")` gives the lines.
-""", ["str_trim", "file_read_text"]),
+""", ["str_join", "str_trim", "file_read_text"]),
+    "str_join": _f("""\
+- `list`: una lista `[String]`.
+- `sep`: lo que va entre cada dos; `""`, nada.
+
+Devuelve un texto nuevo con los de la lista uno tras otro: `str_join(["a", "b", "c"], ", ")` es `"a, b, c"`. Con la
+lista vacía, `""`. Es lo contrario de `str_split`: `str_join(lineas, "\\n")` vuelve a juntar las líneas.
+""", """\
+- `list`: a `[String]` list.
+- `sep`: what goes between each two; `""`, nothing.
+
+Returns a new text with those of the list one after another: `str_join(["a", "b", "c"], ", ")` is `"a, b, c"`. With
+an empty list, `""`. It is the opposite of `str_split`: `str_join(lines, "\\n")` puts the lines back together.
+""", ["str_split"]),
     "file_read_text": _f("""\
 - `filename`: la ruta.
 

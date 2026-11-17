@@ -1,0 +1,9 @@
+# Test: dos variables globales con el mismo nombre (./dash las aceptaba)
+# expect: Symbol 'b' is already defined in this scope
+# expect-dash: la variable global b ya existe
+var b: Int = 1
+var b: Int = 2
+
+Main
+    Print b
+end

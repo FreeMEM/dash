@@ -133,9 +133,48 @@ void err_printf(const char *fmt, ...)
     va_end(ap);
 }
 
+int check_mode, check_errors;
+jmp_buf *check_jmp;
+static struct CheckErr { char *text; int file, line, col, seq; } check_seen[CHECK_MAX];
+static int check_flushed;
+
+static int check_cmp(const void *a, const void *b)
+{
+    const struct CheckErr *x = a, *y = b;
+    if (x->file != y->file) return x->file - y->file;
+    if (x->line != y->line) return x->line - y->line;
+    if (x->col != y->col) return x->col - y->col;
+    return x->seq - y->seq;
+}
+
+/* --check: los errores, por fichero y línea (main.c la pone con atexit) */
+void check_flush(void)
+{
+    int i;
+    if (check_flushed) return;
+    check_flushed = 1;
+    qsort(check_seen, check_errors, sizeof check_seen[0], check_cmp);
+    for (i = 0; i < check_errors; i++) err_printf("%s", check_seen[i].text);
+    fflush(DASHC_ERR);
+}
+
+/* --check: tras un error, a la instrucción siguiente (o fuera, con 1, si no hay dónde seguir) */
+static void check_next(void)
+{
+    if (check_jmp) longjmp(*check_jmp, 1);
+    exit(1);
+}
+
+void check_quiet(void)
+{
+    if (!check_mode) exit(1);
+    check_next();
+}
+
 void fatal(const char *fmt, ...)
 {
     va_list ap;
+    if (check_mode && check_errors) exit(1);   /* (--check: un fallo que viene de un error ya dicho) */
     va_start(ap, fmt);
     err_printf("dash: Error: ");
     err_out(fmt, ap);
@@ -148,9 +187,9 @@ void fatal_at(int line, int col, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    char msg[1024], *m;
-    err_printf("%s:%d:%d: Error: ", src_name, line, col);
+    char msg[1024], *m, full[1400];
     vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
     /* (sin el sufijo de los nombres privados de un módulo: `_x__m2` es `_x`, rename_private) */
     for (m = msg; *m; m++) {
         char *e = m + 3;
@@ -158,7 +197,26 @@ void fatal_at(int line, int col, const char *fmt, ...)
         while (isdigit((unsigned char)*e)) e++;
         if (!isalnum((unsigned char)*e) && *e != '_') memmove(m, e, strlen(e) + 1);
     }
-    err_printf("%s\n", msg);
-    va_end(ap);
+    snprintf(full, sizeof full, "%s:%d:%d: Error: %s\n", src_name, line, col, msg);
+    if (check_mode) {
+        /* cada error una vez (una función copiada en otra lo repite); salen ordenados al acabar (check_flush) */
+        int i, file = 0;
+        for (i = 0; i < check_errors; i++)
+            if (!strcmp(check_seen[i].text, full)) check_next();
+        for (i = 0; i < src_files.n; i++)
+            if (!strcmp(src_files.v[i], src_name)) file = i;
+        check_seen[check_errors].text = xstrndup(full, strlen(full));
+        check_seen[check_errors].file = file;
+        check_seen[check_errors].line = line;
+        check_seen[check_errors].col = col;
+        check_seen[check_errors].seq = check_errors;
+        if (++check_errors == CHECK_MAX) {
+            check_flush();
+            err_printf("dash: Error: demasiados errores (%d): no se miran más\n", CHECK_MAX);
+            exit(1);
+        }
+        check_next();
+    }
+    err_printf("%s", full);
     exit(1);
 }

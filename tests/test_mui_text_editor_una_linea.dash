@@ -1,0 +1,42 @@
+# mui_text_editor también sin la clase Textinput (lo pidió Forja: un MUI 3.8 sin más daba nada): entonces es un campo
+# de una línea, y se pone, se lee y se escribe en él igual. Con Textinput (como aquí) es el de varias líneas; sin ella
+# se probó con un sistema emulado sin Textinput.mcc (tools/emu_run.py --system). El programa, arrancado otra vez como
+# "teclas", escribe en él.
+# emu-needs: muimaster.library
+# expect-out: puesto: [hola]
+# expect-out: escrito: [abc]
+# expect-out: fin
+
+Main
+    if arg(0) == "teclas"
+        t = 0
+        while input_active_title() != "Campo" and t < 200
+            time_delay(5)
+            t = t + 1
+        end
+        time_delay(25)
+        input_text("abc")
+    elif mui_app_begin("Campo", "DASHCAMPO") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Campo", 0)
+            e = mui_text_editor(3)
+        mui_window_end()
+        mui_set_text(e, "hola")
+        mui_window_open(w)
+        Print "puesto: [#{mui_get_text(e)}]"
+        mui_set_text(e, "")
+        mui_set_active(w, e)
+        h = run_start("\"" + program_path() + "\" teclas", 30000)
+        s = run_finish(h)
+        i = 0
+        while i < 20                               # que MUI lea las teclas
+            x = mui_poll_event()
+            time_delay(2)
+            i = i + 1
+        end
+        Print "escrito: [#{mui_get_text(e)}]"
+        mui_app_end()
+        Print "fin"
+    end
+end

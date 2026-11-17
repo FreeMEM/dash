@@ -1,0 +1,37 @@
+# MUI: una ventana con un texto y dos botones en fila; el bucle de eventos espera a que se pulse uno.
+# emu-needs: muimaster.library
+# expect-out: pulsado: Vale
+# expect-out: fin
+
+const ID_VALE = 1
+const ID_SALIR = 2
+
+Main
+    if mui_app_begin("Botones", "BOTONES") == 0
+        Print "hace falta MUI y un 68020"
+        return
+    end
+    win = mui_window_begin("Botones", 0)
+        mui_label("¿Seguimos?")
+        mui_hgroup_begin()                         # en fila
+            vale = mui_button("_Vale")
+            mui_space()                            # un hueco que se estira
+            salir = mui_button("_Salir")
+        mui_group_end()
+    mui_window_end()
+    mui_on_press(vale, ID_VALE)
+    mui_on_press(salir, ID_SALIR)
+    if mui_window_open(win) == 0
+        Print "no se pudo abrir la ventana"
+        return
+    end
+    mui_press(vale)                                # para la prueba: como si se pulsara Vale
+    ev = mui_wait_event()                          # -1 al cerrar la ventana
+    if ev == ID_VALE
+        Print "pulsado: Vale"
+    elif ev == ID_SALIR
+        Print "pulsado: Salir"
+    end
+    mui_app_end()
+    Print "fin"
+end

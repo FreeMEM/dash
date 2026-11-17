@@ -163,6 +163,18 @@ static int fold_literal;   /* fold sin las variables que valen una constante */
 /* Una global del programa principal no se ve desde sus módulos: allí ese nombre es una variable
    suya (como en ./dash, dashweb D14). Las de los módulos se ven desde todos. */
 static int cur_file_g;
+
+/* --check: las variables cuya asignación dio un error (las siguientes que las usan no dan otro, que vendría de él) */
+static struct { const char **v; int n, cap; } check_poisoned;
+
+static int check_is_poisoned(const char *name)
+{
+    int i;
+    for (i = 0; i < check_poisoned.n; i++)
+        if (!strcmp(check_poisoned.v[i], name)) return 1;
+    return 0;
+}
+
 static int global_visible(int i)
 {
     return prog->globals.v[i].file != 0 || cur_file_g == 0;
@@ -631,7 +643,10 @@ static int simple(Node *n, Var *v)
     }
     if (n->kind == E_VAR) {
         *v = lookup(n->name);
-        if (v->kind == V_NONE) fatal_node(n, "la variable %s no existe", n->name);
+        if (v->kind == V_NONE) {
+            if (check_mode && check_is_poisoned(n->name)) check_quiet();
+            fatal_node(n, "la variable %s no existe", n->name);
+        }
         return 1;
     }
     return 0;
@@ -3381,6 +3396,7 @@ static int gen_expr(Node *n)
     case E_VAR:
         v = lookup(n->name);
         if (v.kind == V_NONE) {
+            if (check_mode && check_is_poisoned(n->name)) check_quiet();
             fatal_node(n, "la variable %s no existe", n->name);
         }
         load_var(0, &v);
@@ -5891,10 +5907,64 @@ static void gen_stmt(Node *n)
     fatal_node(n, "instrucción no admitida");
 }
 
+/* --check: ¿lee la instrucción (sin sus bloques) una variable cuya asignación dio un error y que sigue sin existir? */
+static int check_reads_poisoned(Node *n)
+{
+    int i;
+    if (!n) return 0;
+    if (n->kind == E_VAR && check_is_poisoned(n->name) && lookup(n->name).kind == V_NONE) return 1;
+    if (check_reads_poisoned(n->a) || check_reads_poisoned(n->b) || check_reads_poisoned(n->c)) return 1;
+    for (i = 0; i < n->args.n; i++)
+        if (check_reads_poisoned(n->args.v[i])) return 1;
+    return 0;
+}
+
+/* --check: una instrucción que, si da un error, deja todo como estaba antes de ella y sigue con la siguiente */
+static void gen_stmt_check(Node *n)
+{
+    jmp_buf jb, *prev = check_jmp;
+    int s_sp = sp_depth, s_locals = locals.n, s_depth = depth, s_loops = loops.n, s_inl = inl_stack.n,
+        s_sub = sub_stack.n, s_repls = repls.n, s_lives = lives.n, s_tenv = tenv.n, s_frame = cur_frame,
+        s_loop_base = loop_base, s_made = made_tmp, s_win = cur_window, s_infer = infer_on, s_cf = cur_file_g;
+    long s_weight = loop_weight;
+    if (setjmp(jb)) {
+        check_jmp = prev;
+        sp_depth = s_sp;
+        locals.n = s_locals;
+        depth = s_depth;
+        loops.n = s_loops;
+        inl_stack.n = s_inl;
+        sub_stack.n = s_sub;
+        repls.n = s_repls;
+        lives.n = s_lives;
+        tenv.n = s_tenv;
+        cur_frame = s_frame;
+        loop_base = s_loop_base;
+        made_tmp = s_made;
+        cur_window = s_win;
+        infer_on = s_infer;
+        cur_file_g = s_cf;
+        loop_weight = s_weight;
+        forced_type = -1;
+        if ((n->kind == S_ASSIGN || n->kind == S_VAR) && n->name && lookup(n->name).kind == V_NONE)
+            VEC_PUSH(check_poisoned, n->name);
+        return;
+    }
+    if (check_poisoned.n && check_reads_poisoned(n)) return;   /* (sus errores vendrían del de antes) */
+    check_jmp = &jb;
+    gen_stmt(n);
+    check_jmp = prev;
+}
+
 static void gen_block(NodeList *b)
 {
     int i;
-    for (i = 0; i < b->n; i++) gen_stmt(b->v[i]);
+    /* (--check: en el cuerpo de la función que se genera, no en lo que se copia dentro) */
+    int check = check_mode && inl_stack.n == 1 && !sub_stack.n;
+    for (i = 0; i < b->n; i++) {
+        if (check) gen_stmt_check(b->v[i]);
+        else gen_stmt(b->v[i]);
+    }
 }
 
 /* una pasada sobre la función: link a5,#-marco; guarda registros ... recupera; unlk a5; rts */
@@ -5936,6 +6006,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     plen_depth = -1;
     locals.n = 0;
     depth = 0;
+    check_poisoned.n = 0;
     nframe = 0;
     cur_file_g = f ? f->file : 0;
     loop_weight = 1;
@@ -6166,6 +6237,7 @@ static void gen_function(int label, Func *f, NodeList *body)
         if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
     }
     if (debug || !CAN_FRAMELESS) frameless = 0;
+    if (check_mode) return;   /* (--check: la segunda pasada no da otros errores) */
     pass = 2;
     gen_function_pass(label, f, body);
 }
@@ -6622,6 +6694,35 @@ void gen_program(Program *p, Obj *o)
     for (i = 0; i < p->globals.n; i++) {
         p->globals.v[i].type = resolve_type(p->globals.v[i].type, p->globals.v[i].line, p->globals.v[i].col);
         subst_consts(&p->globals.v[i].init);
+    }
+    /* un nombre global es de una sola cosa (como en --gcc): una constante, una variable global o una función */
+    for (i = 0; i < p->globals.n; i++) {
+        Global *g = &p->globals.v[i];
+        int j;
+        for (j = 0; j < p->consts.n; j++)
+            if (!strcmp(p->consts.v[j].name, g->name)) {
+                src_name = src_files.v[g->file];
+                fatal_at(g->line, g->col, "%s ya existe: es una constante", g->name);
+            }
+        for (j = 0; j < i; j++)
+            if (!strcmp(p->globals.v[j].name, g->name)) {
+                src_name = src_files.v[g->file];
+                fatal_at(g->line, g->col, "la variable global %s ya existe", g->name);
+            }
+    }
+    for (i = 0; i < p->funcs.n; i++) {
+        Func *f = &p->funcs.v[i];
+        int j;
+        for (j = 0; j < p->globals.n; j++)
+            if (!strcmp(p->globals.v[j].name, f->name)) {
+                src_name = src_files.v[f->file];
+                fatal_at(f->line, f->col, "%s ya existe: es una variable global", f->name);
+            }
+        for (j = 0; j < p->consts.n; j++)
+            if (!strcmp(p->consts.v[j].name, f->name)) {
+                src_name = src_files.v[f->file];
+                fatal_at(f->line, f->col, "%s ya existe: es una constante", f->name);
+            }
     }
     for (i = 0; i < p->funcs.n; i++) {
         Func *f = &p->funcs.v[i];

@@ -49,7 +49,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1017 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1020 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -623,6 +623,7 @@ They return new strings (the original does not change) or numbers. Positions sta
 | `str_replace(s, de, a)` | Replaces every occurrence of `de` with `a` |
 | `str_contains(s, sub)` | Whether `sub` is in `s` (`""` is in all of them) |
 | `str_split(s, sep)` | The pieces between each `sep`, in a new `[String]` list; with `sep` `""` or if it is not there, `[s]`; two `sep` in a row give `""` |
+| `str_join(list, sep)` | The opposite: the texts of a `[String]` list one after another, with `sep` between each two; `""` with an empty list |
 | `file_read_text(nombre)` | The whole file as a string (`nil` if it cannot be read) |
 | `file_write_text(nombre, texto)` | Writes the string as the whole file (`true` if it went well) |
 | `str_from_buffer(buffer, desde, n)` | String with `n` bytes from a buffer |
@@ -3567,6 +3568,7 @@ Each one explained, with its parameters and two examples run by the tests: [BUIL
 | `mui_set_enabled(obj, si)` | Enables or disables (ghosts). |
 | `mui_list()` | List of strings with a scroll bar. Its value is the selected line (-1 = none). |
 | `mui_list_add(l, texto)`, `mui_list_insert(l, pos, texto)` | Adds at the end or at `pos` (0 = first). |
+| `mui_list_add_lines(l, texto)` | Adds every line of the text (separated by line breaks) at the end at once: for hundreds of lines, much faster than `mui_list_add` one by one (300 lines on an A1200: 0.6 s instead of 10.6 s). |
 | `mui_list_remove(l, pos)`, `mui_list_clear(l)` | Deletes one line or all of them. |
 | `mui_list_count(l)`, `mui_list_get(l, pos)` | Number of lines and the text of one (`""` outside the list). |
 | `mui_list_quiet(l, si)` | While it is "quiet" it is not redrawn: for adding many lines. |
@@ -4656,7 +4658,8 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--debug` | A `NOP` at the start of each line and the debug information (below) |
 | `--debug-info prog` | Shows the debug information of an executable built with `--debug` |
 | `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
-| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc |
+| `--check` | Only checks: gives the errors as compiling does, without making the executable and without `-o` (an editor marks them on saving). Also with `--gcc`, without calling gcc. It gives every error it can, in line order and at most 20 (not the ones that come from another, such as a variable whose assignment failed). A module without `Main` is fine |
+| `--texto path=file` | With `--check`: the text of `path` (a module or the program) is read from `file`, what the editor has not saved yet; the errors name `path`. This checks a module inside its program: `./dash --check main.dash --texto lib/module.dash=T:copy`. Repeat it for several files |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
@@ -4887,7 +4890,7 @@ It needs `clang` (with the `aarch64-none-elf` and `aarch64_be-none-elf` targets)
 MUI windows (`mui_*`) work on DashOS with the DashOS kit: the same program comes out with MUI on the Amiga and with
 the Material 3 look on DashOS. For now, these: `mui_app_begin`/`end`, `mui_window_begin`/`end`/`open`/`close`,
 `mui_vgroup_begin`, `mui_hgroup_begin`, `mui_group_end`, `mui_text`, `mui_label`, `mui_button`, `mui_string`,
-`mui_checkbox`, `mui_cycle`, `mui_list` (with `mui_list_add`, `_insert`, `_remove`, `_clear`, `_count`, `_get` and
+`mui_checkbox`, `mui_cycle`, `mui_list` (with `mui_list_add`, `_add_lines`, `_insert`, `_remove`, `_clear`, `_count`, `_get` and
 `mui_on_double`), menus (`mui_menu_begin`, `mui_menu_item`, `mui_menu_check`, `mui_menu_radio`,
 `mui_menu_separator`, `mui_submenu_begin`/`end`, `mui_menu_end`), events
 (`mui_on_press`, `mui_on_change`, `mui_on_close`, `mui_wait_event`), `mui_get_text`, `mui_set_text`,

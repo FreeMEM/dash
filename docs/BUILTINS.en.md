@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1017 functions, 1017 implemented, 0 not implemented.
+Total: 1020 functions, 1020 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -638,6 +638,8 @@ Main
     Print "fin"
 end
 ```
+
+**More examples**, small ones, of some functions (they are tests too; the Amiga help shows them in the page of each function they use): `tests/test_doc_sprite.dash`, `tests/test_doc_bob.dash`.
 
 **Index.** The ones with a link are explained further down.
 
@@ -4771,6 +4773,7 @@ end
 | [`str_from_int(n, base)`](#str_from_int) | String | n written in that base (2-36, lowercase letters) |  |
 | [`str_replace(s, from, to)`](#str_replace) | String | Copy with every from replaced by to |  |
 | [`str_contains(s, sub)`](#str_contains) | Bool | Whether sub is in s ("" is in every text) |  |
+| [`str_join(list, sep)`](#str_join) | String | The texts of a [String] list one after another, with sep between each two; "" for an empty list (the opposite of str_split) |  |
 | [`str_split(s, sep)`](#str_split) | [Int] | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
 | [`file_read_text(filename)`](#file_read_text) | String | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
 | [`file_write_text(filename, text)`](#file_write_text) | Bool | Write the text as the whole file; true if it was all written |  |
@@ -4920,6 +4923,18 @@ Returns `true` if `sub` is in `s`. `""` is in every text.
 
 See also: [`str_find`](#str_find).
 
+<a id="str_join"></a>
+
+### `str_join(list, sep)` → `String`
+
+- `list`: a `[String]` list.
+- `sep`: what goes between each two; `""`, nothing.
+
+Returns a new text with those of the list one after another: `str_join(["a", "b", "c"], ", ")` is `"a, b, c"`. With
+an empty list, `""`. It is the opposite of `str_split`: `str_join(lines, "\n")` puts the lines back together.
+
+See also: [`str_split`](#str_split).
+
 <a id="str_split"></a>
 
 ### `str_split(s, sep)` → `[Int]`
@@ -4930,7 +4945,7 @@ See also: [`str_find`](#str_find).
 Returns a `[String]` list with the pieces of `s` between each `sep`. Two separators in a row give a `""` piece.
 With an empty `sep`, or if it does not appear, the list holds just `s`. `str_split(text, "\n")` gives the lines.
 
-See also: [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
+See also: [`str_join`](#str_join), [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
 
 <a id="file_read_text"></a>
 
@@ -11402,16 +11417,19 @@ Main
 end
 ```
 
+**More examples**, small ones, of some functions (they are tests too; the Amiga help shows them in the page of each function they use): `tests/test_doc_mui_boton.dash`, `tests/test_doc_mui_formulario.dash`, `tests/test_doc_mui_lista.dash`.
+
 **Index.** The ones with a link are explained further down.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | [`mui_app_begin(title, base)`](#mui_app_begin) | Int (address) | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
-| [`mui_text_editor(lines)`](#mui_text_editor) | Int (address) | A text field of several lines (MUI's Textinput), that many lines high (0: as high as the window lets it), with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
+| [`mui_text_editor(lines)`](#mui_text_editor) | Int (address) | A text field of several lines (MUI's Textinput), that many lines high (0: as high as the window lets it), with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window). Without the Textinput class, a one-line field |  |
 | [`mui_window_open_back(win)`](#mui_window_open_back) | Int | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
 | [`mui_window_activate(win)`](#mui_window_activate) | — | Make a window the active one, in front of the others (it opens if it is closed) |  |
 | [`mui_window_dispose(window)`](#mui_window_dispose) | — | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
 | [`mui_request(window, title, text, buttons)`](#mui_request) | Int | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
+| [`mui_request_text(window, title, text, initial, buttons)`](#mui_request_text) | String | Ask for a line of text in a small window over another (0: over the application): the text, a field with initial and two buttons, "_Ok\|_Cancel" ("": those). Return accepts, Esc cancels. The text written, or "" when cancelled |  |
 | [`mui_set_background(obj, r, g, b)`](#mui_set_background) | — | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
 | [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
 | [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, combo), inactive and active, and their cursor; the windows opened after it take them. The text stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128 |  |
@@ -11453,6 +11471,7 @@ end
 | [`mui_on_ack(obj, id)`](#mui_on_ack) | — | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
 | [`mui_list()`](#mui_list) | Int (address) | List of texts with scroller; its value is the selected line (-1 none) |  |
 | [`mui_list_add(list, text)`](#mui_list_add) | — | Add a line at the end |  |
+| [`mui_list_add_lines(list, text)`](#mui_list_add_lines) | — | Add every line of text (separated by line breaks) at the end, all at once: much faster than mui_list_add one by one |  |
 | [`mui_list_insert(list, pos, text)`](#mui_list_insert) | — | Insert a line at pos (0 = first) |  |
 | [`mui_list_remove(list, pos)`](#mui_list_remove) | — | Remove the line at pos |  |
 | [`mui_list_clear(list)`](#mui_list_clear) | — | Remove all lines |  |
@@ -11545,7 +11564,8 @@ See also: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_begin)
 - `lines`: how many lines high; `0` = as high as the window lets it, growing with it.
 
 A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
-change all of it; `mui_on_ack` fires on Amiga+Return.
+change all of it; `mui_on_ack` fires on Amiga+Return. Without the Textinput class (a bare MUI 3.8), it is a one-line
+field, like `mui_string`: it is read and changed the same way and `mui_on_ack` fires on Return.
 
 See also: [`mui_string`](#mui_string).
 
@@ -11592,7 +11612,24 @@ See also: [`mui_window_close`](#mui_window_close).
 Asks and waits; meanwhile the application's windows do not respond. Returns the chosen button: 1, 2... from the
 left, and 0 the last one (also with Esc).
 
-See also: [`mui_window_begin`](#mui_window_begin).
+See also: [`mui_request_text`](#mui_request_text), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_request_text"></a>
+
+### `mui_request_text(window, title, text, initial, buttons)` → `String`
+
+- `window`: the window it shows over; 0 = over the application.
+- `title`: the title.
+- `text`: what is asked; it takes MUI's text codes.
+- `initial`: what the field holds when it opens.
+- `buttons`: accept and cancel, separated by `|`, with `_` for their key: `"_Rename|_Cancel"`. With `""`,
+  `"_Ok|_Cancel"`.
+
+Asks for a line of text and waits; meanwhile the application's other windows do not respond. Return in the field
+accepts like the first button; Esc and the close gadget cancel like the last one. Returns what was written, or `""`
+when cancelled (also when accepted with the field empty).
+
+See also: [`mui_request`](#mui_request), [`mui_string`](#mui_string).
 
 <a id="mui_set_background"></a>
 
@@ -12043,7 +12080,21 @@ See also: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double).
 
 Adds the line at the end.
 
-See also: [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+See also: [`mui_list_add_lines`](#mui_list_add_lines), [`mui_list_insert`](#mui_list_insert), [`mui_list_quiet`](#mui_list_quiet).
+
+<a id="mui_list_add_lines"></a>
+
+### `mui_list_add_lines(list, text)`
+
+- `list`: the list (or a `mui_combo`).
+- `text`: the lines, separated by line breaks (`\n`; a `\r` before it is fine too). A break at the end adds no
+  empty line.
+
+Adds them all at the end at once: the list is redrawn once, not once per line. For hundreds of lines (a command's
+output, a file), much faster than `mui_list_add` one by one: 300 lines with the window open on an emulated A1200,
+10.6 s one by one and 0.6 s this way. A list the program left quiet (`mui_list_quiet`) stays quiet.
+
+See also: [`mui_list_add`](#mui_list_add), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_list_insert"></a>
 
@@ -12104,7 +12155,7 @@ See also: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_value)
 
 To add many lines at once without each one being drawn.
 
-See also: [`mui_list_add`](#mui_list_add).
+See also: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_add_lines).
 
 <a id="mui_on_double"></a>
 

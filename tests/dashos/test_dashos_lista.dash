@@ -1,0 +1,16 @@
+# Una lista de DashOS con mui_list_add_lines (lo pidió Forja): cada línea del texto, al final. En qemu no hay
+# compositor: la ventana se hace y no se abre.
+# expect-out: 4 lineas: [uno] [dos] [] [cuatro]
+# expect-out: con mui_list_add: 5, la ultima [cinco]
+# expect-out: fin
+
+Main
+    win = mui_window_begin("Lista", 0)
+        lista = mui_list()
+    mui_window_end()
+    mui_list_add_lines(lista, "uno\r\ndos\n\ncuatro\n")
+    Print "#{mui_list_count(lista)} lineas: [#{mui_list_get(lista, 0)}] [#{mui_list_get(lista, 1)}] [#{mui_list_get(lista, 2)}] [#{mui_list_get(lista, 3)}]"
+    mui_list_add(lista, "cinco")
+    Print "con mui_list_add: #{mui_list_count(lista)}, la ultima [#{mui_list_get(lista, 4)}]"
+    Print "fin"
+end

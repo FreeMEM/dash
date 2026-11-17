@@ -80,6 +80,8 @@ TEXTS = {
         "total": "Total: {total} funciones, {implemented} implementadas, {missing} sin implementar.",
         "example": "**Ejemplo** (`{path}`, que también es un test: se prueba con los demás):",
         "index": "**Índice.** Las que tienen enlace están explicadas más abajo.",
+        "more_examples": "**Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los "
+                         "enseña en la ficha de cada función que usan):",
         "returns": "Devuelve",
         "see": "Ver también",
         "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
@@ -96,6 +98,8 @@ TEXTS = {
         "total": "Total: {total} functions, {implemented} implemented, {missing} not implemented.",
         "example": "**Example** (`{path}`, which is also a test: it runs with the others):",
         "index": "**Index.** The ones with a link are explained further down.",
+        "more_examples": "**More examples**, small ones, of some functions (they are tests too; the Amiga help "
+                         "shows them in the page of each function they use):",
         "returns": "Returns",
         "see": "See also",
         "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
@@ -139,7 +143,7 @@ def check_doc():
         if not (doc.get("es") and doc.get("en")):
             raise SystemExit(f"compiler/builtins_doc: the group {attr} needs es and en")
         examples = doc.get("example") or []
-        for path in [examples] if isinstance(examples, str) else examples:
+        for path in ([examples] if isinstance(examples, str) else examples) + doc.get("function_examples", []):
             if not (PROJECT_ROOT / path).exists():
                 raise SystemExit(f"compiler/builtins_doc: {path} does not exist")
     for name, doc in builtins_doc.FUNCS.items():
@@ -187,6 +191,9 @@ def render(lang: str) -> str:
             examples = gdoc.get("example") or []
             for path in [examples] if isinstance(examples, str) else examples:
                 sections += [t["example"].format(path=path), "", "```dash", example(path), "```", ""]
+            more = gdoc.get("function_examples") or []
+            if more:
+                sections += [t["more_examples"] + " " + ", ".join(f"`{p}`" for p in more) + ".", ""]
             if examples:
                 sections += [t["index"], ""]
         sections += [t["header"], "|---|---|---|---|", *rows, ""]

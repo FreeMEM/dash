@@ -6,6 +6,13 @@
 #include "zlib.h"
 
 #ifdef __amigaos__
+#define Node AmigaNode        /* (el Node de exec; dashc tiene el suyo) */
+#include <proto/dos.h>
+#undef Node
+#else
+#include <sys/stat.h>
+#endif
+#ifdef __amigaos__
 /* en el Amiga: 64 KB de pila (el shell da 4 KB); libnix cambia de pila antes de main */
 extern void __stkinit(void);
 void *__stkinit_ref = (void *)__stkinit;
@@ -41,9 +48,45 @@ static void rt_unpack(const unsigned char *z, unsigned int zlen, uint8_t *dst, u
     inflateEnd(&s);
 }
 
+/* --texto ruta=fichero: el texto de ruta (un módulo o el programa) se lee de fichero. Forja comprueba así lo que aún
+   no ha guardado; los errores dicen ruta */
+static struct { const char *path, *from; } textos[16];
+static int n_textos;
+
+/* ¿son el mismo fichero? (si no existen los dos, el mismo nombre) */
+static int same_file(const char *a, const char *b)
+{
+#ifdef __amigaos__
+    BPTR la = Lock((STRPTR)a, SHARED_LOCK), lb;
+    if (la) {
+        lb = Lock((STRPTR)b, SHARED_LOCK);
+        if (lb) {
+            int r = SameLock(la, lb) == LOCK_SAME;
+            UnLock(lb);
+            UnLock(la);
+            return r;
+        }
+        UnLock(la);
+    }
+    return !stricmp(a, b);
+#else
+    struct stat sa, sb;
+    if (!stat(a, &sa) && !stat(b, &sb)) return sa.st_dev == sb.st_dev && sa.st_ino == sb.st_ino;
+    return !strcmp(a, b);
+#endif
+}
+
+static const char *texto_de(const char *path)
+{
+    int i;
+    for (i = 0; i < n_textos; i++)
+        if (same_file(textos[i].path, path)) return textos[i].from;
+    return path;
+}
+
 char *read_text(const char *path)
 {
-    FILE *f = fopen(path, "rb");
+    FILE *f = fopen(texto_de(path), "rb");
     Buf b = {0};
     char tmp[4096];
     size_t n;
@@ -81,7 +124,8 @@ static void usage(void)
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
             "  --perfil       al acabar, en qué funciones se fue el tiempo (también --profile)\n"
             "  --cabecera x.h los structs del programa en C, para el C de @link (sin -o, solo eso)\n"
-            "  --check        solo comprueba: da los errores sin hacer el ejecutable (sin -o)\n"
+            "  --check        solo comprueba: da los errores sin hacer el ejecutable (sin -o); vale un módulo sin Main\n"
+            "  --texto r=f    el texto de r (un módulo o el programa) se lee de f: lo que aún no se ha guardado\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
             "  --tiempos      lo que lleva cada fase\n");
@@ -170,7 +214,15 @@ int main(int argc, char **argv)
             cpu020 = strcmp(c, "68000") != 0;          /* muls.l y divs.l */
         }
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
-        else if (!strcmp(argv[i], "--check")) check = 1;
+        else if (!strcmp(argv[i], "--check")) check = check_mode = 1;
+        else if ((!strcmp(argv[i], "--texto") || !strcmp(argv[i], "--text")) && i + 1 < argc) {
+            /* --texto ruta=fichero (con --check): el texto sin guardar de un módulo o del programa */
+            char *a = argv[++i], *eq = strrchr(a, '=');
+            if (!eq || eq == a || !eq[1]) fatal("--texto ruta=fichero: el texto de ruta se lee de fichero");
+            if (n_textos == 16) fatal("--texto: como mucho 16");
+            textos[n_textos].path = xstrndup(a, (size_t)(eq - a));
+            textos[n_textos++].from = eq + 1;
+        }
         else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);
         else if (!strcmp(argv[i], "--version")) {
             printf("Dash %s\n", DASH_VERSION);
@@ -195,6 +247,7 @@ int main(int argc, char **argv)
         else usage();
     }
     if (!in || (!out && !header && !check)) usage();
+    if (check) atexit(check_flush);
     tiempo("cargar");
 
     rt = rt_normal;
@@ -236,7 +289,7 @@ int main(int argc, char **argv)
     src_name = in;
     VEC_PUSH(src_files, in);
     lex_file = 0;
-    src = read_file(in, &len);
+    src = read_file(texto_de(in), &len);
     if (rt_path) rt = read_file(rt_path, &rtlen);
 
     rt_blob = rt;
@@ -259,7 +312,10 @@ int main(int argc, char **argv)
     tiempo("leer");
     gen_program(prog, &obj);
     tiempo("generar");
-    if (check) return 0;   /* --check: los errores salen al generar; sin ejecutable */
+    if (check) {
+        check_flush();
+        return check_errors ? 1 : 0;
+    }   /* --check: los errores salen al generar; sin ejecutable */
 #ifdef DASH_A64
     write_elf_obj(&obj, out);   /* (se enlaza aparte con el runtime para ARM: docs/AARCH64_LOOP.md) */
 #else

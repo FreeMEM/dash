@@ -108,6 +108,27 @@ class GenAyuda(unittest.TestCase):
                     if l.startswith("%dashos "):
                         self.assertIn(l.split(" ")[1], ("si", "no", "solo"))
 
+    def test_every_example_can_be_tried(self):
+        """Forja's "Probar": the whole program of the page (code lines with Main), or else the first example of the
+        function's group. A function whose example is a piece of another one gets it whole (lo pidió Forja)"""
+        for a in (self.es, self.en):
+            for i in range(a.cab["fichas"][1]):
+                if a.tipo(i) != "F":
+                    continue
+                lineas = a.ficha(i)
+                campos = {l[1:].split(" ", 1)[0]: l.split(" ", 1)[1] for l in lineas if l.startswith("%")}
+                if "ejemplo" not in campos:
+                    continue
+                if any(re.match(r"\|Main(\s|#|$)", l) for l in lineas):
+                    continue
+                grupo = a.ficha(a.buscar(campos["grupo"]))
+                primero = next(l.split(" ", 1)[1] for l in grupo if l.startswith("%ejemplo "))
+                self.assertEqual(campos["ejemplo"], primero, a.clave(i))
+        # the small examples of some functions, whole in their pages
+        lineas = self.es.ficha(self.es.buscar("sprite_set_row"))
+        self.assertIn("%ejemplo tests/test_doc_sprite.dash", lineas)
+        self.assertIn("|Main", lineas)
+
     def test_indexes_are_sorted_and_point_right(self):
         for a in (self.es, self.en):
             nombres = [r[:-7].rstrip() for r in a.nombres()]

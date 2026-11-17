@@ -52,6 +52,8 @@ option, the chosen line...); `mui_get_text` and `mui_set_text`, its text.
 `docs/MUI_DISEÑO.md`.
 """,
         "example": ["tests/test_doc_mui.dash", "tests/test_doc_mui_lienzo.dash"],
+        "function_examples": ["tests/test_doc_mui_boton.dash", "tests/test_doc_mui_formulario.dash",
+                              "tests/test_doc_mui_lista.dash"],
     },
 }
 
@@ -303,7 +305,30 @@ desde la izquierda, y 0 el último (también con Esc).
 
 Asks and waits; meanwhile the application's windows do not respond. Returns the chosen button: 1, 2... from the
 left, and 0 the last one (also with Esc).
-""", ["mui_window_begin"]),
+""", ["mui_request_text", "mui_window_begin"]),
+    "mui_request_text": _f("""\
+- `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
+- `title`: el título.
+- `text`: lo que se pide; admite los códigos de texto de MUI.
+- `initial`: lo que trae el campo al abrirse.
+- `buttons`: aceptar y cancelar, separados por `|`, con `_` para su tecla: `"_Renombrar|_Cancelar"`. Con `""`,
+  `"_Ok|_Cancel"`.
+
+Pide una línea de texto y espera; mientras, las demás ventanas de la aplicación no responden. Return en el campo
+acepta como el primer botón; Esc y el botón de cerrar cancelan como el último. Devuelve lo escrito, o `""` si se
+cancela (también si se acepta con el campo vacío).
+""", """\
+- `window`: the window it shows over; 0 = over the application.
+- `title`: the title.
+- `text`: what is asked; it takes MUI's text codes.
+- `initial`: what the field holds when it opens.
+- `buttons`: accept and cancel, separated by `|`, with `_` for their key: `"_Rename|_Cancel"`. With `""`,
+  `"_Ok|_Cancel"`.
+
+Asks for a line of text and waits; meanwhile the application's other windows do not respond. Return in the field
+accepts like the first button; Esc and the close gadget cancel like the last one. Returns what was written, or `""`
+when cancelled (also when accepted with the field empty).
+""", ["mui_request", "mui_string"]),
     # ------------------------------------------------------------ grupos
     "mui_vgroup_begin": _f("""\
 Empieza un grupo que pone sus objetos uno debajo de otro, dentro del grupo abierto. Se acaba con `mui_group_end`.
@@ -436,12 +461,14 @@ text and X cuts it (reported by Alex Agauser and Ferrán García).
 - `lines`: cuántas líneas de alto; `0` = tan alto como deje la ventana, que crece con ella.
 
 Un campo de texto de varias líneas, con su barra. Return empieza otra línea. `mui_get_text` y `mui_set_text` lo
-leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return.
+leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return. Sin la clase Textinput (un MUI 3.8 sin más), es un
+campo de una línea, como `mui_string`: se lee y se cambia igual y `mui_on_ack` avisa con Return.
 """, """\
 - `lines`: how many lines high; `0` = as high as the window lets it, growing with it.
 
 A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
-change all of it; `mui_on_ack` fires on Amiga+Return.
+change all of it; `mui_on_ack` fires on Amiga+Return. Without the Textinput class (a bare MUI 3.8), it is a one-line
+field, like `mui_string`: it is read and changed the same way and `mui_on_ack` fires on Return.
 """, ["mui_string"]),
     "mui_checkbox": _f("""\
 - `checked`: si empieza marcada.
@@ -662,7 +689,27 @@ Añade la línea al final.
 - `text`: the line; the list keeps its own copy.
 
 Adds the line at the end.
-""", ["mui_list_insert", "mui_list_quiet"]),
+""", ["mui_list_add_lines", "mui_list_insert", "mui_list_quiet"]),
+    "mui_list_add_lines": _f("""\
+- `list`: la lista (o un `mui_combo`).
+- `text`: las líneas, separadas por saltos de línea (`\\n`; un `\\r` delante también vale). Un salto al final no
+  añade una línea vacía.
+
+Añade todas al final de una vez: la lista se redibuja una sola vez, no una por línea. Para cientos de líneas (la
+salida de una orden, un fichero), mucho más rápido que `mui_list_add` una a una: 300 líneas con la ventana abierta
+en un A1200 emulado, 10,6 s una a una y 0,6 s así. Una lista que el programa dejó en silencio (`mui_list_quiet`)
+sigue en silencio.
+
+""", """\
+- `list`: the list (or a `mui_combo`).
+- `text`: the lines, separated by line breaks (`\\n`; a `\\r` before it is fine too). A break at the end adds no
+  empty line.
+
+Adds them all at the end at once: the list is redrawn once, not once per line. For hundreds of lines (a command's
+output, a file), much faster than `mui_list_add` one by one: 300 lines with the window open on an emulated A1200,
+10.6 s one by one and 0.6 s this way. A list the program left quiet (`mui_list_quiet`) stays quiet.
+
+""", ["mui_list_add", "mui_list_quiet"]),
     "mui_list_insert": _f("""\
 - `list`: la lista.
 - `pos`: dónde, desde 0; las de después bajan.
@@ -704,7 +751,7 @@ Para añadir muchas líneas de golpe sin que se vea cada una.
 - `quiet`: `true` stops redrawing it; `false` redraws it with everything new.
 
 To add many lines at once without each one being drawn.
-""", ["mui_list_add"]),
+""", ["mui_list_add", "mui_list_add_lines"]),
     # ------------------------------------------------------------ eventos
     "mui_on_press": _f("""\
 - `obj`: un botón (o un botón con imagen).
