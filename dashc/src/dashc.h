@@ -113,15 +113,22 @@ enum {
     T_FLOAT   /* val: los bits del float (IEEE de 32 bits) */
 };
 
+/* (32 bytes: un fuente grande tiene decenas de miles, y están todos a la vez mientras se lee su fichero) */
 typedef struct {
-    int kind, line, col, file;
+    int line;
     long val;      /* T_INT */
-    double dval;   /* T_FLOAT: el valor entero (un Double lo quiere con todas sus cifras) */
     char *text;    /* T_ID; T_STR ya en Latin-1 y sin escapes */
     int len;
-    /* T_ISTR: piece[0] texto, piece[1] código, piece[2] texto...; plen: largo de cada texto */
-    char **piece;
-    int *plen, npieces;
+    union {
+        double dval;   /* T_FLOAT: el valor entero (un Double lo quiere con todas sus cifras) */
+        struct {
+            /* T_ISTR: piece[0] texto, piece[1] código, piece[2] texto...; plen: largo de cada texto */
+            char **piece;
+            int *plen;
+        };
+    };
+    unsigned short col, file, npieces;
+    unsigned char kind;
 } Token;
 
 Token *lex(const char *src);

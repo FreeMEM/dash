@@ -42,8 +42,8 @@ static Node *node(int kind, Token *at)
     Node *n = node_alloc();
     n->kind = (unsigned char)kind;
     n->line = at->line;
-    n->col = (unsigned short)(at->col > 65535 ? 65535 : at->col);
-    n->file = (unsigned short)at->file;
+    n->col = at->col;
+    n->file = at->file;
     return n;
 }
 
