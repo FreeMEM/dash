@@ -1047,6 +1047,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_register_begin", 1, 1, 0, 0, 2, 1u},
     {"mui_request", 4, 1, 0, 0, 0, 14u},
     {"mui_request", 4, 1, 0, 0, 0, 14u},
+    {"mui_request_text", 5, 3, 0, 0, 2, 30u},
+    {"mui_request_text", 5, 3, 0, 0, 2, 30u},
     {"mui_rexx_fail", 1, 0, 1, 0, 2, 0u},
     {"mui_rexx_fail", 1, 0, 1, 0, 2, 0u},
     {"mui_scroll_begin", 0, 1, 1, 0, 2, 0u},
@@ -1751,6 +1753,8 @@ const BuiltinInfo builtin_info[] = {
     {"str_from_double", 2, 3, 0, 1, 0, 0u},
     {"str_from_int", 2, 3, 0, 0, 0, 0u},
     {"str_from_int", 2, 3, 0, 0, 0, 0u},
+    {"str_join", 2, 3, 0, 0, 0, 2u},
+    {"str_join", 2, 3, 0, 0, 0, 2u},
     {"str_lower", 1, 3, 0, 0, 0, 1u},
     {"str_lower", 1, 3, 0, 0, 0, 1u},
     {"str_replace", 3, 3, 0, 0, 0, 7u},
@@ -2038,7 +2042,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u},
 };
-const int builtin_count = 2036;
+const int builtin_count = 2040;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

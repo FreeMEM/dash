@@ -305,6 +305,8 @@ DESC_ES = {
     "str_to_int": "El número escrito en s en esa base (2-36); Int(s) es en base 10",
     "str_from_int": "n escrito en esa base (2-36, letras en minúscula)",
     "str_replace": "Una copia con cada from cambiado por to",
+    "str_join": "Los textos de una lista [String] uno tras otro, con sep entre cada dos; \"\" con la lista vacía (lo "
+                "contrario de str_split)",
     "str_contains": "Si sub está en s (\"\" está en todos)",
     "str_split": "Los trozos de s entre cada sep, en una [String] nueva; con sep \"\" o si no está, [s]",
     "file_read_text": "El fichero entero como texto (los bytes 0 pasan a espacios); nil si no se puede leer",
@@ -1126,7 +1128,7 @@ DESC_ES = {
     # MUI
     "mui_text_editor": "Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto (0: tan alto como deje la ventana), con su "
                        "barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el "
-                       "evento de mandarlo (Amiga+Return en su ventana)",
+                       "evento de mandarlo (Amiga+Return en su ventana). Sin la clase Textinput, un campo de una línea",
     "mui_window_open_back": "Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo "
                             "abrirse",
     "mui_window_activate": "Hace activa una ventana, delante de las demás (si está cerrada, la abre)",
@@ -1136,6 +1138,9 @@ DESC_ES = {
     "mui_request": "Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados "
                    "por \"|\" (\"_Guardar|_Descartar|_Cancelar\"); las ventanas de la aplicación esperan. El botón elegido: "
                    "1, 2... desde la izquierda, 0 el último (también Esc)",
+    "mui_request_text": "Pide una línea de texto en una ventanita sobre otra (0: sobre la aplicación): el texto, un campo "
+                        "con initial y dos botones, \"_Ok|_Cancel\" (\"\": esos). Return acepta y Esc cancela. "
+                        "Devuelve lo escrito, o \"\" si se cancela",
     "mui_set_background": "Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una "
                           "lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si "
                           "no tienen el suyo",

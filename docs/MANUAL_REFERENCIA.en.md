@@ -49,7 +49,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 1018 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 1020 built-in functions (each one explained in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -623,6 +623,7 @@ They return new strings (the original does not change) or numbers. Positions sta
 | `str_replace(s, de, a)` | Replaces every occurrence of `de` with `a` |
 | `str_contains(s, sub)` | Whether `sub` is in `s` (`""` is in all of them) |
 | `str_split(s, sep)` | The pieces between each `sep`, in a new `[String]` list; with `sep` `""` or if it is not there, `[s]`; two `sep` in a row give `""` |
+| `str_join(list, sep)` | The opposite: the texts of a `[String]` list one after another, with `sep` between each two; `""` with an empty list |
 | `file_read_text(nombre)` | The whole file as a string (`nil` if it cannot be read) |
 | `file_write_text(nombre, texto)` | Writes the string as the whole file (`true` if it went well) |
 | `str_from_buffer(buffer, desde, n)` | String with `n` bytes from a buffer |

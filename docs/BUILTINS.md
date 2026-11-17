@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1018 funciones, 1018 implementadas, 0 sin implementar.
+Total: 1020 funciones, 1020 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -4772,6 +4772,7 @@ end
 | [`str_from_int(n, base)`](#str_from_int) | String | n escrito en esa base (2-36, letras en minúscula) |  |
 | [`str_replace(s, from, to)`](#str_replace) | String | Una copia con cada from cambiado por to |  |
 | [`str_contains(s, sub)`](#str_contains) | Bool | Si sub está en s ("" está en todos) |  |
+| [`str_join(list, sep)`](#str_join) | String | Los textos de una lista [String] uno tras otro, con sep entre cada dos; "" con la lista vacía (lo contrario de str_split) |  |
 | [`str_split(s, sep)`](#str_split) | [Int] | Los trozos de s entre cada sep, en una [String] nueva; con sep "" o si no está, [s] |  |
 | [`file_read_text(filename)`](#file_read_text) | String | El fichero entero como texto (los bytes 0 pasan a espacios); nil si no se puede leer |  |
 | [`file_write_text(filename, text)`](#file_write_text) | Bool | Escribe el texto como el fichero entero; true si se escribió todo |  |
@@ -4922,6 +4923,18 @@ Devuelve `true` si `sub` está en `s`. `""` está en todos.
 
 Ver también: [`str_find`](#str_find).
 
+<a id="str_join"></a>
+
+### `str_join(list, sep)` → `String`
+
+- `list`: una lista `[String]`.
+- `sep`: lo que va entre cada dos; `""`, nada.
+
+Devuelve un texto nuevo con los de la lista uno tras otro: `str_join(["a", "b", "c"], ", ")` es `"a, b, c"`. Con la
+lista vacía, `""`. Es lo contrario de `str_split`: `str_join(lineas, "\n")` vuelve a juntar las líneas.
+
+Ver también: [`str_split`](#str_split).
+
 <a id="str_split"></a>
 
 ### `str_split(s, sep)` → `[Int]`
@@ -4932,7 +4945,7 @@ Ver también: [`str_find`](#str_find).
 Devuelve una lista `[String]` con los trozos de `s` entre cada `sep`. Dos separadores seguidos dan un trozo `""`.
 Con `sep` vacío, o si no aparece, la lista tiene solo `s`. `str_split(texto, "\n")` da las líneas.
 
-Ver también: [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
+Ver también: [`str_join`](#str_join), [`str_trim`](#str_trim), [`file_read_text`](#file_read_text).
 
 <a id="file_read_text"></a>
 
@@ -11417,11 +11430,12 @@ end
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | [`mui_app_begin(title, base)`](#mui_app_begin) | Int (dirección) | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
-| [`mui_text_editor(lines)`](#mui_text_editor) | Int (dirección) | Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto (0: tan alto como deje la ventana), con su barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el evento de mandarlo (Amiga+Return en su ventana) |  |
+| [`mui_text_editor(lines)`](#mui_text_editor) | Int (dirección) | Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto (0: tan alto como deje la ventana), con su barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el evento de mandarlo (Amiga+Return en su ventana). Sin la clase Textinput, un campo de una línea |  |
 | [`mui_window_open_back(win)`](#mui_window_open_back) | Int | Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo abrirse |  |
 | [`mui_window_activate(win)`](#mui_window_activate) | — | Hace activa una ventana, delante de las demás (si está cerrada, la abre) |  |
 | [`mui_window_dispose(window)`](#mui_window_dispose) | — | Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después |  |
 | [`mui_request(window, title, text, buttons)`](#mui_request) | Int | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
+| [`mui_request_text(window, title, text, initial, buttons)`](#mui_request_text) | String | Pide una línea de texto en una ventanita sobre otra (0: sobre la aplicación): el texto, un campo con initial y dos botones, "_Ok\|_Cancel" ("": esos). Return acepta y Esc cancela. Devuelve lo escrito, o "" si se cancela |  |
 | [`mui_set_background(obj, r, g, b)`](#mui_set_background) | — | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |
 | [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |
 | [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, 104 y 120, 120, 128 |  |
@@ -11556,7 +11570,8 @@ Ver también: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_be
 - `lines`: cuántas líneas de alto; `0` = tan alto como deje la ventana, que crece con ella.
 
 Un campo de texto de varias líneas, con su barra. Return empieza otra línea. `mui_get_text` y `mui_set_text` lo
-leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return.
+leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return. Sin la clase Textinput (un MUI 3.8 sin más), es un
+campo de una línea, como `mui_string`: se lee y se cambia igual y `mui_on_ack` avisa con Return.
 
 Ver también: [`mui_string`](#mui_string).
 
@@ -11603,7 +11618,24 @@ Ver también: [`mui_window_close`](#mui_window_close).
 Pregunta y espera; mientras, las ventanas de la aplicación no responden. Devuelve el botón elegido: 1, 2...
 desde la izquierda, y 0 el último (también con Esc).
 
-Ver también: [`mui_window_begin`](#mui_window_begin).
+Ver también: [`mui_request_text`](#mui_request_text), [`mui_window_begin`](#mui_window_begin).
+
+<a id="mui_request_text"></a>
+
+### `mui_request_text(window, title, text, initial, buttons)` → `String`
+
+- `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
+- `title`: el título.
+- `text`: lo que se pide; admite los códigos de texto de MUI.
+- `initial`: lo que trae el campo al abrirse.
+- `buttons`: aceptar y cancelar, separados por `|`, con `_` para su tecla: `"_Renombrar|_Cancelar"`. Con `""`,
+  `"_Ok|_Cancel"`.
+
+Pide una línea de texto y espera; mientras, las demás ventanas de la aplicación no responden. Return en el campo
+acepta como el primer botón; Esc y el botón de cerrar cancelan como el último. Devuelve lo escrito, o `""` si se
+cancela (también si se acepta con el campo vacío).
+
+Ver también: [`mui_request`](#mui_request), [`mui_string`](#mui_string).
 
 <a id="mui_set_background"></a>
 

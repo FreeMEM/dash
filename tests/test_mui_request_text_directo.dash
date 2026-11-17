@@ -1,0 +1,55 @@
+# El mismo test que test_mui_request_text.dash, por ./dash directo a hunk.
+# dash-direct:
+# mui_request_text (lo pidió Forja): pide una línea de texto en una ventanita sobre otra. El programa, arrancado otra
+# vez como "texto", "return" o "esc", escribe y pulsa Return, pulsa Return con lo que trae el campo o pulsa Esc,
+# cuando la ventanita es la activa.
+# emu-needs: muimaster.library
+# expect-out: escrito: [nuevo.dash]
+# expect-out: el de antes: [main.dash]
+# expect-out: cancelado: []
+# expect-out: fin
+
+func espera()
+    t = 0
+    while input_active_title() != "Renombrar" and t < 300
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(25)
+end
+
+Main
+    if arg(0) == "texto"
+        espera()
+        input_text("nuevo.dash")
+        input_key(0x44, 0)                         # Return
+    elif arg(0) == "return"
+        espera()
+        input_key(0x44, 0)
+    elif arg(0) == "esc"
+        espera()
+        input_key(0x45, 0)                         # Esc
+    elif mui_app_begin("Pregunta", "DASHREQTEXT") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Proyecto", 0)
+            t = mui_text("Hola")
+        mui_window_end()
+        mui_window_open(w)
+        yo = "\"" + program_path() + "\""
+        h = run_start(yo + " texto", 60000)
+        r = mui_request_text(w, "Renombrar", "Nombre nuevo:", "", "_Renombrar|_Cancelar")
+        s = run_finish(h)
+        Print "escrito: [#{r}]"
+        h = run_start(yo + " return", 60000)
+        r = mui_request_text(w, "Renombrar", "Nombre nuevo:", "main.dash", "")
+        s = run_finish(h)
+        Print "el de antes: [#{r}]"
+        h = run_start(yo + " esc", 60000)
+        r = mui_request_text(0, "Renombrar", "Nombre nuevo:", "main.dash", "")
+        s = run_finish(h)
+        Print "cancelado: [#{r}]"
+        mui_app_end()
+        Print "fin"
+    end
+end

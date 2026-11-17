@@ -1,0 +1,34 @@
+# str_join(lista, sep) (lo pidió Forja): los textos de una lista [String] con sep entre cada dos; lo contrario de
+# str_split.
+# expect-out: [a, b, c]
+# expect-out: [abc]
+# expect-out: []
+# expect-out: [solo]
+# expect-out: [x--z]
+# expect-out: vuelta: true
+# expect-out: [Linea 0|Linea 1|Linea 2]
+# expect-out: fin
+
+func lineas(n: Int) -> [String]
+    var l: [String] = []
+    i = 0
+    while i < n
+        l.push("Linea #{i}")
+        i = i + 1
+    end
+    return l
+end
+
+Main
+    Print "[" + str_join(["a", "b", "c"], ", ") + "]"
+    Print "[" + str_join(["a", "b", "c"], "") + "]"
+    var vacia: [String] = []
+    Print "[" + str_join(vacia, ", ") + "]"
+    Print "[" + str_join(["solo"], ", ") + "]"
+    Print "[" + str_join(["x", "", "z"], "-") + "]"
+    texto = "uno\ndos\n\ntres"
+    Print "vuelta: #{str_join(str_split(texto, "\n"), "\n") == texto}"
+    j = str_join(lineas(3), "|")
+    Print "[#{j}]"
+    Print "fin"
+end

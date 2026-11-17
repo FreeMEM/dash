@@ -305,7 +305,30 @@ desde la izquierda, y 0 el último (también con Esc).
 
 Asks and waits; meanwhile the application's windows do not respond. Returns the chosen button: 1, 2... from the
 left, and 0 the last one (also with Esc).
-""", ["mui_window_begin"]),
+""", ["mui_request_text", "mui_window_begin"]),
+    "mui_request_text": _f("""\
+- `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
+- `title`: el título.
+- `text`: lo que se pide; admite los códigos de texto de MUI.
+- `initial`: lo que trae el campo al abrirse.
+- `buttons`: aceptar y cancelar, separados por `|`, con `_` para su tecla: `"_Renombrar|_Cancelar"`. Con `""`,
+  `"_Ok|_Cancel"`.
+
+Pide una línea de texto y espera; mientras, las demás ventanas de la aplicación no responden. Return en el campo
+acepta como el primer botón; Esc y el botón de cerrar cancelan como el último. Devuelve lo escrito, o `""` si se
+cancela (también si se acepta con el campo vacío).
+""", """\
+- `window`: the window it shows over; 0 = over the application.
+- `title`: the title.
+- `text`: what is asked; it takes MUI's text codes.
+- `initial`: what the field holds when it opens.
+- `buttons`: accept and cancel, separated by `|`, with `_` for their key: `"_Rename|_Cancel"`. With `""`,
+  `"_Ok|_Cancel"`.
+
+Asks for a line of text and waits; meanwhile the application's other windows do not respond. Return in the field
+accepts like the first button; Esc and the close gadget cancel like the last one. Returns what was written, or `""`
+when cancelled (also when accepted with the field empty).
+""", ["mui_request", "mui_string"]),
     # ------------------------------------------------------------ grupos
     "mui_vgroup_begin": _f("""\
 Empieza un grupo que pone sus objetos uno debajo de otro, dentro del grupo abierto. Se acaba con `mui_group_end`.
@@ -438,12 +461,14 @@ text and X cuts it (reported by Alex Agauser and Ferrán García).
 - `lines`: cuántas líneas de alto; `0` = tan alto como deje la ventana, que crece con ella.
 
 Un campo de texto de varias líneas, con su barra. Return empieza otra línea. `mui_get_text` y `mui_set_text` lo
-leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return.
+leen y lo cambian entero; `mui_on_ack` avisa con Amiga+Return. Sin la clase Textinput (un MUI 3.8 sin más), es un
+campo de una línea, como `mui_string`: se lee y se cambia igual y `mui_on_ack` avisa con Return.
 """, """\
 - `lines`: how many lines high; `0` = as high as the window lets it, growing with it.
 
 A multi-line text field, with its scroll bar. Return starts a new line. `mui_get_text` and `mui_set_text` read and
-change all of it; `mui_on_ack` fires on Amiga+Return.
+change all of it; `mui_on_ack` fires on Amiga+Return. Without the Textinput class (a bare MUI 3.8), it is a one-line
+field, like `mui_string`: it is read and changed the same way and `mui_on_ack` fires on Return.
 """, ["mui_string"]),
     "mui_checkbox": _f("""\
 - `checked`: si empieza marcada.

@@ -12930,6 +12930,25 @@ static double DashArray_pop_dbl(DashArrayLong *arr) {
     # Text from files and buffers (dashweb D7), only in programs that use it
     # str_split: a list of Strings (needs the array and text runtimes)
     SPLIT_RUNTIME = """\
+/* str_join(list, sep) (Forja): the texts of a [String] one after another with sep between them; nil elements and a
+   nil list count as "" */
+static STRPTR _dash_str_join(DashArrayLong *list, STRPTR sep) {
+    LONG n = list ? list->length : 0, ns = _dash_str_len(sep), len = 0, i, j = 0;
+    STRPTR r;
+    for (i = 0; i < n; i++) len += _dash_str_len((STRPTR)list->data[i]);
+    if (n > 1) len += (n - 1) * ns;
+    r = _dash_str_alloc(len, TRUE);
+    if (!r) return NULL;
+    for (i = 0; i < n; i++) {
+        STRPTR e = (STRPTR)list->data[i];
+        LONG k = _dash_str_len(e);
+        if (i && ns) { _dash_copy(r + j, sep, ns); j += ns; }
+        if (k) { _dash_copy(r + j, e, k); j += k; }
+    }
+    r[j] = 0;
+    return r;
+}
+
 /* The pieces of s between each sep: a new list of Strings that owns them (s itself if sep is
    "" or not there; "a,,b" gives "a", "" and "b") */
 static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
@@ -22989,25 +23008,32 @@ static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
 }
 
 /* A text field of several lines (Dash 2.0, Inferencia: the question), Textinputscroll.mcc of MUI: lines high, with
-   its scroller; Return makes a new line, and mui_on_ack gives the event of sending it */
+   its scroller; Return makes a new line, and mui_on_ack gives the event of sending it. Without the Textinput class
+   (a bare MUI 3.8), a one-line field instead of nothing (Forja): mui_get_text, mui_set_text and mui_on_ack (Return)
+   work the same */
 static APTR _dash_mui_text_editor(LONG lines) {
     char fix[40];
     LONG i, k = 0;
+    Object *obj;
     if (lines == 0)                                       /* (0: as high as the window lets it) */
-        return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
+        obj = _DASH_MUI_NEW(MUIC_Textinputscroll,
             MUIA_CycleChain, 1,
             MUIA_Textinput_Multiline, TRUE,
-            MUIA_Textinput_Contents, (IPTR)""), _DASH_MUI_EDITOR);
-    if (lines < 1) lines = 1;
-    if (lines > 30) lines = 30;
-    for (i = 1; i < lines; i++) fix[k++] = '\\n';
-    fix[k++] = 'X';
-    fix[k] = 0;
-    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
-        MUIA_CycleChain, 1,
-        MUIA_Textinput_Multiline, TRUE,
-        MUIA_Textinput_Contents, (IPTR)"",
-        MUIA_FixHeightTxt, (IPTR)_dash_mui_keep((STRPTR)fix)), _DASH_MUI_EDITOR);
+            MUIA_Textinput_Contents, (IPTR)"");
+    else {
+        if (lines < 1) lines = 1;
+        if (lines > 30) lines = 30;
+        for (i = 1; i < lines; i++) fix[k++] = '\\n';
+        fix[k++] = 'X';
+        fix[k] = 0;
+        obj = _DASH_MUI_NEW(MUIC_Textinputscroll,
+            MUIA_CycleChain, 1,
+            MUIA_Textinput_Multiline, TRUE,
+            MUIA_Textinput_Contents, (IPTR)"",
+            MUIA_FixHeightTxt, (IPTR)_dash_mui_keep((STRPTR)fix));
+    }
+    if (obj) return _dash_mui_add_kind(obj, _DASH_MUI_EDITOR);
+    return _dash_mui_string((STRPTR)"", 4096);
 }
 
 static APTR _dash_mui_checkbox(LONG checked) {
@@ -23791,6 +23817,87 @@ static LONG _dash_mui_request(APTR win, STRPTR title, STRPTR text, STRPTR button
     params[0] = text ? text : (STRPTR)"";
     return MUI_RequestA((Object *)_dash_mui_app, (Object *)win, 0, title, buttons && *buttons ? buttons : (STRPTR)"_Ok",
                         (STRPTR)"%s", params);
+}
+
+/* mui_request_text (Forja): a small modal window over win (0: over the application) with the text, a one-line field
+   with initial and two buttons, buttons "_Ok|_Cancel" (the first accepts, the last cancels; "": those two). Return
+   in the field accepts too; Esc and the close gadget cancel. The text written, or "" when cancelled. Meanwhile the
+   application's other windows sleep and their events wait. */
+#define _DASH_MUI_RT_OK 0x5DA51001
+#define _DASH_MUI_RT_CANCEL 0x5DA51002
+static STRPTR _dash_mui_request_text(APTR win, STRPTR title, STRPTR text, STRPTR initial, STRPTR buttons) {
+    char labels[128];
+    STRPTR cancel, bar, contents = NULL, result;
+    Object *w, *str, *bok, *bcancel, *row, *root, *o;
+    struct List *wl = NULL;
+    APTR state;
+    ULONG sigs = 0, params[1];
+    LONG id = 0, quit = 0;
+    IPTR open = 0;
+    if (!_dash_mui_app) return _dash_str_alloc(0, TRUE);
+    strncpy(labels, buttons && *buttons ? (char *)buttons : "_Ok|_Cancel", sizeof labels - 1);
+    labels[sizeof labels - 1] = 0;
+    bar = (STRPTR)strchr(labels, '|');
+    cancel = (STRPTR)strrchr(labels, '|');
+    if (bar) *bar = 0;
+    cancel = cancel ? cancel + 1 : NULL;
+    str = _DASH_MUI_NEW(MUIC_String, MUIA_Frame, MUIV_Frame_String, MUIA_CycleChain, 1, MUIA_String_MaxLen, 1025,
+                        MUIA_String_Contents, (IPTR)(initial ? initial : (STRPTR)""));
+    params[0] = (ULONG)labels;
+    bok = MUI_MakeObjectA(MUIO_Button, params);
+    params[0] = (ULONG)cancel;
+    bcancel = cancel ? MUI_MakeObjectA(MUIO_Button, params) : NULL;
+    row = bcancel ? _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, TRUE, MUIA_Group_Child, (IPTR)bok,
+                                  MUIA_Group_Child, (IPTR)_DASH_MUI_NEW(MUIC_Rectangle, MUIA_Weight, 100),
+                                  MUIA_Group_Child, (IPTR)bcancel)
+                  : _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, TRUE, MUIA_Group_Child, (IPTR)bok);
+    root = _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Child, (IPTR)_DASH_MUI_NEW(MUIC_Text,
+                             MUIA_Text_Contents, (IPTR)(text ? text : (STRPTR)"")),
+                         MUIA_Group_Child, (IPTR)str, MUIA_Group_Child, (IPTR)row);
+    w = root ? _DASH_MUI_NEW(MUIC_Window, MUIA_Window_Title, (IPTR)(title ? title : (STRPTR)""),
+                             MUIA_Window_RefWindow, (IPTR)win, MUIA_Window_RootObject, (IPTR)root,
+                             MUIA_Window_ActiveObject, (IPTR)str) : NULL;
+    if (!w) return _dash_str_alloc(0, TRUE);
+    GetAttr(MUIA_Application_WindowList, (Object *)_dash_mui_app, (IPTR *)&wl);
+    if (wl)
+        for (state = wl->lh_Head; (o = (Object *)NextObject((Object **)&state)) != NULL; )
+            SetAttrs(o, MUIA_Window_Sleep, TRUE, TAG_DONE);
+    _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)w);
+    _DASH_MUI_DO(bok, MUIM_Notify, MUIA_Pressed, FALSE, (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID,
+                 _DASH_MUI_RT_OK);
+    if (bcancel)
+        _DASH_MUI_DO(bcancel, MUIM_Notify, MUIA_Pressed, FALSE, (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID,
+                     _DASH_MUI_RT_CANCEL);
+    _DASH_MUI_DO(str, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime, (IPTR)_dash_mui_app, 2,
+                 MUIM_Application_ReturnID, _DASH_MUI_RT_OK);
+    _DASH_MUI_DO(w, MUIM_Notify, MUIA_Window_CloseRequest, TRUE, (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID,
+                 _DASH_MUI_RT_CANCEL);
+    SetAttrs(w, MUIA_Window_Open, TRUE, TAG_DONE);
+    GetAttr(MUIA_Window_Open, w, &open);
+    if (open) SetAttrs(w, MUIA_Window_ActiveObject, (IPTR)str, TAG_DONE);   /* (the cursor in the field) */
+    while (open) {
+        id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
+        if (id == _DASH_MUI_RT_OK || id == _DASH_MUI_RT_CANCEL) break;
+        if (id == MUIV_Application_ReturnID_Quit) { quit = 1; id = _DASH_MUI_RT_CANCEL; break; }
+        if (sigs) {
+            sigs = Wait(sigs | SIGBREAKF_CTRL_C);
+            if (sigs & SIGBREAKF_CTRL_C) {
+                SetSignal(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C);   /* (for the program, as it came) */
+                id = _DASH_MUI_RT_CANCEL;
+                break;
+            }
+        }
+    }
+    if (id == _DASH_MUI_RT_OK) GetAttr(MUIA_String_Contents, str, (IPTR *)&contents);
+    result = _dash_str_dup(contents ? contents : (STRPTR)"", TRUE);
+    SetAttrs(w, MUIA_Window_Open, FALSE, TAG_DONE);
+    _DASH_MUI_DO(_dash_mui_app, OM_REMMEMBER, (IPTR)w);
+    MUI_DisposeObject(w);
+    if (wl)
+        for (state = wl->lh_Head; (o = (Object *)NextObject((Object **)&state)) != NULL; )
+            SetAttrs(o, MUIA_Window_Sleep, FALSE, TAG_DONE);
+    if (quit) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
+    return result;
 }
 
 /* mui_set_background (Dash 2.0, Forja): an RGB background ("2:rrrrrrrr,gggggggg,bbbbbbbb", MUI allocates the pen

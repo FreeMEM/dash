@@ -3740,7 +3740,7 @@ MUI_FUNCTIONS = {
         name="mui_text_editor", params=["lines"], return_type="APTR", c_template="_dash_mui_text_editor(${lines})",
         description="A text field of several lines (MUI's Textinput), that many lines high (0: as high as the window lets it), with a scroller: Return "
                     "starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of "
-                    "sending it (Amiga+Return in its window)"),
+                    "sending it (Amiga+Return in its window). Without the Textinput class, a one-line field"),
     "mui_window_open_back": BuiltinFunc(
         name="mui_window_open_back", params=["win"], return_type="LONG",
         c_template="_dash_mui_window_open_back(${win})",
@@ -3763,6 +3763,12 @@ MUI_FUNCTIONS = {
         description="Ask with MUI's requester over a window (0: over the application), its buttons separated by \"|\" "
                     "(\"_Guardar|_Descartar|_Cancelar\"); the application's windows wait. The button chosen: 1, 2... "
                     "from the left, 0 the last one (also Esc)"),
+    "mui_request_text": BuiltinFunc(
+        name="mui_request_text", params=["window", "title", "text", "initial", "buttons"], return_type="STRPTR",
+        c_template="_dash_mui_request_text(${window}, ${title}, ${text}, ${initial}, ${buttons})", reads_only=True,
+        description="Ask for a line of text in a small window over another (0: over the application): the text, a "
+                    "field with initial and two buttons, \"_Ok|_Cancel\" (\"\": those). Return accepts, Esc "
+                    "cancels. The text written, or \"\" when cancelled"),
     # Dash 2.0 (Forja): colours without MUI's prefs
     "mui_set_background": BuiltinFunc(
         name="mui_set_background", params=["obj", "r", "g", "b"], return_type="void",
@@ -4634,6 +4640,9 @@ TEXT_FUNCTIONS = {
                          "Copy with every from replaced by to"),
     "str_contains": _text("str_contains", ["s", "sub"], "BOOL", "_dash_str_contains(${s}, ${sub})",
                           "Whether sub is in s (\"\" is in every text)"),
+    "str_join": _text("str_join", ["list", "sep"], "STRPTR", "_dash_str_join(${list}, ${sep})",
+                      "The texts of a [String] list one after another, with sep between each two; \"\" for an empty "
+                      "list (the opposite of str_split)"),
     "str_split": BuiltinFunc(name="str_split", params=["s", "sep"], return_type="DashArrayLong *",
                              c_template="_dash_str_split(${s}, ${sep})", reads_only=True, list_of="String",
                              description="The pieces of s between each sep, as a new [String]; with sep \"\" or "

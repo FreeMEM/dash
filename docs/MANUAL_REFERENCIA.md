@@ -49,7 +49,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 1018 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 1020 funciones built-in (cada una explicada en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -624,6 +624,7 @@ Devuelven textos nuevos (el original no cambia) o numeros. Las posiciones empiez
 | `str_replace(s, de, a)` | Cambia todas las apariciones de `de` por `a` |
 | `str_contains(s, sub)` | Si `sub` esta en `s` (`""` esta en todos) |
 | `str_split(s, sep)` | Los trozos entre cada `sep`, en una lista nueva `[String]`; con `sep` `""` o si no esta, `[s]`; dos `sep` seguidos dan `""` |
+| `str_join(lista, sep)` | Lo contrario: los textos de una lista `[String]` uno tras otro, con `sep` entre cada dos; `""` con la lista vacía |
 | `file_read_text(nombre)` | El fichero entero como texto (`nil` si no se puede leer) |
 | `file_write_text(nombre, texto)` | Escribe el texto como fichero entero (`true` si fue bien) |
 | `str_from_buffer(buffer, desde, n)` | Texto con `n` bytes de un buffer |
