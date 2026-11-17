@@ -176,20 +176,38 @@ void *xrealloc(void *p, size_t n)
 
 size_t xcap(const void *p) { return p ? SIZE_OF(p) & ~(size_t)1 : 0; }
 
-/* Los nodos del árbol, de corrido en bloques de 32 KB: sin la cabecera ni el redondeo a 8 de cada trozo (nunca se
-   sueltan uno a uno) */
-Node *node_alloc(void)
+/* Los nodos del árbol (y sus NodeExt), de corrido en bloques de 32 KB: sin la cabecera ni el redondeo a 8 de cada
+   trozo (nunca se sueltan uno a uno; node_free_all, todos al acabar de generar) */
+static struct NodeBlock { struct NodeBlock *next; } *node_blocks;
+
+void *node_arena(size_t size)
 {
     static uint8_t *at, *end;
-    /* (de 4 en 4 bytes en el 68000, donde el struct va de 2 en 2: un long en dirección impar de palabra va más lento) */
-    size_t sz = (sizeof(Node) + 3) & ~(size_t)3;
-    Node *n;
+    /* (de 4 en 4 bytes, también en el 68000, donde el struct va de 2 en 2: un long que no empieza en múltiplo de 4
+       va más lento en un 68020) */
+    size_t sz = (size + 3) & ~(size_t)3;
+    void *n;
+#if !defined(__amigaos__)
+    sz = (size + 7) & ~(size_t)7;                  /* (los double y punteros del PC, alineados) */
+#endif
     if ((size_t)(end - at) < sz) {
-        at = xmalloc(32 * 1024);
-        end = at + 32 * 1024;
+        struct NodeBlock *b = xmalloc(32 * 1024);
+        b->next = node_blocks;
+        node_blocks = b;
+        at = (uint8_t *)(b + 1);
+#if !defined(__amigaos__)
+        at = (uint8_t *)b + 8;
+#endif
+        end = (uint8_t *)b + 32 * 1024;
     }
-    n = (Node *)at;                                /* (ya a 0: xmalloc) */
+    n = at;                                        /* (ya a 0: xmalloc) */
     at += sz;
+    return n;
+}
+
+Node *node_alloc(void)
+{
+    Node *n = node_arena(sizeof(Node));
     n->x = &node_no_ext;
     return n;
 }

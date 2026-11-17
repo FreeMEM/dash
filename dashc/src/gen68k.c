@@ -807,7 +807,7 @@ static void push_value(Node *n)
 {
     Var v;
     if (n->kind == E_STR) {
-        pea_string(n->str, n->len);
+        pea_string(n->x->str, n->x->len);
         return;
     }
     if (simple(n, &v)) {
@@ -935,7 +935,7 @@ static int expr_type(Node *n)
         ta = expr_type(n->args.v[1]);
         return dict_type(expr_type(n->args.v[0]) == TY_INT ? TY_INT : TY_STR, ta == TY_NIL ? TY_INT : ta);
     case E_LIST:
-        if (n->type) return TY_ARR + n->type;          /* (el de su destino: un campo [Double]...) */
+        if (n->x->type) return TY_ARR + n->x->type;          /* (el de su destino: un campo [Double]...) */
         if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
         ta = expr_type(n->args.v[0]);
         return TY_ARR + (ta == TY_NIL ? TY_INT : ta);
@@ -996,7 +996,7 @@ static void infer_calls(Node *e)
     if (!e) return;
     infer_calls(e->a);
     infer_calls(e->b);
-    infer_calls(e->c);
+    infer_calls(e->x->c);
     for (i = 0; i < e->args.n; i++) infer_calls(e->args.v[i]);
     if (e->kind == E_MCALL && !strcmp(e->name, "sort") && e->args.n == 1 &&
         (e->args.v[0]->kind == E_VAR || e->args.v[0]->kind == E_FUNCREF) &&
@@ -1043,7 +1043,7 @@ static void walk_types(NodeList *l, int *ret)
         if (infer_on) {
             infer_calls(st->a);
             infer_calls(st->b);
-            infer_calls(st->c);
+            infer_calls(st->x->c);
         }
         switch (st->kind) {
         case S_ASSIGN:
@@ -1053,7 +1053,7 @@ static void walk_types(NodeList *l, int *ret)
             }
             break;
         case S_VAR:
-            b.type = st->type;
+            b.type = st->x->type;
             VEC_PUSH(tenv, b);
             break;
         case S_FOR:
@@ -1258,7 +1258,7 @@ static void fix_value(Node *n)
     int t;
     Node *lit = n->kind == E_NEG ? n->a : n;
     if ((lit->kind == E_FLOAT || lit->kind == E_INT) && expr_type(n) != TY_FIXED) {
-        double v = lit->kind == E_FLOAT ? lit->dval : (double)(int32_t)lit->val;
+        double v = lit->kind == E_FLOAT ? lit->x->dval : (double)(int32_t)lit->val;
         double r = v * 65536.0;
         long q = (long)(r < 0 ? r - 0.5 : r + 0.5);       /* (round de Python, salvo los .5 exactos) */
         if (n->kind == E_NEG) q = -q;
@@ -1320,11 +1320,11 @@ static void dbl_value(Node *n)
     long k;
     int t;
     if (n->kind == E_FLOAT) {
-        load_dbl_lit(n->dval);
+        load_dbl_lit(n->x->dval);
         return;
     }
     if (n->kind == E_NEG && n->a->kind == E_FLOAT) {
-        load_dbl_lit(-n->a->dval);
+        load_dbl_lit(-n->a->x->dval);
         return;
     }
     if (expr_type(n) != TY_DOUBLE && fold(n, &k)) {
@@ -1418,7 +1418,7 @@ static void gen_concat(Node *n)
         for (i = 0; i <= np; i++) NL_PUSH(join.args, NULL);
         for (e = n, i = np; i > 0; e = e->a, i--) join.args.v[i] = e->b;
         join.args.v[0] = e;
-        if (join.args.v[0]->kind == E_STR && join.args.v[0]->len == 0) {   /* "" + ...: el primero sobra */
+        if (join.args.v[0]->kind == E_STR && join.args.v[0]->x->len == 0) {   /* "" + ...: el primero sobra */
             memmove(join.args.v, join.args.v + 1, sizeof(Node *) * np);
             join.args.n--;
         }
@@ -1556,7 +1556,7 @@ static int gen_str_slice(Node *n)
     to.val = 0x7FFFFFFF;
     a[0] = n->a;
     a[1] = n->b ? n->b : &from;
-    a[2] = n->c ? n->c : &to;
+    a[2] = n->x->c ? n->x->c : &to;
     args_to_stack(a, 3, NULL);
     rt_call("_dl_str_slice", 3, 1);
     return TY_STR;
@@ -1596,7 +1596,7 @@ static void elem_value(Node *v, int et)
 /* una lista literal que va a un destino de tipo t ([Double]...): guarda eso, no lo de su primer elemento */
 static void list_hint(Node *e, int t)
 {
-    if (e && e->kind == E_LIST && IS_ARR(t) && t != TY_ARR + TY_VOID && !e->type) e->type = t - TY_ARR;
+    if (e && e->kind == E_LIST && IS_ARR(t) && t != TY_ARR + TY_VOID && !e->x->type) node_ext(e)->type = t - TY_ARR;
 }
 
 static void str_kept(Node *e)
@@ -1772,7 +1772,7 @@ static int gen_new(Node *n, int si, int fresh)
         int ft = st->fields.v[i].type, off = field_off(i);
         if (ft == TY_STR && vals[i]->kind == E_STR) {
             /* un literal: el texto fijo de Dash (dash_lit), sin copia */
-            obj_field_data(off, dash_lit(vals[i]->str, vals[i]->len));
+            obj_field_data(off, dash_lit(vals[i]->x->str, vals[i]->x->len));
         } else if (IS_STRLIKE(ft)) {
             obj_field_clear(off);
             push_sp_off(SLOT * (i + 1));               /* el valor (por encima, lo guardado de obj_begin) */
@@ -1935,7 +1935,7 @@ static int gen_arr_slice(Node *n)
     to.val = 0x7FFFFFFF;
     a[0] = n->a;
     a[1] = n->b ? n->b : &from;
-    a[2] = n->c ? n->c : &to;
+    a[2] = n->x->c ? n->x->c : &to;
     args_to_stack(a, 3, NULL);
     rt_call("_dl_arr_slice", 3, 1);
     return expr_type(n->a);
@@ -2091,8 +2091,8 @@ static int push_key_hash(int t, Node *k)
 {
     uint32_t h = 5381;
     int i;
-    if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->str) != k->len) return 0;
-    for (i = 0; i < k->len; i++) h = (h << 5) + h + (unsigned char)k->str[i];
+    if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->x->str) != k->x->len) return 0;
+    for (i = 0; i < k->x->len; i++) h = (h << 5) + h + (unsigned char)k->x->str[i];
     push_long(h);
     return 1;
 }
@@ -2120,7 +2120,7 @@ static int dict_passed(Node *e, const char *d)
             return 1;
         if (e->kind == S_STORE && e->a && e->a->kind == E_VAR && !strcmp(e->a->name, d)) return 1;
     }
-    if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->c, d)) return 1;
+    if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->x->c, d)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (dict_passed(e->args.v[i], d)) return 1;
     for (i = 0; i < e->x->body.n; i++)
@@ -2611,8 +2611,8 @@ static int gen_compare(Node *n)
     if (ta == TY_STR && tb == TY_STR && (n->op == P_EQ || n->op == P_NE) &&
         ((n->b->kind == E_STR && n->a->kind != E_STR) || (n->a->kind == E_STR && n->b->kind != E_STR))) {
         Node *lit = n->b->kind == E_STR ? n->b : n->a, *s = lit == n->b ? n->a : n->b;
-        int i, ok, done, len = lit->len, inl = len <= 8 ? len : 2;
-        if ((int)strlen(lit->str) == len) {
+        int i, ok, done, len = lit->x->len, inl = len <= 8 ? len : 2;
+        if ((int)strlen(lit->x->str) == len) {
             value(s);
             tst_d0();
             ok = new_label();
@@ -2623,13 +2623,13 @@ static int gen_compare(Node *n)
             def_label(ok);
             move_d0_a0();
             for (i = 0; i < inl; i++) {
-                cmp_byte_next((unsigned char)lit->str[i]);
+                cmp_byte_next((unsigned char)lit->x->str[i]);
                 branch(CC_NE, done);
             }
             if (inl == len) {
                 tst_byte_a0();                         /* el final */
             } else {
-                pea_string(lit->str + inl, len - inl);
+                pea_string(lit->x->str + inl, len - inl);
                 push_a0();
                 rt_call("_dl_str_cmp", 2, 0);
                 test_d0();
@@ -2649,13 +2649,13 @@ static int gen_compare(Node *n)
         return cc;
     }
     /* un carácter con un texto de uno: el código del carácter, con signo como char */
-    if ((ta == TY_CHAR && n->b->kind == E_STR && n->b->len == 1) ||
-        (tb == TY_CHAR && n->a->kind == E_STR && n->a->len == 1)) {
+    if ((ta == TY_CHAR && n->b->kind == E_STR && n->b->x->len == 1) ||
+        (tb == TY_CHAR && n->a->kind == E_STR && n->a->x->len == 1)) {
         Node c = *n, lit;
         Node *s = ta == TY_CHAR ? n->b : n->a;
         memset(&lit, 0, sizeof lit); lit.x = &node_no_ext;
         lit.kind = E_INT;
-        lit.val = (signed char)s->str[0];
+        lit.val = (signed char)s->x->str[0];
         if (ta == TY_CHAR) c.b = &lit;
         else c.a = &lit;
         return gen_compare(&c);
@@ -2858,7 +2858,7 @@ static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
                 return "usar textos";
         return NULL;
     case S_VAR:
-        if (n->type && n->type != TY_INT && n->type != TY_BOOL && n->type != TY_FLOAT)
+        if (n->x->type && n->x->type != TY_INT && n->x->type != TY_BOOL && n->x->type != TY_FLOAT)
             return "tener una variable que no es Int, Bool ni Float";
         break;
     case S_PRINT:
@@ -2887,7 +2887,7 @@ static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
         break;
     }
     if ((r = task_impure(n->a, 0, visited, at)) || (r = task_impure(n->b, 0, visited, at)) ||
-        (r = task_impure(n->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
+        (r = task_impure(n->x->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
         (r = task_impure_list(&n->x->body, 0, visited, at)) || (r = task_impure_list(&n->x->els, 0, visited, at)))
         return r;
     return NULL;
@@ -2988,7 +2988,7 @@ static int gen_builtin(Node *n)
         Node *a = n->args.v[i];
         if (builtins[b].args[i] == 'S') {
             if (a->kind != E_STR) fatal_node(a, "(sin --gcc) aquí va un texto literal");
-            pea_string(a->str, a->len);
+            pea_string(a->x->str, a->x->len);
         } else {
             push_value(a);
         }
@@ -3048,7 +3048,7 @@ static int count_refs(Node *n, const char *name)
     if (!n) return 0;
     c = n->kind == E_VAR && !strcmp(n->name, name);
     for (i = 0; i < n->args.n; i++) c += count_refs(n->args.v[i], name);
-    return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->c, name);
+    return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->x->c, name);
 }
 
 /* Float, Double y Fixed: un Int que va a ellos se convierte */
@@ -3065,7 +3065,7 @@ static int calls_name(Node *n, const char *name)
     if (n->kind == E_CALL && !strcmp(n->name, name)) return 1;
     for (i = 0; i < n->args.n; i++)
         if (calls_name(n->args.v[i], name)) return 1;
-    return calls_name(n->a, name) || calls_name(n->b, name) || calls_name(n->c, name);
+    return calls_name(n->a, name) || calls_name(n->b, name) || calls_name(n->x->c, name);
 }
 
 static int param_index(Func *f, const char *name)
@@ -3085,7 +3085,7 @@ static int subst_ok(Node *e, Func *f)
     if (e->kind == E_VAR && param_index(f, e->name) < 0 && find_local(e->name)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!subst_ok(e->args.v[i], f)) return 0;
-    return subst_ok(e->a, f) && subst_ok(e->b, f) && subst_ok(e->c, f);
+    return subst_ok(e->a, f) && subst_ok(e->b, f) && subst_ok(e->x->c, f);
 }
 
 static Node *subst(Node *e, Func *f, NodeList *args)
@@ -3101,7 +3101,12 @@ static Node *subst(Node *e, Func *f, NodeList *args)
     *c = *e;
     c->a = subst(e->a, f, args);
     c->b = subst(e->b, f, args);
-    c->c = subst(e->c, f, args);
+    if (e->x != &node_no_ext) {
+        /* (el suyo: lo que se cambie en la copia, como el tipo de una lista, no va al original) */
+        c->x = node_arena(sizeof(NodeExt));
+        *c->x = *e->x;
+        c->x->c = subst(e->x->c, f, args);
+    }
     if (e->args.n) {
         c->args.v = xmalloc(sizeof(Node *) * e->args.n);
         for (i = 0; i < e->args.n; i++) c->args.v[i] = subst(e->args.v[i], f, args);
@@ -3471,7 +3476,7 @@ static int gen_expr(Node *n)
     }
     switch (n->kind) {
     case E_STR:
-        load_str_lit(n->str, n->len);
+        load_str_lit(n->x->str, n->x->len);
         return TY_STR;
     case E_NIL:
         load_imm(0, 0);
@@ -3717,15 +3722,15 @@ static Node *in_const(Node *n)
         if (t != TY_INT && t != TY_CHAR && t != TY_BOOL)
             fatal_node(n, "x in (a..b) es para enteros (Int() pasa a entero un Float o un Fixed)");
     }
-    if (!n->c || !fold(n->args.v[0], &a) || !fold(n->args.v[1], &b)) return NULL;
-    if (a > b && !n->c->val) {
+    if (!n->x->c || !fold(n->args.v[0], &a) || !fold(n->args.v[1], &b)) return NULL;
+    if (a > b && !n->x->c->val) {
         /* (10..1): de 1 a 10 */
-        Node *lo = n->c->a->b;
-        n->c->a->b = n->c->b->b;
-        n->c->b->b = lo;
+        Node *lo = n->x->c->a->b;
+        n->x->c->a->b = n->x->c->b->b;
+        n->x->c->b->b = lo;
     }
-    n->c->val = 1;   /* ya ordenado */
-    return n->c;
+    n->x->c->val = 1;   /* ya ordenado */
+    return n->x->c;
 }
 
 /* x in (a..b step s), x in lista, x in texto, x in diccionario (lo pidió David Martínez): 1 o 0 en d0 */
@@ -3946,7 +3951,7 @@ static void find_float_inv(Node *n, NodeList *body, const char *ivar, Node **inv
     }
     find_float_inv(n->a, body, ivar, inv, ninv);
     find_float_inv(n->b, body, ivar, inv, ninv);
-    find_float_inv(n->c, body, ivar, inv, ninv);
+    find_float_inv(n->x->c, body, ivar, inv, ninv);
     for (i = 0; i < n->args.n; i++) find_float_inv(n->args.v[i], body, ivar, inv, ninv);
     for (i = 0; i < n->x->body.n; i++) find_float_inv(n->x->body.v[i], body, ivar, inv, ninv);
     for (i = 0; i < n->x->els.n; i++) find_float_inv(n->x->els.v[i], body, ivar, inv, ninv);
@@ -3970,7 +3975,7 @@ static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *
     }
     find_mults(n->a, name, body, m, nm);
     find_mults(n->b, name, body, m, nm);
-    find_mults(n->c, name, body, m, nm);
+    find_mults(n->x->c, name, body, m, nm);
     for (i = 0; i < n->args.n; i++) find_mults(n->args.v[i], name, body, m, nm);
     for (i = 0; i < n->x->body.n; i++) find_mults(n->x->body.v[i], name, body, m, nm);
     for (i = 0; i < n->x->els.n; i++) find_mults(n->x->els.v[i], name, body, m, nm);
@@ -3995,14 +4000,14 @@ static void gen_for(Node *n)
     Loop lp;
     MarkScope ms;
 
-    if (n->c && !fold(n->c, &step)) step_known = 0;
+    if (n->x->c && !fold(n->x->c, &step)) step_known = 0;
     if (step_known && step < 0) down = 1;
     from_known = fold(n->a, &from);
     end_known = fold(n->b, &to);
     /* sin paso, (5..1) cuenta hacia atrás si los dos extremos son literales o
        constantes (no variables, aunque se sepa su valor) */
     fold_literal = 1;
-    if (!n->c && fold(n->a, &from) && fold(n->b, &to) && from > to) {
+    if (!n->x->c && fold(n->a, &from) && fold(n->b, &to) && from > to) {
         down = 1;
         step = -1;
     }
@@ -4036,7 +4041,7 @@ static void gen_for(Node *n)
             add_repl(m[i].n, -1, 0);                   /* el hueco, más abajo */
         }
     }
-    use_i = !counted || !from_known || refs(n->b, n->name) || (n->c && refs(n->c, n->name)) ||
+    use_i = !counted || !from_known || refs(n->b, n->name) || (n->x->c && refs(n->x->c, n->name)) ||
             list_refs(&n->x->body, n->name);
 
     if (use_i) {
@@ -4110,7 +4115,7 @@ static void gen_for(Node *n)
             store_d0(&vend);
         }
         if (!step_known) {
-            value(n->c);
+            value(n->x->c);
             vstep = declare_slot("", TY_INT, &step_slot);
             store_d0(&vstep);
         }
@@ -4209,7 +4214,7 @@ static int refs(Node *n, const char *name)
 {
     if (!n || is_repl(n)) return 0;
     if ((n->kind == E_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
-    return refs(n->a, name) || refs(n->b, name) || refs(n->c, name) || list_refs(&n->args, name) ||
+    return refs(n->a, name) || refs(n->b, name) || refs(n->x->c, name) || list_refs(&n->args, name) ||
            list_refs(&n->x->body, name) || list_refs(&n->x->els, name);
 }
 
@@ -4220,7 +4225,7 @@ static int has_call(Node *n)
     if (n->kind == E_CALL) return 1;
     for (i = 0; i < n->args.n; i++)
         if (has_call(n->args.v[i])) return 1;
-    return has_call(n->a) || has_call(n->b) || has_call(n->c);
+    return has_call(n->a) || has_call(n->b) || has_call(n->x->c);
 }
 
 /* e como suma de términos con signo; self: si sale la variable name sumando (una vez) */
@@ -4543,7 +4548,7 @@ static int assign_in_reg(Node *n)
 static int join_hint(Node *p)
 {
     int ty;
-    if (p->kind == E_STR && p->len < 32768) return p->len;
+    if (p->kind == E_STR && p->x->len < 32768) return p->x->len;
     ty = expr_type(p);
     if (ty == TY_INT || ty == TY_CHAR || ty == TY_BOOL) return -2;
     return -1;
@@ -4570,12 +4575,12 @@ static int str_set_join(Node *n, Node *e, int fresh)
         for (x = e, i = np; i > 0; x = x->a, i--) parts[i] = x->b;
         np++;
     } else return 0;
-    if (np == 2 && parts[0]->kind == E_STR && parts[0]->len < 32768 && expr_type(parts[1]) == TY_INT) {
+    if (np == 2 && parts[0]->kind == E_STR && parts[0]->x->len < 32768 && expr_type(parts[1]) == TY_INT) {
         /* literal + número: dl_str_cat_li_r(var, literal, largo, n) */
         value(parts[1]);
         push_d0();
-        push_word(parts[0]->len);                      /* el largo */
-        load_str_lit(parts[0]->str, parts[0]->len);
+        push_word(parts[0]->x->len);                      /* el largo */
+        load_str_lit(parts[0]->x->str, parts[0]->x->len);
         push_d0();
         if (fresh) {
             push_word(0);                                  /* sin texto antes */
@@ -4972,7 +4977,7 @@ static int node_keeps(Node *e, int any_index)
         if (!call_keeps(e)) return 0;
         break;
     }
-    return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->c, any_index) &&
+    return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->x->c, any_index) &&
            list_keeps(&e->args, any_index) && list_keeps(&e->x->body, any_index) && list_keeps(&e->x->els, any_index);
 }
 
@@ -5095,7 +5100,7 @@ static void lent_escapes_expr(LentInfo *li, Node *e)
         for (i = 0; i < e->args.n; i++) lent_escape(li, e->args.v[i]);
     lent_escapes_expr(li, e->a);
     lent_escapes_expr(li, e->b);
-    lent_escapes_expr(li, e->c);
+    lent_escapes_expr(li, e->x->c);
     for (i = 0; i < e->args.n; i++) lent_escapes_expr(li, e->args.v[i]);
 }
 
@@ -5207,7 +5212,7 @@ static int node_nofree(Node *e, char *nf)
         if (!call_nofree(e, nf)) return 0;
         break;
     }
-    return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->c, nf) && list_nofree(&e->args, nf) &&
+    return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->x->c, nf) && list_nofree(&e->args, nf) &&
            list_nofree(&e->x->body, nf) && list_nofree(&e->x->els, nf);
 }
 
@@ -5309,7 +5314,7 @@ static int keys_body_ok(Node *e, const char *d)
         if (!call_keeps(e)) return 0;
         break;
     }
-    if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->c, d)) return 0;
+    if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->x->c, d)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!keys_body_ok(e->args.v[i], d)) return 0;
     for (i = 0; i < e->x->body.n; i++)
@@ -5442,7 +5447,7 @@ static int body_frozen(Node *e)
     default:
         break;
     }
-    if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->c)) return 0;
+    if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->x->c)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!body_frozen(e->args.v[i])) return 0;
     for (i = 0; i < e->x->body.n; i++)
@@ -5689,8 +5694,8 @@ static void gen_evloop(Node *n)
             if (h->a) {
                 long code = -1;
                 if (h->a->kind == E_INT) code = h->a->val;
-                else if (h->a->len == 1) {
-                    load_imm(0, (unsigned char)h->a->str[0]);
+                else if (h->a->x->len == 1) {
+                    load_imm(0, (unsigned char)h->a->x->str[0]);
                     push_d0();
                     rt_call("_dl_key_char", 1, 0);
                     tst_d0();
@@ -5698,11 +5703,11 @@ static void gen_evloop(Node *n)
                 } else {
                     int k;
                     for (k = 0; key_names[k].name; k++) {
-                        const char *a = key_names[k].name, *b = h->a->str;
+                        const char *a = key_names[k].name, *b = h->a->x->str;
                         while (*a && toupper((unsigned char)*a) == toupper((unsigned char)*b)) a++, b++;
                         if (!*a && !*b) code = key_names[k].code;
                     }
-                    if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->str);
+                    if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->x->str);
                 }
                 if (code >= 0) {
                     call_sym("_dl_event_code", 0);
@@ -5827,7 +5832,7 @@ static void gen_stmt(Node *n)
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
-            pea_string(n->a->str, n->a->len);
+            pea_string(n->a->x->str, n->a->x->len);
             call_sym("__dash_print_str", 1);
         } else {
             ty = gen_expr(n->a);
@@ -5869,7 +5874,7 @@ static void gen_stmt(Node *n)
             }
         }
         {
-            int tt = n->kind == S_VAR ? n->type : var_type(n->name);
+            int tt = n->kind == S_VAR ? n->x->type : var_type(n->name);
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
             else if (n->kind == S_ASSIGN && n->a->kind != E_NIL)
                 check_assign_type(n, tt, expr_type(n->a));
@@ -5900,7 +5905,7 @@ static void gen_stmt(Node *n)
             Local lc;
             lc.name = n->name;
             lc.slot = -1;
-            lc.type = n->kind == S_VAR ? n->type : forced >= 0 ? forced : fold_type(n->a);
+            lc.type = n->kind == S_VAR ? n->x->type : forced >= 0 ? forced : fold_type(n->a);
             lc.depth = depth;
             lc.frame = cur_frame;
             lc.val = k;
@@ -5929,7 +5934,7 @@ static void gen_stmt(Node *n)
         v = lookup(n->name);
         if (n->kind == S_VAR || v.kind == V_NONE) {
             /* la primera asignación declara (en el bloque actual) */
-            v = declare(n->name, n->kind == S_VAR ? n->type : ty);
+            v = declare(n->name, n->kind == S_VAR ? n->x->type : ty);
         } else if (v.kind == V_CONST) {
             fatal_node(n, "%s es una constante", n->name);
         }
@@ -6123,7 +6128,7 @@ static int check_reads_poisoned(Node *n)
     int i;
     if (!n) return 0;
     if (n->kind == E_VAR && check_is_poisoned(n->name) && lookup(n->name).kind == V_NONE) return 1;
-    if (check_reads_poisoned(n->a) || check_reads_poisoned(n->b) || check_reads_poisoned(n->c)) return 1;
+    if (check_reads_poisoned(n->a) || check_reads_poisoned(n->b) || check_reads_poisoned(n->x->c)) return 1;
     for (i = 0; i < n->args.n; i++)
         if (check_reads_poisoned(n->args.v[i])) return 1;
     return 0;
@@ -6189,7 +6194,7 @@ static int len_uses_node(Node *e, const char *name)
         !strcmp(e->args.v[0]->name, name)) return 1;
     if ((e->kind == E_INDEX || (e->kind == E_FIELD && !strcmp(e->name, "length"))) && e->a && e->a->kind == E_VAR &&
         !strcmp(e->a->name, name)) return 1;
-    if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->c, name)) return 1;
+    if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->x->c, name)) return 1;
     for (i = 0; i < e->args.n; i++)
         if (len_uses_node(e->args.v[i], name)) return 1;
     for (i = 0; i < e->x->body.n; i++)
@@ -6471,7 +6476,7 @@ static int tree_size(Node *n)
     int idx;
     if (!n) return 0;
     if (n->kind == E_CALL && find_func(n->name, &idx)) call_sites[idx]++;
-    return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->c) +
+    return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->x->c) +
            list_size(&n->args) + list_size(&n->x->body) + list_size(&n->x->els);
 }
 
@@ -6520,12 +6525,12 @@ static void find_uses_expr(Node *n)
         /* button_create(..., "_Vale"): la tecla del gadget */
         if ((!strcmp(n->name, "button_create") || !strcmp(n->name, "checkbox_create")))
             for (i = 0; i < n->args.n; i++)
-                if (n->args.v[i]->kind == E_STR && memchr(n->args.v[i]->str, '_', n->args.v[i]->len))
+                if (n->args.v[i]->kind == E_STR && memchr(n->args.v[i]->x->str, '_', n->args.v[i]->x->len))
                     gadget_keys = uses_keys = 1;
     }
     find_uses_expr(n->a);
     find_uses_expr(n->b);
-    find_uses_expr(n->c);
+    find_uses_expr(n->x->c);
     for (i = 0; i < n->args.n; i++) find_uses_expr(n->args.v[i]);
 }
 
@@ -6561,7 +6566,7 @@ static void gen_window_descs(void)
             int f;
             if (!strcmp(v->name, "title")) {
                 if (v->kind != E_STR) fatal_at(v->line, v->col, "title es un texto");
-                title = v->str;
+                title = v->x->str;
                 continue;
             }
             if (!fold(v, &k)) fatal_at(v->line, v->col, "%s tiene que ser un valor fijo", v->name);
@@ -6646,7 +6651,7 @@ static void subst_consts(Node **pe)
     }
     subst_consts(&e->a);
     subst_consts(&e->b);
-    subst_consts(&e->c);
+    subst_consts(&e->x->c);
     for (i = 0; i < e->args.n; i++) subst_consts(&e->args.v[i]);
 }
 
@@ -6657,9 +6662,9 @@ static void resolve_list(NodeList *l)
         Node *n = l->v[i];
         subst_consts(&n->a);
         subst_consts(&n->b);
-        subst_consts(&n->c);
+        subst_consts(&n->x->c);
         for (int j = 0; j < n->args.n; j++) subst_consts(&n->args.v[j]);
-        if (n->kind == S_VAR) n->type = resolve_type(n->type, n->line, n->col);
+        if (n->kind == S_VAR) node_ext(n)->type = resolve_type(n->x->type, n->line, n->col);
         resolve_list(&n->x->body);
         resolve_list(&n->x->els);
     }
@@ -6805,7 +6810,7 @@ static int node_calls(Node *n)
         if (node_calls(n->x->body.v[i])) return 1;
     for (i = 0; i < n->x->els.n; i++)
         if (node_calls(n->x->els.v[i])) return 1;
-    return node_calls(n->a) || node_calls(n->b) || node_calls(n->c);
+    return node_calls(n->a) || node_calls(n->b) || node_calls(n->x->c);
 }
 
 static int body_calls(NodeList *b)
@@ -6833,7 +6838,7 @@ static int handles_break(Node *n)
         if (handles_break(n->x->body.v[i])) return 1;
     for (i = 0; i < n->x->els.n; i++)
         if (handles_break(n->x->els.v[i])) return 1;
-    return handles_break(n->a) || handles_break(n->b) || handles_break(n->c);
+    return handles_break(n->a) || handles_break(n->b) || handles_break(n->x->c);
 }
 
 static int prog_handles_break(Program *p)
@@ -7118,6 +7123,11 @@ void gen_program(Program *p, Obj *o)
         for (i = 0; i < p->funcs.n; i++) code_data_ptr(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
     }
     resolve_fixups();
+    {
+        /* el NodeExt de los nodos que no tienen el suyo, compartido: nadie puede haber escrito en él */
+        static const NodeExt zero;
+        if (memcmp(&node_no_ext, &zero, sizeof zero)) fatal("interno: se cambió node_no_ext");
+    }
     if (debug) debug_text(p);
     /* las @export, con su nombre de C, para hunk.c */
     for (i = 0; i < p->funcs.n; i++)

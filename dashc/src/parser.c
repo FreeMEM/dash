@@ -33,7 +33,7 @@ NodeExt node_no_ext;
 
 NodeExt *node_ext(Node *n)
 {
-    if (n->x == &node_no_ext) n->x = xmalloc(sizeof(NodeExt));
+    if (n->x == &node_no_ext) n->x = node_arena(sizeof(NodeExt));
     return n->x;
 }
 
@@ -146,15 +146,15 @@ static Node *atom(void)
         return n;
     case T_STR:
         n = node(E_STR, t);
-        n->str = t->text;
-        n->len = t->len;
+        node_ext(n)->str = t->text;
+        node_ext(n)->len = t->len;
         return n;
     case T_ISTR:
         return interp(t);
     case T_FLOAT:
         n = node(E_FLOAT, t);
         n->val = t->val;
-        n->dval = t->dval;
+        node_ext(n)->dval = t->dval;
         return n;
     case K_TRUE:
     case K_FALSE:
@@ -191,8 +191,8 @@ static Node *atom(void)
             next();
             strftime(buf, sizeof buf, t->text[6] == 'd' ? "%Y-%m-%d" : "%H:%M:%S", tm);
             n = node(E_STR, t);
-            n->str = xstrndup(buf, strlen(buf));
-            n->len = (int)strlen(buf);
+            node_ext(n)->str = xstrndup(buf, strlen(buf));
+            node_ext(n)->len = (int)strlen(buf);
             return n;
         }
         if (!strcmp(t->text, "Ptr") && peek()->kind == T_ID && tk[1].kind == P_LP) {
@@ -281,7 +281,7 @@ static Node *primary(void)
             if (accept(P_COLON)) {
                 m = node(E_SLICE, t);
                 m->b = i;
-                m->c = peek()->kind == P_RB ? NULL : expr();
+                node_ext(m)->c = peek()->kind == P_RB ? NULL : expr();
             } else {
                 m = node(E_INDEX, t);
                 m->b = i;
@@ -311,8 +311,8 @@ static Node *interp(Token *t)
         if (i % 2 == 0) {
             if (t->plen[i]) {
                 Node *s = node(E_STR, t);
-                s->str = t->piece[i];
-                s->len = t->plen[i];
+                node_ext(s)->str = t->piece[i];
+                node_ext(s)->len = t->plen[i];
                 NL_PUSH(n->args, s);
             }
         } else {
@@ -444,7 +444,7 @@ static Node *in_expr(Node *x, Token *t)
             NL_PUSH(n->args, z);
             /* (1..10) fijo y x una variable: 1 <= x and x <= 10 (gen68k.c, tras mirar los tipos) */
             if (chain_safe(x))
-                n->c = logic(E_AND, t, cmp_node(t, x, P_GE, n->args.v[0]), cmp_node(t, x, P_LE, n->args.v[1]));
+                node_ext(n)->c = logic(E_AND, t, cmp_node(t, x, P_GE, n->args.v[0]), cmp_node(t, x, P_LE, n->args.v[1]));
         }
         expect(P_RP);
         return n;
@@ -579,7 +579,7 @@ static Node *stmt(void)
         n->a = expr();
         expect(P_DOTDOT);
         n->b = expr();
-        if (accept(K_STEP)) n->c = expr();
+        if (accept(K_STEP)) node_ext(n)->c = expr();
         expect(P_RP);
         block(&node_ext(n)->body, K_END, K_END, K_END);
         expect(K_END);
@@ -605,8 +605,8 @@ static Node *stmt(void)
         n = node(S_VAR, t);
         n->name = expect(T_ID)->text;
         expect(P_COLON);
-        n->type = parse_type();
-        n->a = accept(P_ASSIGN) ? expr() : zero_value(t, n->type);
+        node_ext(n)->type = parse_type();
+        n->a = accept(P_ASSIGN) ? expr() : zero_value(t, n->x->type);
         return n;
     case T_ID: {
         Node *target;

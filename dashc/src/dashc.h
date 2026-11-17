@@ -180,19 +180,13 @@ typedef struct { Node **v; int n; } NodeList;
         (l).v[(l).n++] = (x); \
     } while (0)
 
-/* lo que solo llevan las sentencias con bloques (if, while, for...): aparte, para que los demás nodos (casi todos)
-   no carguen con dos listas vacías */
-typedef struct { NodeList body, els; } NodeExt;
-extern NodeExt node_no_ext;      /* (parser.c) el de los nodos sin bloques: sus listas, vacías */
-NodeExt *node_ext(Node *n);      /* (parser.c) el suyo, para llenarlo (un nodo de node_alloc) */
-
-/* Un nodo del árbol. Con un programa grande hay decenas de miles (Forja: 75.000): sus campos, de lo más pequeño que
-   cabe; salen de corrido de bloques (node_alloc), sin cabecera. */
-struct Node {
-    int line;
+/* Lo que llevan pocos nodos (los bloques de if, while, for...; el texto de un literal; c; el tipo de un var o de
+   una lista), aparte: así los demás (casi todos: nombres, números, operaciones, llamadas) no cargan con ello */
+typedef struct {
+    NodeList body;   /* S_IF (rama sí), S_WHILE, S_FOR... */
+    NodeList els;    /* S_IF (rama no; un elif es un S_IF dentro) */
+    Node *c;         /* S_FOR: el paso; E_SLICE: el final; E_INRANGE: la comprobación */
     int type;        /* S_VAR: tipo declarado; E_LIST: lo que guarda, si lo dice su destino ([Double]) */
-    long val;        /* E_INT, E_BOOL */
-    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
     union {
         struct {
             char *str;   /* E_STR */
@@ -200,15 +194,25 @@ struct Node {
         };
         double dval;     /* E_FLOAT */
     };
-    Node *a, *b, *c; /* operandos; S_IF: a = condición; S_FOR: desde, hasta, paso */
+} NodeExt;
+extern NodeExt node_no_ext;      /* (parser.c) el de los nodos sin nada de eso: todo a 0, y nadie lo cambia */
+NodeExt *node_ext(Node *n);      /* (parser.c) el suyo, para escribir en él */
+
+/* Un nodo del árbol. Con un programa grande hay decenas de miles (Forja: 75.000): sus campos, de lo más pequeño que
+   cabe; salen de corrido de bloques (node_alloc), sin cabecera. */
+struct Node {
+    int line;
+    long val;        /* E_INT, E_BOOL */
+    char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
+    Node *a, *b;     /* operandos; S_IF: a = condición; S_FOR: desde, hasta (x->c el paso) */
     NodeList args;   /* E_CALL */
-    NodeExt *x;      /* x->body: S_IF (rama sí), S_WHILE, S_FOR...; x->els: S_IF (rama no; un elif es un S_IF
-                        dentro). Nunca NULL: sin bloques, &node_no_ext (node_alloc), que nadie cambia */
+    NodeExt *x;      /* lo de NodeExt (n->x->body...). Nunca NULL: sin nada de eso, &node_no_ext (node_alloc) */
     unsigned short col, file;
     unsigned char kind;
     unsigned char op;    /* E_BIN, E_CMP: el token del operador */
 };
 Node *node_alloc(void);   /* util.c: un nodo a 0 */
+void *node_arena(size_t size);   /* util.c: de donde salen los nodos (a 0): un NodeExt */
 
 typedef struct {
     char *name;
