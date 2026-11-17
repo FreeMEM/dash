@@ -1,0 +1,54 @@
+# Nombres de Dash que son palabras de C (asm, int, default, long...) o main (lo encontró Forja: una función llamada
+# asm rompía el C con --gcc). En Dash valen: asm abre un bloque solo al principio de una línea, solo o con in, out o
+# uses. Por C se renombran. Lo usan test_nombres_c.dash (por C) y test_nombres_c_directo.dash (directo).
+
+const long = 7
+var default: Int = 3
+
+struct Caja
+    int: Int
+    char: String
+
+    func asm() -> Int
+        return self.int * 2
+    end
+end
+
+enum Modo
+    auto
+    static
+end
+
+func asm(x: Int) -> Int
+    return x * 2
+end
+
+func main(register: Int, volatile: String) -> String
+    return "#{register} #{volatile}"
+end
+
+func nombres_c()
+    Print asm(21)
+    y = asm(2)
+    asm(3)
+    Print y
+    int = 5
+    for char in [1, 2]
+        int = int + char
+    end
+    Print int
+    Print long + default
+    default = default + 1
+    Print default
+    Print main(4, "si")
+    c = Caja(6, "x")
+    c.int = c.int + 1
+    Print c.asm()
+    Print c.char
+    m = Modo.static
+    if m == Modo.static
+        Print "static"
+    end
+    doble = fn(do) -> do * 2
+    Print doble(8)
+end

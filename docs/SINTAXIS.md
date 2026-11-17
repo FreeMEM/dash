@@ -72,6 +72,8 @@ arr = [1, 2, 3, 4, 5]
 arr[2] = 99
 n = arr.length
 trozo = arr[1:3]               # slicing: [a:b], [:b], [a:] (también en strings: s[5:])
+arr.push(6)                    # también pop(), insert(i, x), remove(i), clear(), sort(f)
+si = arr.has(99)               # true si está: como 99 in arr
 
 s = "Hola, " + nombre          # concatenación
 c = nombre[0]                  # carácter
@@ -123,7 +125,7 @@ end
 ```
 Un texto entra como la dirección de sus caracteres y una lista como la de su primer elemento. Datos: `dc.b/w/l`,
 `ds`, `even`, `incbin "f"`; constantes `X equ 5` y las `const` de Dash. Del 68020 (`muls.l`, `bfextu`...), con
-`--cpu 68020`.
+`--cpu 68020`. `asm` no es reservada: fuera de esa línea es un nombre más (`func asm(x)`), como `int` o `default`.
 
 ## Ventanas y eventos
 ```ruby

@@ -1151,6 +1151,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       tabla de builtins). Constantes en `lib/amiga/gl.dash`. Probado en la máquina coffin con MiniGL Classic 30.0
       sobre Wazp3D (`$DASH_EMU_MINIGL`, `tools/emu_run.py --lib`); lo que Wazp3D no hace, en `docs/MINIGL.md`.
       1061 funciones. `tests/test_gl*.dash`, `examples/gl_cubo.dash`
+- [x] Fallos que encontró Forja al hacer su editor (2026-11-17): en el directo, guardar en un parámetro de una
+      función sin marco (leído de la pila, sobre sp) iba a una dirección de los datos y el parámetro no cambiaba
+      (`tests/test_param_reasignado*.dash`); `l.has(x)` en las listas por los dos caminos (`test_lista_has*`); por
+      C, los nombres que son palabras de C (`asm`, `int`, `default`...) o `main` se renombran (`test_nombres_c*`);
+      por C, `l = []` en una lista con tipo ya no olvida lo que guarda: Forja compila con `--gcc`
+      (`test_lista_vaciada*`)
 
 ## Notas y Decisiones
 

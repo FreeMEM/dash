@@ -1156,6 +1156,7 @@ Each addition copies the whole list: to add items one at a time, use `push`.
 | `l.remove(i)` | Removes the one at position `i` |
 | `l.clear()` | Leaves the list empty |
 | `l.sort(f)` | Sorts it with the function `f(a, b)`, keeping the order of equal ones |
+| `l.has(x)` | `true` if some element equals `x`: the same as `x in l` (asked for by Forja) |
 
 They also work through fields (`nodo.hijos.push(h)`, `self.lista.clear()`). When it fills up,
 the list moves to a block twice the size: adding 20,000 elements one at a time takes less than
@@ -5029,6 +5030,11 @@ The body:
 
 An error in the block comes with the line of the `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida:
 movx`. On DashOS (AArch64) an `asm` block is an error.
+
+`asm` is not a reserved word: it opens a block only at the start of a line, alone or followed by `in`, `out` or
+`uses`. Anywhere else it is just a name: a function or a variable may be called `asm`. The same goes for the words
+of C (`int`, `default`, `long`, `static`...) and `main`: through C they are renamed (`asm__kw`) and the errors give
+the Dash name (found by Forja).
 
 Demo example: `examples/asm_barras.dash` (raster bars: the loop of every frame, in assembler).
 

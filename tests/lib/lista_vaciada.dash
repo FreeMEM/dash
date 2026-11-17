@@ -1,0 +1,39 @@
+# Una lista que dice lo que guarda ([Ext], [String]) y se vacía con l = [] en una función: por C sus elementos
+# pasaban a ser LONG y l[i].campo no compilaba (lo encontró Forja: Forja no compilaba con --gcc). Lo usan
+# test_lista_vaciada.dash (por C) y test_lista_vaciada_directo.dash (directo).
+
+struct Ext
+    activa: Bool
+    nombre: String
+end
+
+var exts: [Ext] = []
+var nombres: [String] = ["viejo"]
+
+func _lv_leer()
+    exts = []
+    nombres = []
+    exts.push(Ext(true, "a"))
+    exts.push(Ext(false, "b"))
+    nombres.push("uno")
+    i = 0
+    while i < exts.length
+        e = exts[i]
+        if e.activa and e.nombre == "a"
+            Print e.nombre
+        end
+        i = i + 1
+    end
+    if nombres[0] == "uno"
+        Print nombres[0] + "!"
+    end
+end
+
+func lista_vaciada()
+    _lv_leer()
+    var l: [Ext] = [Ext(true, "x")]
+    l = []
+    l.push(Ext(true, "c"))
+    Print l[0].nombre
+    Print exts[1].activa
+end

@@ -28005,7 +28005,11 @@ static {ret_type} {method_name}({params_str}) {{
             if self.context.is_declared(node.name) and self._num_list(VarRef(name=node.name)) in self._NUM_LISTS:
                 node.value.num_kind = self._num_list(VarRef(name=node.name))   # l = [1, 2] in a [Double]
             elem = self._literal_elem_type(node.value)
-            self.var_types[node.name] = f"array:{elem}" if elem else "array"
+            known = self.var_types.get(node.name) or ""
+            if not (not node.value.elements and self.context.is_declared(node.name) and known.startswith("array:")):
+                # (l = [] in a list that already says what it holds, a [Nodo] global or variable, keeps saying it:
+                # its elements were LONG and l[i].campo did not compile; lo encontró Forja)
+                self.var_types[node.name] = f"array:{elem}" if elem else "array"
             if self._declared_type_of(node.value):
                 self.decl_types[node.name] = self._declared_type_of(node.value)   # [["a", "1"]]: a [[String]]
             self._mark_num_list(node.name, self._num_list(node.value))

@@ -1,0 +1,12 @@
+# Una lista con tipo vaciada con l = [] (lo encontró Forja), directo a hunk. El mismo programa por ./dash --gcc:
+# test_lista_vaciada.dash.
+# dash-direct:
+# expect-out: a
+# expect-out: uno!
+# expect-out: c
+# expect-out: false
+import "lib/lista_vaciada.dash"
+
+Main
+    lista_vaciada()
+end

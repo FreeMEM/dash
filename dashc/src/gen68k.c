@@ -821,6 +821,7 @@ static int expr_type(Node *n)
     case E_MCALL:
         ta = expr_type(n->a);
         if (IS_ARR(ta) && !strcmp(n->name, "pop")) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
+        if (IS_ARR(ta) && !strcmp(n->name, "has")) return TY_BOOL;
         if (IS_DICT(ta)) {
             if (!strcmp(n->name, "get")) return dict_val(ta);
             if (!strcmp(n->name, "has")) return TY_BOOL;
@@ -1903,6 +1904,20 @@ static int gen_list_method(Node *n)
         args_to_stack(&n->a, 1, NULL);
         rt_call("_dl_arr_clear", 1, 0);
         return TY_VOID;
+    }
+    if (!strcmp(n->name, "has")) {
+        /* l.has(x): x in l (lo pidió Forja) */
+        Node *c;
+        if (n->args.n != 1) fatal_node(n, "has pide 1 argumento");
+        c = xmalloc(sizeof *c);
+        *c = *n;
+        c->kind = E_IN;
+        c->name = NULL;
+        c->a = n->args.v[0];
+        c->b = n->a;
+        memset(&c->args, 0, sizeof c->args);
+        value(c);
+        return TY_BOOL;
     }
     fatal_node(n, "(sin --gcc) .%s aún no está", n->name);
     return TY_VOID;

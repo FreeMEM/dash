@@ -1157,6 +1157,7 @@ Cada suma copia la lista entera: para ir anadiendo uno a uno, `push`.
 | `l.remove(i)` | Quita el de la posicion `i` |
 | `l.clear()` | Deja la lista vacia |
 | `l.sort(f)` | La ordena con la funcion `f(a, b)`, sin cambiar el orden de los iguales |
+| `l.has(x)` | `true` si algun elemento es igual a `x`: lo mismo que `x in l` (lo pidio Forja) |
 
 Funcionan tambien a traves de campos (`nodo.hijos.push(h)`, `self.lista.clear()`). Al llenarse,
 la lista pasa a un bloque del doble de tamano: anadir 20.000 elementos uno a uno tarda menos de
@@ -5031,6 +5032,11 @@ El cuerpo:
 
 Un error del bloque sale con la línea del `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida: movx`. En
 DashOS (AArch64) un bloque `asm` es un error.
+
+`asm` no es una palabra reservada: abre un bloque solo al principio de una línea, solo o seguido de `in`, `out` o
+`uses`. En cualquier otro sitio es un nombre más: una función o una variable pueden llamarse `asm`. Lo mismo con
+las palabras de C (`int`, `default`, `long`, `static`...) y `main`: por C se renombran (`asm__kw`) y los errores
+dicen el nombre de Dash (lo encontró Forja).
 
 Ejemplo de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador).
 

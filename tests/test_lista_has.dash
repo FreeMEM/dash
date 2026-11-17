@@ -1,0 +1,18 @@
+# l.has(x) de una lista (lo pidió Forja), por ./dash --gcc. El mismo programa directo a hunk: test_lista_has_directo.dash.
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: sin 9
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: true
+# expect-out: true
+# expect-out: false
+# expect-out: false
+# expect-out: 3
+import "lib/lista_has.dash"
+
+Main
+    lista_has()
+end
