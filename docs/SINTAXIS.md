@@ -124,8 +124,17 @@ func suma(a: Int, b: Int) -> Int
 end
 ```
 Un texto entra como la dirección de sus caracteres y una lista como la de su primer elemento. Datos: `dc.b/w/l`,
-`ds`, `even`, `incbin "f"`; constantes `X equ 5` y las `const` de Dash. Del 68020 (`muls.l`, `bfextu`...), con
-`--cpu 68020`. `asm` no es reservada: fuera de esa línea es un nombre más (`func asm(x)`), como `int` o `default`.
+`dc.s/d`, `ds`, `even`, `cnop 0,4`, `incbin "f"`; constantes `X equ 5` y las `const` de Dash. Secciones: `data`,
+`bss`, `data_c`/`bss_c` (memoria chip), `code` para volver. `jsr nombre` llama a una función de Dash (argumentos en
+la pila, resultado en d0); `GfxBase`, `DOSBase`... son las bases. Del 68020 (`muls.l`, `bfextu`, `([a0],4)`...),
+con `--cpu 68020`; la FPU (`fmove`, `fadd`, `fbeq`... y `uses fp2`), con `--fpu`. `asm` no es reservada: fuera de
+esa línea es un nombre más (`func asm(x)`), como `int` o `default`.
+```ruby
+asm func suma(a: Int, b: Int) -> Int    # una función en asm: parámetros en d0, d1...; devuelve d0 (o out d1)
+    add.l   d1,d0
+end
+s = vblank_server(mi_vblank, datos)      # mi_vblank(datos) en cada VBlank; int_server_remove(s) o al salir
+```
 
 ## Ventanas y eventos
 ```ruby

@@ -124,8 +124,17 @@ func add(a: Int, b: Int) -> Int
 end
 ```
 A string goes in as the address of its characters and a list as the address of its first element. Data:
-`dc.b/w/l`, `ds`, `even`, `incbin "f"`; constants `X equ 5` and Dash's `const`. 68020 instructions (`muls.l`,
-`bfextu`...), with `--cpu 68020`. `asm` is not reserved: outside that line it is just a name (`func asm(x)`), like `int` or `default`.
+`dc.b/w/l`, `dc.s/d`, `ds`, `even`, `cnop 0,4`, `incbin "f"`; constants `X equ 5` and Dash's `const`. Sections:
+`data`, `bss`, `data_c`/`bss_c` (chip memory), `code` to go back. `jsr name` calls a Dash function (arguments on the
+stack, result in d0); `GfxBase`, `DOSBase`... are the bases. 68020 instructions (`muls.l`, `bfextu`, `([a0],4)`...),
+with `--cpu 68020`; the FPU (`fmove`, `fadd`, `fbeq`... and `uses fp2`), with `--fpu`. `asm` is not reserved:
+outside that line it is just a name (`func asm(x)`), like `int` or `default`.
+```ruby
+asm func add(a: Int, b: Int) -> Int     # a function in asm: parameters in d0, d1...; returns d0 (or out d1)
+    add.l   d1,d0
+end
+s = vblank_server(my_vblank, data)       # my_vblank(data) on each VBlank; int_server_remove(s) or at exit
+```
 
 ## Windows and events
 ```ruby

@@ -5007,7 +5007,8 @@ The `asm` line says what goes in and what comes out:
   its 32 bits; a string, the address of its first character; a list, the address of its first element (4 bytes
   each; 0 if it is `nil`). A Float or a Double cannot go: `Int(x)` or `Fixed(x)`.
 - `out variable = r, ...`: after it, the variable gets the register as an Int (a new one is declared).
-- `uses r, ...`: the other registers the block changes, also as in `movem`: `uses d2-d4/a1`.
+- `uses r, ...`: the other registers the block changes, also as in `movem`: `uses d2-d4/a1`. With `--fpu`, also
+  the FPU's: `uses fp0-fp3` (they do not go in `in` or `out`: a value goes through a data register).
 
 d0-d7, a0-a4 and a6 can be used. Not a5 (the frame of Dash functions) nor a7 (sp). Every register the block
 changes goes in `in`, `out` or `uses`; the others must be left as they were. The stack must be left the same and the
@@ -5019,25 +5020,70 @@ The body:
   comment. Labels belong to the block (`.loop` or `loop`); another block can use the same name.
 - Numbers `123`, `$1F`, `0x1F`, `%1010`, `0b1010`, `'A'`; expressions with `+ - * / << >> & | ^ ~` and brackets. A
   name can be a label, a constant of the block (`WIDTH equ 320` or `WIDTH = 320`) or a Dash `const`.
-- Data: `dc.b 1,2,"hello",0`, `dc.w`, `dc.l` (also `dc.l label`), `ds.b`/`ds.w`/`ds.l n` (zeros), `even` and
-  `incbin "file"[,from[,count]]` (the path, from the `.dash`). Data sits among the code: the block jumps over it
-  (`bra.s .end`). It is not in chip memory.
+- Data: `dc.b 1,2,"hello",0`, `dc.w`, `dc.l` (also `dc.l label`), `dc.s 1.5` and `dc.d 2.0` (floating point),
+  `ds.b`/`ds.w`/`ds.l n` (zeros), `even`, `cnop 0,4` (aligns to 2, 4 or 8) and `incbin "file"[,from[,count]]` (the
+  path, from the `.dash`). Data in the code sits among the instructions: the block jumps over it (`bra.s .end`).
+- Sections: `section name,type` or just the type. `data` and `bss` take the data out of the code; `data_c` and
+  `bss_c` put it in chip memory (copper lists, sprites, bitplanes, sound); `code` goes back to the code. What is in
+  a section is kept between calls. Only data goes in them (in `bss` and `bss_c`, `ds`). The code reaches their
+  labels by address: `lea table,a0`, `move.l #table,d0`.
 - Every 68000 instruction with all its modes (`4(a0)` or `(4,a0)`, `8(a0,d1.w)`, `table(pc)`, `$dff180`, `4.w`...)
   and the usual aliases (`dbra`, `bhs`, `blo`...). A branch without a size picks the short or the long one itself.
 - From the 68020, with `--cpu 68020` or higher (or `--fpu`): `muls.l`/`mulu.l` (also 64-bit, `d1:d2`), `divs.l`,
-  `divu.l`, `divsl.l`, `divul.l`, `extb.l`, bit fields (`bfextu d0{4:8},d1`...), `bra.l`, `link.l`, `rtd`, `chk.l`
-  and the scaled index (`(a0,d0.l*4)`). Without the option, the error says so.
-- Not there: the FPU, the MMU, the 68020 memory indirection, `cnop` and sections (`section data_c`).
+  `divu.l`, `divsl.l`, `divul.l`, `extb.l`, bit fields (`bfextu d0{4:8},d1`...), `bra.l`, `link.l`, `rtd`, `chk.l`,
+  the scaled index (`(a0,d0.l*4)`), memory indirection (`([4,a0,d0.l*4],8)`), `cas`, `cas2`, `cmp2`, `chk2`,
+  `pack`, `unpk`, `trapcc`, `bkpt` and `movec`. Without the option, the error says so.
+- From the FPU, with `--fpu`: `fmove` (`.b .w .l .s .d .x`, and `fpcr`, `fpsr`, `fpiar`), `fmovem`, `fadd`,
+  `fsub`, `fmul`, `fdiv`, `fcmp`, `ftst`, `fsqrt`, `fsin`, `fcos`, `fetox`, `flogn` and the other 68881 ones,
+  `fsincos`, `fmovecr`, `fbcc` (`fbeq`, `fblt`...), `fdbcc`, `fscc`, `ftrapcc`, `fnop`, `fsave` and `frestore`. An
+  `.s`/`.d`/`.x` immediate is a number: `fmul.s #2.5,fp1`.
+- Not there: the MMU, `callm`, `moves`, `move16`, the 68040 ones (`fsadd`...) and the `.p` (BCD) format.
+
+A block calls a Dash function with `jsr name`, the way Dash calls it: the arguments on the stack, right to left
+(4 bytes each), the result in d0; the block removes the arguments. The function changes d0, d1, a0 and a1 (the
+compiler knows it) and leaves the rest as they were. From the runtime, the library bases: `SysBase`, `DOSBase`,
+`GfxBase`, `IntuitionBase`.
+
+```ruby
+asm in d2 = 21 out r = d0
+    move.l  d2,-(sp)
+    jsr     double              ; a Dash function: double(21)
+    addq.l  #4,sp
+    move.l  GfxBase,a6
+    jsr     -270(a6)            ; WaitTOF
+end
+```
+
+A whole function in assembler is an `asm func`. Without `in`, the parameters go in d0, d1... in order; without
+`out`, the result comes from d0 (`out d1`: from d1). It returns an Int, a Bool or a Pointer, or nothing. It is
+called like any other, also with `jsr` and as a value:
+
+```ruby
+asm func add(a: Int, b: Int) -> Int
+    add.l   d1,d0
+end
+
+asm func count(p: Pointer) in a0 = p         # for the VBlank: adds 1 to *p
+    addq.l  #1,(a0)
+end
+```
+
+Interrupts: `vblank_server(f, data)` puts `f(data)` on the VBlank (50 times a second on PAL);
+`int_server_add(intb, f, data)`, on another exec chain (4 copper, 3 CIA-A, 13 CIA-B). They return the server;
+`int_server_remove(s)` takes it off, and at exit (also after an error) all of them come off. `f` runs in the
+interrupt: normally an `asm func` (in Dash, only sums and peek/poke).
 
 An error in the block comes with the line of the `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida:
 movx`. On DashOS (AArch64) an `asm` block is an error.
 
-`asm` is not a reserved word: it opens a block only at the start of a line, alone or followed by `in`, `out` or
-`uses`. Anywhere else it is just a name: a function or a variable may be called `asm`. The same goes for the words
+`asm` is not a reserved word: it opens a block only at the start of a line, alone or followed by `in`, `out`,
+`uses` or `func`. Anywhere else it is just a name: a function or a variable may be called `asm`. The same goes for the words
 of C (`int`, `default`, `long`, `static`...) and `main`: through C they are renamed (`asm__kw`) and the errors give
 the Dash name (found by Forja).
 
-Demo example: `examples/asm_barras.dash` (raster bars: the loop of every frame, in assembler).
+Demo examples: `examples/asm_barras.dash` (raster bars: the loop of every frame, in assembler) and
+`examples/asm_copper.dash` (a copper bar with its list in chip memory and a VBlank server in asm that moves it; it
+takes the system's display away and leaves it as it was at the end).
 
 ---
 
