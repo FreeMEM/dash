@@ -184,6 +184,11 @@ class Translate(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
 
 
+def _read(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
 class SecondPart(unittest.TestCase):
     """asm func, sections, jsr to functions, the FPU and the rest of the 68020 (the second part, for demos)."""
 
@@ -268,9 +273,9 @@ class SecondPart(unittest.TestCase):
             with open(exe, "wb") as f:
                 f.write(struct.pack(">9I", 0x3F3, 0, 4, 0, 3, 10, 2, 5, 1))
             fix_chip_hunks(["x"], exe)                                   # no chip section: as it was
-            self.assertEqual(struct.unpack(">4I", open(exe, "rb").read()[20:36]), (10, 2, 5, 1))
+            self.assertEqual(struct.unpack(">4I", _read(exe)[20:36]), (10, 2, 5, 1))
             fix_chip_hunks(['__asm__("\t.section .datachip")'], exe)   # the last hunk, in chip memory
-            self.assertEqual(struct.unpack(">4I", open(exe, "rb").read()[20:36]), (10, 2, 5, 0x40000001))
+            self.assertEqual(struct.unpack(">4I", _read(exe)[20:36]), (10, 2, 5, 0x40000001))
 
 
 class Format(unittest.TestCase):

@@ -78,7 +78,8 @@ def build(gcc: bool, d: str) -> bytes:
                        capture_output=True, text=True, cwd=d)
     if r.returncode:
         raise AssertionError(r.stdout + r.stderr)
-    data = open(out, "rb").read()
+    with open(out, "rb") as f:
+        data = f.read()
     a = data.index(b"\xde\xad\xbe\xef") + 4
     return data[a:data.index(b"\xca\xfe\xba\xbe", a)]
 
