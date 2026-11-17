@@ -16,7 +16,7 @@ from typing import Optional, Set, List, Dict, Tuple
 
 from compiler.grammar import dash_grammar_minimal
 from compiler.transformer import DashASTBuilder
-from compiler.analyzer import SemanticAnalyzer, AnalysisResult
+from compiler.analyzer import SemanticAnalyzer, AnalysisResult, C_KEYWORDS, C_KEYWORD_SUFFIX
 from compiler.codegen import CodeGenerator
 from compiler.latin1 import latin1_literals
 from compiler import debuglines
@@ -328,7 +328,7 @@ class DashCompiler:
                 self._rename_names(ast, {n: f"{n}_{tag}" for n in clashing})
 
     @staticmethod
-    def _rename_names(ast: Program, names: Dict[str, str]) -> None:
+    def _rename_names(ast: Program, names: Dict[str, str], parts=None) -> None:
         """Rename these names everywhere in this module's own definitions: definitions, variables,
         parameters, constructor calls, enum values (_Modo.X) and types ([_Caja], {String: _Caja})."""
         import re
@@ -370,8 +370,71 @@ class DashCompiler:
                 if isinstance(value, list) or is_dataclass(value):
                     walk(value)
 
-        walk([ast.constants, ast.global_vars, ast.structs, ast.enums, ast.functions, ast.native_funcs,
-              ast.extern_funcs, ast.windows])
+        walk(parts if parts is not None else [ast.constants, ast.global_vars, ast.structs, ast.enums,
+                                              ast.functions, ast.native_funcs, ast.extern_funcs, ast.windows])
+
+    def _rename_c_keywords(self, ast: Program) -> None:
+        """A Dash name that is a word of C (asm, int, default, long...) or main is fine in Dash (asm opens a block
+        only at the start of a line, alone or with in, out or uses), but not in the C: it is renamed (asm ->
+        asm__kw) everywhere, before the analysis. The analyzer's messages say the Dash name (lo encontró Forja:
+        una función llamada asm rompía el C)."""
+        from dataclasses import is_dataclass, fields
+        found = set()
+
+        def walk(node, seen, field_name=""):
+            if isinstance(node, list):
+                for item in node:
+                    if isinstance(item, str):
+                        if item in C_KEYWORDS and field_name == "params":     # (a lambda's: plain names)
+                            found.add(item)
+                    else:
+                        walk(item, seen)
+                return
+            if not is_dataclass(node) or id(node) in seen:
+                return
+            seen.add(id(node))
+            for f in fields(node):
+                value = getattr(node, f.name, None)
+                if isinstance(value, str) and value in C_KEYWORDS and f.name in (
+                        "name", "variable", "object_name", "member", "property"):
+                    found.add(value)
+                elif isinstance(value, list) or is_dataclass(value):
+                    walk(value, seen, f.name)
+
+        parts = [ast.constants, ast.global_vars, ast.structs, ast.enums, ast.functions, ast.native_funcs,
+                 ast.windows, ast.main, ast.extra_mains]
+        walk(parts, set())
+        found -= {f.name for f in ast.extern_funcs}        # (@extern: the library's own name)
+        if not found:
+            return
+        names = {n: n + C_KEYWORD_SUFFIX for n in found}
+        self._rename_names(ast, names, parts)
+        for f in list(ast.functions) + list(ast.native_funcs):
+            if f.name in names:
+                f.name = names[f.name]
+        # the fields of the structs and the values of the enums, with what names them (c.int, Modo.static)
+        from compiler.ast_nodes import StructField, EnumValue, MemberAccess, MemberAssign, PropertyAccess
+        attrs = {StructField: "name", EnumValue: "name", MemberAccess: "member", MemberAssign: "member",
+                 PropertyAccess: "property"}
+        seen = set()
+
+        def walk_members(node):
+            if isinstance(node, list):
+                for item in node:
+                    walk_members(item)
+                return
+            if not is_dataclass(node) or id(node) in seen:
+                return
+            seen.add(id(node))
+            attr = attrs.get(type(node))
+            if attr and getattr(node, attr, None) in names:
+                setattr(node, attr, names[getattr(node, attr)])
+            for f in fields(node):
+                value = getattr(node, f.name, None)
+                if isinstance(value, list) or is_dataclass(value):
+                    walk_members(value)
+
+        walk_members(parts)
 
     def _is_private(self, name: str) -> bool:
         """Check if a name is private (starts with underscore)."""
@@ -506,6 +569,7 @@ class DashCompiler:
         Raises:
             CompilationError: If compilation fails
         """
+        self._c_names = True                             # (the language server analyzes with the Dash names)
         analysis = self.analyze(source, filename)
 
         # Report warnings
@@ -585,6 +649,9 @@ class DashCompiler:
             if self.verbose:
                 print(f"  After merge: {len(ast.windows)} windows, {len(ast.functions)} functions",
                       file=sys.stderr)
+
+        if getattr(self, "_c_names", False):
+            self._rename_c_keywords(ast)
 
         # Stage 3: Semantic analysis
         if self.verbose:
@@ -706,6 +773,7 @@ class DashCompiler:
         # We still need full analysis to resolve cross-module references
         merged_ast = self._merge_modules(main_ast)
         self._rename_private_clashes(main_ast)
+        self._rename_c_keywords(merged_ast)
 
         if self.verbose:
             print("Stage 3: Analyzing...", file=sys.stderr)

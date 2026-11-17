@@ -125,7 +125,7 @@ end
 ```
 Un texto entra como la dirección de sus caracteres y una lista como la de su primer elemento. Datos: `dc.b/w/l`,
 `ds`, `even`, `incbin "f"`; constantes `X equ 5` y las `const` de Dash. Del 68020 (`muls.l`, `bfextu`...), con
-`--cpu 68020`.
+`--cpu 68020`. `asm` no es reservada: fuera de esa línea es un nombre más (`func asm(x)`), como `int` o `default`.
 
 ## Ventanas y eventos
 ```ruby

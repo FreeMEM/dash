@@ -5032,6 +5032,11 @@ El cuerpo:
 Un error del bloque sale con la línea del `.dash`: `prog.dash:9:9: Error: asm: instrucción desconocida: movx`. En
 DashOS (AArch64) un bloque `asm` es un error.
 
+`asm` no es una palabra reservada: abre un bloque solo al principio de una línea, solo o seguido de `in`, `out` o
+`uses`. En cualquier otro sitio es un nombre más: una función o una variable pueden llamarse `asm`. Lo mismo con
+las palabras de C (`int`, `default`, `long`, `static`...) y `main`: por C se renombran (`asm__kw`) y los errores
+dicen el nombre de Dash (lo encontró Forja).
+
 Ejemplo de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada imagen, en ensamblador).
 
 ---

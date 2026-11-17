@@ -19,6 +19,20 @@ from compiler.ast_nodes import (AmigaCast, InExpr, InRangeExpr,
     StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral, GlobalVarDecl, SourceLocation
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
+import re as _re
+
+# Words of C (and main) that a Dash name can be: the compiler renames them in the C (compiler/main.py,
+# _rename_c_keywords); the messages give the Dash name back
+C_KEYWORDS = frozenset("""asm auto break case char const continue default do double else enum extern float for goto
+    if inline int long register restrict return short signed sizeof static struct switch typedef typeof union unsigned
+    void volatile while main""".split())
+C_KEYWORD_SUFFIX = "__kw"
+_C_KEYWORD_RE = _re.compile(r"\b(" + "|".join(sorted(C_KEYWORDS)) + r")" + C_KEYWORD_SUFFIX + r"\b")
+
+
+def dash_name_text(text: str) -> str:
+    """A message with the renamed C words (asm__kw) as they are in Dash (asm)"""
+    return _C_KEYWORD_RE.sub(r"\1", text) if C_KEYWORD_SUFFIX in text else text
 
 
 def list_elem_type(type_name: Optional[str]) -> Optional[str]:
@@ -223,11 +237,11 @@ class SemanticAnalyzer(ASTVisitor):
 
     def error(self, message: str, node: Optional[ASTNode] = None):
         """Record a semantic error."""
-        self.errors.append(AnalysisError(message=message, node=node))
+        self.errors.append(AnalysisError(message=dash_name_text(message), node=node))
 
     def warning(self, message: str, node: Optional[ASTNode] = None):
         """Record a semantic warning."""
-        self.warnings.append(AnalysisError(message=message, node=node, is_warning=True))
+        self.warnings.append(AnalysisError(message=dash_name_text(message), node=node, is_warning=True))
 
     def enter_scope(self, name: str):
         """Enter a new scope."""

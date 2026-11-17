@@ -125,7 +125,7 @@ end
 ```
 A string goes in as the address of its characters and a list as the address of its first element. Data:
 `dc.b/w/l`, `ds`, `even`, `incbin "f"`; constants `X equ 5` and Dash's `const`. 68020 instructions (`muls.l`,
-`bfextu`...), with `--cpu 68020`.
+`bfextu`...), with `--cpu 68020`. `asm` is not reserved: outside that line it is just a name (`func asm(x)`), like `int` or `default`.
 
 ## Windows and events
 ```ruby

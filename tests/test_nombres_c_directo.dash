@@ -1,0 +1,18 @@
+# Nombres de Dash que son palabras de C (lo encontró Forja), directo a hunk. El mismo programa por ./dash --gcc:
+# test_nombres_c.dash.
+# dash-direct:
+# expect-out: 42
+# expect-out: 4
+# expect-out: 8
+# expect-out: 10
+# expect-out: 4
+# expect-out: 4 si
+# expect-out: 14
+# expect-out: x
+# expect-out: static
+# expect-out: 16
+import "lib/nombres_c.dash"
+
+Main
+    nombres_c()
+end
