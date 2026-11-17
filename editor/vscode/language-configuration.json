@@ -11,7 +11,7 @@
   "surroundingPairs": [["(", ")"], ["[", "]"], ["{", "}"]],
   "wordPattern": "@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?",
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*((@native(\\s*\\(\\s*borrow\\s*\\))?\\s+)?func|if|elif|else|while|for|struct|enum|Window|Main|EventLoop|On|@c|asm(?=\\s*$|\\s*#|\\s+(?:in|out|uses)\\b))\\b(?!.*\\bend\\s*(#.*)?$).*$",
+    "increaseIndentPattern": "^\\s*((@native(\\s*\\(\\s*borrow\\s*\\))?\\s+)?func|if|elif|else|while|for|struct|enum|Window|Main|EventLoop|On|@c|asm(?=\\s*$|\\s*#|\\s+(?:in|out|uses|func)\\b))\\b(?!.*\\bend\\s*(#.*)?$).*$",
     "decreaseIndentPattern": "^\\s*(end|else|elif)\\b"
   },
   "folding": {
