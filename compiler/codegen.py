@@ -2250,6 +2250,63 @@ static void _dash_font_cleanup(void) {
     # High/true colour RTG screens mix each pixel (cybergraphics.library, or Picasso96API.library's
     # p96ReadPixel/p96WritePixel); palette screens (AGA/ECS, 8-bit RTG) get an ordered 4x4 Bayer
     # dither of the closest pen, drawn by RectFill with an area pattern (the blitter does it).
+    IRQ_RUNTIME = """\
+/* Interrupt servers (docs/ASM_DISEÑO.md, asm en línea): a function of the program, usually an asm func, on an
+   interrupt chain of exec (AddIntServer): VBlank (5), copper (4), CIA-A (3) or CIA-B (13). It is called in the
+   interrupt with its data; at exit (also after an error) every server comes off its chain */
+#include <hardware/intbits.h>
+#include <exec/interrupts.h>
+struct _DashIrq {
+    struct Interrupt is;
+    LONG (*fn)(LONG);
+    LONG data;
+    LONG intb;
+    struct _DashIrq *next;
+};
+static struct _DashIrq *_dash_irqs = NULL;
+
+/* exec calls it with a1 = is_Data; it returns with d0 = 0 and Z set (the chain goes on: the VBlank of the system
+   too). (gcc ends it with moveq #0,d0 and addq.l #4,sp, which leaves the flags as they are) */
+static ULONG _dash_irq_server(struct _DashIrq *n __asm("a1")) {
+    n->fn(n->data);
+    return 0;
+}
+
+static LONG _dash_irq_add(LONG intb, APTR fn, LONG data) {
+    struct _DashIrq *n;
+    if (!fn || !(intb == INTB_VERTB || intb == INTB_COPER || intb == INTB_PORTS || intb == INTB_EXTER)) return 0;
+    n = (struct _DashIrq *)AllocMem(sizeof(struct _DashIrq), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!n) return 0;
+    n->is.is_Node.ln_Type = NT_INTERRUPT;
+    n->is.is_Node.ln_Name = (char *)"dash";
+    n->is.is_Data = (APTR)n;
+    n->is.is_Code = (void (*)(void))_dash_irq_server;
+    n->fn = (LONG (*)(LONG))fn;
+    n->data = data;
+    n->intb = intb;
+    n->next = _dash_irqs;
+    _dash_irqs = n;
+    AddIntServer(intb, &n->is);
+    return (LONG)n;
+}
+
+static void _dash_irq_remove(LONG h) {
+    struct _DashIrq **p;
+    for (p = &_dash_irqs; *p; p = &(*p)->next)
+        if ((LONG)*p == h) {
+            struct _DashIrq *n = *p;
+            *p = n->next;
+            RemIntServer(n->intb, &n->is);
+            FreeMem(n, sizeof(struct _DashIrq));
+            return;
+        }
+}
+
+static void _dash_irq_cleanup(void) {
+    while (_dash_irqs) _dash_irq_remove((LONG)_dash_irqs);
+}
+"""
+
     TASK_RUNTIME = """\
 /* task_start (dashweb D47): a C function f(arg) -> result in another AmigaOS process, so the
    program goes on (its MUI loop, say) while f works. Only C runs there: an @native function,
@@ -25690,6 +25747,7 @@ _RUNTIME_FLAGS = [
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
     ("BLEND_RUNTIME", "uses_blend"),
     ("TASK_RUNTIME", "uses_tasks"),         # dashweb D47
+    ("IRQ_RUNTIME", "uses_irq"),            # int_server_add (asm en línea)
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
@@ -26053,6 +26111,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_blend: bool = False    # gfx_blend_rect, gfx_gradient_rect, gfx_pixel_rgb (BLEND_RUNTIME)
         self.uses_tasks: bool = False    # task_start... (TASK_RUNTIME, dashweb D47)
+        self.uses_irq: bool = False      # int_server_add... (IRQ_RUNTIME)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
         self.uses_inactive: bool = False  # On Inactive: windows ask for IDCMP_INACTIVEWINDOW
@@ -26426,6 +26485,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BLEND_RUNTIME)
         if self.uses_tasks:
             parts.append(CTemplates.TASK_RUNTIME)
+        if self.uses_irq:
+            parts.append(CTemplates.IRQ_RUNTIME)
         if self.uses_images:
             parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
@@ -26726,6 +26787,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_irq:
+            cleanup.insert(0, "    _dash_irq_cleanup();\n")    # before anything: the servers run the program's code
         if self.uses_runcap:
             cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
         if self.uses_syslist:
