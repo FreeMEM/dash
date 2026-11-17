@@ -32,6 +32,23 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.17.0 (2026-11-17)
+
+The Amiga `dash` command uses less than half the memory, and Forja 0.8. Everything that compiled still compiles the
+same, to the same bytes.
+
+- **Improvement:** compiling the whole of Forja drops from 18 MB to 7.6 MB of memory: it now fits on an A1200 with
+  8 MB of fast. The generated code does not change.
+- **New:** `dbg_set(i, expr, value)` changes a variable while debugging (Int, Char, Bool, Fixed or Float); also the
+  debug server's `set` command. 1063 functions.
+- **New:** `icon_save(path, base, type, tool, tooltypes)` writes a `.info` icon with icon.library.
+- **Fix:** a text made of many concatenated pieces exhausted the stack of the Amiga `dash` command (Software
+  Failure).
+- **Fix:** with `--gcc`, `not` of a function returning a pointer no longer gives a gcc warning.
+- **Forja 0.8:** tabs that do not fit get buttons and a list, the session remembers bookmarks, folds and extension
+  files, Demos is much faster and holds several track files, Change value while debugging, an executable size limit
+  for 4 and 64 KB intros, and an end-to-end test on CoffinOS.
+
 ### 2.16.0 (2026-11-17)
 
 Inline assembler, 3D with MiniGL, the help inside the Amiga and twice-as-fast compiling. Everything that compiled
