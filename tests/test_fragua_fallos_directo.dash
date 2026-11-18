@@ -1,0 +1,72 @@
+# Lo que vio Fragua (FRAGUA_LOOP, 2026-11-17), por los dos caminos: x.close() de un struct dentro de un if y un campo
+# "opened" (--gcc los tomaba por los .close y .open de las ventanas); const W y H (--gcc los ponía como #define y
+# rompían el runtime de tilemap); step como nombre de parámetro (./dash lo tomaba por el del for); un método de
+# interfaz con _ cumplido por un struct de otro fichero (./dash lo hacía privado del módulo); y f()[0].
+# expect-out: abierta false opened 3
+# expect-out: 320x200
+# expect-out: 3
+# expect-out: 0
+# expect-out: 5
+# expect-out: 10
+# expect-out: 8
+# expect-out: listo
+# expect-out: 5
+# expect-out: 7
+# El mismo programa por ./dash directo a hunk: test_fragua_fallos.dash.
+# dash-direct:
+
+import "lib/script_privado.dash"
+
+const W = 320
+const H = 200
+
+struct Puerta
+    abierta: Bool
+    opened: Int
+    func close()
+        self.abierta = false
+    end
+end
+
+struct Scr: Script
+    n: Int
+    func _ready()
+        Print "listo"
+    end
+end
+
+func _ayuda() -> Int
+    return 7
+end
+
+func cerrar(p: Puerta)
+    if p.abierta
+        p.close()
+    end
+end
+
+func avanza(x: Int, step: Int) -> Int
+    return x + step
+end
+
+func lista() -> [Int]
+    return [7, 8, 9]
+end
+
+Main
+    p = Puerta(true, 0)
+    p.opened = 3
+    cerrar(p)
+    Print "abierta #{p.abierta} opened #{p.opened}"
+    if tilemap_create(0, 4, 4, 16, 1) and W == 0
+        tilemap_draw(0, 0, 0, 0, 0, 1, 1, 0, 0)
+    end
+    Print "#{W}x#{H}"
+    Print avanza(1, 2)
+    for i in (0..10 step 5)
+        Print i
+    end
+    Print lista()[1]
+    Print llamar(Scr(1))
+    Print _ayuda()
+end

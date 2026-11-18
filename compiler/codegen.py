@@ -27756,7 +27756,14 @@ static LONG _dash_mui_wait_event(void) { return dash_ui_wait_event ? dash_ui_wai
         """Generate C #define for a constant."""
         value = const.value
         if isinstance(value, NumberLiteral):
-            self.const_defines.append(f"#define {const.name} {c_int_literal(value.value)}")
+            # an enum, not a #define: the runtime that comes after may use the same name for a variable
+            # (const W = 320 broke _dash_tilemap_draw, whose W and H are locals; lo vio Fragua)
+            if -2**31 <= value.value < 2**31:
+                # (#undef: the same name may be a macro of the system headers, MODE_NEWFILE; the program's wins, as
+                # it did with #define)
+                self.const_defines.append(f"#undef {const.name}\nenum {{ {const.name} = {c_int_literal(value.value)} }};")
+            else:
+                self.const_defines.append(f"#define {const.name} {c_int_literal(value.value)}")
         elif isinstance(value, StringLiteral):
             self.const_defines.append(f"#define {const.name} {value.value}")
         elif isinstance(value, BoolLiteral):
