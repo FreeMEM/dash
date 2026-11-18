@@ -99,6 +99,8 @@ def objects(build, flags, sfx, *cpu):
     if fpu:
         run([GCC, *cpu, "-c", str(HERE / "rt_fpu.s"), "-o", str(build / "rt_fpu.o")])
         common.append(build / "rt_fpu.o")
+        run([GCC, *cpu, "-c", str(REPO / "runtime" / "fpu" / "fixuns.s"), "-o", str(build / "fpu_fixuns.o")])
+        common.append(build / "fpu_fixuns.o")
     else:
         # Float por software, como compiler/softfloat.py (fp-bit.c en simple precisión, con su suma, resta y
         # producto renombrados, y fastfp.c, que los usa de respaldo), una sección por función
@@ -121,8 +123,10 @@ def objects(build, flags, sfx, *cpu):
     libgcc = subprocess.run([GCC, *cpu, "-print-libgcc-file-name"], capture_output=True,
                             text=True).stdout.strip()
     with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run([AR, "x", libgcc, *LIBGCC], cwd=tmp, check=True)
-        for o in LIBGCC:
+        # (con FPU, las conversiones a entero sin signo van en rt_fpu.s: las de esta libgcc redondean)
+        lista = [o for o in LIBGCC if not (fpu and o in ("_fixunsdfsi.o", "_fixunsdfdi.o"))]
+        subprocess.run([AR, "x", libgcc, *lista], cwd=tmp, check=True)
+        for o in lista:
             dst = build / f"libgcc{sfx}{o}"
             dst.write_bytes((Path(tmp) / o).read_bytes())
             common.append(dst)

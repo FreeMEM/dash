@@ -1,0 +1,18 @@
+# Con --fpu, de double a entero de 64 bits y sin signo hacia el cero, por los dos caminos (el C de @link, como el de
+# Tachyon): las conversiones de la libgcc del 68881 redondeaban al más cercano y 1709164800000.0 daba 2^32 de más.
+# fpu
+# dash-direct: --fpu
+# expect-out: 397 -232183808
+# expect-out: -398 232183808
+# expect-out: 1 -1
+
+@link "lib/libfixdf.a"
+
+@extern("fixdf") func fixdf_alto(i: Int) -> Int
+@extern("fixdf") func fixdf_bajo(i: Int) -> Int
+
+Main
+    Print fixdf_alto(0) + " " + fixdf_bajo(0)
+    Print fixdf_alto(1) + " " + fixdf_bajo(1)
+    Print fixdf_alto(5) + " " + fixdf_bajo(5)
+end
