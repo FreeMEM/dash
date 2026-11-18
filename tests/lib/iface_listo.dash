@@ -1,0 +1,4 @@
+# Para tests/errors/interfaz_otro_fichero.dash: una interfaz en otro fichero
+interface Listo
+    func ready()
+end
