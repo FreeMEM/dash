@@ -33,6 +33,25 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.18.0 (2026-11-18)
+
+Un builtin nuevo y arreglos, casi todos de lo que salió haciendo Fragua y Tachyon. Todo lo que compilaba sigue
+compilando igual.
+
+- **Nuevo:** `wm_screen_front()` dice si la pantalla del Workbench es la de delante. Con otra delante (la de DOpus,
+  por ejemplo), el puntero sigue moviéndose en la del Workbench; el dock de Trasfondo la usa para no asomarse (lo
+  contó Ernesto Laura de la Fuente).
+- **Arreglo:** liberar un objeto de un struct sin campos (solo métodos) colgaba el Amiga, por los dos caminos.
+- **Arreglo:** con `--fpu`, pasar un número con decimales a un entero de 64 bits o sin signo desde C (`@link`)
+  redondeaba en vez de truncar: 1709164800000.0 daba 2^32 de más. Venía de la libgcc del compilador; Dash trae las
+  suyas, por los dos caminos.
+- **Arreglo:** con `./dash --gcc`, `x.close()` de un struct dentro de un `if` y un campo que empieza por `open`
+  (`opened`) ya no se confunden con las ventanas; y una constante llamada como algo del runtime (`const W = 320`)
+  ya no rompe la compilación.
+- **Arreglo:** con `./dash`, `step` vale como nombre de parámetro; un struct de otro fichero puede cumplir una
+  interfaz con métodos que empiezan por `_`; y el error de un struct que no cumple su interfaz sale con su fichero.
+- **Arreglo:** el compilador directo para DashOS (AArch64) vuelve a compilar.
+
 ### 2.17.1 (2026-11-17)
 
 Arreglos que salieron al grabar el vídeo de Forja 0.8 en CoffinOS. Todo lo que compilaba sigue compilando igual.
