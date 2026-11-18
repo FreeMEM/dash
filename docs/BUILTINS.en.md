@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1079 functions, 1079 implemented, 0 not implemented.
+Total: 1080 functions, 1080 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -9669,6 +9669,7 @@ those dropped on a window.
 | [`wm_at(x, y)`](#wm_at) | Int | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
 | [`wm_pointer_x()`](#wm_pointer_x) | Int | Where the pointer is on the Workbench screen: x |  |
 | [`wm_pointer_y()`](#wm_pointer_y) | Int | Where the pointer is on the Workbench screen: y |  |
+| `wm_screen_front()` | Bool | true if the Workbench screen is the one in front (another screen, DOpus's for one, may cover it while wm_pointer_x and wm_pointer_y still follow the pointer) |  |
 | [`wm_bar_height()`](#wm_bar_height) | Int | The height of the Workbench screen's title bar (where windows usually start) |  |
 | [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
 | [`screen_show_title(on)`](#screen_show_title) | — | The screen's title bar in front of its backdrop windows (true, as it comes) or behind them (false): for a bar of its own in a backdrop window that takes its place |  |

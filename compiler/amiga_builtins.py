@@ -5272,6 +5272,10 @@ TASK_FUNCTIONS = {
     "wm_pointer_y": BuiltinFunc(
         name="wm_pointer_y", params=[], return_type="LONG", c_template="_dash_wm_pointer(1)",
         description="Where the pointer is on the Workbench screen: y"),
+    "wm_screen_front": BuiltinFunc(
+        name="wm_screen_front", params=[], return_type="BOOL", c_template="_dash_wm_screen_front()",
+        description="true if the Workbench screen is the one in front (another screen, DOpus's for one, may cover it "
+                    "while wm_pointer_x and wm_pointer_y still follow the pointer)"),
     "wm_bar_height": BuiltinFunc(
         name="wm_bar_height", params=[], return_type="LONG", c_template="_dash_wm_bar_height()",
         description="The height of the Workbench screen's title bar (where windows usually start)"),
@@ -6341,7 +6345,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_hide", "wm_show", "wm_can_hide", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_hide", "wm_show", "wm_can_hide", "wm_box_now", "wm_close", "wm_double_click_ms", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_screen_front", "wm_bar_height", "wm_bar_gadgets", "screen_show_title", "window_next_backdrop", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free",
     "icon_save"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1079 funciones, 1079 implementadas, 0 sin implementar.
+Total: 1080 funciones, 1080 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -9669,6 +9669,7 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 | [`wm_at(x, y)`](#wm_at) | Int | El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna |  |
 | [`wm_pointer_x()`](#wm_pointer_x) | Int | Dónde está el puntero en la pantalla del Workbench: la x |  |
 | [`wm_pointer_y()`](#wm_pointer_y) | Int | Dónde está el puntero en la pantalla del Workbench: la y |  |
+| `wm_screen_front()` | Bool | true si la pantalla del Workbench es la de delante (otra, como la de DOpus, puede taparla mientras wm_pointer_x y wm_pointer_y siguen al puntero) |  |
 | [`wm_bar_height()`](#wm_bar_height) | Int | El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas) |  |
 | [`wm_bar_gadgets()`](#wm_bar_gadgets) | Int | A qué distancia del borde derecho de la barra de título de la pantalla del Workbench empiezan sus botones del sistema (el de profundidad), preguntado a la pantalla; 0 si no lo sabe |  |
 | [`screen_show_title(on)`](#screen_show_title) | — | La barra de título de la pantalla delante de sus ventanas de fondo (true, como viene) o detrás (false): para una barra propia, en una ventana de fondo, que ocupe su sitio |  |
