@@ -389,7 +389,9 @@ static void bool_to_str(void)                          /* d0 (Bool) al texto "tr
 
 /* ---- structs: cada campo, 8 bytes; la cabecera (_Dash_RefHeader) delante, con el tipo en -8 ---- */
 static int field_off(int f) { return 8 * f; }
-static int struct_bytes(int nfields) { return 8 * nfields; }
+/* un struct sin campos mide uno: tamaño 0 en su _DashType es el de un objeto de _dash_rc_alloc, y liberarlo
+   colgaba el Amiga (lo vio Fragua) */
+static int struct_bytes(int nfields) { return 8 * (nfields ? nfields : 1); }
 static void load_a0_off(int off) { mem64(1, 0, XA0, off); }
 
 static void fail_if_nil(int file, int line)

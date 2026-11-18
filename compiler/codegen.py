@@ -27945,6 +27945,10 @@ static {ret_type} {native.name}({params_str}) {{
         for field in struct.fields:
             c_type = type_map.get(field.field_type, "LONG")
             fields.append(f"    {c_type} {field.name};")
+        if not fields:
+            # sizeof 0 is how _dash_obj_free knows an object of _dash_rc_alloc (its size in a LONG before the
+            # header): freeing a struct without fields read that LONG and hung the Amiga (lo vio Fragua)
+            fields.append("    LONG _vacio;")
 
         typedef = f"struct {c_name} {{\n"
         typedef += "\n".join(fields)

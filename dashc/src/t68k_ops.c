@@ -551,7 +551,9 @@ static void arr_put(void)
 /* ---- un objeto nuevo mientras se llenan sus campos: en a2, que se guarda (una función de Dash a la que llama C,
    una retrollamada, tiene que dejarlo como estaba; C no lo toca) ---- */
 #define SLOT 4                                         /* lo que ocupa cada cosa de la pila */
-static int struct_bytes(int nfields) { return 4 * nfields; }
+/* un struct sin campos mide uno: tamaño 0 en su _DashType es el de un objeto de _dash_rc_alloc, y liberarlo
+   colgaba el Amiga (lo vio Fragua) */
+static int struct_bytes(int nfields) { return 4 * (nfields ? nfields : 1); }
 
 static void obj_begin(void)                            /* el objeto de d0 */
 {

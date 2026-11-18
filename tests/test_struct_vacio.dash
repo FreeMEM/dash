@@ -1,0 +1,59 @@
+# Test: un struct sin campos se libera bien en los dos caminos (colgaba el Amiga: _dash_obj_free tomaba su
+# tamaño 0 por el de un objeto de _dash_rc_alloc; lo vio Fragua)
+#
+# memcheck
+# expect-out: hola
+# expect-out: 1000 vueltas
+# expect-out: 45150
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+interface Script
+    func ready()
+end
+
+struct Oye: Script
+    func ready()
+        Print "hola"
+    end
+end
+
+struct Vacio
+end
+
+struct Actor
+    script: Script
+end
+
+struct Num
+    n: Int
+end
+
+Main
+    a = Actor(nil)
+    a.script = Oye()
+    a.script.ready()
+    a.script = nil
+    n = 0
+    for i in (1..1000)
+        v = Vacio()
+        a.script = Oye()
+        n = n + 1
+    end
+    a.script = nil
+    # junto a objetos con un número grande delante: el LONG que se leía era su último campo
+    var nums: [Num] = []
+    var vacios: [Vacio] = []
+    for i in (1..300)
+        nums.push(Num(2000000 + i))
+        vacios.push(Vacio())
+    end
+    vacios = []
+    suma = 0
+    for x in nums
+        suma = suma + x.n - 2000000
+    end
+    Print n + " vueltas"
+    Print suma
+    Print "fin"
+end
