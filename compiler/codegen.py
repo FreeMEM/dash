@@ -4851,6 +4851,18 @@ static LONG _dash_wm_pointer(LONG y) {
     return y ? s->MouseY : s->MouseX;
 }
 
+/* Whether the Workbench screen is the one in front (another program's screen, DOpus's for one, may cover it while the
+   pointer still moves on it: Trasfondo's dock came out under it; lo contó Ernesto Laura de la Fuente) */
+static BOOL _dash_wm_screen_front(void) {
+    struct Screen *s = _dash_wm_screen();
+    BOOL r;
+    if (!s) return FALSE;
+    Forbid();      /* (not LockIBase, which Intuition holds while a window is dragged: see _dash_wm_active) */
+    r = IntuitionBase->FirstScreen == s;
+    Permit();
+    return r;
+}
+
 static LONG _dash_wm_bar_height(void) {
     struct Screen *s = _dash_wm_screen();
     return s ? s->BarHeight + 1 : 0;

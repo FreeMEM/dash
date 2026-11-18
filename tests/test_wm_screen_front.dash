@@ -1,0 +1,17 @@
+# wm_screen_front: si la pantalla del Workbench es la de delante. Con otra delante (la de DOpus, por ejemplo), el
+# puntero sigue moviéndose en la del Workbench y el dock de Trasfondo salía debajo (lo contó Ernesto Laura de la Fuente)
+# workbench
+# expect-out: al empezar: true
+# expect-out: con otra delante: false
+# expect-out: al cerrarla: true
+# expect-out: fin
+
+Main
+    Print "al empezar: #{wm_screen_front()}"
+    if screen_open_custom(320, 200, 2, "Delante")
+        Print "con otra delante: #{wm_screen_front()}"
+        screen_close()
+    end
+    Print "al cerrarla: #{wm_screen_front()}"
+    Print "fin"
+end

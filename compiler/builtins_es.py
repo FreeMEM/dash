@@ -843,6 +843,7 @@ DESC_ES = {
     "wm_active": "El id de la ventana activa, si está en la pantalla del Workbench; 0 si no",
     "wm_at": "El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna",
     "wm_pointer_x": "Dónde está el puntero en la pantalla del Workbench: la x",
+    "wm_screen_front": "true si la pantalla del Workbench es la de delante (otra, como la de DOpus, puede taparla mientras wm_pointer_x y wm_pointer_y siguen al puntero)",
     "wm_pointer_y": "Dónde está el puntero en la pantalla del Workbench: la y",
     "wm_bar_height": "El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas)",
     "screen_show_title": "La barra de título de la pantalla delante de sus ventanas de fondo (true, como viene) o detrás (false): para una barra propia, en una ventana de fondo, que ocupe su sitio",
