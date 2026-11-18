@@ -25,7 +25,7 @@ static void e64(Buf *b, uint64_t v)
 }
 
 /* las secciones: 0 nula, 1 .text, 2 .data, 3 .rela.text, 4 .rela.data, 5 .symtab, 6 .strtab, 7 .shstrtab */
-enum { S_TEXT = 1, S_DATA, S_RELT, S_RELD, S_SYM, S_STR, S_SHSTR, S_N };
+enum { ES_TEXT = 1, ES_DATA, ES_RELT, ES_RELD, ES_SYM, ES_STR, ES_SHSTR, ES_N };
 
 typedef struct { uint32_t name; uint8_t info, other; uint16_t shndx; uint64_t value, size; } Sym;
 
@@ -43,8 +43,8 @@ void write_elf_obj(Obj *obj, const char *out)
     struct { Sym *v; int n, cap; } syms = {0};
     struct { const char *name; int idx; } *ext = NULL;
     int next = 0, i, nlocal;
-    uint32_t sh_name[S_N];
-    uint64_t off[S_N], size[S_N];
+    uint32_t sh_name[ES_N];
+    uint64_t off[ES_N], size[ES_N];
     Sym s;
     FILE *f;
 
@@ -56,21 +56,21 @@ void write_elf_obj(Obj *obj, const char *out)
     memset(&s, 0, sizeof s);
     VEC_PUSH(syms, s);
     s.info = 3;                                        /* STB_LOCAL, STT_SECTION */
-    s.shndx = S_TEXT;
+    s.shndx = ES_TEXT;
     VEC_PUSH(syms, s);
-    s.shndx = S_DATA;
+    s.shndx = ES_DATA;
     VEC_PUSH(syms, s);
     nlocal = syms.n;
     memset(&s, 0, sizeof s);
     s.name = str_add(&strtab, "_dashc_start");         /* la entrada: el principio del código */
     s.info = 0x12;                                     /* STB_GLOBAL, STT_FUNC */
-    s.shndx = S_TEXT;
+    s.shndx = ES_TEXT;
     VEC_PUSH(syms, s);
     for (i = 0; i < obj->exports.n; i++) {
         memset(&s, 0, sizeof s);
         s.name = str_add(&strtab, obj->exports.v[i].name[0] == '_' ? obj->exports.v[i].name + 1 : obj->exports.v[i].name);
         s.info = 0x12;
-        s.shndx = S_TEXT;
+        s.shndx = ES_TEXT;
         s.value = obj->exports.v[i].off;
         VEC_PUSH(syms, s);
     }
@@ -115,28 +115,28 @@ void write_elf_obj(Obj *obj, const char *out)
         e64(b, (uint64_t)r->addend);
     }
     sh_name[0] = 0;
-    sh_name[S_TEXT] = str_add(&shstr, ".text");
-    sh_name[S_DATA] = str_add(&shstr, ".data");
-    sh_name[S_RELT] = str_add(&shstr, ".rela.text");
-    sh_name[S_RELD] = str_add(&shstr, ".rela.data");
-    sh_name[S_SYM] = str_add(&shstr, ".symtab");
-    sh_name[S_STR] = str_add(&shstr, ".strtab");
-    sh_name[S_SHSTR] = str_add(&shstr, ".shstrtab");
+    sh_name[ES_TEXT] = str_add(&shstr, ".text");
+    sh_name[ES_DATA] = str_add(&shstr, ".data");
+    sh_name[ES_RELT] = str_add(&shstr, ".rela.text");
+    sh_name[ES_RELD] = str_add(&shstr, ".rela.data");
+    sh_name[ES_SYM] = str_add(&shstr, ".symtab");
+    sh_name[ES_STR] = str_add(&shstr, ".strtab");
+    sh_name[ES_SHSTR] = str_add(&shstr, ".shstrtab");
 
     /* el fichero: cabecera (64 bytes), las secciones (alineadas a 16) y la tabla de secciones */
     {
-        Buf *body[S_N];
+        Buf *body[ES_N];
         uint64_t pos = 64;
         body[0] = NULL;
-        body[S_TEXT] = &obj->code;
-        body[S_DATA] = &obj->data;
-        body[S_RELT] = &relt;
-        body[S_RELD] = &reld;
-        body[S_SYM] = &symtab;
-        body[S_STR] = &strtab;
-        body[S_SHSTR] = &shstr;
+        body[ES_TEXT] = &obj->code;
+        body[ES_DATA] = &obj->data;
+        body[ES_RELT] = &relt;
+        body[ES_RELD] = &reld;
+        body[ES_SYM] = &symtab;
+        body[ES_STR] = &strtab;
+        body[ES_SHSTR] = &shstr;
         off[0] = size[0] = 0;
-        for (i = 1; i < S_N; i++) {
+        for (i = 1; i < ES_N; i++) {
             pos = (pos + 15) & ~(uint64_t)15;
             off[i] = pos;
             size[i] = (uint64_t)body[i]->n;
@@ -159,22 +159,22 @@ void write_elf_obj(Obj *obj, const char *out)
         e16(&file, 64);
         e16(&file, 0); e16(&file, 0);                /* sin cabeceras de programa */
         e16(&file, 64);                               /* e_shentsize */
-        e16(&file, S_N);
-        e16(&file, S_SHSTR);
-        for (i = 1; i < S_N; i++) {
+        e16(&file, ES_N);
+        e16(&file, ES_SHSTR);
+        for (i = 1; i < ES_N; i++) {
             while ((uint64_t)file.n < off[i]) buf_byte(&file, 0);
             buf_bytes(&file, (const char *)body[i]->p, body[i]->n);
         }
         while ((uint64_t)file.n < pos) buf_byte(&file, 0);
         /* la tabla de secciones */
-        for (i = 0; i < S_N; i++) {
-            static const uint32_t type[S_N] = {0, 1, 1, 4, 4, 2, 3, 3};   /* PROGBITS, RELA, SYMTAB, STRTAB */
-            static const uint64_t flags[S_N] = {0, 6, 3, 0x40, 0x40, 0, 0, 0};   /* AX, WA, INFO_LINK */
-            static const uint64_t align[S_N] = {0, 8, 8, 8, 8, 8, 1, 1};
+        for (i = 0; i < ES_N; i++) {
+            static const uint32_t type[ES_N] = {0, 1, 1, 4, 4, 2, 3, 3};   /* PROGBITS, RELA, SYMTAB, STRTAB */
+            static const uint64_t flags[ES_N] = {0, 6, 3, 0x40, 0x40, 0, 0, 0};   /* AX, WA, INFO_LINK */
+            static const uint64_t align[ES_N] = {0, 8, 8, 8, 8, 8, 1, 1};
             uint32_t link = 0, info = 0;
             uint64_t entsize = 0;
-            if (i == S_RELT || i == S_RELD) { link = S_SYM; info = i == S_RELT ? S_TEXT : S_DATA; entsize = 24; }
-            if (i == S_SYM) { link = S_STR; info = (uint32_t)nlocal; entsize = 24; }
+            if (i == ES_RELT || i == ES_RELD) { link = ES_SYM; info = i == ES_RELT ? ES_TEXT : ES_DATA; entsize = 24; }
+            if (i == ES_SYM) { link = ES_STR; info = (uint32_t)nlocal; entsize = 24; }
             e32(&file, sh_name[i]);
             e32(&file, type[i]);
             e64(&file, flags[i]);
