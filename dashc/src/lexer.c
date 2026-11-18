@@ -401,6 +401,8 @@ Token *lex(const char *src)
                         t->kind = K_FUNC + i;
                         break;
                     }
+            /* step solo es palabra clave en un for: fuera, un nombre más (un parámetro step; lo vio Fragua) */
+            if (t->kind == K_STEP) t->kind = T_ID;
             if (t->kind == T_ID) {
                 t->text = (char *)intern(b, s - b);
                 t->len = (int)(s - b);

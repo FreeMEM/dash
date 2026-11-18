@@ -22,6 +22,16 @@ static int accept(int kind)
     return 0;
 }
 
+/* el step de un for: un nombre para el lexer (lexer.c) */
+static int accept_step(void)
+{
+    if (tk->kind == T_ID && tk->len == 4 && !memcmp(tk->text, "step", 4)) {
+        tk++;
+        return 1;
+    }
+    return 0;
+}
+
 static Token *expect(int kind)
 {
     if (tk->kind != kind)
@@ -436,7 +446,7 @@ static Node *in_expr(Node *x, Token *t)
         NL_PUSH(n->args, expr());
         expect(P_DOTDOT);
         NL_PUSH(n->args, expr());
-        if (accept(K_STEP)) {
+        if (accept_step()) {
             NL_PUSH(n->args, expr());
         } else {
             Node *z = node(E_INT, t);
@@ -579,7 +589,7 @@ static Node *stmt(void)
         n->a = expr();
         expect(P_DOTDOT);
         n->b = expr();
-        if (accept(K_STEP)) node_ext(n)->c = expr();
+        if (accept_step()) node_ext(n)->c = expr();
         expect(P_RP);
         block(&node_ext(n)->body, K_END, K_END, K_END);
         expect(K_END);
@@ -841,8 +851,10 @@ static void import_file(Program *p, Token *at, const char *path)
         lex_priv = NULL;
         for (i = 1; tk[i - 1].kind != T_EOF && tk[i].kind != T_EOF; i++) {
             Token *d = &tk[i - 1];
+            /* (una func con sangría es un método: no es privado del módulo; un struct de otro fichero puede cumplir
+               una interfaz con _ready, como en ./dash --gcc; lo vio Fragua) */
             if (tk[i].kind == T_ID && tk[i].text[0] == '_' &&
-                (d->kind == K_FUNC || d->kind == K_CONST || d->kind == K_VAR || d->kind == K_STRUCT ||
+                ((d->kind == K_FUNC && d->col == 1) || d->kind == K_CONST || d->kind == K_VAR || d->kind == K_STRUCT ||
                  (d->kind == T_ID && (!strcmp(d->text, "enum") || !strcmp(d->text, "interface"))))) {
                 lex_priv = xrealloc(lex_priv, (n + 1) * sizeof *lex_priv);
                 lex_priv[n++] = tk[i].text;

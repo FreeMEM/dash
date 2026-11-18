@@ -1,0 +1,13 @@
+# Para test_fragua_fallos*.dash: una interfaz con un método que empieza por _ y una función privada del módulo
+interface Script
+    func _ready()
+end
+
+func _ayuda() -> Int
+    return 5
+end
+
+func llamar(s: Script) -> Int
+    s._ready()
+    return _ayuda()
+end

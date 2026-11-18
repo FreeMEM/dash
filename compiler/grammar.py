@@ -136,8 +136,11 @@ dash_grammar_minimal = r"""
     func_call_stmt: function_call
 
     // Window commands
-    window_open: ID ".open"
-    window_close: ID ".close"
+    // (".open" y ".close" solos: si no, x.close() de un struct y un campo "opened" chocaban con ellos; lo vio Fragua)
+    window_open: ID _WIN_OPEN
+    window_close: ID _WIN_CLOSE
+    _WIN_OPEN: /\.open(?![A-Za-z0-9_(])/
+    _WIN_CLOSE: /\.close(?![A-Za-z0-9_(])/
 
     // I/O commands
     wait_cmd: "Wait" expression

@@ -2,7 +2,7 @@
 # 0x and $ (Amiga style) are hexadecimal, 0b is binary; values above
 # 0x7FFFFFFF keep their 32 bits as a LONG
 #
-# expect-c: #define CUSTOM 14675968
+# expect-c: enum { CUSTOM = 14675968 };
 # expect-c: ((LONG)0xFFFF0000UL)
 # expect-out: 14675968
 # expect-out: 255
