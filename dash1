@@ -265,6 +265,9 @@ def main():
     if not args.fpu and any(uses_float(open(f).read()) for f in c_files):
         compile_command.extend(softfloat_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
                                                  build_dir))
+    if args.fpu:   # double a entero sin signo y de 64 bits: los de libgcc redondean (lo vio Tachyon)
+        from compiler.softfloat import fpu_objects
+        compile_command.extend(fpu_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"), build_dir))
     from compiler.softfloat import softfloat_double_objects, uses_double   # Double (Lorraine D1)
     if not args.fpu and any(uses_double(open(f).read()) for f in c_files):
         for obj in softfloat_double_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"), build_dir):

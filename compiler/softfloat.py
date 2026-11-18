@@ -59,6 +59,21 @@ def _stale(obj: Path, *sources: Path) -> bool:
     return not obj.exists() or any(obj.stat().st_mtime < s.stat().st_mtime for s in sources)
 
 
+FPU_FIXUNS = ROOT / "runtime" / "fpu" / "fixuns.s"
+
+
+def fpu_objects(gcc: str, build_dir: Path = ROOT / "build") -> list:
+    """With --fpu: __fixunsdfsi and __fixunsdfdi that truncate (libgcc's for the 68881 round to nearest: __fixdfdi
+    of 1709164800000.0 gave 2^32 too much; lo vio Tachyon). Linked before libgcc, which then uses them too."""
+    build_dir = Path(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    obj = build_dir / "dash_fpu_fixuns.o"
+    if _stale(obj, FPU_FIXUNS):
+        subprocess.run([gcc, "-m68020", "-m68881", "-c", str(FPU_FIXUNS), "-o", str(obj)], check=True,
+                       capture_output=True, text=True)
+    return [str(obj)]
+
+
 def softfloat_objects(gcc: str, build_dir: Path = ROOT / "build") -> list:
     """Paths of the compiled objects, rebuilt when a source is newer."""
     build_dir = Path(build_dir)
