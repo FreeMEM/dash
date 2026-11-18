@@ -33,6 +33,14 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.18.1 (2026-11-18)
+
+Un arreglo para quien usa el escritorio de DOpus. Todo lo que compilaba sigue compilando igual.
+
+- **Arreglo:** con DOpus de escritorio (su ventana de fondo guarda lo que queda tapado), un programa que pinta en el
+  escritorio con `desktop_canvas`, como el panel de Trasfondo, se quedaba pintado al quitarse. Ahora la zona se
+  repinta con el fondo de DOpus; lo que DOpus tuviera ahí vuelve cuando él repinta (lo contó Ferrán García).
+
 ### 2.18.0 (2026-11-18)
 
 Un builtin nuevo y arreglos, casi todos de lo que salió haciendo Fragua y Tachyon. Todo lo que compilaba sigue
