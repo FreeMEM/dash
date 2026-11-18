@@ -6954,16 +6954,20 @@ static void gen_struct_types(void)
                 int fi = -1;
                 for (j = 0; j < st->ifaces.n && !mname; j++) {
                     int ii = find_struct(st->ifaces.v[j]), q;
-                    if (ii < 0 || !prog->structs.v[ii].iface)
+                    if (ii < 0 || !prog->structs.v[ii].iface) {
+                        src_name = src_files.v[st->file];
                         fatal_at(st->line, st->col, "%s no es una interfaz", st->ifaces.v[j]);
+                    }
                     for (q = 0; q < prog->structs.v[ii].methods.n; q++)
                         if (prog->structs.v[ii].methods.v[q].slot == k) mname = prog->structs.v[ii].methods.v[q].name;
                 }
                 if (mname) {
                     char full[256];
                     snprintf(full, sizeof full, "%s.%s", st->name, mname);
-                    if (!find_func(full, &fi))
+                    if (!find_func(full, &fi)) {
+                        src_name = src_files.v[st->file];     /* (el fichero del struct, no el último leído) */
                         fatal_at(st->line, st->col, "%s no tiene el método %s de su interfaz", st->name, mname);
+                    }
                 }
                 code_ptr(mname ? func_label[fi] : -1);
             }
@@ -7147,7 +7151,10 @@ void gen_program(Program *p, Obj *o)
     for (i = 0; i < p->structs.n; i++) {
         int j;
         Struct *st = &p->structs.v[i];
-        if (find_struct(st->name) < i) fatal_at(st->line, st->col, "el struct %s ya existe", st->name);
+        if (find_struct(st->name) < i) {
+            src_name = src_files.v[st->file];
+            fatal_at(st->line, st->col, "el struct %s ya existe", st->name);
+        }
         for (j = 0; j < st->fields.n; j++)
             st->fields.v[j].type = resolve_type(st->fields.v[j].type, st->fields.v[j].line, st->fields.v[j].col);
         desc_label[i] = new_label();

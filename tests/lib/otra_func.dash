@@ -1,0 +1,4 @@
+# Para tests/errors/interfaz_otro_fichero.dash: un módulo que se importa el último
+func otra() -> Int
+    return 1
+end

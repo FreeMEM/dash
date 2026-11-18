@@ -1090,6 +1090,7 @@ static void parse_into(Program *p)
             Token *name = expect(T_ID);
             st.name = name->text;
             st.line = name->line;
+            st.file = name->file;
             st.col = name->col;
             st.iface = 1;
             while (!accept(K_END)) {
@@ -1115,6 +1116,7 @@ static void parse_into(Program *p)
             Token *name = expect(T_ID);
             st.name = name->text;
             st.line = name->line;
+            st.file = name->file;
             st.col = name->col;
             if (accept(P_COLON))                       /* struct Cuadro: Figura, Orden */
                 do VEC_PUSH(st.ifaces, expect(T_ID)->text); while (accept(P_COMMA));

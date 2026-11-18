@@ -1,0 +1,15 @@
+# expect: has interface 'Listo' but not its method 'ready'
+# expect-dash: interfaz_otro_fichero.dash:8:8: Error: Scr no tiene el método ready de su interfaz
+# (./dash daba la línea del último fichero importado, no la del struct; lo vio Fragua)
+import "../lib/iface_listo.dash"
+import "../lib/otra_func.dash"
+
+
+struct Scr: Listo
+    n: Int
+end
+
+Main
+    s = Scr(1)
+    Print otra()
+end

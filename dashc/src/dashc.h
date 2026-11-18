@@ -282,7 +282,7 @@ typedef struct {
    campos con iface y sus métodos; un struct dice las que cumple en ifaces. */
 typedef struct {
     char *name;
-    int line, col;
+    int line, col, file;                              /* (file: src_files, para sus errores) */
     struct { Field *v; int n, cap; } fields;
     int iface;
     struct { IfaceMethod *v; int n, cap; } methods;   /* (de una interfaz) */
