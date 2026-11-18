@@ -32,6 +32,14 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.18.1 (2026-11-18)
+
+A fix for those who use DOpus as the desktop. Everything that compiled still compiles the same.
+
+- **Fix:** with DOpus as the desktop (its backdrop window keeps what gets covered), a program that draws on the
+  desktop with `desktop_canvas`, like Trasfondo's panel, stayed on screen after going away. Now the area is redrawn
+  with DOpus's background; whatever DOpus had there comes back when it redraws (reported by Ferrán García).
+
 ### 2.18.0 (2026-11-18)
 
 One new builtin and fixes, most of them from what came up building Fragua and Tachyon. Everything that compiled

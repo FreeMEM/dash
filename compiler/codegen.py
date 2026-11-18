@@ -18682,10 +18682,13 @@ static void _dash_desk_free(APTR c) {
     struct _DashDesk *d = (struct _DashDesk *)c, **p;
     LONG i, sx = 0, sy = 0;
     BOOL shown = FALSE;
+    struct Window *dw = NULL;               /* the backdrop window that had the hook */
+    struct Layer *dl = NULL;
     if (!d) return;
     if (_dash_desk_scr) {
         struct Layer_Info *li = &_dash_desk_scr->LayerInfo;
         LockLayerInfo(li);
+        if (_dash_desk_mode == _DASH_DESK_BACKDROP) { dw = _dash_desk_win; dl = _dash_desk_layer; }
         for (p = &_dash_desks; *p; p = &(*p)->next)
             if (*p == d) {
                 shown = d->front >= 0;
@@ -18714,6 +18717,18 @@ static void _dash_desk_free(APTR c) {
                 WA_Borderless, TRUE, WA_Backdrop, TRUE, WA_SimpleRefresh, TRUE, WA_Activate, FALSE,
                 WA_RMBTrap, TRUE, WA_BackFill, (ULONG)LAYERS_NOBACKFILL, TAG_DONE);
             if (v) CloseWindow(v);
+            /* A SMART_REFRESH backdrop window (DOpus's desktop) keeps what was covered and gives it back when the
+               little window closes: the panel stayed on screen (Ferrán García). The area is redrawn with its own
+               backfill hook, ours already gone; what DOpus drew there comes back when it refreshes */
+            if (dw && dl) {
+                BOOL alive;
+                LockLayerInfo(li);
+                alive = _dash_desk_alive(dl) && dw->WLayer == dl;
+                UnlockLayerInfo(li);
+                if (alive && (dw->Flags & WFLG_REFRESHBITS) == WFLG_SMART_REFRESH)
+                    EraseRect(dw->RPort, sx - dw->LeftEdge, sy - dw->TopEdge, sx - dw->LeftEdge + d->w - 1,
+                              sy - dw->TopEdge + d->h - 1);
+            }
         }
         if (!_dash_desks) {
             UnlockPubScreen(NULL, _dash_desk_scr);
