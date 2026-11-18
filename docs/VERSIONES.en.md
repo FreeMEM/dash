@@ -32,6 +32,25 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.18.0 (2026-11-18)
+
+One new builtin and fixes, most of them from what came up building Fragua and Tachyon. Everything that compiled
+still compiles the same.
+
+- **New:** `wm_screen_front()` tells whether the Workbench screen is the one in front. With another in front
+  (DOpus's, for one), the pointer still moves on the Workbench screen; Trasfondo's dock uses it so it does not pop
+  up (reported by Ernesto Laura de la Fuente).
+- **Fix:** freeing an object of a struct without fields (methods only) hung the Amiga, on both paths.
+- **Fix:** with `--fpu`, converting a number with decimals to a 64-bit or unsigned integer from C (`@link`) rounded
+  instead of truncating: 1709164800000.0 gave 2^32 too much. It came from the compiler's libgcc; Dash brings its
+  own, on both paths.
+- **Fix:** with `./dash --gcc`, `x.close()` of a struct inside an `if` and a field starting with `open` (`opened`)
+  are no longer taken for windows; and a constant named like something in the runtime (`const W = 320`) no longer
+  breaks the build.
+- **Fix:** with `./dash`, `step` works as a parameter name; a struct from another file can fulfil an interface with
+  methods starting with `_`; and the error of a struct that does not fulfil its interface shows its own file.
+- **Fix:** the direct compiler for DashOS (AArch64) builds again.
+
 ### 2.17.1 (2026-11-17)
 
 Fixes that came up while recording the Forja 0.8 video on CoffinOS. Everything that compiled still compiles the
