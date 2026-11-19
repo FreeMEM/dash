@@ -38,7 +38,7 @@ A fix for those who use DOpus as the desktop. Everything that compiled still com
 
 - **Fix:** with DOpus as the desktop (its backdrop window keeps what gets covered), a program that draws on the
   desktop with `desktop_canvas`, like Trasfondo's panel, stayed on screen after going away. Now the area is redrawn
-  with DOpus's background; whatever DOpus had there comes back when it redraws (reported by Ferrán García).
+  with DOpus's background; whatever DOpus had there comes back when it redraws (reported by Ferrán García and pcotter72).
 
 ### 2.18.0 (2026-11-18)
 

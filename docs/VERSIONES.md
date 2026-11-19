@@ -39,7 +39,7 @@ Un arreglo para quien usa el escritorio de DOpus. Todo lo que compilaba sigue co
 
 - **Arreglo:** con DOpus de escritorio (su ventana de fondo guarda lo que queda tapado), un programa que pinta en el
   escritorio con `desktop_canvas`, como el panel de Trasfondo, se quedaba pintado al quitarse. Ahora la zona se
-  repinta con el fondo de DOpus; lo que DOpus tuviera ahí vuelve cuando él repinta (lo contó Ferrán García).
+  repinta con el fondo de DOpus; lo que DOpus tuviera ahí vuelve cuando él repinta (lo contaron Ferrán García y pcotter72).
 
 ### 2.18.0 (2026-11-18)
 
