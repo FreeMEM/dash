@@ -1,7 +1,11 @@
 # Dash para PPC: MorphOS, AmigaOS 4 y WarpOS (notas para el plan)
 
-Sin empezar. Va después de la fusión de ide-piezas (D13 en `docs/DASHC_LOOP.md`): el camino `./dash --c` (el C de
-dash1) compilado con el gcc de cada sistema, adaptando el runtime. El gcc de bebbo solo da 68k.
+Sin empezar. **Decisión del usuario (2026-11-20): sin pasar por C.** El compilador directo (`dashc`) genera PowerPC él
+mismo, como ya hace con el 68k (`gen68k.c`, `t68k_*`) y con AArch64 (`ta64_*`): un `tppc_*` nuevo y los formatos de
+ejecutable de cada sistema. Opciones: `--ppc` con `--mos` (MorphOS, ELF), `--aos4` (AmigaOS 4, ELF) y WarpOS/PowerUP
+en el Amiga clásico (lo pidió Javier R. Santurde Tolkien en Dash Amiga: WarpOS, PowerUP o lo que soporte el emulador
+PPC de la PiStorm). Lo de abajo sobre el runtime sigue valiendo: lo que depende del 68000 hay que hacerlo para PPC.
+Antes (2026-10-30) el plan era `./dash --c` con el gcc de cada sistema; queda descartado.
 
 ## Lo que hay que adaptar del runtime
 
