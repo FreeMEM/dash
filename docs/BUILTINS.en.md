@@ -5876,7 +5876,7 @@ end
 | [`desktop_canvas_free(canvas)`](#desktop_canvas_free) | — | The wallpaper back in the area (the program's end does it too) |  |
 | [`break_check()`](#break_check) | Bool | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared. A program that calls it does not get Ctrl-C in its loops: it handles it |  |
 | [`single_instance(name)`](#single_instance) | Bool | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
-| [`tooltype(name, default)`](#tooltype) | String | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
+| [`tooltype(name, default)`](#tooltype) | String | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of the project icon it was opened from (one in WBStartup, say), and if it is not there, of the program's own icon; default if it is in none |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
 | [`cx_key_add(description, n)`](#cx_key_add) | Bool | One more hotkey for the commodity (up to 64, n from 1 to 64; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
@@ -6106,7 +6106,9 @@ See also: [`break_check`](#break_check).
 - `name`: the name: `"DELAY"`.
 - `default`: what it returns if it is not there.
 
-From the Shell, the argument `NAME=value`; from the Workbench, the program icon's tooltype.
+From the Shell, the argument `NAME=value`; from the Workbench, the tooltype of the project icon it was opened from
+(a project icon in WBStartup that points to the program, say) and, if it is not there, the program icon's, as is usual
+on the Amiga.
 
 See also: [`arg`](#arg).
 

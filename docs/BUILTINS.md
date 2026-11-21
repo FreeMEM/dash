@@ -5877,7 +5877,7 @@ end
 | [`desktop_canvas_free(canvas)`](#desktop_canvas_free) | — | Vuelve a poner el fondo de escritorio en la zona (al acabar el programa también) |  |
 | [`break_check()`](#break_check) | Bool | True si llegó un Ctrl-C ("Break" en el Shell, u otra copia: single_instance); se borra. Un programa que lo llama no recibe Ctrl-C en sus bucles: lo atiende él |  |
 | [`single_instance(name)`](#single_instance) | Bool | Una sola copia a la vez: false si corre otra copia del programa (un puerto público con ese nombre), que recibe un Ctrl-C; si no, true (el puerto es del programa hasta que acaba) |  |
-| [`tooltype(name, default)`](#tooltype) | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
+| [`tooltype(name, default)`](#tooltype) | String | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype del icono de proyecto con el que se abrió (uno de WBStartup, por ejemplo) y, si no está ahí, el del icono del programa; default si no está en ninguno |  |
 | [`cx_broker(name, title, description, priority)`](#cx_broker) | Bool | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
 | [`cx_hotkey(description)`](#cx_hotkey) | Bool | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
 | [`cx_key_add(description, n)`](#cx_key_add) | Bool | Una tecla rápida más para la commodity (hasta 64, n de 1 a 64; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
@@ -6106,7 +6106,9 @@ Ver también: [`break_check`](#break_check).
 - `name`: el nombre: `"DELAY"`.
 - `default`: lo que devuelve si no está.
 
-Desde el Shell, el argumento `NOMBRE=valor`; desde el Workbench, el tooltype del icono del programa.
+Desde el Shell, el argumento `NOMBRE=valor`; desde el Workbench, el tooltype del icono de proyecto con el que se abrió
+(un icono de proyecto en WBStartup que apunta al programa, por ejemplo) y, si no está ahí, el del icono del programa,
+como es costumbre en el Amiga.
 
 Ver también: [`arg`](#arg).
 

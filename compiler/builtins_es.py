@@ -780,7 +780,8 @@ DESC_ES = {
     "single_instance": "Una sola copia a la vez: false si corre otra copia del programa (un puerto público con ese "
                        "nombre), que recibe un Ctrl-C; si no, true (el puerto es del programa hasta que acaba)",
     "tooltype": "Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE=\"a b\"); si no "
-                "(o desde el Workbench), el tooltype de su icono; default si no está en ninguno",
+                "(o desde el Workbench), el tooltype del icono de proyecto con el que se abrió (uno de WBStartup, por "
+                "ejemplo) y, si no está ahí, el del icono del programa; default si no está en ninguno",
     "cx_broker": "El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, "
                  "título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se "
                  "quita al acabar el programa",

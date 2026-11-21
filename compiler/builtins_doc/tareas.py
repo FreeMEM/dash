@@ -107,12 +107,16 @@ old one sees it with `break_check`). Otherwise it returns `true`.
 - `name`: el nombre: `"DELAY"`.
 - `default`: lo que devuelve si no está.
 
-Desde el Shell, el argumento `NOMBRE=valor`; desde el Workbench, el tooltype del icono del programa.
+Desde el Shell, el argumento `NOMBRE=valor`; desde el Workbench, el tooltype del icono de proyecto con el que se abrió
+(un icono de proyecto en WBStartup que apunta al programa, por ejemplo) y, si no está ahí, el del icono del programa,
+como es costumbre en el Amiga.
 """, """\
 - `name`: the name: `"DELAY"`.
 - `default`: what it returns if it is not there.
 
-From the Shell, the argument `NAME=value`; from the Workbench, the program icon's tooltype.
+From the Shell, the argument `NAME=value`; from the Workbench, the tooltype of the project icon it was opened from
+(a project icon in WBStartup that points to the program, say) and, if it is not there, the program icon's, as is usual
+on the Amiga.
 """, ["arg"]),
     "cx_broker": _f("""\
 - `name`: el nombre en Exchange, hasta 23 letras.
