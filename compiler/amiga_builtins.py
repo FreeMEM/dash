@@ -5096,7 +5096,8 @@ TASK_FUNCTIONS = {
         name="tooltype", params=["name", "default"], return_type="STRPTR",
         c_template="_dash_tooltype(${name}, ${default})",
         reads_only=True, description="A tooltype of the program: from the Shell, the argument NAME=value (NAME=\"a b\" too); else (or "
-                    "from the Workbench) the tooltype of its icon; default if it is in neither"),
+                    "from the Workbench) the tooltype of the project icon it was opened from (one in WBStartup, say), and if it is not "
+                    "there, of the program's own icon; default if it is in none"),
     "cx_broker": BuiltinFunc(
         name="cx_broker", params=["name", "title", "description", "priority"], return_type="BOOL",
         c_template="_dash_cx_broker_new(${name}, ${title}, ${description}, ${priority})",

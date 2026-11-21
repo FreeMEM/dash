@@ -4268,6 +4268,26 @@ static STRPTR _dash_tooltype(STRPTR name, STRPTR dflt) {
     struct DiskObject *dobj;
     if (!name || !*name) return _dash_str_dup(dflt ? dflt : (STRPTR)"", TRUE);
     if (!_WBenchMsg && _dash_tooltype_shell(name, buf, sizeof(buf))) return _dash_str_dup((STRPTR)buf, TRUE);
+    /* Opened from a project icon (one in WBStartup, say): its tooltypes first, as is usual on the Amiga; then the
+       program's own icon. Before, only the program's icon was read (Ferran Garcia saw it with Trasfondo) */
+    if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 1 && !IconBase) {
+        IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36);
+        _dash_icon_lib_ours = IconBase != NULL;
+    }
+    if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 1 && IconBase) {
+        BPTR old = CurrentDir(_WBenchMsg->sm_ArgList[1].wa_Lock);
+        dobj = GetDiskObject((CONST_STRPTR)_WBenchMsg->sm_ArgList[1].wa_Name);
+        CurrentDir(old);
+        if (dobj) {
+            STRPTR v = (STRPTR)FindToolType((CONST_STRPTR *)dobj->do_ToolTypes, (CONST_STRPTR)name);
+            if (v) {
+                STRPTR r = _dash_str_dup(v, TRUE);
+                FreeDiskObject(dobj);
+                return r;
+            }
+            FreeDiskObject(dobj);
+        }
+    }
     if ((dobj = _dash_own_icon())) {
         STRPTR v = (STRPTR)FindToolType((CONST_STRPTR *)dobj->do_ToolTypes, (CONST_STRPTR)name);
         if (v) {

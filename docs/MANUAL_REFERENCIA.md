@@ -3935,7 +3935,8 @@ end
 ```
 
 - `tooltype(nombre, defecto)`: desde la Shell, el argumento `NOMBRE=valor` (`CX_POPKEY="ctrl alt t"`; el nombre en
-  mayúsculas o minúsculas); si no está, o desde el Workbench, el tooltype del icono del programa; si tampoco, el
+  mayúsculas o minúsculas); si no está, o desde el Workbench, el tooltype del icono de proyecto con el que se abrió (uno
+  de WBStartup, por ejemplo) y, si no está ahí, el del icono del programa; si tampoco, el
   defecto.
 - `cx_broker(nombre, título, descripción, prioridad)`: la commodity en Exchange, con Mostrar y Ocultar, activada
   (nombre hasta 23 letras; título y descripción hasta 39). `false` sin `commodities.library` o si ya hay una con ese
