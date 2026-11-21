@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1080 functions, 1080 implemented, 0 not implemented.
+Total: 1081 functions, 1081 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -9353,6 +9353,7 @@ program when something arrives. That is how Tachyon loads a page's pictures.
 | [`net_bg_open_tls(host, port, timeout_ms)`](#net_bg_open_tls) | Int | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
 | [`net_bg_state(c)`](#net_bg_state) | Int | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
 | [`net_bg_stage(c)`](#net_bg_stage) | Int | While connecting, its stage, as net_connect_stage |  |
+| [`net_bg_peer(c)`](#net_bg_peer) | String | The IPv4 address ("a.b.c.d") the connection really reached once connected, after the name lookup; "" before. A browser checks it against DNS rebinding |  |
 | [`net_bg_error(c)`](#net_bg_error) | String | Why a connection failed or closed, "" if it did not |  |
 | [`net_bg_send(c, text)`](#net_bg_send) | Bool | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
 | [`net_bg_send_buffer(c, buffer, n)`](#net_bg_send_buffer) | Bool | net_bg_send of n bytes of a buffer |  |
@@ -9402,6 +9403,16 @@ See also: [`net_bg_error`](#net_bg_error), [`net_bg_stage`](#net_bg_stage).
 While connecting, which stage it is at, like `net_connect_stage`.
 
 See also: [`net_bg_state`](#net_bg_state).
+
+<a id="net_bg_peer"></a>
+
+### `net_bg_peer(c)` → `String`
+
+- `c`: the connection's number.
+
+Returns the IPv4 address (`"a.b.c.d"`) the connection really reached once connected (after the name lookup), or `""` before. A browser checks it against DNS rebinding: an internet name that suddenly points at the home network.
+
+See also: [`net_bg_state`](#net_bg_state), [`net_resolve`](#net_resolve).
 
 <a id="net_bg_error"></a>
 

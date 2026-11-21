@@ -4781,6 +4781,10 @@ NET_FUNCTIONS = {
     "net_bg_stage": BuiltinFunc(
         name="net_bg_stage", params=["c"], return_type="LONG", c_template="_dash_net_bg_stage(${c})",
         description="While connecting, its stage, as net_connect_stage"),
+    "net_bg_peer": BuiltinFunc(
+        name="net_bg_peer", params=["c"], return_type="STRPTR", c_template="_dash_net_bg_peer(${c})",
+        description="The IPv4 address (\"a.b.c.d\") the connection really reached once connected, after the name "
+                    "lookup; \"\" before. A browser checks it against DNS rebinding"),
     "net_bg_error": BuiltinFunc(
         name="net_bg_error", params=["c"], return_type="STRPTR", c_template="_dash_net_bg_error(${c})",
         description="Why a connection failed or closed, \"\" if it did not"),

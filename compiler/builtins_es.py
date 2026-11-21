@@ -682,6 +682,7 @@ DESC_ES = {
                     "qué)",
     "net_bg_stage": "Mientras conecta, en qué fase está, como net_connect_stage",
     "net_bg_error": "Por qué falló o se cerró una conexión; \"\" si no",
+    "net_bg_peer": "La dirección IPv4 (\"a.b.c.d\") a la que llegó de verdad la conexión, ya conectada (tras buscar el nombre); \"\" antes",
     "net_bg_send": "Deja un texto para enviar (la tarea lo envía en cuanto la conexión esté abierta); false si no hay "
                    "memoria",
     "net_bg_send_buffer": "net_bg_send de n bytes de un búfer",

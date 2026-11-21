@@ -10538,6 +10538,7 @@ typedef struct {
     volatile LONG drop;
     volatile LONG polled;   /* the program asked it for what came (net_bg_recv, net_bg_pending) */
     char error[160];
+    char peer[16];          /* the IPv4 it connected to ("a.b.c.d"), once connected (net_bg_peer) */
 } _DashNbgSlot;
 static _DashNbgSlot _dash_nbg[_DASH_NBG_MAX];
 static struct SignalSemaphore _dash_nbg_sem;
@@ -10633,6 +10634,17 @@ static LONG _dash_nbg_loop(LONG arg) {
                     s->state = _NBG_ERROR;
                     done = 1;
                 } else if (r > 0) {
+                    /* the address it really connected to, after the name lookup (net_bg_peer: a browser checks it
+                       against DNS rebinding; Tachyon, Rodrigo Saez) */
+                    {
+                        struct sockaddr_in sa;
+                        socklen_t sl = sizeof(sa);
+                        s->peer[0] = 0;
+                        if (getpeername(s->sock, (struct sockaddr *)&sa, &sl) == 0) {
+                            strncpy(s->peer, (char *)Inet_NtoA(sa.sin_addr.s_addr), 15);
+                            s->peer[15] = 0;
+                        }
+                    }
                     if (!s->tls_wanted) s->state = _NBG_OPEN;
                     else if (!_dash_nbg_tls_start) {
                         strcpy(s->error, "no TLS");
@@ -10804,6 +10816,18 @@ static LONG _dash_net_bg_state(LONG c) {
 
 static LONG _dash_net_bg_stage(LONG c) {
     return (c >= 0 && c < _DASH_NBG_MAX) ? _dash_nbg[c].stage : 0;
+}
+
+/* The IPv4 the connection really reached ("a.b.c.d"), once it is connected; "" before or if unknown */
+static STRPTR _dash_net_bg_peer(LONG c) {
+    char b[16];
+    b[0] = 0;
+    if (c >= 0 && c < _DASH_NBG_MAX && _dash_nbg_sem_ready) {
+        ObtainSemaphore(&_dash_nbg_sem);
+        if (_dash_nbg[c].state >= _NBG_NEGOTIATING || (_dash_nbg[c].state == _NBG_CONNECTING && _dash_nbg[c].peer[0])) strcpy(b, _dash_nbg[c].peer);
+        ReleaseSemaphore(&_dash_nbg_sem);
+    }
+    return _dash_str_dup((STRPTR)b, TRUE);
 }
 
 static STRPTR _dash_net_bg_error(LONG c) {

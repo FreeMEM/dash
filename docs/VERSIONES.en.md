@@ -32,6 +32,16 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.19.0 (2026-11-21)
+
+One new builtin for networking. Everything that compiled still compiles the same.
+
+- **New:** `net_bg_peer(c)` tells the IPv4 address a `net_bg_open` connection really reached, once connected, after
+  the name lookup. It lets a browser, for one, check that an internet name does not suddenly point at the home
+  network (DNS rebinding). Requested by Rodrigo Sáez's security review of Tachyon.
+- For Nix (and systems like SteamOS): `flake.nix` with the compiler, the Amiga gcc toolchain, VS Code and FS-UAE;
+  maintained by the community (by nihirash).
+
 ### 2.18.2 (2026-11-21)
 
 A fix for programs opened from a project icon. Everything that compiled still compiles the same.
