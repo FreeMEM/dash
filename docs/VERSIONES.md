@@ -33,6 +33,15 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.18.2 (2026-11-21)
+
+Un arreglo para los programas que se abren desde un icono de proyecto. Todo lo que compilaba sigue compilando igual.
+
+- **Arreglo:** desde el Workbench, `tooltype()` mira primero el icono de proyecto con el que se abrió el programa
+  (un documento, o un icono de WBStartup que apunta al programa con su Herramienta por defecto) y luego el icono del
+  propio programa. Antes solo miraba el del programa, así que los tooltypes puestos en el icono de proyecto no
+  servían. Es lo que hace el Workbench con los demás programas (lo contó Ferrán García).
+
 ### 2.18.1 (2026-11-18)
 
 Un arreglo para quien usa el escritorio de DOpus. Todo lo que compilaba sigue compilando igual.

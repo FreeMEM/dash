@@ -32,6 +32,15 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.18.2 (2026-11-21)
+
+A fix for programs opened from a project icon. Everything that compiled still compiles the same.
+
+- **Fix:** from Workbench, `tooltype()` now looks first at the project icon the program was opened with (a document,
+  or a WBStartup icon that points to the program as its Default Tool) and then at the program's own icon. Before,
+  it only looked at the program's icon, so tooltypes set on the project icon did nothing. This is what Workbench
+  does with other programs (reported by Ferrán García).
+
 ### 2.18.1 (2026-11-18)
 
 A fix for those who use DOpus as the desktop. Everything that compiled still compiles the same.
