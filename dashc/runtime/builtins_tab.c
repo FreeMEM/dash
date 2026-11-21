@@ -1277,6 +1277,8 @@ const BuiltinInfo builtin_info[] = {
     {"net_bg_open", 3, 1, 0, 0, 0, 1u, 0u},
     {"net_bg_open_tls", 3, 1, 0, 0, 0, 1u, 0u},
     {"net_bg_open_tls", 3, 1, 0, 0, 0, 1u, 0u},
+    {"net_bg_peer", 1, 3, 1, 0, 0, 0u, 0u},
+    {"net_bg_peer", 1, 3, 1, 0, 0, 0u, 0u},
     {"net_bg_pending", 1, 1, 1, 0, 0, 0u, 0u},
     {"net_bg_pending", 1, 1, 1, 0, 0, 0u, 0u},
     {"net_bg_recv", 3, 1, 1, 0, 0, 0u, 0u},
@@ -2162,7 +2164,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2160;
+const int builtin_count = 2162;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

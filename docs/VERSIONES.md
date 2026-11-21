@@ -33,6 +33,17 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.19.0 (2026-11-21)
+
+Un builtin nuevo para la red. Todo lo que compilaba sigue compilando igual.
+
+- **Nuevo:** `net_bg_peer(c)` dice la dirección IPv4 a la que llegó de verdad una conexión de `net_bg_open`, una vez
+  conectada, después de buscar el nombre. Sirve, por ejemplo, para que un navegador compruebe que un nombre de
+  internet no apunta de pronto a la red de casa (DNS rebinding). Lo pidió la revisión de seguridad de Tachyon de
+  Rodrigo Sáez.
+- Para Nix (y sistemas como SteamOS): `flake.nix` con el compilador, la toolchain de gcc para Amiga, VS Code y
+  FS-UAE; lo mantiene la comunidad (de nihirash).
+
 ### 2.18.2 (2026-11-21)
 
 Un arreglo para los programas que se abren desde un icono de proyecto. Todo lo que compilaba sigue compilando igual.
