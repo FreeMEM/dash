@@ -32,6 +32,13 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.20.0 (2026-11-22)
+
+One new builtin for MUI. Everything that compiled still compiles the same.
+
+- **New:** `mui_list_stripes(list, true)` shows a list's rows in alternate colours, the ones set in the MUI prefs
+  (MUI 5). Requested for the Hangar client.
+
 ### 2.19.0 (2026-11-21)
 
 One new builtin for networking. Everything that compiled still compiles the same.

@@ -27,6 +27,7 @@ Main
         mui_on_double(lista, ID_DOBLE)
         mui_window_open(win)
 
+        mui_list_stripes(lista, true)
         mui_list_quiet(lista, true)
         mui_list_add(lista, "Aminet")
         mui_list_add(lista, "AmigaZen")

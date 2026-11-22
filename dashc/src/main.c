@@ -24,7 +24,7 @@ unsigned long __stack = DASHC_STACK;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
-#define DASH_VERSION "2.19.0"
+#define DASH_VERSION "2.20.0"
 #ifndef DASH_FECHA
 #define DASH_FECHA "?"
 #endif

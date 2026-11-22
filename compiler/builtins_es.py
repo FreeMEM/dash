@@ -1237,6 +1237,7 @@ DESC_ES = {
     "mui_list_clear": "Quita todas las líneas",
     "mui_list_count": "Cuántas líneas hay",
     "mui_list_get": "El texto de la línea de pos (\"\" fuera de la lista)",
+    "mui_list_stripes": "Filas de colores alternos, los de las preferencias de MUI (MUI 5; uno anterior no hace nada)",
     "mui_list_quiet": "Mientras está callada, la lista no se redibuja (para añadir muchas líneas)",
     "mui_on_double": "mui_wait_event da id con un doble clic en la lista",
     "mui_frame_begin": "Empieza un grupo con marco y un título (\"\" = ninguno)",
