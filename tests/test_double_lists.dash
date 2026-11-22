@@ -19,8 +19,13 @@
 # expect-out: float trozo: 2 2.0
 # expect-out: declarada: 1.0 2.0 3.0
 # expect-out: anidada: 2.5 3.0 suma 6.5
+# expect-out: anidada escrita: 4.5 0.75 campo 1.5 -2.0 7.25
 # expect-out: dicc: 7.0 2.8333333333333335
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Poses
+    ang: [[Float]]
+end
 
 struct Serie
     nombre: String
@@ -118,6 +123,18 @@ Main
         end
     end
     Print "anidada: #{tabla[0][1]} #{tabla[1][0]} suma #{st}"
+    # escribir en una lista de una lista (de una variable, de un campo y por la fila)
+    tabla[0][1] = 4.5
+    fila = tabla[1]
+    fila[0] = 0.75
+    ps = Poses([])
+    var f1: [Float] = [1.0, 2.0]
+    ps.ang.push(f1)
+    ps.ang[0][0] = 1.5
+    pf = ps.ang[0]
+    pf[1] = Float(-2.0)
+    ps.ang[0].push(Float(7.25))
+    Print "anidada escrita: #{tabla[0][1]} #{tabla[1][0]} campo #{ps.ang[0][0]} #{ps.ang[0][1]} #{ps.ang[0][2]}"
     var dd: {String: [Double]} = {}
     dd["a"] = [0.5, 1]
     dd["a"].push(7)
