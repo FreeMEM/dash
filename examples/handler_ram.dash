@@ -1,4 +1,4 @@
-# Un disco en memoria escrito en Dash: un handler de DOS (docs/HANDLER_LOOP.md, sección 27 del manual).
+# Un disco en memoria escrito en Dash: un handler de DOS (docs/HANDLER_LOOP.md, sección 28 del manual).
 # Una sola carpeta (la raíz) con ficheros que se leen y se escriben; se pierde al apagar.
 #
 #   ./dash examples/handler_ram.dash -o DEVS:L/ramd-handler      (o ./dash --gcc ...)

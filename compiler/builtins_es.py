@@ -411,6 +411,34 @@ DESC_ES = {
     "click_y": "La Y del último On Click, en la ventana (dentro de sus bordes)",
     "time_ms": "Los milisegundos desde que empezó el programa (EClock de timer.device)",
     # Compresión (zlib)
+    # Handlers de DOS (docs/HANDLER_LOOP.md)
+    "handler_startup": "dn_Startup del DeviceNode del handler: con Device= en la mountlist, el BPTR de su "
+                       "FileSysStartupMsg (0 si el programa no es un handler)",
+    "handler_name": "El nombre del dispositivo del handler, sin los dos puntos (\"RAM9\")",
+    "handler_devnode": "La dirección del DeviceNode del handler",
+    "handler_port": "El puerto al que llegan los paquetes (dn_Task, y el dl_Task de los volúmenes y el fl_Task de "
+                    "las cerraduras)",
+    "handler_ready": "Contesta al paquete de arranque: true, listo para paquetes; false, con ese error, y el "
+                     "programa debería acabar",
+    "handler_wait": "Espera el siguiente paquete: su DosPacket; 0 con Ctrl-C",
+    "handler_poll": "El siguiente paquete si hay uno esperando, o 0 sin esperar",
+    "packet_reply": "Contesta a un paquete: res1 es lo que devuelve la función del DOS, res2 el error (IoErr)",
+    "handler_log": "Print, y los errores de ejecución, van a este fichero (nunca uno del propio handler); false si "
+                   "no se abre",
+    "handler_volume_add": "Pone un volumen del handler en la lista del DOS (y avisa al Workbench): su DosList, 0 si "
+                          "no se puede",
+    "handler_volume_remove": "Quita el volumen de la lista del DOS y lo libera (sin cerraduras suyas pendientes)",
+    "bstr_text": "El texto de un BSTR, desde su BPTR (\"\" para 0)",
+    "bstr_put": "Escribe text como BSTR (un byte de largo y las letras) en addr, en max bytes como mucho",
+    "dev_open": "Abre una unidad de un dispositivo (trackdisk.device, scsi.device...) para dev_read y dev_write: su "
+                "IORequest, o 0",
+    "dev_close": "Cierra lo que abrió dev_open (al acabar el programa, solo)",
+    "dev_read": "Lee len bytes desde block (bloques de block_size bytes) en buf: 0, o el error del dispositivo. "
+                "Pasados los 4 GB, con TD64 o NSD",
+    "dev_write": "Escribe len bytes de buf desde block: 0, o el error del dispositivo",
+    "dev_cmd": "Manda una orden sin datos (TD_MOTOR, TD_CHANGESTATE, CMD_UPDATE...): 0, o el error del "
+               "dispositivo; dev_actual da su resultado",
+    "dev_actual": "io_Actual de la última orden de dev (TD_CHANGESTATE: 0 con un disco dentro)",
     "inflate": "Descomprime n bytes de deflate sin cabecera (como en un ZIP) del búfer src a dest: los bytes "
                "escritos, o -1 si no es deflate o está cortado, -2 si no cabe en max, -3 si no hay memoria (zlib)",
     "inflate_auto": "inflate para gzip, zlib o deflate sin cabecera, según sus primeros bytes (un cuerpo HTTP con "

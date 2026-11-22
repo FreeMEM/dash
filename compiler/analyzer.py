@@ -1006,6 +1006,14 @@ class SemanticAnalyzer(ASTVisitor):
         # Check if it's a builtin function
         builtin = get_builtin(node.name)
         if builtin:
+            if node.name.startswith(("file_", "dir_", "path_")) and (
+                    os.environ.get("DASH_HANDLER") == "1" or getattr(self.program, "handler", False)):
+                # a DOS handler that calls the DOS on its own volume waits for itself (docs/HANDLER_LOOP.md)
+                warned = self.__dict__.setdefault("_handler_warned", set())
+                if node.name not in warned:
+                    warned.add(node.name)
+                    self.warning(f"in a DOS handler, {node.name} asks the DOS: a path of the handler's own volume "
+                                 f"would hang it (other volumes are fine)", node)
             from compiler.codegen import unimplemented_builtins  # lazy: codegen imports this module
             if node.name in unimplemented_builtins():
                 self.error(f"Builtin '{node.name}' is declared but not implemented yet "

@@ -41,6 +41,7 @@ GROUPS = [
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
     ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
+    ("HANDLER_FUNCTIONS", "Handlers de DOS (sistemas de archivos)", "DOS handlers (file systems)"),
     ("UTF8_FUNCTIONS", "UTF-8", "UTF-8"),              # Lorraine D5
     ("BUFSEARCH_FUNCTIONS", "Comparar y buscar en un búfer", "Comparing and searching in a buffer"),  # Lorraine D38, D39
     ("DOUBLE_FUNCTIONS", "Double y texto", "Double and text"),   # Lorraine D3

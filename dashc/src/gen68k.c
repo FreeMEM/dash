@@ -2758,6 +2758,9 @@ static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
     {NULL, NULL, NULL, 0}
 };
 static long sink_off = -1;
+#ifndef DASH_A64
+static char builtin_warned[4096];   /* los avisos de handler, uno por builtin */
+#endif
 
 /* Un builtin de ./dash (compiler/amiga_builtins.py): su envoltorio db_nombre de la librería, con los
    argumentos que falten a 0. Si guarda lo que recibe, un texto o un objeto pasa escapado (se queda hasta
@@ -2768,6 +2771,14 @@ static int gen_dash_builtin(Node *n)
     char *sym;
     if ((b = find_builtin(n->name)) < 0) fatal_node(n, "la función %s no existe", n->name);
 #ifndef DASH_A64
+    if ((prog->handler || handler_mode) && (!strncmp(n->name, "file_", 5) || !strncmp(n->name, "dir_", 4) ||
+                                            !strncmp(n->name, "path_", 5)) && b < (int)sizeof builtin_warned && !builtin_warned[b]) {
+        /* un handler de DOS que pide al DOS algo de su propio volumen se espera a sí mismo (docs/HANDLER_LOOP.md) */
+        builtin_warned[b] = 1;
+        err_printf("%s:%d:%d: Warning: en un handler de DOS, %s pide al DOS: una ruta del propio volumen del "
+                   "handler lo bloquearía (las de otros volúmenes, bien)\n", src_files.v[n->file], n->line, n->col,
+                   n->name);
+    }
     if (builtin_info[b].dashos == 1) fatal_node(n, "%s es solo de DashOS (./dash --dashos)", n->name);
 #else
     if (builtin_info[b].dashos == 2)

@@ -38,6 +38,7 @@
 25. [DashOS (AArch64)](#25-dashos-aarch64)
 26. [Inline assembler](#26-inline-assembler)
 27. [3D with MiniGL](#27-3d-with-minigl)
+28. [DOS handlers (file systems)](#28-dos-handlers-file-systems)
 
 ---
 
@@ -5154,6 +5155,73 @@ There is state (`gl_enable`, `gl_blend_func`...), matrices (`gl_perspective`, `g
 from `image_decode` (`gl_texture`), lights (`gl_light`), fog (`gl_fog`) and `gl_read_pixel` for tests. All of it, with
 what was tried in the emulator and what Wazp3D does not do, in [MINIGL.en.md](MINIGL.en.md). Example:
 `examples/gl_cubo.dash`.
+
+---
+
+## 28. DOS handlers (file systems)
+
+Dash can write a DOS handler for AmigaOS 3.x: the program behind a device such as `DF0:` or `RAM:`, which gets a
+packet from the DOS for each thing other programs ask for and answers it. Both ways work: `./dash --handler` and
+`./dash --gcc --handler`, or the `@handler` directive, which `lib/amiga/handler.dash` sets when imported. The
+user's idea. Plan and log: [HANDLER_LOOP.md](HANDLER_LOOP.md) (in Spanish).
+
+```ruby
+import "lib/amiga/handler.dash"   # @handler, DosPacket, FileLock, FileInfoBlock, ACTION_*, ERROR_*...
+
+Main
+    handler_log("T:mine.log")                 # Print goes there (without a log, nowhere)
+    volume = handler_volume_add("Mine", ID_DOS_DISK)
+    handler_ready(true, 0)                    # answers the startup packet
+    while true
+        p = handler_wait()                    # the next packet; 0 with Ctrl-C
+        if p == 0
+            break
+        end
+        pk = Ptr DosPacket(p)
+        if pk.dp_Type == ACTION_IS_FILESYSTEM
+            packet_reply(p, DOSTRUE, 0)
+        elif pk.dp_Type == ACTION_LOCATE_OBJECT and bstr_text(pk.dp_Arg2) == "Mine:"
+            packet_reply(p, lock_new(0, SHARED_LOCK, volume), 0)
+        else
+            Print "not done: #{pk.dp_Type}"
+            packet_reply(p, DOSFALSE, ERROR_ACTION_NOT_KNOWN)
+        end
+    end
+end
+```
+
+It is mounted with a mountlist (in `DEVS:DOSDrivers` or with `Mount MINE: FROM file`):
+
+```
+MINE:
+    Handler = L:mine-handler       /* with a disk: FileSystem = ..., Device = ..., Unit = ..., the geometry */
+    Stacksize = 8000
+    Priority = 5
+    GlobVec = -1                   /* a handler in C (or Dash), not BCPL */
+    Activate = 1                   /* it starts when mounted, not on the first access */
+#
+```
+
+- **The start.** `handler_name()` gives the device's name and `handler_startup()` the value of `Startup =`; with
+  `Device =`, `lib/amiga/handler.dash` reads the `FileSysStartupMsg`: `fssm_device()`, `fssm_unit()`, `fssm_env()`
+  (the `DosEnvec`), `fssm_first_block()`, `fssm_blocks()`, `fssm_block_size()` and `fssm_open()`, which opens the
+  device for `dev_read` and `dev_write` (beyond 4 GB, with TD64 or NSD).
+- **The packets.** `handler_wait()` gives the address of the `DosPacket`; `Ptr DosPacket(p)` reads `dp_Type` and the
+  arguments. BPTRs become addresses with `baddr` and back with `mkbptr`; BSTRs are read with `bstr_text` and written
+  with `bstr_put`. Locks: `lock_new(key, access, volume)`, `lock_key`, `lock_free`. For `EXAMINE_OBJECT` and
+  `EXAMINE_NEXT`, `fib_fill`; for `DISK_INFO` and `INFO`, `info_fill`. `ExAll` is not needed: the DOS does it with
+  `EXAMINE_NEXT` if the handler answers `ERROR_ACTION_NOT_KNOWN`.
+- **No console.** `Print` goes nowhere until `handler_log(path)`. A runtime error goes to that log (without a log, to
+  a requester). If the handler ends with a packet unanswered, the runtime answers it with `ERROR_OBJECT_NOT_FOUND`,
+  like the ones still queued, and the DOS loads a new copy on the next access.
+- **The DOS from a handler.** The packets come to a port of the handler's own, not the process's: so it can use
+  Dash's file functions with other volumes (a log in `T:`, a disk image). With a path of its own volume it would wait
+  for itself: the compiler warns about each file function a handler uses.
+- **Errors that open requesters.** `ERROR_DISK_WRITE_PROTECTED`, `ERROR_NO_DISK` and `ERROR_DEVICE_NOT_MOUNTED` make
+  the client's DOS open a requester and wait.
+
+Complete example: `examples/handler_ram.dash`, a disk in memory (read, write, list, rename, delete, protection and
+comments). Tests in the emulator: `tests/test_handler_*.dash`, with `# emu-handler:` in the runner.
 
 ---
 
