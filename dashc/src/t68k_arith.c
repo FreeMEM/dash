@@ -19,6 +19,15 @@ static int popcount(uint32_t m)
     return c;
 }
 
+/* Tras cada muls.l de 32 bits, move.l d0,d0: el JIT de Emu68 1.1.0-beta.1 deja en el registro de ARM el producto de
+   64 bits (smull) y su lsr.l Dn,Dm desplaza esos 64 bits, así que (a * b) >> n salía mal en el mismo bloque. El
+   move.l lo traduce como una escritura de 32 bits, que limpia la mitad alta; las banderas, como tras tst.l (Tachyon
+   se colgaba al crear el contexto de QuickJS: lo contaron David Martínez y BordanBordan) */
+static void mul_emu68(void)
+{
+    w(0x2000);                                         /* move.l d0,d0 */
+}
+
 /* d0 = d0 * k; src: un registro que ya tiene el valor de d0 (-1: ninguno) */
 static void mul_const(long k, int src)
 {
@@ -27,6 +36,7 @@ static void mul_const(long k, int src)
     if (k == 0) { w(0x7000); return; }                 /* moveq #0,d0 */
     if (cpu020 && popcount(m) > 2) {
         w(0x4C3C); w(0x0800); l((uint32_t)k);          /* muls.l #k,d0 */
+        mul_emu68();
         return;
     }
     if (popcount(m) == 1) {
@@ -151,6 +161,7 @@ static void mul_d1(void)
 {
     if (cpu020) {
         w(0x4C01); w(0x0800);                          /* muls.l d1,d0 */
+        mul_emu68();
         d0_loaded = (uint32_t)obj->code.n;
         return;
     }
@@ -168,6 +179,7 @@ static void square_d0(void)
 {
     if (cpu020) {
         w(0x4C00); w(0x0800);                          /* muls.l d0,d0 */
+        mul_emu68();
         d0_loaded = (uint32_t)obj->code.n;
         return;
     }

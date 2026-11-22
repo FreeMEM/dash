@@ -57,7 +57,10 @@ def main():
     for out, lib in (("dashrt.o", "dashlib.o"), ("dashrt_mc.o", "dashlib_mc.o")):
         write(HERE / out, [build / lib] + common)
     # --fpu: todo para 68020 + 68881 (como ./dash --fpu), el Float de dashc por rt_fpu.s
+    # (con el as de compiler/emu68: un move.l tras cada muls.l de 32 bits, por el JIT de Emu68 1.1.0-beta.1)
+    from compiler.cflags import emu68_flags
     fpu = [f for f in FLAGS if f != "-m68000"] + ["-m68020", "-m68881"]
+    fpu += emu68_flags(fpu)
     run([GCC, *fpu, *inc, "-c", str(src), "-o", str(build / "dashlib_fpu.o")])
     run([GCC, *fpu, *inc, "-DDASH_MEMCHECK", "-c", str(src), "-o", str(build / "dashlib_fpu_mc.o")])
     common = objects(build, fpu, "_fpu", "-m68020", "-m68881")

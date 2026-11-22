@@ -90,12 +90,16 @@ class CpuFlags(unittest.TestCase):
     """./dash --cpu (docs/RECURSOS_LOOP.md R1): 68020 code (the toolchain's libnix is 68000 or 68020) tuned per CPU"""
     def test_flags(self):
         sys.path.insert(0, ROOT)
-        from compiler.cflags import cpu_flags
+        from compiler.cflags import cpu_flags, emu68_flags
         self.assertEqual(cpu_flags(), [])
         self.assertEqual(cpu_flags("68000"), [])
-        self.assertEqual(cpu_flags(None, True), ["-m68020", "-m68881"])
-        self.assertEqual(cpu_flags("68020"), ["-m68020"])
-        self.assertEqual(cpu_flags("68060", True), ["-m68020", "-mtune=68060", "-m68881"])
+        # (68020 o más: y el as de compiler/emu68, el rodeo del JIT de Emu68 1.1.0-beta.1)
+        b = emu68_flags(["-m68020"])
+        self.assertEqual(len(b), 1)
+        self.assertTrue(b[0].startswith("-B") and os.path.exists(os.path.join(b[0][2:], "as")))
+        self.assertEqual(cpu_flags(None, True), ["-m68020", "-m68881"] + b)
+        self.assertEqual(cpu_flags("68020"), ["-m68020"] + b)
+        self.assertEqual(cpu_flags("68060", True), ["-m68020", "-mtune=68060", "-m68881"] + b)
 
     @unittest.skipUnless(os.path.exists("/opt/amiga/bin/m68k-amigaos-gcc"), "needs the Amiga toolchain")
     def test_68060_without_64_bit_multiply(self):
