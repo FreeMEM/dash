@@ -242,6 +242,30 @@ with `buffer_free`.
     "buffer_get_float": _f(_BUF_ES + "\nDevuelve, como `Double`, el `float` de 32 bits de esa posición.\n",
                            _BUF_EN + "\nReturns, as a `Double`, the 32-bit `float` at that position.\n",
                            ["buffer_set_float"]),
+    "buffer_tex_span": _f("""\
+- `dest`, `offset`: el búfer donde se escribe (un búfer de lápices de una pantalla, por ejemplo) y desde dónde.
+- `count`: cuántos bytes.
+- `texture`: la textura, un byte por texel, fila tras fila; cuadrada, de `2^shift` de lado.
+- `shift`: el lado de la textura en potencia de dos: 7 para 128 x 128 (hasta 12).
+- `u`, `v`: el texel del primer byte, en coma fija 16.16 (`x * 65536`).
+- `du`, `dv`: cuánto avanzan `u` y `v` en cada byte, también en 16.16. Se dan la vuelta al salir de la textura.
+- `table`: 0, o un búfer de 256 bytes por el que pasa cada texel (la luz: una tabla por cada nivel, como el
+  colormap de Quake).
+
+Es el bucle de dentro de un motor 3D con texturas: una llamada por cada línea de un triángulo, con las `u`, `v` de
+sus dos extremos. Va en C: unas pocas instrucciones por byte.
+""", """\
+- `dest`, `offset`: the buffer written (a pen buffer of a screen, say) and from where.
+- `count`: how many bytes.
+- `texture`: the texture, one byte per texel, row after row; square, `2^shift` a side.
+- `shift`: the side of the texture as a power of two: 7 for 128 x 128 (up to 12).
+- `u`, `v`: the texel of the first byte, in 16.16 fixed point (`x * 65536`).
+- `du`, `dv`: how much `u` and `v` move on each byte, 16.16 too. They wrap round outside the texture.
+- `table`: 0, or a 256-byte buffer each texel goes through (the light: one table per level, as Quake's colormap).
+
+It is the inner loop of a textured 3D engine: one call per line of a triangle, with the `u`, `v` of its two ends. It
+is in C: a few instructions per byte.
+""", ["buffer_fill", "gfx_pens_draw"]),
     "buffer_copy": _f("""\
 - `dest`, `dest_offset`: adónde.
 - `src`, `src_offset`: de dónde.

@@ -21648,6 +21648,31 @@ static double _dash_buffer_get_float(APTR buffer, LONG offset) {
     return (double)u.f;
 }
 
+/* A line of a textured triangle: count texels of a square texture of 2^shift a side, from (u, v) by (du, dv), 16.16
+   fixed point, wrapping round; through table (256 bytes: the light, as Quake's colormap) if there is one */
+static void _dash_buffer_tex_span(APTR dest, LONG offset, LONG count, APTR texture, LONG shift, LONG u, LONG v, LONG du,
+                                  LONG dv, APTR table) {
+    UBYTE *d;
+    const UBYTE *t = (const UBYTE *)texture, *m = (const UBYTE *)table;
+    ULONG mask, uu = (ULONG)u, vv = (ULONG)v;
+    if (!dest || !texture || count <= 0 || shift < 0 || shift > 12) return;
+    mask = (1UL << shift) - 1;
+    d = (UBYTE *)dest + offset;
+    if (m) {
+        while (count-- > 0) {
+            *d++ = m[t[(((vv >> 16) & mask) << shift) | ((uu >> 16) & mask)]];
+            uu += (ULONG)du;
+            vv += (ULONG)dv;
+        }
+    } else {
+        while (count-- > 0) {
+            *d++ = t[(((vv >> 16) & mask) << shift) | ((uu >> 16) & mask)];
+            uu += (ULONG)du;
+            vv += (ULONG)dv;
+        }
+    }
+}
+
 static void _dash_buffer_copy(APTR dest, LONG dest_offset, APTR src, LONG src_offset, LONG length) {
     CopyMem((UBYTE *)src + src_offset, (UBYTE *)dest + dest_offset, length);
 }

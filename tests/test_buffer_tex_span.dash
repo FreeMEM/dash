@@ -1,0 +1,52 @@
+# Test: buffer_tex_span, the inner loop of a textured engine: a 4 x 4 texture (texel = 10 * row + column), steps of a
+# whole texel and of half one, going backwards and wrapping round, and through a light table (texel + 100)
+# expect-out: fila 0: 0 1 2 3 0 1
+# expect-out: fila 2 a medias: 20 20 21 21 22 22
+# expect-out: diagonal: 0 11 22 33 0
+# expect-out: hacia atrás: 3 2 1 0 3
+# expect-out: con tabla: 130 131 132 133
+# expect-out: fuera intacto: 255 255
+# expect-out: nada: 255
+
+func leer(b: Int, desde: Int, n: Int) -> String
+    t = ""
+    for i in (0..n - 1)
+        if i > 0
+            t = t + " "
+        end
+        t = t + "#{buffer_get_byte(b, desde + i)}"
+    end
+    return t
+end
+
+Main
+    tex = buffer_alloc(16)
+    for f in (0..3)
+        for c in (0..3)
+            buffer_set_byte(tex, f * 4 + c, f * 10 + c)
+        end
+    end
+    luz = buffer_alloc(256)
+    for i in (0..255)
+        buffer_set_byte(luz, i, (i + 100) % 256)
+    end
+    d = buffer_alloc(16)
+    buffer_fill(d, 0, 16, 255)
+    buffer_tex_span(d, 1, 6, tex, 2, 0, 0, 65536, 0, 0)
+    Print "fila 0: #{leer(d, 1, 6)}"
+    buffer_tex_span(d, 1, 6, tex, 2, 0, 2 * 65536, 32768, 0, 0)
+    Print "fila 2 a medias: #{leer(d, 1, 6)}"
+    buffer_tex_span(d, 1, 5, tex, 2, 0, 0, 65536, 65536, 0)
+    Print "diagonal: #{leer(d, 1, 5)}"
+    buffer_tex_span(d, 1, 5, tex, 2, 3 * 65536, 0, -65536, 0, 0)
+    Print "hacia atrás: #{leer(d, 1, 5)}"
+    buffer_tex_span(d, 1, 4, tex, 2, 0, 3 * 65536, 65536, 0, luz)
+    Print "con tabla: #{leer(d, 1, 4)}"
+    Print "fuera intacto: #{buffer_get_byte(d, 0)} #{buffer_get_byte(d, 15)}"
+    buffer_fill(d, 0, 16, 255)
+    buffer_tex_span(d, 0, 0, tex, 2, 0, 0, 65536, 0, 0)
+    Print "nada: #{buffer_get_byte(d, 0)}"
+    buffer_free(tex)
+    buffer_free(luz)
+    buffer_free(d)
+end
