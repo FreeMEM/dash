@@ -391,6 +391,8 @@ DESC_ES = {
     # Imágenes RGB desde un búfer
     "gfx_rgb_draw": "Dibuja un búfer RGB24 (3 bytes por píxel, filas una tras otra) en x, y (RTG: con un "
                     "WritePixelArray; pantallas de paleta: los colores más cercanos)",
+    "gfx_pens_draw_rgb": "Dibuja una imagen de lápices con los colores de una tabla (256 longs 0xRRGGBB) en vez "
+                         "de la paleta: para pantallas de 16 a 32 bits",
     "gfx_rgb_draw_scaled": "Dibuja un búfer RGB24 en x, y a dest_width x dest_height (el píxel más cercano, fila a fila)",
     # Imágenes (datatypes)
     "image_load": "Una imagen de un fichero con los datatypes (ILBM; PNG, GIF, JPEG si el sistema los tiene), con los "

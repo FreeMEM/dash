@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1088 funciones, 1088 implementadas, 0 sin implementar.
+Total: 1089 funciones, 1089 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -5814,6 +5814,7 @@ de vídeo. En RTG va directa; en una pantalla de paleta cada píxel toma el colo
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | [`gfx_rgb_draw(buffer, width, height, x, y)`](#gfx_rgb_draw) | — | Dibuja un búfer RGB24 (3 bytes por píxel, filas una tras otra) en x, y (RTG: con un WritePixelArray; pantallas de paleta: los colores más cercanos) |  |
+| [`gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`](#gfx_pens_draw_rgb) | — | Dibuja una imagen de lápices con los colores de una tabla (256 longs 0xRRGGBB) en vez de la paleta: para pantallas de 16 a 32 bits |  |
 | [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#gfx_rgb_draw_scaled) | — | Dibuja un búfer RGB24 en x, y a dest_width x dest_height (el píxel más cercano, fila a fila) |  |
 
 <a id="gfx_rgb_draw"></a>
@@ -5827,6 +5828,21 @@ de vídeo. En RTG va directa; en una pantalla de paleta cada píxel toma el colo
 La dibuja de una vez. En una pantalla de paleta, cada píxel toma el color más cercano.
 
 Ver también: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_pens_draw_rgb"></a>
+
+### `gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`
+
+- `buffer`: un búfer con un byte por píxel, el número de color (lápiz), fila tras fila, como en `gfx_pens_draw`.
+- `width`, `height`: el tamaño de la imagen.
+- `x`, `y`: dónde va la esquina de arriba a la izquierda.
+- `colors`: un búfer de 1024 bytes: 256 números `0xRRGGBB` (`buffer_set_long`), el color de cada lápiz.
+
+Como `gfx_pens_draw`, pero los colores salen de la tabla y no de la paleta de la pantalla: en una pantalla de 16,
+24 o 32 bits (RTG) cada lápiz tiene su color de 8 bits por componente, sin los 4 bits de `gfx_rgb`. Se pasa a RGB
+en C y va de una vez con `WritePixelArray`. En una pantalla de paleta se usan los lápices más parecidos (más lento).
+
+Ver también: [`gfx_pens_draw`](#gfx_pens_draw), [`gfx_rgb_draw`](#gfx_rgb_draw), [`rtg_open_screen`](#rtg_open_screen).
 
 <a id="gfx_rgb_draw_scaled"></a>
 

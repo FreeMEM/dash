@@ -210,6 +210,25 @@ Devuelve el color de ese píxel como `0xRRGGBB`; en una pantalla de paleta, el d
 Returns that pixel's colour as `0xRRGGBB`; on a palette screen, the one of its colour number.
 """, ["gfx_pixel_read"]),
     # ------------------------------------------------------------ RGB
+    "gfx_pens_draw_rgb": _f("""\
+- `buffer`: un búfer con un byte por píxel, el número de color (lápiz), fila tras fila, como en `gfx_pens_draw`.
+- `width`, `height`: el tamaño de la imagen.
+- `x`, `y`: dónde va la esquina de arriba a la izquierda.
+- `colors`: un búfer de 1024 bytes: 256 números `0xRRGGBB` (`buffer_set_long`), el color de cada lápiz.
+
+Como `gfx_pens_draw`, pero los colores salen de la tabla y no de la paleta de la pantalla: en una pantalla de 16,
+24 o 32 bits (RTG) cada lápiz tiene su color de 8 bits por componente, sin los 4 bits de `gfx_rgb`. Se pasa a RGB
+en C y va de una vez con `WritePixelArray`. En una pantalla de paleta se usan los lápices más parecidos (más lento).
+""", """\
+- `buffer`: a buffer with one byte per pixel, the colour number (pen), row after row, as in `gfx_pens_draw`.
+- `width`, `height`: the size of the image.
+- `x`, `y`: where the top left corner goes.
+- `colors`: a 1024-byte buffer: 256 numbers `0xRRGGBB` (`buffer_set_long`), the colour of each pen.
+
+As `gfx_pens_draw`, but the colours come from the table and not from the screen's palette: on a 16, 24 or 32-bit
+screen (RTG) each pen has its colour with 8 bits per gun, without the 4 bits of `gfx_rgb`. It is turned into RGB in C
+and goes in one `WritePixelArray`. On a palette screen the closest pens are used (slower).
+""", ["gfx_pens_draw", "gfx_rgb_draw", "rtg_open_screen"]),
     "gfx_rgb_draw": _f("""\
 - `buffer`: los píxeles, 3 bytes cada uno (rojo, verde, azul), fila tras fila.
 - `width`, `height`: el tamaño de la imagen.

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1088 functions, 1088 implemented, 0 not implemented.
+Total: 1089 functions, 1089 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -5812,6 +5812,7 @@ it goes straight; on a palette screen each pixel takes the closest colour.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | [`gfx_rgb_draw(buffer, width, height, x, y)`](#gfx_rgb_draw) | — | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
+| [`gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`](#gfx_pens_draw_rgb) | — | Draw an image of pens (one byte a pixel) at x, y with the colors of a table (256 longs 0xRRGGBB, a buffer of 1024 bytes) instead of the screen's palette: for a screen of 16, 24 or 32 bits (RTG, one WritePixelArray); on a palette screen, the closest pens |  |
 | [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#gfx_rgb_draw_scaled) | — | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
 
 <a id="gfx_rgb_draw"></a>
@@ -5825,6 +5826,21 @@ it goes straight; on a palette screen each pixel takes the closest colour.
 Draws it in one go. On a palette screen, each pixel takes the closest colour.
 
 See also: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_pens_draw_rgb"></a>
+
+### `gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`
+
+- `buffer`: a buffer with one byte per pixel, the colour number (pen), row after row, as in `gfx_pens_draw`.
+- `width`, `height`: the size of the image.
+- `x`, `y`: where the top left corner goes.
+- `colors`: a 1024-byte buffer: 256 numbers `0xRRGGBB` (`buffer_set_long`), the colour of each pen.
+
+As `gfx_pens_draw`, but the colours come from the table and not from the screen's palette: on a 16, 24 or 32-bit
+screen (RTG) each pen has its colour with 8 bits per gun, without the 4 bits of `gfx_rgb`. It is turned into RGB in C
+and goes in one `WritePixelArray`. On a palette screen the closest pens are used (slower).
+
+See also: [`gfx_pens_draw`](#gfx_pens_draw), [`gfx_rgb_draw`](#gfx_rgb_draw), [`rtg_open_screen`](#rtg_open_screen).
 
 <a id="gfx_rgb_draw_scaled"></a>
 
