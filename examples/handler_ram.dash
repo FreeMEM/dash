@@ -1,0 +1,418 @@
+# Un disco en memoria escrito en Dash: un handler de DOS (docs/HANDLER_LOOP.md, sección 28 del manual).
+# Una sola carpeta (la raíz) con ficheros que se leen y se escriben; se pierde al apagar.
+#
+#   ./dash examples/handler_ram.dash -o DEVS:L/ramd-handler      (o ./dash --gcc ...)
+#
+# y en el Amiga, una mountlist (por ejemplo DEVS:DOSDrivers/RAMD, o un fichero para "Mount RAMD: FROM fichero"):
+#
+#   RAMD:
+#       Handler = L:ramd-handler
+#       Stacksize = 8000
+#       Priority = 5
+#       GlobVec = -1
+#       Activate = 1
+#   #
+#
+# El volumen se llama "Dash RAM" (Startup = "otro nombre" lo cambia). Lo que hace va a T:RAMD.log (el nombre del
+# dispositivo).
+import "lib/amiga/handler.dash"
+
+struct RFile
+    id: Int = 0
+    name: String = ""
+    data: Int = 0          # búfer con el contenido (buffer_alloc), 0 si está vacío
+    size: Int = 0
+    cap: Int = 0
+    time: Int = 0
+    protection: Int = 0
+    comment: String = ""
+    opens: Int = 0         # cuántas veces está abierto
+end
+
+# un fichero abierto (su id va en fh_Args, y llega en el dp_Arg1 de READ, WRITE, SEEK, END...)
+struct OpenFile
+    id: Int = 0
+    file: RFile
+    pos: Int = 0
+end
+
+var files: [RFile] = []
+var opens: [OpenFile] = []
+var next_id: Int = 1
+var volume: Int = 0
+var vol_name: String = "Dash RAM"
+var created: Int = 0
+
+# El nombre de un paquete sin el volumen delante ("RAMD:a" o ":a" da "a")
+func plain_name(bstr: Int) -> String
+    s = bstr_text(bstr)
+    c = str_find(s, ":")
+    if c >= 0
+        s = s[c + 1:]
+    end
+    return s
+end
+
+func find_file(name: String) -> RFile
+    low = str_lower(name)
+    for f in files
+        if str_lower(f.name) == low
+            return f
+        end
+    end
+    return nil
+end
+
+func file_by_id(id: Int) -> RFile
+    for f in files
+        if f.id == id
+            return f
+        end
+    end
+    return nil
+end
+
+func open_by_id(id: Int) -> OpenFile
+    for o in opens
+        if o.id == id
+            return o
+        end
+    end
+    return nil
+end
+
+# El objeto de (cerradura, nombre): la raíz (0), un fichero (su id), -1 si no está, -2 si el nombre es incorrecto
+func resolve(lock: Int, name: String) -> Int
+    base = lock_key(lock)
+    if name == ""
+        return base
+    end
+    if base != 0 or str_contains(name, "/")
+        return -2     # (solo hay una carpeta)
+    end
+    f = find_file(name)
+    if f == nil
+        return -1
+    end
+    return f.id
+end
+
+func fail_of(key: Int) -> Int
+    if key == -2
+        return ERROR_OBJECT_NOT_FOUND
+    end
+    return ERROR_OBJECT_NOT_FOUND
+end
+
+func ensure_cap(f: RFile, need: Int) -> Bool
+    if need <= f.cap
+        return true
+    end
+    cap = f.cap * 2
+    if cap < need
+        cap = need + 256
+    end
+    buf = buffer_alloc(cap)
+    if buf == 0
+        return false
+    end
+    if f.data != 0
+        buffer_copy(buf, 0, f.data, 0, f.size)
+        buffer_free(f.data)
+    end
+    f.data = buf
+    f.cap = cap
+    return true
+end
+
+func new_open(f: RFile, fh: Int) -> Int
+    o = OpenFile(next_id, f, 0)
+    next_id = next_id + 1
+    opens.push(o)
+    f.opens = f.opens + 1
+    h = Ptr FileHandle(baddr(fh))
+    h.fh_Args = o.id
+    h.fh_Port = 0
+    return DOSTRUE
+end
+
+func close_open(id: Int)
+    i = 0
+    while i < opens.length
+        if opens[i].id == id
+            opens[i].file.opens = opens[i].file.opens - 1
+            opens.remove(i)
+            return
+        end
+        i = i + 1
+    end
+end
+
+func fill_fib(fib: Int, key: Int)
+    if key == 0
+        fib_fill(fib, 0, ST_ROOT, vol_name, 0, 0, created, "")
+    else
+        f = file_by_id(key)
+        fib_fill(fib, key, ST_FILE, f.name, f.size, f.protection, f.time, f.comment)
+    end
+end
+
+# (un tamaño fijo de 4 MB: la memoria libre cambia a cada momento, e Info daría cada vez otra cosa)
+func disk_info(info: Int)
+    used = 1
+    for f in files
+        used = used + (f.cap + 511) / 512 + 1
+    end
+    total = 8192
+    if used > total
+        total = used
+    end
+    info_fill(info, total, used, 512, ID_VALIDATED, volume)
+end
+
+Main
+    handler_log("T:#{handler_name()}.log")
+    s = handler_startup()
+    if s > 0 and s < 0x40000000
+        nombre = bstr_text(s)
+        if nombre != ""
+            vol_name = str_replace(nombre, "\"", "")
+        end
+    end
+    created = time_unix()
+    volume = handler_volume_add(vol_name, ID_DOS_DISK)
+    if volume == 0
+        Print "no se pudo crear el volumen #{vol_name}"
+        handler_ready(false, ERROR_NO_FREE_STORE)
+        program_exit(20)
+    end
+    Print "#{handler_name()}: volumen #{vol_name}"
+    handler_ready(true, 0)
+    vivo = true
+    while vivo
+        p = handler_wait()
+        if p == 0
+            break
+        end
+        pk = Ptr DosPacket(p)
+        t = pk.dp_Type
+        r1 = DOSFALSE
+        r2 = 0
+        if t == ACTION_LOCATE_OBJECT
+            key = resolve(pk.dp_Arg1, plain_name(pk.dp_Arg2))
+            if key < 0
+                r2 = fail_of(key)
+            else
+                r1 = lock_new(key, pk.dp_Arg3, volume)
+                if r1 == 0
+                    r2 = ERROR_NO_FREE_STORE
+                end
+            end
+        elif t == ACTION_FREE_LOCK
+            lock_free(pk.dp_Arg1)
+            r1 = DOSTRUE
+        elif t == ACTION_COPY_DIR
+            r1 = lock_new(lock_key(pk.dp_Arg1), SHARED_LOCK, volume)
+        elif t == ACTION_PARENT
+            if lock_key(pk.dp_Arg1) != 0
+                r1 = lock_new(0, SHARED_LOCK, volume)
+            end
+        elif t == ACTION_SAME_LOCK
+            if lock_key(pk.dp_Arg1) == lock_key(pk.dp_Arg2)
+                r1 = DOSTRUE
+            end
+        elif t == ACTION_EXAMINE_OBJECT
+            key = lock_key(pk.dp_Arg1)
+            fill_fib(baddr(pk.dp_Arg2), key)
+            # ExNext sigue desde fib_DiskKey: en la raíz, el número de entradas ya dadas
+            r1 = DOSTRUE
+        elif t == ACTION_EXAMINE_NEXT
+            fib = baddr(pk.dp_Arg2)
+            n = Ptr FileInfoBlock(fib).fib_DiskKey
+            if lock_key(pk.dp_Arg1) != 0 or n < 0 or n >= files.length
+                r2 = ERROR_NO_MORE_ENTRIES
+            else
+                f = files[n]
+                fib_fill(fib, n + 1, ST_FILE, f.name, f.size, f.protection, f.time, f.comment)
+                r1 = DOSTRUE
+            end
+        elif t == ACTION_FINDINPUT or t == ACTION_FINDOUTPUT or t == ACTION_FINDUPDATE
+            name = plain_name(pk.dp_Arg3)
+            key = resolve(pk.dp_Arg2, name)
+            if key == 0
+                r2 = ERROR_OBJECT_WRONG_TYPE
+            elif key == -2
+                r2 = ERROR_OBJECT_NOT_FOUND
+            elif key == -1 and t == ACTION_FINDINPUT
+                r2 = ERROR_OBJECT_NOT_FOUND
+            else
+                var f: RFile = nil
+                if key == -1
+                    f = RFile(next_id, name, 0, 0, 0, time_unix(), 0, "", 0)
+                    next_id = next_id + 1
+                    files.push(f)
+                else
+                    f = file_by_id(key)
+                    if t == ACTION_FINDOUTPUT
+                        f.size = 0
+                        f.time = time_unix()
+                    end
+                end
+                r1 = new_open(f, pk.dp_Arg1)
+            end
+        elif t == ACTION_FH_FROM_LOCK
+            key = lock_key(pk.dp_Arg2)
+            if key == 0
+                r2 = ERROR_OBJECT_WRONG_TYPE
+            else
+                r1 = new_open(file_by_id(key), pk.dp_Arg1)
+                lock_free(pk.dp_Arg2)
+            end
+        elif t == ACTION_READ
+            o = open_by_id(pk.dp_Arg1)
+            if o == nil
+                r1 = -1
+                r2 = ERROR_INVALID_LOCK
+            else
+                n = o.file.size - o.pos
+                if n > pk.dp_Arg3
+                    n = pk.dp_Arg3
+                end
+                if n > 0
+                    buffer_copy(pk.dp_Arg2, 0, o.file.data, o.pos, n)
+                    o.pos = o.pos + n
+                else
+                    n = 0
+                end
+                r1 = n
+            end
+        elif t == ACTION_WRITE
+            o = open_by_id(pk.dp_Arg1)
+            n = pk.dp_Arg3
+            if o == nil
+                r1 = -1
+                r2 = ERROR_INVALID_LOCK
+            elif not ensure_cap(o.file, o.pos + n)
+                r1 = -1
+                r2 = ERROR_DISK_FULL
+            else
+                buffer_copy(o.file.data, o.pos, pk.dp_Arg2, 0, n)
+                o.pos = o.pos + n
+                if o.pos > o.file.size
+                    o.file.size = o.pos
+                end
+                o.file.time = time_unix()
+                r1 = n
+            end
+        elif t == ACTION_SEEK
+            o = open_by_id(pk.dp_Arg1)
+            if o == nil
+                r1 = -1
+                r2 = ERROR_INVALID_LOCK
+            else
+                pos = pk.dp_Arg2
+                if pk.dp_Arg3 == OFFSET_CURRENT
+                    pos = o.pos + pk.dp_Arg2
+                elif pk.dp_Arg3 == OFFSET_END
+                    pos = o.file.size + pk.dp_Arg2
+                end
+                if pos < 0 or pos > o.file.size
+                    r1 = -1
+                    r2 = ERROR_SEEK_ERROR
+                else
+                    r1 = o.pos
+                    o.pos = pos
+                end
+            end
+        elif t == ACTION_END
+            close_open(pk.dp_Arg1)
+            r1 = DOSTRUE
+        elif t == ACTION_EXAMINE_FH
+            o = open_by_id(pk.dp_Arg1)
+            if o != nil
+                fill_fib(baddr(pk.dp_Arg2), o.file.id)
+                r1 = DOSTRUE
+            end
+        elif t == ACTION_PARENT_FH
+            r1 = lock_new(0, SHARED_LOCK, volume)
+        elif t == ACTION_COPY_DIR_FH
+            o = open_by_id(pk.dp_Arg1)
+            if o != nil
+                r1 = lock_new(o.file.id, SHARED_LOCK, volume)
+            end
+        elif t == ACTION_DELETE_OBJECT
+            key = resolve(pk.dp_Arg1, plain_name(pk.dp_Arg2))
+            if key <= 0
+                r2 = ERROR_OBJECT_NOT_FOUND
+                if key == 0
+                    r2 = ERROR_OBJECT_WRONG_TYPE
+                end
+            else
+                f = file_by_id(key)
+                if f.opens > 0
+                    r2 = ERROR_OBJECT_IN_USE
+                else
+                    i = 0
+                    while i < files.length
+                        if files[i].id == key
+                            files.remove(i)
+                            break
+                        end
+                        i = i + 1
+                    end
+                    if f.data != 0
+                        buffer_free(f.data)
+                    end
+                    r1 = DOSTRUE
+                end
+            end
+        elif t == ACTION_RENAME_OBJECT
+            key = resolve(pk.dp_Arg1, plain_name(pk.dp_Arg2))
+            nuevo = plain_name(pk.dp_Arg4)
+            if key <= 0
+                r2 = ERROR_OBJECT_NOT_FOUND
+            elif str_contains(nuevo, "/") or lock_key(pk.dp_Arg3) != 0
+                r2 = ERROR_OBJECT_NOT_FOUND
+            elif find_file(nuevo) != nil and str_lower(nuevo) != str_lower(file_by_id(key).name)
+                r2 = ERROR_OBJECT_EXISTS
+            else
+                file_by_id(key).name = nuevo
+                r1 = DOSTRUE
+            end
+        elif t == ACTION_SET_PROTECT
+            key = resolve(pk.dp_Arg2, plain_name(pk.dp_Arg3))
+            if key > 0
+                file_by_id(key).protection = pk.dp_Arg4
+                r1 = DOSTRUE
+            else
+                r2 = ERROR_OBJECT_NOT_FOUND
+            end
+        elif t == ACTION_SET_COMMENT
+            key = resolve(pk.dp_Arg2, plain_name(pk.dp_Arg3))
+            if key > 0
+                file_by_id(key).comment = bstr_text(pk.dp_Arg4)
+                r1 = DOSTRUE
+            else
+                r2 = ERROR_OBJECT_NOT_FOUND
+            end
+        elif t == ACTION_DISK_INFO
+            disk_info(baddr(pk.dp_Arg1))
+            r1 = DOSTRUE
+        elif t == ACTION_INFO
+            disk_info(baddr(pk.dp_Arg2))
+            r1 = DOSTRUE
+        elif t == ACTION_IS_FILESYSTEM or t == ACTION_FLUSH
+            r1 = DOSTRUE
+        elif t == ACTION_CURRENT_VOLUME
+            r1 = mkbptr(volume)
+        elif t == ACTION_DIE
+            r1 = DOSTRUE
+            vivo = false
+        else
+            r2 = ERROR_ACTION_NOT_KNOWN
+        end
+        packet_reply(p, r1, r2)
+    end
+    Print "#{handler_name()}: fin"
+    handler_volume_remove(volume)
+end

@@ -947,6 +947,10 @@ static void parse_into(Program *p)
             if (n > p->stack_min) p->stack_min = n;
             continue;
         }
+        if (t->kind == T_ID && !strcmp(t->text, "@handler")) {
+            p->handler = 1;   /* un handler de DOS: lo dice lib/amiga/handler.dash */
+            continue;
+        }
         if (t->kind == T_ID && !strcmp(t->text, "@version")) {
             p->version = expect(T_STR)->text;
             continue;

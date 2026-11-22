@@ -336,6 +336,7 @@ typedef struct {
     char *wb_output;  /* @workbench_output "NIL:": desde el Workbench, en vez de la consola */
     int wb_output_main;
     long stack_min;  /* @stack N: al menos esa pila */
+    int handler;     /* @handler o --handler: un handler de DOS (docs/HANDLER_LOOP.md) */
     int nslots;      /* los métodos de interfaz del programa (tamaño de la tabla de métodos de un struct) */
 } Program;
 
@@ -402,6 +403,7 @@ extern int memcheck;
 extern int elf_be;      /* AArch64: datos y ELF en big-endian (--be: bibliotecas de la caja Amiga); si no, little */
 extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
 extern Buf debug_info;
+extern int handler_mode;   /* --handler */
 extern int profile;    /* --perfil */
 extern int cpu020;     /* --fpu o --cpu 68020 y más */   /* --memcheck: como ./dash --memcheck */
 extern int fpu881;     /* --fpu: la FPU en los bloques asm */

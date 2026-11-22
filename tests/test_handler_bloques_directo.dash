@@ -1,0 +1,35 @@
+# The same as test_handler_bloques.dash, built by ./dash straight to hunk (the handler too).
+# dash-direct:
+# Test: a read-only DOS handler written in Dash that reads the blocks of its partition (tests/lib/handler_bloques.dash,
+# docs/HANDLER_LOOP.md): mounted with FileSystem= and Device=uaehf.device Unit=1, the raw disk of the runner
+# (# emu-hardfile), cylinders 2 to 15 of 16 blocks. The handler takes the device, the unit and the geometry from
+# its FileSysStartupMsg and reads with dev_read; this program reads its two files and its Info as any program would.
+# emu-handler: tests/lib/handler_bloques.dash
+# emu-hardfile
+# emu-needs: C/Mount
+# expect-out: mount: 0
+# expect-out: primero: BLOQ0032
+# expect-out: ultimo: BLOQ0255
+# expect-out: tamaño: 512
+# expect-out: escribir: false
+# expect-out: entradas: 2 primero ultimo
+# expect-out: registro: BLQ1: uaehf.device unidad 1, bloques 32 a 255 de 512
+# expect-out: registro: primer bloque: error 0, BLOQ0032
+Main
+    ml = "BLQ1:\n  FileSystem = DH0:h_test_handler_bloques_directo\n  Device = uaehf.device\n  Unit = 1\n  Flags = 0\n" +
+         "  Surfaces = 1\n  BlocksPerTrack = 16\n  Reserved = 0\n  LowCyl = 2\n  HighCyl = 15\n  BlockSize = 512\n" +
+         "  Buffers = 5\n  DosType = 0x44415348\n  GlobVec = -1\n  Stacksize = 8000\n  Activate = 1\n#\n"
+    file_write_text("RAM:blq.ml", ml)
+    Print "mount: #{run_command("C:Mount BLQ1: FROM RAM:blq.ml")}"
+    Print "primero: #{file_read_text("BLQ1:primero")[0:8]}"
+    Print "ultimo: #{file_read_text("Bloques:ultimo")[0:8]}"
+    Print "tamaño: #{file_size("BLQ1:primero")}"
+    Print "escribir: #{file_write_text("BLQ1:nuevo", "x")}"
+    n = dir_read("BLQ1:")
+    Print "entradas: #{n} #{dir_entry_name(0)} #{dir_entry_name(1)}"
+    for l in str_split(file_read_text("T:BLQ1.log"), "\n")
+        if l != ""
+            Print "registro: #{l}"
+        end
+    end
+end

@@ -1204,6 +1204,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       Amiga rehace Forja e Inferencia con su `tools/paquete.py` (metía una Inferencia sin `ENCARGO`); Amiberry 8.5 en
       `tools/coffin/coffin.uae.in` y `tools/emu_run.py`. `tests/test_mui_canvas_esc_cierre`,
       `test_mui_canvas_ctrl_signo*` (CoffinOS), `test_sprite_break*`
+- [x] Handlers de DOS (2026-11-22, idea del usuario): `./dash --handler` y `@handler` (`lib/amiga/handler.dash`)
+      para escribir un sistema de archivos de AmigaOS 3.x en Dash, por los dos caminos: arranque propio con el
+      paquete de arranque, puerto de paquetes aparte, sin consola (registro con `handler_log`), 19 builtins (paquetes,
+      BPTR/BSTR, volúmenes, bloques del dispositivo) y aviso de las funciones de ficheros. Ejemplo
+      `examples/handler_ram.dash`; con este modo, un lector de DashFS de solo lectura (repo local `dashfs-amiga`).
+      Plan y bitácora en `docs/HANDLER_LOOP.md`. `tests/test_handler_*`
 
 ## Notas y Decisiones
 

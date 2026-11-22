@@ -748,6 +748,7 @@ class Program(ASTNode):
     links: List[str] = field(default_factory=list)      # @link: objects/libraries (paths as written)
     c_blocks: List[str] = field(default_factory=list)   # @c: C code at top level
     stack: int = 0                                       # @stack: the largest one, 0 if none
+    handler: bool = False                                # @handler (a module's counts too)
     workbench_output: Optional[str] = None               # @workbench_output: the C literal, None if none
     catalog: Optional[tuple] = None                      # @catalog: (name literal, version, language literal)
     version: Optional[str] = None                        # @version: the C literal, None if none

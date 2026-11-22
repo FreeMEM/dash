@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1092 funciones, 1092 implementadas, 0 sin implementar.
+Total: 1111 funciones, 1111 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -7384,6 +7384,130 @@ Ver también: [`ed25519_verify_text`](#ed25519_verify_text), [`sha256`](#sha256)
 Devuelve `true` si la firma es buena.
 
 Ver también: [`ed25519_verify`](#ed25519_verify).
+
+<a id="handler_functions"></a>
+
+## Handlers de DOS (sistemas de archivos)
+
+Un handler de DOS es el programa que hay detrás de un dispositivo como `DF0:` o `RAM:`: el DOS le manda un paquete
+por cada cosa que piden los demás programas (abrir, leer, listar un cajón...) y él contesta. Con Dash se escribe
+uno compilando con `./dash --handler` (o `--gcc --handler`), o importando `lib/amiga/handler.dash`, que ya lo pide
+y trae las estructuras (`DosPacket`, `FileLock`, `FileInfoBlock`, `InfoData`...), las constantes `ACTION_*` y
+`ERROR_*` y ayudas para cerraduras y fechas. Se monta con una mountlist (`Handler =` o, con un dispositivo de bloques,
+`FileSystem =` y `Device =`) con `GlobVec = -1`.
+
+El esquema: `handler_ready(true, 0)` al acabar de prepararse, y un bucle con `handler_wait()`, que da cada
+paquete, y `packet_reply(paquete, res1, res2)`. Sin consola: `Print` no va a ninguna parte hasta `handler_log`, y un
+error de ejecución va a ese registro. Un handler no debe pedir al DOS rutas de su propio volumen (se esperaría a sí
+mismo); las de otros volúmenes, sí. Si acaba (con error o no), el DOS carga una copia nueva en el siguiente acceso.
+Ejemplo completo: `examples/handler_ram.dash`, un disco en memoria. Más en la sección 28 del manual.
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `handler_startup()` | Int | dn_Startup del DeviceNode del handler: con Device= en la mountlist, el BPTR de su FileSysStartupMsg (0 si el programa no es un handler) |  |
+| `handler_name()` | String | El nombre del dispositivo del handler, sin los dos puntos ("RAM9") |  |
+| `handler_devnode()` | Int | La dirección del DeviceNode del handler |  |
+| `handler_port()` | Int | El puerto al que llegan los paquetes (dn_Task, y el dl_Task de los volúmenes y el fl_Task de las cerraduras) |  |
+| [`handler_ready(ok, error)`](#handler_ready) | — | Contesta al paquete de arranque: true, listo para paquetes; false, con ese error, y el programa debería acabar |  |
+| [`handler_wait()`](#handler_wait) | Int | Espera el siguiente paquete: su DosPacket; 0 con Ctrl-C |  |
+| `handler_poll()` | Int | El siguiente paquete si hay uno esperando, o 0 sin esperar |  |
+| [`packet_reply(packet, res1, res2)`](#packet_reply) | — | Contesta a un paquete: res1 es lo que devuelve la función del DOS, res2 el error (IoErr) |  |
+| [`handler_log(path)`](#handler_log) | Bool | Print, y los errores de ejecución, van a este fichero (nunca uno del propio handler); false si no se abre |  |
+| [`handler_volume_add(name, disk_type)`](#handler_volume_add) | Int | Pone un volumen del handler en la lista del DOS (y avisa al Workbench): su DosList, 0 si no se puede |  |
+| `handler_volume_remove(volume)` | — | Quita el volumen de la lista del DOS y lo libera (sin cerraduras suyas pendientes) |  |
+| `bstr_text(bptr)` | String | El texto de un BSTR, desde su BPTR ("" para 0) |  |
+| [`bstr_put(addr, text, max)`](#bstr_put) | — | Escribe text como BSTR (un byte de largo y las letras) en addr, en max bytes como mucho |  |
+| `dev_open(name, unit, flags)` | Int | Abre una unidad de un dispositivo (trackdisk.device, scsi.device...) para dev_read y dev_write: su IORequest, o 0 |  |
+| `dev_close(dev)` | — | Cierra lo que abrió dev_open (al acabar el programa, solo) |  |
+| [`dev_read(dev, block, block_size, buf, len)`](#dev_read) | Int | Lee len bytes desde block (bloques de block_size bytes) en buf: 0, o el error del dispositivo. Pasados los 4 GB, con TD64 o NSD |  |
+| `dev_write(dev, block, block_size, buf, len)` | Int | Escribe len bytes de buf desde block: 0, o el error del dispositivo |  |
+| `dev_cmd(dev, command, length)` | Int | Manda una orden sin datos (TD_MOTOR, TD_CHANGESTATE, CMD_UPDATE...): 0, o el error del dispositivo; dev_actual da su resultado |  |
+| `dev_actual(dev)` | Int | io_Actual de la última orden de dev (TD_CHANGESTATE: 0 con un disco dentro) |  |
+
+<a id="handler_ready"></a>
+
+### `handler_ready(ok, error)`
+
+- `ok`: `true` si el handler está listo; `false` si no puede funcionar.
+- `error`: con `false`, el error que verá quien lo montó (`ERROR_NO_FREE_STORE`, `ERROR_NO_DISK`...).
+
+Contesta al paquete de arranque. Hasta entonces, quien monta el dispositivo espera, y los paquetes de los demás se
+quedan en cola. Con `false`, el programa debería acabar después.
+
+Ver también: [`handler_wait`](#handler_wait), `handler_startup`.
+
+<a id="handler_wait"></a>
+
+### `handler_wait()` → `Int`
+
+Espera el siguiente paquete y devuelve su dirección: con `Ptr DosPacket(p)` (de `lib/amiga/handler.dash`) se leen
+`dp_Type` y `dp_Arg1`... Devuelve 0 si el handler recibe Ctrl-C (por ejemplo con `Break`). Antes de esperar,
+vacía el registro de `handler_log`.
+
+Cada paquete se contesta una vez con `packet_reply`. Si el programa acaba con un paquete sin contestar (un error de
+ejecución), el runtime lo contesta con `ERROR_OBJECT_NOT_FOUND`, y también los que quedaban en cola.
+
+Ver también: [`packet_reply`](#packet_reply), `handler_poll`.
+
+<a id="packet_reply"></a>
+
+### `packet_reply(packet, res1, res2)`
+
+- `packet`: lo que dio `handler_wait`.
+- `res1`: el resultado (`DOSTRUE`, `DOSFALSE`, un BPTR de cerradura, los bytes leídos, -1...).
+- `res2`: el error para `IoErr()` cuando falla (`ERROR_OBJECT_NOT_FOUND`...), 0 si no.
+
+Ojo con `ERROR_DISK_WRITE_PROTECTED`, `ERROR_NO_DISK` y `ERROR_DEVICE_NOT_MOUNTED`: el DOS del cliente abre un
+requester con ellos y espera a que alguien lo cierre.
+
+Ver también: [`handler_wait`](#handler_wait).
+
+<a id="handler_log"></a>
+
+### `handler_log(path)` → `Bool`
+
+- `path`: un fichero de otro volumen (`T:mi.log`); se vacía al abrirlo y se puede leer mientras el handler va.
+
+Desde ahí, `Print` y los errores de ejecución van a ese fichero. Sin él, `Print` no va a ninguna parte y un error
+abre un requester.
+
+<a id="handler_volume_add"></a>
+
+### `handler_volume_add(name, disk_type)` → `Int`
+
+- `name`: el nombre del volumen, sin los dos puntos.
+- `disk_type`: lo que dirá `Info` (`ID_DOS_DISK`...).
+
+El volumen apunta al puerto del handler, con la fecha de ahora. Se avisa al Workbench para que enseñe su icono. Al
+acabar el programa, el volumen se queda como un disco sacado (por si alguien tiene cerraduras suyas): para
+quitarlo, `handler_volume_remove`.
+
+Ver también: `handler_volume_remove`.
+
+<a id="bstr_put"></a>
+
+### `bstr_put(addr, text, max)`
+
+- `addr`: dónde escribirlo (el `fib_FileName` de un `FileInfoBlock`: `fib + offsetof(FileInfoBlock, fib_FileName)`).
+- `text`: el texto.
+- `max`: los bytes que hay ahí (108 para `fib_FileName`, 80 para `fib_Comment`).
+
+Pone un byte con el largo, las letras y un 0 detrás si cabe. Un texto más largo se corta.
+
+Ver también: `bstr_text`.
+
+<a id="dev_read"></a>
+
+### `dev_read(dev, block, block_size, buf, len)` → `Int`
+
+- `dev`: lo que dio `dev_open` (o `fssm_open()` de `lib/amiga/handler.dash`, con el dispositivo del montaje).
+- `block`, `block_size`: desde qué bloque y de qué tamaño (el sitio en bytes es su producto, en 64 bits).
+- `buf`, `len`: dónde dejarlo y cuántos bytes.
+
+Devuelve 0 o el error del dispositivo. Hasta 4 GB usa `CMD_READ`; más allá, `TD_READ64` y, si el dispositivo no lo
+conoce, `NSCMD_TD_READ64`. `buf` debe ser memoria que el dispositivo pueda usar (la de `buffer_alloc` vale).
+
+Ver también: `dev_open`, `dev_write`, `dev_cmd`.
 
 <a id="utf8_functions"></a>
 

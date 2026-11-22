@@ -1,0 +1,63 @@
+# The same as test_handler_ram.dash, built by ./dash straight to hunk (the handler too).
+# dash-direct:
+# Test: a DOS handler written in Dash (examples/handler_ram.dash, docs/HANDLER_LOOP.md). The runner builds it with
+# --handler as DH0:h_test_handler_ram (by --gcc, like this test); this program mounts it with C:Mount and uses it as
+# any program would: write, read, append, seek, list, rename, protection, comment, delete, Info, and the handler's
+# log in T:.
+# emu-handler: examples/handler_ram.dash
+# emu-needs: C/Mount
+# expect-out: mount: 0
+# expect-out: volumen: true
+# expect-out: escrito: true
+# expect-out: leído: Hola desde Dash
+# expect-out: tamaño: 15
+# expect-out: añadido: Hola desde Dash, otra vez
+# expect-out: seek: 6 desde
+# expect-out: entradas: 2
+# expect-out: 0 hola.txt 25
+# expect-out: 1 otro 3
+# expect-out: mayúsculas: true
+# expect-out: renombrado: true true false
+# expect-out: protección: 5
+# expect-out: nota: una nota
+# expect-out: libre: true
+# expect-out: borrado: true false 1
+# expect-out: borrar lo que no está: false
+# expect-out: registro: RAMX: volumen Dash RAM 2
+Main
+    ml = "RAMX:\n  Handler = DH0:h_test_handler_ram_directo\n  Stacksize = 8000\n  Priority = 5\n  GlobVec = -1\n  Startup = \"Dash RAM 2\"\n  Activate = 1\n#\n"
+    file_write_text("RAM:ramd.ml", ml)
+    Print "mount: #{run_command("C:Mount RAMX: FROM RAM:ramd.ml")}"
+    Print "volumen: #{file_exists("Dash RAM 2:")}"
+    Print "escrito: #{file_write_text("RAMX:hola.txt", "Hola desde Dash")}"
+    Print "leído: #{file_read_text("RAMX:hola.txt")}"
+    Print "tamaño: #{file_size("RAMX:hola.txt")}"
+    f = file_open("RAMX:hola.txt", 1004)
+    file_seek(f, 0, 1)
+    file_print(f, ", otra vez")
+    file_close(f)
+    Print "añadido: #{file_read_text("RAMX:hola.txt")}"
+    f = file_open("RAMX:hola.txt", 1005)
+    file_seek(f, 5, -1)
+    buf = buffer_alloc(16)
+    n = file_read(f, buf, 6)
+    file_close(f)
+    Print "seek: #{n} #{str_from_buffer(buf, 0, n)}"
+    file_write_text("RAMX:otro", "abc")
+    n = dir_read("RAMX:")
+    Print "entradas: #{n}"
+    for i in (0..n - 1)
+        Print "#{i} #{dir_entry_name(i)} #{dir_entry_size(i)}"
+    end
+    Print "mayúsculas: #{file_exists("RAMX:HOLA.TXT")}"
+    Print "renombrado: #{file_rename("RAMX:otro", "RAMX:tercero")} #{file_exists("Dash RAM 2:tercero")} #{file_exists("RAMX:otro")}"
+    file_set_protection("RAMX:tercero", 5)
+    Print "protección: #{file_protection("RAMX:tercero")}"
+    file_set_comment("RAMX:tercero", "una nota")
+    Print "nota: #{file_comment("RAMX:tercero")}"
+    Print "libre: #{path_free_kb("RAMX:") > 0}"
+    Print "borrado: #{file_delete("RAMX:tercero")} #{file_exists("RAMX:tercero")} #{dir_read("RAMX:")}"
+    Print "borrar lo que no está: #{file_delete("RAMX:nada")}"
+    log = file_read_text("T:RAMX.log")
+    Print "registro: #{str_split(log, "\n")[0]}"
+end

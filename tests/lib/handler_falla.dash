@@ -1,0 +1,37 @@
+# A DOS handler for the tests (test_handler_falla) that ends with a runtime error: a division by zero when asked
+# for "falla". Its error goes to its log, its client gets an error instead of waiting for ever, and the next access
+# starts a new copy of the handler (it writes "arranque N" with the number of starts it has seen in T:).
+import "lib/amiga/handler.dash"
+
+func divide(a: Int, b: Int) -> Int
+    return a / b
+end
+
+Main
+    handler_log("T:#{handler_name()}.log")
+    n = 1
+    t = file_read_text("T:#{handler_name()}.n")
+    if t != nil
+        n = Int(t) + 1
+    end
+    file_write_text("T:#{handler_name()}.n", "#{n}")
+    Print "arranque #{n}"
+    handler_ready(true, 0)
+    while true
+        p = handler_wait()
+        if p == 0
+            break
+        end
+        pk = Ptr DosPacket(p)
+        if pk.dp_Type == ACTION_LOCATE_OBJECT
+            name = bstr_text(pk.dp_Arg2)
+            Print "buscar #{name}"
+            if str_ends(name, "falla")
+                Print "#{divide(10, str_find(name, "x") + 1)}"
+            end
+            packet_reply(p, DOSFALSE, ERROR_OBJECT_NOT_FOUND)
+        else
+            packet_reply(p, DOSFALSE, ERROR_ACTION_NOT_KNOWN)
+        end
+    end
+end

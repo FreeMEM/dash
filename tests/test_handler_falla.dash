@@ -1,0 +1,39 @@
+# Test: a runtime error in a DOS handler written in Dash (tests/lib/handler_falla.dash, docs/HANDLER_LOOP.md). The
+# message goes to the handler's log (no requester, no console), the packet it was doing is answered with an error
+# (the client does not hang), and the next access loads a new copy of the handler (dn_SegList to 0).
+# emu-handler: tests/lib/handler_falla.dash
+# emu-needs: C/Mount
+# expect-out: mount: 0
+# expect-out: bien: false
+# expect-out: falla: false
+# expect-out: registro: arranque 1
+# expect-out: registro: buscar FALLA:bien
+# expect-out: registro: buscar FALLA:falla
+# expect-out: el error, en el registro: true
+# expect-out: otra vez: false
+# expect-out: registro: arranque 2
+# expect-out: registro: buscar FALLA:otra
+
+# the lines of the handler's log, without the error's (its text and where it was differ between ./dash and --gcc)
+func show_log() -> Bool
+    error = false
+    for l in str_split(file_read_text("T:FALLA.log"), "\n")
+        if str_starts(l, "Error: divisi") and str_contains(l, "n por cero")
+            error = true
+        elif l != "" and not str_starts(l, "en ")
+            Print "registro: #{l}"
+        end
+    end
+    return error
+end
+
+Main
+    ml = "FALLA:\n  Handler = DH0:h_test_handler_falla\n  Stacksize = 8000\n  GlobVec = -1\n  Activate = 1\n#\n"
+    file_write_text("RAM:falla.ml", ml)
+    Print "mount: #{run_command("C:Mount FALLA: FROM RAM:falla.ml")}"
+    Print "bien: #{file_exists("FALLA:bien")}"
+    Print "falla: #{file_exists("FALLA:falla")}"
+    Print "el error, en el registro: #{show_log()}"
+    Print "otra vez: #{file_exists("FALLA:otra")}"
+    show_log()
+end

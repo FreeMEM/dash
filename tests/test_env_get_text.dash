@@ -18,4 +18,5 @@ Main
     file_delete("ENV:DashPrueba/varias")
     file_delete("ENV:DashPrueba/fin")
     file_delete("ENV:DashPrueba/una")
+    file_delete("ENV:DashPrueba")
 end

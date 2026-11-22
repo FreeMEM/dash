@@ -105,6 +105,8 @@ def main():
     parser.add_argument("--profile", action="store_true",
                         help="Profile build: at exit, how many times each function was called and where the "
                              "time went (sampled 50 times a second)")
+    parser.add_argument("--handler", action="store_true",
+                        help="The program is a DOS handler (a file system), mounted with Mount (docs/HANDLER_LOOP.md)")
     parser.add_argument("--memcheck", action="store_true",
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
@@ -121,6 +123,8 @@ def main():
         os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
         os.environ["DASH_PRINT_FLUSH"] = "1"   # and each Print goes out at once (the debugger shows it)
         args.no_optimize = True
+    if args.handler:
+        os.environ["DASH_HANDLER"] = "1"      # the transpiler makes a DOS handler (as @handler)
     if args.memcheck:
         os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
     if args.profile:
