@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1082 funciones, 1082 implementadas, 0 sin implementar.
+Total: 1087 funciones, 1087 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -4655,6 +4655,8 @@ ficheros del Amiga (IFF).
 | [`buffer_get_word(buffer, offset)`](#buffer_get_word) | Int | El word de 16 bits en una posición (big-endian) |  |
 | [`buffer_set_word(buffer, offset, value)`](#buffer_set_word) | — | Pone el word de 16 bits de una posición (big-endian) |  |
 | [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | El long de 32 bits en una posición (big-endian) |  |
+| [`buffer_set_float(buffer, offset, value)`](#buffer_set_float) | — | Pone un float de 32 bits (el de C) en una posición: los vértices de gl_draw_arrays |  |
+| [`buffer_get_float(buffer, offset)`](#buffer_get_float) | Double | El float de 32 bits de una posición, como Double |  |
 | [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Pone el long de 32 bits de una posición (big-endian) |  |
 | [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copia bytes de un búfer a otro |  |
 | [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Llena una zona de un búfer con un byte |  |
@@ -4732,6 +4734,29 @@ Ver también: [`buffer_get_word`](#buffer_get_word).
 Devuelve el número de 32 bits de esa posición, con signo, con el byte alto primero.
 
 Ver también: [`buffer_set_long`](#buffer_set_long).
+
+<a id="buffer_set_float"></a>
+
+### `buffer_set_float(buffer, offset, value)`
+
+- `buffer`: el búfer.
+- `offset`: la posición, en bytes desde el principio.
+- `value`: el número (un `Float`, un `Int` o un `Double`).
+
+Lo guarda como un `float` de C de 32 bits, el que piden MiniGL y `gl_draw_arrays`.
+
+Ver también: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_draw_arrays).
+
+<a id="buffer_get_float"></a>
+
+### `buffer_get_float(buffer, offset)` → `Double`
+
+- `buffer`: el búfer.
+- `offset`: la posición, en bytes desde el principio.
+
+Devuelve, como `Double`, el `float` de 32 bits de esa posición.
+
+Ver también: [`buffer_set_float`](#buffer_set_float).
 
 <a id="buffer_set_long"></a>
 
@@ -13183,6 +13208,9 @@ end
 | `gl_look_at(ex, ey, ez, cx, cy, cz, ux, uy, uz)` | — | Una cámara en (ex, ey, ez) que mira a (cx, cy, cz), con (ux, uy, uz) hacia arriba (gluLookAt) |  |
 | [`gl_begin(mode)`](#gl_begin) | — | Empieza una figura: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, GL_POLYGON...; sus esquinas con gl_vertex hasta gl_end |  |
 | `gl_end()` | — | Acaba la figura de gl_begin |  |
+| [`gl_draw_arrays(mode, vertices, colors, first, count)`](#gl_draw_arrays) | — | Dibuja count esquinas de una vez desde búferes (vértices: 3 float; colores: 4 bytes, o 0) |  |
+| [`gl_draw_elements(mode, vertices, colors, nverts, indices, count)`](#gl_draw_elements) | — | Dibuja count esquinas de una vez por sus números (2 bytes cada uno), con las esquinas bloqueadas (glLockArrays) |  |
+| [`gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`](#gl_mult_matrix) | — | Multiplica la matriz activa por una de 3x4 dada por filas (giro y desplazamiento) |  |
 | `gl_vertex(x, y, z)` | — | Una esquina, con el color, la normal y el punto de textura puestos los últimos |  |
 | `gl_color(r, g, b)` | — | El color de las esquinas siguientes, cada parte de 0.0 a 1.0 |  |
 | `gl_color_alpha(r, g, b, a)` | — | Como gl_color, con la opacidad a (0.0 a 1.0; con GL_BLEND) |  |
@@ -13244,6 +13272,56 @@ Las esquinas van con `gl_vertex` hasta `gl_end`. Las caras de delante son las qu
 agujas del reloj, como en OpenGL.
 
 Ver también: `gl_vertex`, `gl_end`, `gl_color`.
+
+<a id="gl_draw_arrays"></a>
+
+### `gl_draw_arrays(mode, vertices, colors, first, count)`
+
+- `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`: un búfer con 3 `float` por esquina (x, y, z), puestos con `buffer_set_float` o leídos de un fichero.
+- `colors`: un búfer con 4 bytes por esquina (rojo, verde, azul, alfa, de 0 a 255), o 0 para usar el color de
+  `gl_color`.
+- `first`: la primera esquina que se dibuja, desde 0.
+- `count`: cuántas esquinas.
+
+Dibuja todas esas esquinas de una vez (`glDrawArrays`), con la matriz y el estado de ese momento: un modelo de 1200
+triángulos son 3600 llamadas menos en cada fotograma. Los búferes se preparan una vez y se mueven con
+`gl_mult_matrix` o `gl_translate` y `gl_rotate`. Está pensado para una tarjeta 3D (sin probar): con MiniGL Classic
+sobre Wazp3D, que lo hace todo por software, no fue más rápido que `gl_vertex` (docs/MINIGL.md).
+
+Ver también: [`gl_begin`](#gl_begin), [`buffer_set_float`](#buffer_set_float), [`gl_mult_matrix`](#gl_mult_matrix).
+
+<a id="gl_draw_elements"></a>
+
+### `gl_draw_elements(mode, vertices, colors, nverts, indices, count)`
+
+- `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`, `colors`: como en `gl_draw_arrays` (`colors` puede ser 0).
+- `nverts`: cuántas esquinas hay en `vertices`.
+- `indices`: un búfer con los números de las esquinas de cada figura, 2 bytes cada uno (0 es la primera de
+  `vertices`), puestos con `buffer_set_word` o leídos de un fichero.
+- `count`: cuántos números se usan.
+
+Como `gl_draw_arrays`, pero cada esquina va una sola vez en `vertices` aunque la compartan varias caras: MiniGL la
+debería calcular una vez (bloquea las `nverts` esquinas con `glLockArrays` y dibuja con `glDrawElements`). Está
+pensado para una tarjeta 3D (sin probar): con MiniGL Classic sobre Wazp3D fue más lento que `gl_draw_arrays`
+(docs/MINIGL.md).
+
+Ver también: [`gl_draw_arrays`](#gl_draw_arrays), [`gl_mult_matrix`](#gl_mult_matrix).
+
+<a id="gl_mult_matrix"></a>
+
+### `gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`
+
+- `a`, `b`, `c`, `tx`: la primera fila de la matriz.
+- `d`, `e`, `f`, `ty`: la segunda.
+- `g`, `h`, `i`, `tz`: la tercera (la cuarta es 0, 0, 0, 1).
+
+Multiplica la matriz activa por esa: un giro (las 3 primeras columnas) y un desplazamiento (`tx`, `ty`, `tz`) en una
+sola llamada (`glMultMatrixf`). Es lo que hace falta para los huesos de un modelo: el programa calcula la matriz de
+cada hueso y la pone antes de dibujar su pieza.
+
+Ver también: `gl_push_matrix`, [`gl_draw_arrays`](#gl_draw_arrays), `gl_translate`.
 
 <a id="gl_texture"></a>
 

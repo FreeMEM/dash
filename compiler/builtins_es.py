@@ -297,6 +297,8 @@ DESC_ES = {
     "buffer_set_word": "Pone el word de 16 bits de una posición (big-endian)",
     "buffer_get_long": "El long de 32 bits en una posición (big-endian)",
     "buffer_set_long": "Pone el long de 32 bits de una posición (big-endian)",
+    "buffer_set_float": "Pone un float de 32 bits (el de C) en una posición: los vértices de gl_draw_arrays",
+    "buffer_get_float": "El float de 32 bits de una posición, como Double",
     "buffer_copy": "Copia bytes de un búfer a otro",
     "buffer_fill": "Llena una zona de un búfer con un byte",
     # Texto
@@ -1404,6 +1406,9 @@ DESC_ES = {
     "gl_begin": "Empieza una figura: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, GL_POLYGON...; sus esquinas con gl_vertex hasta gl_end",
     "gl_end": "Acaba la figura de gl_begin",
     "gl_vertex": "Una esquina, con el color, la normal y el punto de textura puestos los últimos",
+    "gl_draw_arrays": "Dibuja count esquinas de una vez desde búferes (vértices: 3 float; colores: 4 bytes, o 0)",
+    "gl_draw_elements": "Dibuja count esquinas de una vez por sus números (2 bytes cada uno), con las esquinas bloqueadas (glLockArrays)",
+    "gl_mult_matrix": "Multiplica la matriz activa por una de 3x4 dada por filas (giro y desplazamiento)",
     "gl_color": "El color de las esquinas siguientes, cada parte de 0.0 a 1.0",
     "gl_color_alpha": "Como gl_color, con la opacidad a (0.0 a 1.0; con GL_BLEND)",
     "gl_normal": "Hacia dónde miran las esquinas siguientes, para las luces (de largo 1)",

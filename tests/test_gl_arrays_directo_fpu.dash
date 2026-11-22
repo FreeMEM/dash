@@ -1,0 +1,126 @@
+# The same as test_gl_arrays.dash, built by ./dash --fpu straight to hunk.
+# dash-direct: --fpu
+# Test: gl_draw_arrays, gl_draw_elements, gl_mult_matrix, buffer_set_float and buffer_get_float. Needs minigl.library 29+ and a FPU: on
+# --emu-coffin with $DASH_EMU_MINIGL (MiniGL Classic over the Wazp3D of the disk). A triangle from buffers, with its own
+# colors and with the gl_color one, moved by gl_mult_matrix, each checked with gl_read_pixel; without a context it
+# does nothing.
+# emu-needs: minigl.library
+# expect-out: float: 1.5 -2.25 0.1
+# expect-out: sin contexto: bien
+# expect-out: abierto
+# expect-out: colores del búfer: rojo
+# expect-out: color de gl_color: verde
+# expect-out: desde la esquina 3: azul
+# expect-out: por números: azul
+# expect-out: por números, del revés: fondo
+# expect-out: matriz que lo aparta: fondo
+# expect-out: matriz que lo devuelve: rojo
+# expect-out: error: 0
+# expect-out: fin
+import "lib/amiga/gl.dash"
+
+# the color of a pixel by its strongest part
+func color(c: Int) -> String
+    r = (c >> 16) & 255
+    g = (c >> 8) & 255
+    b = c & 255
+    if r > 160 and g < 90 and b < 90
+        return "rojo"
+    end
+    if g > 160 and r < 90 and b < 90
+        return "verde"
+    end
+    if b > 160 and r < 90 and g < 90
+        return "azul"
+    end
+    if r < 40 and g < 40 and b < 40
+        return "fondo"
+    end
+    return "#{r},#{g},#{b}"
+end
+
+# a corner: x, y, z as floats; its color as 4 bytes
+func esquina(v: Int, c: Int, i: Int, x: Float, y: Float, r: Int, g: Int, b: Int)
+    buffer_set_float(v, i * 12, x)
+    buffer_set_float(v, i * 12 + 4, y)
+    buffer_set_float(v, i * 12 + 8, 0.0)
+    buffer_set_byte(c, i * 4, r)
+    buffer_set_byte(c, i * 4 + 1, g)
+    buffer_set_byte(c, i * 4 + 2, b)
+    buffer_set_byte(c, i * 4 + 3, 255)
+end
+
+Main
+    v = buffer_alloc(6 * 12)
+    c = buffer_alloc(6 * 4)
+    buffer_set_float(v, 0, 1.5)
+    buffer_set_float(v, 5, -2.25)
+    buffer_set_float(v, 9, 0.1)
+    Print "float: #{buffer_get_float(v, 0)} #{buffer_get_float(v, 5)} #{Float(buffer_get_float(v, 9))}"
+    # two triangles over the middle: corners 0-2 red, 3-5 blue
+    esquina(v, c, 0, -0.9, -0.9, 255, 0, 0)
+    esquina(v, c, 1, 0.9, -0.9, 255, 0, 0)
+    esquina(v, c, 2, 0.0, 0.9, 255, 0, 0)
+    esquina(v, c, 3, -0.9, -0.9, 0, 0, 255)
+    esquina(v, c, 4, 0.9, -0.9, 0, 0, 255)
+    esquina(v, c, 5, 0.0, 0.9, 0, 0, 255)
+    gl_draw_arrays(GL_TRIANGLES, v, c, 0, 3)
+    gl_mult_matrix(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0)
+    Print "sin contexto: bien"
+    if not gl_open(80, 80)
+        Print "no se pudo abrir"
+        program_exit(5)
+    end
+    Print "abierto"
+    gl_matrix_mode(GL_PROJECTION)
+    gl_load_identity()
+    gl_ortho(-1, 1, -1, 1, -1, 1)
+    gl_matrix_mode(GL_MODELVIEW)
+    gl_load_identity()
+    gl_clear_color(0, 0, 0)
+
+    gl_clear()
+    gl_draw_arrays(GL_TRIANGLES, v, c, 0, 3)
+    Print "colores del búfer: #{color(gl_read_pixel(40, 40))}"
+    gl_clear()
+    gl_color(0, 1, 0)
+    gl_draw_arrays(GL_TRIANGLES, v, 0, 0, 3)
+    Print "color de gl_color: #{color(gl_read_pixel(40, 40))}"
+    gl_clear()
+    gl_draw_arrays(GL_TRIANGLES, v, c, 3, 3)
+    Print "desde la esquina 3: #{color(gl_read_pixel(40, 40))}"
+    # by numbers: corners 3, 4, 5 (blue), and the same face backwards with GL_CULL_FACE (not drawn)
+    ix = buffer_alloc(12)
+    buffer_set_word(ix, 0, 3)
+    buffer_set_word(ix, 2, 4)
+    buffer_set_word(ix, 4, 5)
+    buffer_set_word(ix, 6, 5)
+    buffer_set_word(ix, 8, 4)
+    buffer_set_word(ix, 10, 3)
+    gl_clear()
+    gl_draw_elements(GL_TRIANGLES, v, c, 6, ix, 3)
+    Print "por números: #{color(gl_read_pixel(40, 40))}"
+    gl_clear()
+    gl_enable(GL_CULL_FACE)
+    gl_draw_elements(GL_TRIANGLES, v, c, 6, ix + 6, 3)
+    gl_disable(GL_CULL_FACE)
+    Print "por números, del revés: #{color(gl_read_pixel(40, 40))}"
+    buffer_free(ix)
+    # a rotation of 180 degrees about z and 5 to the right: out of the window
+    gl_clear()
+    gl_push_matrix()
+    gl_mult_matrix(-1, 0, 0, 5, 0, -1, 0, 0, 0, 0, 1, 0)
+    gl_draw_arrays(GL_TRIANGLES, v, c, 0, 3)
+    Print "matriz que lo aparta: #{color(gl_read_pixel(40, 40))}"
+    # and back: 5 to the left undoes it (the rotation keeps the middle covered)
+    gl_mult_matrix(1, 0, 0, 5, 0, 1, 0, 0, 0, 0, 1, 0)
+    gl_clear()
+    gl_draw_arrays(GL_TRIANGLES, v, c, 0, 3)
+    Print "matriz que lo devuelve: #{color(gl_read_pixel(40, 40))}"
+    gl_pop_matrix()
+    Print "error: #{gl_error()}"
+    gl_close()
+    buffer_free(v)
+    buffer_free(c)
+    Print "fin"
+end
