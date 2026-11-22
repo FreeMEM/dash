@@ -523,6 +523,45 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('visual editor: a double click gives a number and a name, and makes its code (Jose)', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const ui = path.join(dir, 'ventana.dashui');
+        const prog = path.join(dir, 'main.dash');
+        fs.writeFileSync(ui, JSON.stringify({ dashui: 1, windows: [{ name: 'Principal', close: 99, root: { type: 'vgroup', children: [
+            { type: 'button', name: 'saludar', label: '_Saludar', event: 1 }, { type: 'button', label: 'Botón' }] } }] }, null, 2) + '\n');
+        fs.writeFileSync(prog, '@version "x 1"\n\nimport "ventana.dashui"\n\nconst EV_SALUDAR = 1\nconst EV_OTRO = 2\nconst EV_SALIR = 99\n\n' +
+                               'Main\n    v = Principal_create()\n    while true\n        ev = mui_wait_event()\n' +
+                               '        if ev == -1 or ev == EV_SALIR\n            break\n        elif ev == EV_SALUDAR\n            Print "hola"\n        end\n    end\nend\n');
+        try {
+            const uiDoc = await vscode.workspace.openTextDocument(ui);
+            // the new button: name "boton", event 3 (1, 2 and 99 are taken), and its code after the constants
+            const made = await vscode.commands.executeCommand('dash.openEvent', uiDoc.uri, 0, { path: [1] });
+            assert(made && made.created && made.event === 3 && made.objectName === 'boton', JSON.stringify(made));
+            const node = JSON.parse(uiDoc.getText()).windows[0].root.children[1];
+            assert.strictEqual(node.name, 'boton');
+            assert.strictEqual(node.event, 3);
+            const progDoc = await vscode.workspace.openTextDocument(prog);
+            const lines = progDoc.getText().split('\n');
+            assert.strictEqual(lines[lines.indexOf('const EV_SALIR = 99') + 1], 'const ID_BOTON = 3');
+            assert.match(progDoc.lineAt(vscode.window.activeTextEditor.selection.active.line).text, /# boton/);
+            // saludar: it is there (elif ev == EV_SALUDAR), nothing changes in the .dashui
+            const before = uiDoc.getText();
+            const found = await vscode.commands.executeCommand('dash.openEvent', uiDoc.uri, 0, { path: [0] });
+            assert(found && !found.created);
+            assert.match(progDoc.lineAt(found.line).text, /elif ev == EV_SALUDAR/);
+            assert.strictEqual(uiDoc.getText(), before);
+            // the close button of the window: if ev == -1 or ev == EV_SALIR
+            const close = await vscode.commands.executeCommand('dash.openEvent', uiDoc.uri, 0, { window: true });
+            assert.match(progDoc.lineAt(close.line).text, /EV_SALIR/);
+        } finally {
+            // (saved: closing them changed would ask)
+            for (const d of vscode.workspace.textDocuments) if (d.isDirty && d.fileName.startsWith(dir)) await d.save();
+            await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('new project: the command makes the folder, and the walkthrough is there', async () => {
         const path = require('path');
         const os = require('os');

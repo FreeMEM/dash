@@ -153,7 +153,9 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   Alt+flechas para mover, Supr, F2 (nombre), Intro (propiedades), Ctrl+D (duplicar); copiar, cortar y pegar
   (los nombres repetidos llevan un número); deshacer y rehacer, los del documento (y botones ↶ ↷).
 - **Problemas y código:** los problemas del `.dashui` (JSON, tipos, nombres, números de evento) salen en Problemas en su
-  línea. El botón → de un evento lleva a su código en el `.dash` que importa el fichero: una constante con ese número
+  línea. Un doble clic en un objeto (en el árbol o en la vista), en el título de la ventana o en una opción de menú
+  lleva al código de su evento, como en Visual Basic o Delphi (lo pidió Jose; Forja hace lo mismo): si no tiene número
+  de evento, se le pone el menor libre, y si no tiene nombre, uno de su texto. El botón → de un evento lleva a su código en el `.dash` que importa el fichero: una constante con ese número
   (`const ID_ACEPTAR = 3`) y `if ev == ID_ACEPTAR`; si no lo hay, lo crea (la constante y un `if` en el bucle de
   `mui_wait_event`).
 - **Comandos** (`editor/vscode/package.json`): "Dash: Compilar", "Ejecutar en emulador", "Ejecutar con comprobación

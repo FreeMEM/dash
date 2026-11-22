@@ -212,6 +212,32 @@ async function webviewTests(check, assert) {
             await page.eval('DashUIEditor.select([1])');            // no number yet: the button waits for one
             assert.strictEqual(await page.eval('document.querySelector("#props button.goto").disabled'), true);
         });
+        await check('webview: a double click asks VS Code for the code of the event (Jose)', async () => {
+            await page.eval('DashUIEditor.load(JSON.stringify({ dashui: 1, windows: [{ name: "W", title: "T", root: { type: "vgroup", children: [' +
+                            '{ type: "button", name: "aceptar", event: 3 }, { type: "button", label: "Otro" }] }, ' +
+                            'menus: [{ title: "M", items: [{ label: "Salir", event: 9 }] }] }] }))');
+            const last = () => page.eval('window.__posted[window.__posted.length - 1]');
+            const n = () => page.eval('window.__posted.length');
+            // two clicks on the same row of the tree (the page is made again after the first one)
+            await page.eval('document.querySelector(\'#tree [data-path="[1]"]\').click()');
+            const before = await n();
+            await page.eval('document.querySelector(\'#tree [data-path="[1]"]\').click()');
+            assert.deepStrictEqual(await last(), { type: 'openEvent', window: 0, target: { path: [1] } });
+            assert.strictEqual(await n(), before + 1);
+            // one click only selects; a click on another object is not a double click
+            await page.eval('document.querySelector(\'#tree [data-path="[0]"]\').click()');
+            assert.strictEqual(await n(), before + 1);
+            // in the preview, by the click count
+            await page.eval('document.querySelector(\'#preview [data-path="[0]"]\').dispatchEvent(new MouseEvent("click", { detail: 2, bubbles: true }))');
+            assert.deepStrictEqual(await last(), { type: 'openEvent', window: 0, target: { path: [0] } });
+            // the title of the window: its close button
+            await page.eval('document.querySelector("#preview .titlebar").dispatchEvent(new MouseEvent("click", { detail: 2, bubbles: true }))');
+            assert.deepStrictEqual(await last(), { type: 'openEvent', window: 0, target: { window: true } });
+            // an item of a menu (the window selected: its properties show the menus)
+            await page.eval('DashUIEditor.select([])');
+            await page.eval('document.querySelector("#props .prop.item").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }))');
+            assert.deepStrictEqual(await last(), { type: 'openEvent', window: 0, target: { menu: ['menus', 0, 0] } });
+        });
         await check('webview: F2 goes to the name, the undo button asks VS Code', async () => {
             await page.eval('DashUIEditor.select([1])');
             await page.eval('document.querySelector("#tree .tree-row.selected").focus()');

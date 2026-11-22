@@ -160,7 +160,8 @@ function addHandler(dash, n, objectName) {
     if (!existing) {
         // after the last const or import before the code (functions, structs, Main...), else at the start
         let at = 0;
-        for (let i = 0; i < lines.length && !/^(func|struct|Main|enum|var|Window|@)/.test(lines[i]); i++)
+        // (a directive such as @version before the imports does not stop it: Forja does the same)
+        for (let i = 0; i < lines.length && !/^(func|struct|Main|enum|var|Window)\b/.test(lines[i]); i++)
             if (/^(const|import)\s/.test(lines[i])) at = i + 1;
         edits.push({ line: at, text: `const ${name} = ${n}` + (at > 0 && /^import\s/.test(lines[at - 1]) ? '\n' : '') });
     }
@@ -187,6 +188,15 @@ function applyEdits(dash, edits) {
     return lines.join('\n');
 }
 
+/** The values of the integer constants of a .dash (a new event number takes none of them) */
+function constValues(dash) {
+    const out = [];
+    const re = new RegExp(`^const\\s+${IDENT}\\s*=\\s*(-?\\d+)\\s*(#.*)?$`, 'gm');
+    let m;
+    while ((m = re.exec(dash))) out.push(Number(m[1]));
+    return out;
+}
+
 /** Does a .dash import this .dashui (by its file name)? */
 function importsDashui(dash, dashuiBase) {
     const re = /^\s*import\s+"([^"]+)"/gm;
@@ -195,4 +205,4 @@ function importsDashui(dash, dashuiBase) {
     return false;
 }
 
-module.exports = { problems, handlers, addHandler, applyEdits, importsDashui, constantName };
+module.exports = { problems, handlers, addHandler, applyEdits, importsDashui, constantName, constValues };

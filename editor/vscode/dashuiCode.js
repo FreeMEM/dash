@@ -5,6 +5,7 @@
 const path = require('path');
 const fs = require('fs');
 const L = require('./dashuiLinks');
+const M = require('./media/model.js');
 
 /** @param {typeof import('vscode')} vscode */
 function setupDashuiCode(vscode, context) {
@@ -96,8 +97,40 @@ function setupDashuiCode(vscode, context) {
         return { uri: f.uri, line: at.line, created: true, name: plan.name };
     }
 
-    context.subscriptions.push(vscode.commands.registerCommand('dash.gotoEvent', gotoEvent));
-    return { gotoEvent };
+    /**
+     * The double click on an object of the visual editor (Jose asked for it, Dash Amiga #2244; Forja does the
+     * same): target {path}, {window: true} or {menu: [list, menu, item]} of the window windowIndex. If it has no
+     * event number or no name it gets them (in the .dashui, with undo), and then to its code, made if missing.
+     */
+    async function openEvent(dashuiUri, windowIndex, target) {
+        const document = await vscode.workspace.openTextDocument(dashuiUri);
+        let doc;
+        try { doc = M.parse(document.getText()); } catch (e) {
+            vscode.window.showWarningMessage('El .dashui no se puede leer: ' + e.message);
+            return null;
+        }
+        const files = await users(dashuiUri);
+        if (!files.length) {
+            vscode.window.showWarningMessage(`Ningún .dash importa ${path.basename(dashuiUri.fsPath)} (import "${path.basename(dashuiUri.fsPath)}").`);
+            return null;
+        }
+        const r = M.prepareEvent(doc, windowIndex || 0, target || {}, L.constValues(files[0].text));
+        if (r.error) {
+            vscode.window.showWarningMessage(r.error);
+            return null;
+        }
+        if (r.changed) {
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(dashuiUri, new vscode.Range(0, 0, document.lineCount, 0), M.serialize(doc));
+            await vscode.workspace.applyEdit(edit);
+        }
+        const at = await gotoEvent(dashuiUri, r.event, r.name, true);
+        return at && Object.assign(at, { event: r.event, objectName: r.name });
+    }
+
+    context.subscriptions.push(vscode.commands.registerCommand('dash.gotoEvent', gotoEvent),
+                               vscode.commands.registerCommand('dash.openEvent', openEvent));
+    return { gotoEvent, openEvent };
 }
 
 module.exports = { setupDashuiCode };
