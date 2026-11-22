@@ -153,7 +153,9 @@ Rules checked by the compiler (`compiler/dashui.py`; the editor flags the same o
   Alt+arrows to move, Del, F2 (name), Enter (properties), Ctrl+D (duplicate); copy, cut and paste
   (duplicate names get a number); undo and redo are the document's (plus ↶ ↷ buttons).
 - **Problems and code:** problems in the `.dashui` (JSON, types, names, event numbers) show up in Problems on their
-  line. An event's → button takes you to its code in the `.dash` that imports the file: a constant with that number
+  line. A double click on an object (in the tree or the preview), on the window's title or on a menu item takes you to
+  the code of its event, as in Visual Basic or Delphi (Jose asked for it; Forja does the same): with no event number it
+  gets the lowest free one, and with no name, one from its text. An event's → button takes you to its code in the `.dash` that imports the file: a constant with that number
   (`const ID_ACEPTAR = 3`) and `if ev == ID_ACEPTAR`; if there is none, it creates it (the constant and an `if` in the
   `mui_wait_event` loop).
 - **Commands** (`editor/vscode/package.json`): "Dash: Compilar", "Ejecutar en emulador", "Ejecutar con comprobación

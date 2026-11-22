@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Double click to the code of an event**, as in Visual Basic or Delphi (asked by Jose in Dash Amiga #2244; Forja's
+  window editor does the same): a double click on an object of the tree or the preview, on the title of the window
+  (its close button) or on a menu item goes to where the `.dash` that imports the `.dashui` handles its event, or
+  makes it there (`const ID_NAME = n` and `if ev == ID_NAME`). If the object has no event number, it gets the lowest
+  free one (not in the file nor a `const` of the `.dash`); if it has no name, one from its text (`_Saludar` →
+  `saludar`) or its type. The event of each type: `event` for buttons, `change` for checkboxes, cycles, sliders,
+  tabs and lists, `ack` for text fields. Command `dash.openEvent`.
+- The constant of a new event goes after the `import`s and `const`s also when a directive (`@version`) comes before
+  them; it went to the start of the file.
+
 ## 0.6.0 (2026-11-17)
 
 On Linux and DashOS the extension is the IDE of Dash, as Forja is on the Amiga (asked by the user; FORJA_LOOP 6.1 of

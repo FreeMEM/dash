@@ -46,6 +46,8 @@ class DashUIEditorProvider {
                 const edit = new vscode.WorkspaceEdit();
                 edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), m.text);
                 await vscode.workspace.applyEdit(edit);
+            } else if (m.type === 'openEvent') {     // a double click: number and name if missing, and its code
+                await vscode.commands.executeCommand('dash.openEvent', document.uri, m.window, m.target);
             } else if (m.type === 'gotoEvent') {
                 await vscode.commands.executeCommand('dash.gotoEvent', document.uri, m.event, m.name);
             } else if (m.type === 'undo' || m.type === 'redo') {

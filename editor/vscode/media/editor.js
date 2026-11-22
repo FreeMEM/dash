@@ -38,6 +38,20 @@
 
     function win() { return doc && doc.windows[winIndex]; }
 
+    // A double click on an object (the tree or the preview) or on the title of the window: to the code of its event
+    // (VS Code gives it a number and a name if it has none). The page is made again on the first click, so the
+    // second one is told by its count or by the time.
+    let lastClick = { key: '', t: 0 };
+    function isDouble(e, key) {
+        const now = Date.now();
+        const dbl = e.detail >= 2 || (lastClick.key === key && now - lastClick.t < 500);
+        lastClick = dbl ? { key: '', t: 0 } : { key, t: now };
+        return dbl;
+    }
+    function openEvent(target) {
+        vscode.postMessage({ type: 'openEvent', window: winIndex, target });
+    }
+
     function commit() {
         const text = M.serialize(doc);
         vscode.postMessage({ type: 'edit', text });
@@ -175,7 +189,11 @@
                 'aria-expanded': isGroup ? 'true' : undefined,
                 style: `padding-left:${depth * 14 + 4}px`, draggable: path.length ? 'true' : 'false',
                 'data-path': JSON.stringify(path), tabindex: isSelected ? '0' : '-1',
-                onclick: () => { selected = path; render(); },
+                onclick: (e) => {
+                    selected = path;
+                    if (isDouble(e, 'tree' + JSON.stringify(path))) openEvent({ path });
+                    render();
+                },
                 ondragstart: (e) => { dragging = { path }; e.dataTransfer.setData('text/plain', JSON.stringify(path)); },
             }, (isGroup ? '▾ ' : '• ') + describe(n));
             dropZone(row, path, false);
@@ -366,7 +384,9 @@
                                        onclick: () => { m.items.splice(ii, 1); commit(); } }, '×')));
                     return;
                 }
-                box.append(el('div', { class: 'prop item' },
+                box.append(el('div', { class: 'prop item', title: it.separator ? undefined : 'Doble clic: a su código',
+                    // (on the row, not in its fields: there a double click picks a word)
+                    ondblclick: (e) => { if (e.target === e.currentTarget && !it.separator) openEvent({ menu: [key, mi, ii] }); } },
                     it.separator ? el('span', {}, '———') :
                         el('input', { value: it.label || '', placeholder: 'texto', 'aria-label': 'Texto de la opción',
                             onchange: (e) => { it.label = e.target.value; commit(); } }),
@@ -435,6 +455,11 @@
         const box = $('preview');
         box.innerHTML = M.preview(win(), selected);
         box.setAttribute('aria-hidden', 'true');      // the tree says the same to a screen reader
+        const title = box.querySelector('.titlebar');
+        if (title) {
+            title.title = 'Doble clic: al código de cerrar la ventana';
+            title.addEventListener('click', (ev) => { if (isDouble(ev, 'title')) openEvent({ window: true }); });
+        }
         box.querySelectorAll('[data-path]').forEach((e) => {
             const path = JSON.parse(e.getAttribute('data-path'));
             e.addEventListener('click', (ev) => {
@@ -442,6 +467,7 @@
                 ev.stopPropagation();
                 selected = path;
                 focusTree = true;         // the keys of the tree (Delete, arrows...) work on it now
+                if (isDouble(ev, 'preview' + JSON.stringify(path))) openEvent({ path });
                 render();
             });
             if (path.length) {

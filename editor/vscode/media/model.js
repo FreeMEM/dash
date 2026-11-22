@@ -355,6 +355,108 @@
             (menus ? `<div class="menubar">${menus}</div>` : '') + render(win.root, []) + '</div>';
     }
 
+
+    // --- The event of an object, for the double click (Forja does the same: src/diseno.dash, dv_evento; Jose asked
+    // for it, Dash Amiga #2244) ---
+
+    /** The property of the event of an object, by its type ('' if it gives none) */
+    function eventKey(node) {
+        const t = node.type;
+        if (t === 'button' || t === 'image_button') return 'event';
+        if (['checkbox', 'cycle', 'slider', 'scrollbar', 'tabs', 'image_toggle'].includes(t)) return 'change';
+        if (t === 'list') return node.double !== undefined && node.change === undefined ? 'double' : 'change';
+        if (['string', 'combo', 'text_editor'].includes(t)) return node.change !== undefined && node.ack === undefined ? 'change' : 'ack';
+        for (const k of ['event', 'change', 'ack', 'double']) if (node[k] !== undefined) return k;
+        return '';
+    }
+
+    /** A field name from a text ("_Saludar" -> "saludar", "Acerca de..." -> "acerca_de"), or '' */
+    function nameFromText(text) {
+        const from = 'áéíóúàèìòùäëïöüâêîôûñç', to = 'aeiouaeiouaeiouaeiounc';
+        let r = '';
+        for (let c of String(text || '').replace(/\u001b./g, '').toLowerCase()) {
+            const k = from.indexOf(c);
+            if (k >= 0) c = to[k];
+            if (/[a-z0-9]/.test(c)) r += c;
+            else if ((c === ' ' || c === '-' || c === '.') && r && !r.endsWith('_')) r += '_';
+        }
+        r = r.replace(/_+$/, '').replace(/^[0-9]+/, '').slice(0, 24);
+        return RESERVED.has(r) || r === 'window' ? '' : r;
+    }
+
+    /** Every event number of the document (objects, menus and windows) */
+    function eventNumbers(doc) {
+        const out = new Set();
+        (function walk(v) {
+            if (Array.isArray(v)) v.forEach(walk);
+            else if (v && typeof v === 'object') {
+                for (const k of ['event', 'change', 'ack', 'double', 'close']) if (Number.isInteger(v[k])) out.add(v[k]);
+                Object.values(v).forEach(walk);
+            }
+        })(doc);
+        return out;
+    }
+
+    /** Every name of a window: its objects, menus and menu items */
+    function allNames(win) {
+        const out = new Set();
+        (function walk(v) {
+            if (Array.isArray(v)) v.forEach(walk);
+            else if (v && typeof v === 'object') {
+                if (typeof v.name === 'string' && v !== win) out.add(v.name);
+                Object.values(v).forEach(walk);
+            }
+        })(win);
+        return out;
+    }
+
+    /**
+     * The event of what is double-clicked, to go to its code: target {path} (an object), {window: true} (its close
+     * button) or {menu: [list, menu, item]} ("menus" or "context_menus"). A number is given if it had none (the
+     * lowest one free in the document and not in taken, the const values of the .dash) and a name if it had none
+     * (from its text, else its type). Returns {event, name, key, changed} or {error}.
+     */
+    function prepareEvent(doc, windowIndex, target, taken) {
+        const w = doc.windows[windowIndex];
+        if (!w) return { error: 'No hay esa ventana.' };
+        let node, key;
+        if (target.window) { node = w; key = 'close'; }
+        else if (target.menu) {
+            const [list, mi, ii] = target.menu;
+            node = ((w[list] || [])[mi] || {}).items ? w[list][mi].items[ii] : null;
+            key = node && !node.separator && node.submenu === undefined ? 'event' : '';
+        } else {
+            node = nodeAt(w, target.path || []);
+            key = node ? eventKey(node) : '';
+        }
+        if (!node || !key) {
+            const t = node && TYPES[node.type];
+            return { error: t ? `Un objeto ${t.label} no da eventos.` : 'Esto no da eventos.' };
+        }
+        let changed = false;
+        let name = target.window ? w.name : node.name || '';
+        if (!name) {
+            const base = ['label', 'text', 'title'].map((p) => nameFromText(node[p])).find((x) => x) ||
+                nameFromText(target.menu ? 'opcion' : (TYPES[node.type] || { label: node.type }).label) || 'objeto';
+            const used = allNames(w);
+            name = base;
+            for (let k = 1; used.has(name); k++) name = base + k;
+            node.name = name;
+            changed = true;
+        }
+        let n = node[key];
+        if (!(Number.isInteger(n) && n > 0)) {
+            const used = eventNumbers(doc);
+            for (const t of taken || []) used.add(t);
+            n = 1;
+            while (used.has(n)) n++;
+            node[key] = n;
+            changed = true;
+        }
+        return { event: n, name, key, changed };
+    }
+
     return { TYPES, COMMON, RESERVED, badName, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
-             dropTarget, copy, paste, moveBy, paths, setProp, names, check, preview };
+             dropTarget, copy, paste, moveBy, paths, setProp, names, check, preview,
+             eventKey, nameFromText, eventNumbers, prepareEvent };
 }));
