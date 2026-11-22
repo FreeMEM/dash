@@ -20,6 +20,8 @@ static struct EClockVal bench_t0;
 static ULONG bench_freq;
 
 void (*_dash_weak_dash_time_init)(void) = _dash_time_init;
+/* Un handler de DOS (HANDLER_RUNTIME): entra si el programa lo es (pone _dash_hd_on) o usa handler_* */
+LONG (*_dash_weak_dl_hd_begin)(struct Message *) = _dash_hd_begin;
 /* GadTools, como ./dash la abre al empezar y la cierra al acabar: solo si el programa la usa (lo que
    toca GadToolsBase entra con ella, ver hunk.c) */
 static void dl_gt_open(void)
@@ -210,7 +212,8 @@ LONG _dash_init(const char *cmd, LONG len)
     pr = (struct Process *)FindTask(NULL);
     dl_brk_task = (struct Task *)pr;
     if (!pr->pr_CLI) {
-        /* desde el Workbench: su mensaje, y la carpeta del programa como actual (libnix) */
+        /* desde el Workbench: su mensaje, y la carpeta del programa como actual (libnix); un handler de DOS
+           (@handler, --handler), el paquete de arranque, que se lleva _dash_hd_begin tras abrir dos.library */
         WaitPort(&pr->pr_MsgPort);
         _WBenchMsg = (struct WBStartup *)GetMsg(&pr->pr_MsgPort);
     } else {
@@ -237,6 +240,8 @@ LONG _dash_init(const char *cmd, LONG len)
         _dash_exit_cleanup();
         return 10;
     }
+    if (_WBenchMsg && _dash_weak_dl_hd_begin && _dash_weak_dl_hd_begin((struct Message *)_WBenchMsg))
+        _WBenchMsg = NULL;   /* (ni consola ni respuesta al acabar: ya es de HANDLER_RUNTIME) */
     if (_WBenchMsg && _dash_stdiowin) {
         /* desde el Workbench, la entrada y la salida (como libnix: su ventana de consola o @workbench_output) */
         if (!(dash_wb_con = Open((CONST_STRPTR)_dash_stdiowin, MODE_OLDFILE))) {

@@ -27,6 +27,7 @@ static struct { int *v; int n, cap; } fix_reads;
 static Obj *obj;
 int memcheck;
 int elf_be;
+int handler_mode;     /* --handler: un handler de DOS (docs/HANDLER_LOOP.md) */
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
 int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
 int fpu881;           /* --fpu: las instrucciones de la FPU en los bloques asm */
@@ -2757,6 +2758,9 @@ static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
     {NULL, NULL, NULL, 0}
 };
 static long sink_off = -1;
+#ifndef DASH_A64
+static char builtin_warned[4096];   /* los avisos de handler, uno por builtin */
+#endif
 
 /* Un builtin de ./dash (compiler/amiga_builtins.py): su envoltorio db_nombre de la librería, con los
    argumentos que falten a 0. Si guarda lo que recibe, un texto o un objeto pasa escapado (se queda hasta
@@ -2767,6 +2771,14 @@ static int gen_dash_builtin(Node *n)
     char *sym;
     if ((b = find_builtin(n->name)) < 0) fatal_node(n, "la función %s no existe", n->name);
 #ifndef DASH_A64
+    if ((prog->handler || handler_mode) && (!strncmp(n->name, "file_", 5) || !strncmp(n->name, "dir_", 4) ||
+                                            !strncmp(n->name, "path_", 5)) && b < (int)sizeof builtin_warned && !builtin_warned[b]) {
+        /* un handler de DOS que pide al DOS algo de su propio volumen se espera a sí mismo (docs/HANDLER_LOOP.md) */
+        builtin_warned[b] = 1;
+        err_printf("%s:%d:%d: Warning: en un handler de DOS, %s pide al DOS: una ruta del propio volumen del "
+                   "handler lo bloquearía (las de otros volúmenes, bien)\n", src_files.v[n->file], n->line, n->col,
+                   n->name);
+    }
     if (builtin_info[b].dashos == 1) fatal_node(n, "%s es solo de DashOS (./dash --dashos)", n->name);
 #else
     if (builtin_info[b].dashos == 2)
@@ -7271,6 +7283,10 @@ void gen_program(Program *p, Obj *o)
     }
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     if (p->version) set_rt_var("__dash_version", p->version, 0);   /* program_version() */
+#ifndef DASH_A64
+    /* un handler de DOS: _dash_init toma el mensaje de arranque por el paquete del DOS (HANDLER_RUNTIME) */
+    if (p->handler || handler_mode) set_rt_var("__dash_hd_on", NULL, 1);
+#endif
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
 #ifndef DASH_A64
     if (auto_brk) {

@@ -38,6 +38,7 @@
 25. [DashOS (AArch64)](#25-dashos-aarch64)
 26. [Ensamblador en línea](#26-ensamblador-en-línea)
 27. [3D con MiniGL](#27-3d-con-minigl)
+28. [Handlers de DOS (sistemas de archivos)](#28-handlers-de-dos-sistemas-de-archivos)
 
 ---
 
@@ -5156,6 +5157,73 @@ end
 Hay estado (`gl_enable`, `gl_blend_func`...), matrices (`gl_perspective`, `gl_ortho`, `gl_look_at`...), texturas
 desde `image_decode` (`gl_texture`), luces (`gl_light`), niebla (`gl_fog`) y `gl_read_pixel` para pruebas. Todo,
 con lo probado en el emulador y lo que Wazp3D no hace, en [MINIGL.md](MINIGL.md). Ejemplo: `examples/gl_cubo.dash`.
+
+---
+
+## 28. Handlers de DOS (sistemas de archivos)
+
+Con Dash se puede escribir un handler de DOS de AmigaOS 3.x: el programa que hay detrás de un dispositivo como
+`DF0:` o `RAM:`, que recibe un paquete del DOS por cada cosa que piden los demás programas y la contesta. Va por los
+dos caminos: `./dash --handler` y `./dash --gcc --handler`, o la directiva `@handler`, que ya pone
+`lib/amiga/handler.dash` al importarlo. Idea del usuario. Plan y bitácora: [HANDLER_LOOP.md](HANDLER_LOOP.md).
+
+```ruby
+import "lib/amiga/handler.dash"   # @handler, DosPacket, FileLock, FileInfoBlock, ACTION_*, ERROR_*...
+
+Main
+    handler_log("T:mio.log")                  # Print va ahí (sin registro, a ninguna parte)
+    volumen = handler_volume_add("Mio", ID_DOS_DISK)
+    handler_ready(true, 0)                    # contesta al paquete de arranque
+    while true
+        p = handler_wait()                    # el siguiente paquete; 0 con Ctrl-C
+        if p == 0
+            break
+        end
+        pk = Ptr DosPacket(p)
+        if pk.dp_Type == ACTION_IS_FILESYSTEM
+            packet_reply(p, DOSTRUE, 0)
+        elif pk.dp_Type == ACTION_LOCATE_OBJECT and bstr_text(pk.dp_Arg2) == "Mio:"
+            packet_reply(p, lock_new(0, SHARED_LOCK, volumen), 0)
+        else
+            Print "sin hacer: #{pk.dp_Type}"
+            packet_reply(p, DOSFALSE, ERROR_ACTION_NOT_KNOWN)
+        end
+    end
+end
+```
+
+Se monta con una mountlist (en `DEVS:DOSDrivers` o con `Mount MIO: FROM fichero`):
+
+```
+MIO:
+    Handler = L:mio-handler        /* con un disco: FileSystem = ..., Device = ..., Unit = ..., la geometría */
+    Stacksize = 8000
+    Priority = 5
+    GlobVec = -1                   /* un handler en C (o en Dash), no en BCPL */
+    Activate = 1                   /* arranca al montarlo, no en el primer acceso */
+#
+```
+
+- **El arranque.** `handler_name()` da el nombre del dispositivo y `handler_startup()` el valor de `Startup =`; con
+  `Device =`, `lib/amiga/handler.dash` lee la `FileSysStartupMsg`: `fssm_device()`, `fssm_unit()`, `fssm_env()` (el
+  `DosEnvec`), `fssm_first_block()`, `fssm_blocks()`, `fssm_block_size()` y `fssm_open()`, que abre el dispositivo
+  para `dev_read` y `dev_write` (pasados los 4 GB, con TD64 o NSD).
+- **Los paquetes.** `handler_wait()` da la dirección del `DosPacket`; `Ptr DosPacket(p)` lee `dp_Type` y los
+  argumentos. Los BPTR se pasan a dirección con `baddr` y al revés con `mkbptr`; los BSTR se leen con `bstr_text` y se
+  escriben con `bstr_put`. Cerraduras: `lock_new(clave, acceso, volumen)`, `lock_key`, `lock_free`. Para
+  `EXAMINE_OBJECT` y `EXAMINE_NEXT`, `fib_fill`; para `DISK_INFO` e `INFO`, `info_fill`. `ExAll` no hace falta: el DOS
+  lo hace con `EXAMINE_NEXT` si el handler contesta `ERROR_ACTION_NOT_KNOWN`.
+- **Sin consola.** `Print` no va a ninguna parte hasta `handler_log(ruta)`. Un error de ejecución va a ese registro
+  (sin registro, a un requester). Si el handler acaba con un paquete sin contestar, el runtime lo contesta con
+  `ERROR_OBJECT_NOT_FOUND`, igual que los que quedaban en cola, y el DOS carga una copia nueva en el siguiente acceso.
+- **El DOS desde un handler.** Los paquetes llegan a un puerto propio del handler, no al del proceso: así puede usar
+  las funciones de ficheros de Dash con otros volúmenes (un registro en `T:`, una imagen de disco). Con una ruta de
+  su propio volumen se esperaría a sí mismo: el compilador avisa de cada función de ficheros que use un handler.
+- **Errores que abren requesters.** `ERROR_DISK_WRITE_PROTECTED`, `ERROR_NO_DISK` y `ERROR_DEVICE_NOT_MOUNTED` hacen
+  que el DOS del cliente abra un requester y espere.
+
+Ejemplo completo: `examples/handler_ram.dash`, un disco en memoria (leer, escribir, listar, renombrar, borrar,
+protección y notas). Pruebas en el emulador: `tests/test_handler_*.dash`, con `# emu-handler:` en el runner.
 
 ---
 

@@ -1,0 +1,13 @@
+# Test: Dash names that are macros of the Amiga's gcc without underscores (amiga, AMIGA, mc68020...): renamed in the
+# C like the words of C. A local "amiga" gave "LONG 1 = ..." (found by the DashFS handler, docs/HANDLER_LOOP.md).
+# expect-out: 3 4
+func f(amiga: Int) -> Int
+    mc68020 = amiga + 1
+    return mc68020
+end
+
+Main
+    AMIGA = f(2)
+    amigaos = AMIGA + 1
+    Print "#{AMIGA} #{amigaos}"
+end

@@ -200,11 +200,13 @@ ADD2EXIT(_dash_atexit_run, 0);
    ./dash --debug stops in the debugger first. */
 /* The message of a runtime error (fmt with up to 4 arguments, lines separated by \\n): on the output,
    or in a requester when there is none (a program started from the Workbench) */
+/* A handler without a log writes to NIL: (HANDLER_RUNTIME): its errors go to a requester, as without a console */
+static BPTR _dash_out_nil __attribute__((unused)) = 0;
 static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) __attribute__((unused));
 static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) {
     _DashP args[4];
     args[0] = a; args[1] = b; args[2] = c; args[3] = d;
-    if (DOSBase && Output()) {
+    if (DOSBase && Output() && Output() != _dash_out_nil) {
         VPrintf((CONST_STRPTR)fmt, args);
         PutStr((CONST_STRPTR)"\\n");
         Flush(Output());   /* now: if the cleanup after it fails, the message is already out */
@@ -10463,6 +10465,348 @@ static LONG _dash_adler32(APTR buf, LONG n, LONG a) {
 
 long dash_zlib_inflate_used(void);
 static LONG _dash_inflate_used(void) { return dash_zlib_inflate_used(); }
+
+"""
+
+    # A DOS handler written in Dash (./dash --handler, @handler; docs/HANDLER_LOOP.md, idea of the user): the startup
+    # packet, the packet loop on a port of its own, BSTRs, volumes, a log, and the blocks of a device (dev_*)
+    HANDLER_RUNTIME = """\
+/* Dash Handler Runtime */
+#include <dos/dosextens.h>
+#include <dos/filehandler.h>
+#include <exec/io.h>
+#include <exec/errors.h>
+#include <devices/trackdisk.h>
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#ifndef TD_READ64
+#define TD_READ64 24
+#define TD_WRITE64 25
+#endif
+#ifndef NSCMD_TD_READ64
+#define NSCMD_TD_READ64 0xC000
+#define NSCMD_TD_WRITE64 0xC001
+#endif
+
+/* Set before the program starts (./dash: _dash_start; --gcc: main) when it is a handler */
+LONG _dash_hd_on = 0;
+static struct DosPacket *_dash_hd_start;        /* the startup packet, until handler_ready answers it */
+static LONG _dash_hd_cur;                       /* the last packet handler_wait gave, until it is answered */
+static struct DeviceNode *_dash_hd_node;
+static struct MsgPort *_dash_hd_port;           /* where the packets come (dn_Task): not pr_MsgPort, the DOS's own */
+static LONG _dash_hd_startup;                   /* dn_Startup (a FileSysStartupMsg with Device=) */
+static char _dash_hd_devname[32];
+static BPTR _dash_hd_nilfh, _dash_hd_logfh, _dash_hd_oldout;
+static struct DosList *_dash_hd_vols[8];
+static struct IOExtTD *_dash_dev_ios[8];
+static BOOL _dash_dev_atexit, _dash_hd_atexit;
+
+static void _dash_hd_reply(LONG pkt, LONG res1, LONG res2) {
+    struct DosPacket *p = (struct DosPacket *)pkt;
+    struct MsgPort *to;
+    if (!p) return;
+    if (pkt == _dash_hd_cur) _dash_hd_cur = 0;
+    /* the log up to date before the client goes on (it may read it at once) */
+    if (_dash_hd_logfh) Flush(_dash_hd_logfh);
+    to = p->dp_Port;
+    p->dp_Res1 = res1;
+    p->dp_Res2 = res2;
+    p->dp_Port = _dash_hd_port ? _dash_hd_port : &((struct Process *)FindTask(NULL))->pr_MsgPort;
+    PutMsg(to, p->dp_Link);
+}
+
+/* An error answer: -1 for READ, WRITE and SEEK (their result is a length or a position), DOSFALSE for the rest.
+   ERROR_OBJECT_NOT_FOUND: ERROR_DEVICE_NOT_MOUNTED or ERROR_NO_DISK make the client's DOS open a requester
+   ("insert volume") and wait */
+static void _dash_hd_refuse(LONG pkt, LONG err) {
+    LONG t = ((struct DosPacket *)pkt)->dp_Type;
+    _dash_hd_reply(pkt, t == ACTION_READ || t == ACTION_WRITE || t == ACTION_SEEK ? -1 : DOSFALSE, err);
+}
+
+/* A disk went in or out: the Workbench looks at the volumes again (as FFS does) */
+static void _dash_hd_diskevent(UBYTE cls) {
+    struct MsgPort *mp = CreateMsgPort();
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    if (!mp) return;
+    if ((io = (struct IOStdReq *)CreateIORequest(mp, sizeof(struct IOStdReq)))) {
+        if (!OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0)) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = cls;
+            io->io_Command = IND_WRITEEVENT;
+            io->io_Data = &ie;
+            io->io_Length = sizeof(ie);
+            DoIO((struct IORequest *)io);
+            CloseDevice((struct IORequest *)io);
+        }
+        DeleteIORequest((struct IORequest *)io);
+    }
+    DeleteMsgPort(mp);
+}
+
+/* The end, however it comes (Stop, an error, Ctrl-C): in Forbid, nobody sends to the port any more (dn_Task and the
+   volumes' dl_Task to 0: the volumes stay, as a disk taken out), what is left in it is answered with an error, and
+   dn_SegList to 0, so that the DOS loads a clean copy on the next access (the globals of this one are spent; its
+   code stays in memory: it cannot be unloaded from inside) */
+static void _dash_hd_end(void) {
+    struct Message *m;
+    int i;
+    if (_dash_hd_start) _dash_hd_reply((LONG)_dash_hd_start, DOSFALSE, ERROR_OBJECT_NOT_FOUND);
+    _dash_hd_start = NULL;
+    /* the packet it was doing when it ended (a runtime error): its client would wait for ever */
+    if (_dash_hd_cur) _dash_hd_refuse(_dash_hd_cur, ERROR_OBJECT_NOT_FOUND);
+    Forbid();
+    if (_dash_hd_node) {
+        _dash_hd_node->dn_Task = NULL;
+        _dash_hd_node->dn_SegList = 0;
+    }
+    for (i = 0; i < 8; i++)
+        if (_dash_hd_vols[i]) _dash_hd_vols[i]->dol_Task = NULL;
+    if (_dash_hd_port) {
+        while ((m = GetMsg(_dash_hd_port)))
+            _dash_hd_refuse((LONG)m->mn_Node.ln_Name, ERROR_OBJECT_NOT_FOUND);
+        DeleteMsgPort(_dash_hd_port);
+        _dash_hd_port = NULL;
+    }
+    Permit();
+    if (_dash_hd_oldout || _dash_hd_nilfh || _dash_hd_logfh) {
+        Flush(Output());
+        SelectOutput(_dash_hd_oldout);
+        if (_dash_hd_logfh) Close(_dash_hd_logfh);
+        if (_dash_hd_nilfh) Close(_dash_hd_nilfh);
+        _dash_hd_logfh = _dash_hd_nilfh = 0;
+    }
+    _dash_out_nil = 0;
+}
+
+/* At the start of a handler (msg: what came to pr_MsgPort, the startup packet). 1 if it was one */
+static LONG _dash_hd_begin(struct Message *msg) {
+    UBYTE *b;
+    LONG n;
+    /* (a packet's message has it in ln_Name; a WBStartup, 0: started from the Workbench by mistake) */
+    if (!_dash_hd_on || !msg || !msg->mn_Node.ln_Name) return 0;
+    _dash_hd_start = (struct DosPacket *)msg->mn_Node.ln_Name;
+    _dash_hd_startup = _dash_hd_start->dp_Arg2;
+    _dash_hd_node = (struct DeviceNode *)BADDR(_dash_hd_start->dp_Arg3);
+    if (_dash_hd_node && (b = (UBYTE *)BADDR(_dash_hd_node->dn_Name))) {
+        n = b[0] < sizeof(_dash_hd_devname) ? b[0] : sizeof(_dash_hd_devname) - 1;
+        memcpy(_dash_hd_devname, b + 1, n);
+        _dash_hd_devname[n] = 0;
+        if (n && _dash_hd_devname[n - 1] == ':') _dash_hd_devname[n - 1] = 0;
+    }
+    if (!_dash_hd_atexit) _dash_hd_atexit = _dash_atexit(_dash_hd_end) == 0;
+    /* without a console: Print goes nowhere until handler_log (NIL: is the DOS's own: no packets) */
+    if ((_dash_hd_nilfh = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE))) {
+        _dash_hd_oldout = SelectOutput(_dash_hd_nilfh);
+        _dash_out_nil = _dash_hd_nilfh;
+    }
+    if (!(_dash_hd_port = CreateMsgPort())) {
+        _dash_hd_reply((LONG)_dash_hd_start, DOSFALSE, ERROR_NO_FREE_STORE);
+        _dash_hd_start = NULL;
+        _dash_exit(20);
+    }
+    /* the clients' packets wait in the port of their own from now on, until handler_wait */
+    if (_dash_hd_node) _dash_hd_node->dn_Task = _dash_hd_port;
+    return 1;
+}
+
+/* handler_ready(ok, err): the answer to the startup packet */
+static void _dash_hd_ready(LONG ok, LONG err) {
+    LONG p = (LONG)_dash_hd_start;
+    if (_dash_hd_on && !_dash_hd_node)   /* (started from the Shell or the Workbench) */
+        _dash_fail("este programa es un handler de DOS: se monta con Mount", NULL);
+    if (!p) return;
+    _dash_hd_start = NULL;
+    if (!ok && _dash_hd_node) _dash_hd_node->dn_Task = NULL;
+    _dash_hd_reply(p, ok ? DOSTRUE : DOSFALSE, ok ? 0 : err);
+}
+
+/* The next packet (its DosPacket), waiting for it; 0 with Ctrl-C (or if the program is not a handler) */
+static LONG _dash_hd_wait(void) {
+    struct Message *m;
+    if (!_dash_hd_port) return 0;
+    for (;;) {
+        if ((m = GetMsg(_dash_hd_port))) return _dash_hd_cur = (LONG)m->mn_Node.ln_Name;
+        if (_dash_hd_logfh) Flush(_dash_hd_logfh);   /* the log, up to date while it waits */
+        if (Wait((1UL << _dash_hd_port->mp_SigBit) | SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) return 0;
+    }
+}
+
+static LONG _dash_hd_poll(void) {
+    struct Message *m = _dash_hd_port ? GetMsg(_dash_hd_port) : NULL;
+    return m ? _dash_hd_cur = (LONG)m->mn_Node.ln_Name : 0;
+}
+
+/* Print to this file from now on (and the runtime's errors); FALSE if it does not open */
+/* (emptied, then open in shared mode: others can read it while the handler runs) */
+static BOOL _dash_hd_log(STRPTR path) {
+    BPTR fh = path ? Open((CONST_STRPTR)path, MODE_NEWFILE) : 0;
+    if (!fh) return FALSE;
+    Close(fh);
+    if (!(fh = Open((CONST_STRPTR)path, MODE_READWRITE))) return FALSE;
+    if (!_dash_hd_oldout && !_dash_hd_nilfh) _dash_hd_oldout = Output();
+    Flush(Output());
+    SelectOutput(fh);
+    if (_dash_hd_logfh) Close(_dash_hd_logfh);
+    _dash_hd_logfh = fh;
+    _dash_out_nil = 0;
+    if (!_dash_hd_atexit) _dash_hd_atexit = _dash_atexit(_dash_hd_end) == 0;
+    return TRUE;
+}
+
+static STRPTR _dash_hd_name(void) {
+    return _dash_str_dup((STRPTR)_dash_hd_devname, TRUE);
+}
+
+/* A BSTR (its BPTR) as a text */
+static STRPTR _dash_bstr_text(LONG b) {
+    UBYTE *s = (UBYTE *)BADDR(b);
+    STRPTR t;
+    if (!s) return _dash_str_dup((STRPTR)"", TRUE);
+    t = _dash_str_alloc(s[0], TRUE);
+    if (t && s[0]) memcpy(t, s + 1, s[0]);
+    return t;
+}
+
+/* text as a BSTR at addr, in max bytes (a 0 after it when it fits) */
+static void _dash_bstr_put(LONG addr, STRPTR text, LONG max) {
+    UBYTE *d = (UBYTE *)addr;
+    ULONG n = text ? strlen((char *)text) : 0;
+    if (!d || max < 1) return;
+    if (n > (ULONG)max - 1) n = max - 1;
+    if (n > 255) n = 255;
+    d[0] = (UBYTE)n;
+    if (n) memcpy(d + 1, text, n);
+    if (n + 1 < (ULONG)max) d[n + 1] = 0;
+}
+
+/* A volume of this handler in the DOS list (and the Workbench told); its DosList, 0 if it cannot */
+static LONG _dash_hd_vol_add(STRPTR name, LONG type) {
+    struct DosList *dl;
+    LONG ok, i;
+    if (!name || !(dl = MakeDosEntry((CONST_STRPTR)name, DLT_VOLUME))) return 0;
+    dl->dol_Task = _dash_hd_port;
+    DateStamp(&dl->dol_misc.dol_volume.dol_VolumeDate);
+    dl->dol_misc.dol_volume.dol_DiskType = type;
+    LockDosList(LDF_VOLUMES | LDF_WRITE);
+    ok = AddDosEntry(dl);
+    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    if (!ok) {
+        FreeDosEntry(dl);
+        return 0;
+    }
+    for (i = 0; i < 8; i++)
+        if (!_dash_hd_vols[i]) {
+            _dash_hd_vols[i] = dl;
+            break;
+        }
+    _dash_hd_diskevent(IECLASS_DISKINSERTED);
+    return (LONG)dl;
+}
+
+static void _dash_hd_vol_remove(LONG vol) {
+    struct DosList *dl = (struct DosList *)vol;
+    LONG i;
+    if (!dl) return;
+    for (i = 0; i < 8; i++)
+        if (_dash_hd_vols[i] == dl) _dash_hd_vols[i] = NULL;
+    LockDosList(LDF_VOLUMES | LDF_WRITE);
+    RemDosEntry(dl);
+    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    FreeDosEntry(dl);
+    _dash_hd_diskevent(IECLASS_DISKREMOVED);
+}
+
+/* ---- the blocks of a device (trackdisk.device, scsi.device...) ---- */
+static void _dash_dev_close(LONG h) {
+    struct IOExtTD *io = (struct IOExtTD *)h;
+    struct MsgPort *mp;
+    LONG i;
+    if (!io) return;
+    for (i = 0; i < 8; i++)
+        if (_dash_dev_ios[i] == io) _dash_dev_ios[i] = NULL;
+    mp = io->iotd_Req.io_Message.mn_ReplyPort;
+    CloseDevice((struct IORequest *)io);
+    DeleteIORequest((struct IORequest *)io);
+    DeleteMsgPort(mp);
+}
+
+static void _dash_dev_cleanup(void) {
+    LONG i;
+    for (i = 0; i < 8; i++)
+        if (_dash_dev_ios[i]) _dash_dev_close((LONG)_dash_dev_ios[i]);
+}
+
+static LONG _dash_dev_open(STRPTR name, LONG unit, LONG flags) {
+    struct MsgPort *mp;
+    struct IOExtTD *io;
+    LONG i;
+    if (!name || !(mp = CreateMsgPort())) return 0;
+    if (!(io = (struct IOExtTD *)CreateIORequest(mp, sizeof(struct IOExtTD)))) {
+        DeleteMsgPort(mp);
+        return 0;
+    }
+    if (OpenDevice((CONST_STRPTR)name, unit, (struct IORequest *)io, flags)) {
+        DeleteIORequest((struct IORequest *)io);
+        DeleteMsgPort(mp);
+        return 0;
+    }
+    if (!_dash_dev_atexit) _dash_dev_atexit = _dash_atexit(_dash_dev_cleanup) == 0;
+    for (i = 0; i < 8; i++)
+        if (!_dash_dev_ios[i]) {
+            _dash_dev_ios[i] = io;
+            break;
+        }
+    return (LONG)io;
+}
+
+/* len bytes from block (of bsize bytes) on: up to 4 GB with CMD_READ, beyond with TD64 or NSD */
+static LONG _dash_dev_rw(LONG h, LONG block, LONG bsize, LONG buf, LONG len, BOOL write) {
+    struct IOExtTD *io = (struct IOExtTD *)h;
+    ULONG a = (ULONG)block, b = (ULONG)bsize, lo, hi, mid;
+    ULONG ll, lh, hl;
+    if (!io || !buf) return -1;
+    /* block * bsize in 64 bits, from 16-bit parts (no 64-bit multiply in the runtime) */
+    ll = (ULONG)(UWORD)a * (UWORD)b;
+    lh = (ULONG)(UWORD)a * (UWORD)(b >> 16);
+    hl = (ULONG)(UWORD)(a >> 16) * (UWORD)b;
+    mid = (ll >> 16) + (lh & 0xFFFF) + (hl & 0xFFFF);
+    lo = (ll & 0xFFFF) | (mid << 16);
+    hi = (ULONG)(UWORD)(a >> 16) * (UWORD)(b >> 16) + (lh >> 16) + (hl >> 16) + (mid >> 16);
+    io->iotd_Req.io_Data = (APTR)buf;
+    io->iotd_Req.io_Length = len;
+    io->iotd_Req.io_Offset = lo;
+    io->iotd_Req.io_Actual = hi;
+    io->iotd_Req.io_Flags = 0;
+    io->iotd_Req.io_Command = hi ? (write ? TD_WRITE64 : TD_READ64) : (write ? CMD_WRITE : CMD_READ);
+    DoIO((struct IORequest *)io);
+    if (hi && io->iotd_Req.io_Error == IOERR_NOCMD) {
+        io->iotd_Req.io_Data = (APTR)buf;
+        io->iotd_Req.io_Length = len;
+        io->iotd_Req.io_Offset = lo;
+        io->iotd_Req.io_Actual = hi;
+        io->iotd_Req.io_Command = write ? NSCMD_TD_WRITE64 : NSCMD_TD_READ64;
+        DoIO((struct IORequest *)io);
+    }
+    return io->iotd_Req.io_Error;
+}
+
+static LONG _dash_dev_actual(LONG h) {
+    return h ? (LONG)((struct IOExtTD *)h)->iotd_Req.io_Actual : 0;
+}
+
+/* Any command without data (TD_MOTOR, TD_CHANGESTATE, CMD_UPDATE...): io_Error; dev_actual, its io_Actual */
+static LONG _dash_dev_cmd(LONG h, LONG cmd, LONG length) {
+    struct IOExtTD *io = (struct IOExtTD *)h;
+    if (!io) return -1;
+    io->iotd_Req.io_Command = cmd;
+    io->iotd_Req.io_Length = length;
+    io->iotd_Req.io_Data = NULL;
+    io->iotd_Req.io_Offset = 0;
+    io->iotd_Req.io_Flags = 0;
+    DoIO((struct IORequest *)io);
+    return io->iotd_Req.io_Error;
+}
 
 """
 
@@ -26323,6 +26667,7 @@ _RUNTIME_FLAGS = [
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("HANDLER_RUNTIME", "uses_handler"),    # DOS handlers in Dash (docs/HANDLER_LOOP.md)
     ("SHOT_RUNTIME", "uses_shot"),          # screen_save_png (JaviTecH)
     ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
     ("FONTWEB_RUNTIME", "uses_fontweb"),    # Dash 2.0: font_from_ttf
@@ -26695,6 +27040,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_shot: bool = False     # screen_save_png (SHOT_RUNTIME)
+        self.uses_handler: bool = False  # handler_*, bstr_*, dev_* (HANDLER_RUNTIME)
+        self.handler_mode: bool = False  # ./dash --handler or @handler: the program is a DOS handler
         self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
         self.uses_fontweb: bool = False  # font_from_ttf (FONTWEB_RUNTIME, Dash 2.0)
         self.uses_netbg: bool = False    # net_bg_* (NETBG_RUNTIME, Dash 2.0): with NET and TASK
@@ -27103,6 +27450,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ZLIB_RUNTIME)
         if self.uses_shot:
             parts.append(CTemplates.SHOT_RUNTIME)
+        if self.uses_handler:
+            parts.append(CTemplates.HANDLER_RUNTIME)
         if self.uses_imgdec:
             parts.append(CTemplates.IMGDEC_RUNTIME)
         if self.uses_fontweb:
@@ -27432,6 +27781,15 @@ static LONG _dash_event_window_handle(void) {{
             program = program.replace("static void _dash_mc_error(CONST_STRPTR what) {\n",
                                       "static void _dash_mc_error(CONST_STRPTR what) {\n"
                                       "    _dash_debug_trap((const char *)what);\n", 1)
+        if self.handler_mode and self.target != "dashos":
+            # A DOS handler: libnix took DOS's startup packet for a WBStartup; without its __nocommandline (no
+            # console window, no arguments) and with _WBenchMsg cleared (or libnix would answer it again at the end)
+            program = program.replace("int main(", "/* ./dash --handler: what came to pr_MsgPort is DOS's startup packet */\n"
+                                      "void __nocommandline(void) {}\nextern struct WBStartup *_WBenchMsg;\n\nint main(", 1)
+            program = program.replace("    // User Code\n",
+                                      "    _dash_hd_on = 1;\n"
+                                      "    if (_dash_hd_begin((struct Message *)_WBenchMsg)) _WBenchMsg = NULL;\n"
+                                      "    // User Code\n", 1)
         if self.uses_time:
             # the clock starts with the program
             program = program.replace("    // User Code\n", "    _dash_time_init();\n    // User Code\n", 1)
@@ -27931,6 +28289,10 @@ static LONG _dash_mui_wait_event(void) { return dash_ui_wait_event ? dash_ui_wai
         self.workbench_output = node.workbench_output   # @workbench_output (dashweb D59)
         self.catalog = node.catalog                     # @catalog (dashweb D71)
         self.version = node.version                     # @version
+        # ./dash --handler (DASH_HANDLER) or @handler: a DOS handler (docs/HANDLER_LOOP.md)
+        self.handler_mode = bool(getattr(node, 'handler', False)) or os.environ.get("DASH_HANDLER") == "1"
+        if self.handler_mode:
+            self.uses_handler = self.uses_strings = True
         # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
         import re
         for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:
@@ -30586,6 +30948,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME
         if self.uses_runcap:
             self.uses_strings = True   # run_capture, in the same runtime as run_start, makes texts (_dash_str_dup)
+        if self.uses_handler:
+            self.uses_strings = True   # handler_name, bstr_text: texts of _dash_str_dup
         if self.uses_shot:
             self.uses_blend = True     # SHOT_RUNTIME reads RTG pixels with BLEND_RUNTIME's _dash_rgb_block_rp
             self.uses_zlib = True      # and compresses with ZLIB_RUNTIME

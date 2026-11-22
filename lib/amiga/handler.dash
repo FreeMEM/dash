@@ -1,0 +1,395 @@
+# ========================================
+# Handlers de DOS (sistemas de archivos) escritos en Dash
+# Las estructuras de AmigaOS, las constantes de los paquetes y ayudas para cerraduras, FileInfoBlock e InfoData.
+# Importarlo hace del programa un handler (como ./dash --handler): ver docs/HANDLER_LOOP.md y la sección de
+# handlers del manual. Idea del usuario.
+# ========================================
+
+@handler
+
+# ---- Estructuras (dos/dosextens.h, dos/filehandler.h, dos/dos.h) ----
+
+@amiga struct DosPacket
+    dp_Link: Long        # su Message
+    dp_Port: Long        # el puerto de respuesta
+    dp_Type: Long        # ACTION_...
+    dp_Res1: Long
+    dp_Res2: Long
+    dp_Arg1: Long
+    dp_Arg2: Long
+    dp_Arg3: Long
+    dp_Arg4: Long
+    dp_Arg5: Long
+    dp_Arg6: Long
+    dp_Arg7: Long
+end
+
+@amiga struct DateStamp
+    ds_Days: Long        # desde el 1 de enero de 1978
+    ds_Minute: Long
+    ds_Tick: Long        # 50 por segundo
+end
+
+@amiga struct FileLock
+    fl_Link: BPtr
+    fl_Key: Long         # lo que el handler quiera: su número del objeto
+    fl_Access: Long      # SHARED_LOCK o EXCLUSIVE_LOCK
+    fl_Task: Long        # el puerto del handler
+    fl_Volume: BPtr      # su volumen (DosList)
+end
+
+@amiga struct FileHandle
+    fh_Link: Long
+    fh_Port: Long        # verdadero si es interactivo (una consola): 0 en un sistema de archivos
+    fh_Type: Long        # el puerto del handler
+    fh_Buf: BPtr
+    fh_Pos: Long
+    fh_End: Long
+    fh_Funcs: Long
+    fh_Func2: Long
+    fh_Func3: Long
+    fh_Args: Long        # lo que el handler quiera: su número del fichero abierto (llega en dp_Arg1 de READ...)
+    fh_Arg2: Long
+end
+
+@amiga struct FileInfoBlock
+    fib_DiskKey: Long
+    fib_DirEntryType: Long   # ST_FILE (< 0) o ST_ROOT, ST_USERDIR (> 0)
+    fib_FileName: UByte[108] # BSTR
+    fib_Protection: Long     # bits RWED al revés (0 = todo permitido), y HSPA
+    fib_EntryType: Long
+    fib_Size: Long
+    fib_NumBlocks: Long
+    fib_Date: DateStamp
+    fib_Comment: UByte[80]   # BSTR
+    fib_OwnerUID: UWord
+    fib_OwnerGID: UWord
+    fib_Reserved: UByte[32]
+end
+
+@amiga struct InfoData
+    id_NumSoftErrors: Long
+    id_UnitNumber: Long
+    id_DiskState: Long       # ID_WRITE_PROTECTED, ID_VALIDATING, ID_VALIDATED
+    id_NumBlocks: Long
+    id_NumBlocksUsed: Long
+    id_BytesPerBlock: Long
+    id_DiskType: Long        # ID_DOS_DISK...
+    id_VolumeNode: BPtr
+    id_InUse: Long
+end
+
+@amiga struct DeviceNode
+    dn_Next: BPtr
+    dn_Type: Long
+    dn_Task: Long
+    dn_Lock: BPtr
+    dn_Handler: BPtr
+    dn_StackSize: Long
+    dn_Priority: Long
+    dn_Startup: BPtr
+    dn_SegList: BPtr
+    dn_GlobalVec: BPtr
+    dn_Name: BPtr
+end
+
+@amiga struct FileSysStartupMsg
+    fssm_Unit: ULong
+    fssm_Device: BPtr        # BSTR con un 0 detrás
+    fssm_Environ: BPtr       # DosEnvec
+    fssm_Flags: ULong
+end
+
+@amiga struct DosEnvec
+    de_TableSize: ULong
+    de_SizeBlock: ULong      # en longs (128 = 512 bytes)
+    de_SecOrg: ULong
+    de_Surfaces: ULong
+    de_SectorPerBlock: ULong
+    de_BlocksPerTrack: ULong
+    de_Reserved: ULong
+    de_PreAlloc: ULong
+    de_Interleave: ULong
+    de_LowCyl: ULong
+    de_HighCyl: ULong
+    de_NumBuffers: ULong
+    de_BufMemType: ULong
+    de_MaxTransfer: ULong
+    de_Mask: ULong
+    de_BootPri: ULong
+    de_DosType: ULong
+    de_Baud: ULong
+    de_Control: ULong
+    de_BootBlocks: ULong
+end
+
+# ---- Paquetes (dos/dosextens.h) ----
+
+const ACTION_DIE = 5
+const ACTION_CURRENT_VOLUME = 7
+const ACTION_LOCATE_OBJECT = 8
+const ACTION_RENAME_DISK = 9
+const ACTION_WRITE = 87          # 'W'
+const ACTION_READ = 82           # 'R'
+const ACTION_FREE_LOCK = 15
+const ACTION_DELETE_OBJECT = 16
+const ACTION_RENAME_OBJECT = 17
+const ACTION_MORE_CACHE = 18
+const ACTION_COPY_DIR = 19
+const ACTION_SET_PROTECT = 21
+const ACTION_CREATE_DIR = 22
+const ACTION_EXAMINE_OBJECT = 23
+const ACTION_EXAMINE_NEXT = 24
+const ACTION_DISK_INFO = 25
+const ACTION_INFO = 26
+const ACTION_FLUSH = 27
+const ACTION_SET_COMMENT = 28
+const ACTION_PARENT = 29
+const ACTION_INHIBIT = 31
+const ACTION_SET_DATE = 34
+const ACTION_SAME_LOCK = 40
+const ACTION_FINDUPDATE = 1004
+const ACTION_FINDINPUT = 1005
+const ACTION_FINDOUTPUT = 1006
+const ACTION_END = 1007
+const ACTION_SEEK = 1008
+const ACTION_SET_FILE_SIZE = 1022
+const ACTION_WRITE_PROTECT = 1023
+const ACTION_READ_LINK = 1024
+const ACTION_FH_FROM_LOCK = 1026
+const ACTION_IS_FILESYSTEM = 1027
+const ACTION_CHANGE_MODE = 1028
+const ACTION_COPY_DIR_FH = 1030
+const ACTION_PARENT_FH = 1031
+const ACTION_EXAMINE_ALL = 1033
+const ACTION_EXAMINE_FH = 1034
+const ACTION_EXAMINE_ALL_END = 1035
+const ACTION_ADD_NOTIFY = 4097
+const ACTION_REMOVE_NOTIFY = 4098
+
+# ---- Errores (dos/dos.h): el res2 de packet_reply ----
+
+const ERROR_NO_FREE_STORE = 103
+const ERROR_OBJECT_IN_USE = 202
+const ERROR_OBJECT_EXISTS = 203
+const ERROR_DIR_NOT_FOUND = 204
+const ERROR_OBJECT_NOT_FOUND = 205
+const ERROR_BAD_STREAM_NAME = 206
+const ERROR_OBJECT_TOO_LARGE = 207
+const ERROR_ACTION_NOT_KNOWN = 209
+const ERROR_INVALID_COMPONENT_NAME = 210
+const ERROR_INVALID_LOCK = 211
+const ERROR_OBJECT_WRONG_TYPE = 212
+const ERROR_DISK_NOT_VALIDATED = 213
+const ERROR_DISK_WRITE_PROTECTED = 214
+const ERROR_RENAME_ACROSS_DEVICES = 215
+const ERROR_DIRECTORY_NOT_EMPTY = 216
+const ERROR_DEVICE_NOT_MOUNTED = 218
+const ERROR_SEEK_ERROR = 219
+const ERROR_COMMENT_TOO_BIG = 220
+const ERROR_DISK_FULL = 221
+const ERROR_DELETE_PROTECTED = 222
+const ERROR_WRITE_PROTECTED = 223
+const ERROR_READ_PROTECTED = 224
+const ERROR_NOT_A_DOS_DISK = 225
+const ERROR_NO_DISK = 226
+const ERROR_NO_MORE_ENTRIES = 232
+const ERROR_IS_SOFT_LINK = 233
+const ERROR_NOT_IMPLEMENTED = 236
+
+# ---- Otros valores ----
+
+const DOSTRUE = -1
+const DOSFALSE = 0
+const SHARED_LOCK = -2           # ACCESS_READ
+const EXCLUSIVE_LOCK = -1        # ACCESS_WRITE
+const ST_ROOT = 1
+const ST_USERDIR = 2
+const ST_FILE = -3
+const OFFSET_BEGINNING = -1
+const OFFSET_CURRENT = 0
+const OFFSET_END = 1
+const ID_WRITE_PROTECTED = 80
+const ID_VALIDATING = 81
+const ID_VALIDATED = 82
+const ID_DOS_DISK = 0x444F5300   # "DOS\0"
+const FIBF_ARCHIVE = 16          # (los de RWED van al revés: un bit puesto quita el permiso)
+const FIBF_READ = 8
+const FIBF_WRITE = 4
+const FIBF_EXECUTE = 2
+const FIBF_DELETE = 1
+const TD_MOTOR = 9
+const TD_CHANGESTATE = 14
+const CMD_UPDATE = 4
+
+# ---- BPTR ----
+
+# la dirección de un BPTR
+func baddr(b: Int) -> Int
+    return b << 2
+end
+
+# el BPTR de una dirección (múltiplo de 4)
+func mkbptr(a: Int) -> Int
+    return a >> 2
+end
+
+# ---- Cerraduras ----
+
+# Una cerradura nueva del handler: su BPTR (lo que se contesta a LOCATE_OBJECT, COPY_DIR, PARENT...), 0 sin memoria.
+# key es lo que el handler quiera para saber qué objeto es; volume, lo que dio handler_volume_add.
+func lock_new(key: Int, access: Int, volume: Int) -> Int
+    m = amiga_alloc(sizeof(FileLock))
+    if m == 0
+        return 0
+    end
+    l = Ptr FileLock(m)
+    l.fl_Key = key
+    l.fl_Access = access
+    l.fl_Task = handler_port()
+    l.fl_Volume = mkbptr(volume)
+    return mkbptr(m)
+end
+
+# el key de una cerradura (su BPTR); 0 para la cerradura 0 (la raíz)
+func lock_key(lock: Int) -> Int
+    if lock == 0
+        return 0
+    end
+    return Ptr FileLock(baddr(lock)).fl_Key
+end
+
+# libera una cerradura de lock_new (FREE_LOCK)
+func lock_free(lock: Int)
+    if lock != 0
+        amiga_free(baddr(lock), sizeof(FileLock))
+    end
+end
+
+# ---- Fechas ----
+
+# 1978-01-01 en segundos de Unix
+const _AMIGA_EPOCH = 252460800
+
+# Pone en d (la dirección de un DateStamp) la fecha de Unix t (segundos desde 1970)
+func datestamp_set(d: Int, t: Int)
+    s = t - _AMIGA_EPOCH
+    if s < 0
+        s = 0
+    end
+    ds = Ptr DateStamp(d)
+    ds.ds_Days = s / 86400
+    r = s % 86400
+    ds.ds_Minute = r / 60
+    ds.ds_Tick = (r % 60) * 50
+end
+
+# ---- FileInfoBlock (EXAMINE_OBJECT, EXAMINE_NEXT, EXAMINE_FH) ----
+
+# Rellena el FileInfoBlock fib (su dirección): type ST_FILE, ST_ROOT o ST_USERDIR; protection con los bits de
+# FileInfoBlock (0 = todo permitido); time en segundos de Unix
+func fib_fill(fib: Int, key: Int, type: Int, name: String, size: Int, protection: Int, time: Int, comment: String)
+    f = Ptr FileInfoBlock(fib)
+    f.fib_DiskKey = key
+    f.fib_DirEntryType = type
+    f.fib_EntryType = type
+    bstr_put(fib + offsetof(FileInfoBlock, fib_FileName), name, 108)
+    f.fib_Protection = protection
+    f.fib_Size = size
+    f.fib_NumBlocks = (size + 511) / 512
+    datestamp_set(fib + offsetof(FileInfoBlock, fib_Date), time)
+    bstr_put(fib + offsetof(FileInfoBlock, fib_Comment), comment, 80)
+    f.fib_OwnerUID = 0
+    f.fib_OwnerGID = 0
+end
+
+# ---- InfoData (DISK_INFO, INFO) ----
+
+func info_fill(info: Int, blocks: Int, used: Int, block_size: Int, state: Int, volume: Int)
+    d = Ptr InfoData(info)
+    d.id_NumSoftErrors = 0
+    d.id_UnitNumber = 0
+    d.id_DiskState = state
+    d.id_NumBlocks = blocks
+    d.id_NumBlocksUsed = used
+    d.id_BytesPerBlock = block_size
+    d.id_DiskType = ID_DOS_DISK
+    d.id_VolumeNode = mkbptr(volume)
+    d.id_InUse = 0
+end
+
+# ---- El arranque con Device= (FileSysStartupMsg) ----
+
+# la FileSysStartupMsg del montaje (su dirección), o 0 sin Device=
+func handler_fssm() -> Int
+    s = handler_startup()
+    if s <= 0 or s >= 0x40000000
+        return 0
+    end
+    return baddr(s)
+end
+
+# el nombre del dispositivo del montaje ("trackdisk.device"), "" sin Device=
+func fssm_device() -> String
+    f = handler_fssm()
+    if f == 0
+        return ""
+    end
+    return bstr_text(Ptr FileSysStartupMsg(f).fssm_Device)
+end
+
+func fssm_unit() -> Int
+    f = handler_fssm()
+    if f == 0
+        return 0
+    end
+    return Ptr FileSysStartupMsg(f).fssm_Unit
+end
+
+# el DosEnvec del montaje (su dirección: geometría, LowCyl, HighCyl...), 0 sin Device=
+func fssm_env() -> Int
+    f = handler_fssm()
+    if f == 0
+        return 0
+    end
+    return baddr(Ptr FileSysStartupMsg(f).fssm_Environ)
+end
+
+# abre el dispositivo del montaje (dev_open con su unidad y flags): 0 si no hay o no abre
+func fssm_open() -> Int
+    f = handler_fssm()
+    if f == 0
+        return 0
+    end
+    m = Ptr FileSysStartupMsg(f)
+    return dev_open(bstr_text(m.fssm_Device), m.fssm_Unit, m.fssm_Flags)
+end
+
+# el primer bloque de la partición (bloques de 512 bytes por de_SizeBlock 128)
+func fssm_first_block() -> Int
+    e = fssm_env()
+    if e == 0
+        return 0
+    end
+    d = Ptr DosEnvec(e)
+    return d.de_LowCyl * d.de_Surfaces * d.de_BlocksPerTrack
+end
+
+# cuántos bloques tiene la partición
+func fssm_blocks() -> Int
+    e = fssm_env()
+    if e == 0
+        return 0
+    end
+    d = Ptr DosEnvec(e)
+    return (d.de_HighCyl - d.de_LowCyl + 1) * d.de_Surfaces * d.de_BlocksPerTrack
+end
+
+# el tamaño de bloque en bytes
+func fssm_block_size() -> Int
+    e = fssm_env()
+    if e == 0
+        return 512
+    end
+    return Ptr DosEnvec(e).de_SizeBlock * 4
+end

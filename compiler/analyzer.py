@@ -21,11 +21,13 @@ from compiler.ast_nodes import (AmigaCast, InExpr, InRangeExpr,
 from compiler.amiga_builtins import is_builtin, get_builtin
 import re as _re
 
-# Words of C (and main) that a Dash name can be: the compiler renames them in the C (compiler/main.py,
+# Words of C (and main, and the gcc macros below) that a Dash name can be: the compiler renames them in the C (compiler/main.py,
 # _rename_c_keywords); the messages give the Dash name back
 C_KEYWORDS = frozenset("""asm auto break case char const continue default do double else enum extern float for goto
     if inline int long register restrict return short signed static struct switch typedef typeof union unsigned
-    void volatile while main""".split())
+    void volatile while main""".split()
+    # and the macros the Amiga's gcc defines without underscores: a local "amiga" became "LONG 1 = ..." (DashFS)
+    + "amiga AMIGA amigaos amigaos3 MCH_AMIGA mc68000 mc68020 mc68030 mc68040 mc68060 mc68881".split())
 C_KEYWORD_SUFFIX = "__kw"
 _C_KEYWORD_RE = _re.compile(r"\b(" + "|".join(sorted(C_KEYWORDS)) + r")" + C_KEYWORD_SUFFIX + r"\b")
 
@@ -1006,6 +1008,14 @@ class SemanticAnalyzer(ASTVisitor):
         # Check if it's a builtin function
         builtin = get_builtin(node.name)
         if builtin:
+            if node.name.startswith(("file_", "dir_", "path_")) and (
+                    os.environ.get("DASH_HANDLER") == "1" or getattr(self.program, "handler", False)):
+                # a DOS handler that calls the DOS on its own volume waits for itself (docs/HANDLER_LOOP.md)
+                warned = self.__dict__.setdefault("_handler_warned", set())
+                if node.name not in warned:
+                    warned.add(node.name)
+                    self.warning(f"in a DOS handler, {node.name} asks the DOS: a path of the handler's own volume "
+                                 f"would hang it (other volumes are fine)", node)
             from compiler.codegen import unimplemented_builtins  # lazy: codegen imports this module
             if node.name in unimplemented_builtins():
                 self.error(f"Builtin '{node.name}' is declared but not implemented yet "
@@ -1234,7 +1244,7 @@ class SemanticAnalyzer(ASTVisitor):
                 if num:
                     return num
             return None
-        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)):
+        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess, ArrayAccess)):
             return _num_kind(list_elem_type(self._declared_list_type(expr)))
         return None
 

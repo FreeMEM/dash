@@ -6652,6 +6652,71 @@ GL_FUNCTIONS = {
 }
 
 
+# =============================================================================
+# DOS handlers (docs/HANDLER_LOOP.md, idea of the user): a file system written in Dash (./dash --handler,
+# @handler, lib/amiga/handler.dash), and the blocks of a device
+# =============================================================================
+
+def _hd(name, params, ret, template, desc, reads_only=False):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=reads_only)
+
+
+HANDLER_FUNCTIONS = {
+    "handler_startup": _hd("handler_startup", [], "LONG", "_dash_hd_startup",
+                           "dn_Startup of the handler's DeviceNode: with Device= in the mountlist, the BPTR of its "
+                           "FileSysStartupMsg (0 if the program is not a handler)"),
+    "handler_name": _hd("handler_name", [], "STRPTR", "_dash_hd_name()",
+                        "The name of the handler's device, without the colon (\"RAM9\")"),
+    "handler_devnode": _hd("handler_devnode", [], "LONG", "(LONG)_dash_hd_node",
+                           "The address of the handler's DeviceNode"),
+    "handler_port": _hd("handler_port", [], "LONG", "(LONG)_dash_hd_port",
+                        "The port where the packets come (dn_Task, and the dl_Task of the volumes and the fl_Task of "
+                        "the locks)"),
+    "handler_ready": _hd("handler_ready", ["ok", "error"], "void", "_dash_hd_ready(${ok}, ${error})",
+                         "Answers the startup packet: true, ready for packets; false, with that error, and the "
+                         "program should end"),
+    "handler_wait": _hd("handler_wait", [], "LONG", "_dash_hd_wait()",
+                        "Waits for the next packet: its DosPacket; 0 with Ctrl-C"),
+    "handler_poll": _hd("handler_poll", [], "LONG", "_dash_hd_poll()",
+                        "The next packet if one is waiting, or 0 without waiting"),
+    "packet_reply": _hd("packet_reply", ["packet", "res1", "res2"], "void", "_dash_hd_reply(${packet}, ${res1}, ${res2})",
+                        "Answers a packet: res1 is what the DOS function returns, res2 the error (IoErr)"),
+    "handler_log": _hd("handler_log", ["path"], "BOOL", "_dash_hd_log(${path})",
+                       "Print, and the runtime errors, go to this file (never one of the handler itself); false if "
+                       "it does not open", reads_only=True),
+    "handler_volume_add": _hd("handler_volume_add", ["name", "disk_type"], "LONG",
+                              "_dash_hd_vol_add(${name}, ${disk_type})",
+                              "Puts a volume of the handler in the DOS list (and tells the Workbench): its DosList, "
+                              "0 if it cannot", reads_only=True),
+    "handler_volume_remove": _hd("handler_volume_remove", ["volume"], "void", "_dash_hd_vol_remove(${volume})",
+                                 "Takes the volume out of the DOS list and frees it (with no locks of it left)"),
+    "bstr_text": _hd("bstr_text", ["bptr"], "STRPTR", "_dash_bstr_text(${bptr})",
+                     "The text of a BSTR, from its BPTR (\"\" for 0)"),
+    "bstr_put": _hd("bstr_put", ["addr", "text", "max"], "void", "_dash_bstr_put(${addr}, ${text}, ${max})",
+                    "Writes text as a BSTR (length byte and characters) at addr, in max bytes at most",
+                    reads_only=True),
+    "dev_open": _hd("dev_open", ["name", "unit", "flags"], "LONG", "_dash_dev_open(${name}, ${unit}, ${flags})",
+                    "Opens a unit of a device (trackdisk.device, scsi.device...) for dev_read and dev_write: its "
+                    "IORequest, or 0", reads_only=True),
+    "dev_close": _hd("dev_close", ["dev"], "void", "_dash_dev_close(${dev})",
+                     "Closes what dev_open opened (at the end of the program, by itself)"),
+    "dev_read": _hd("dev_read", ["dev", "block", "block_size", "buf", "len"], "LONG",
+                    "_dash_dev_rw(${dev}, ${block}, ${block_size}, (LONG)(${buf}), ${len}, FALSE)",
+                    "Reads len bytes from block on (blocks of block_size bytes) to buf: 0, or the device's error. "
+                    "Beyond 4 GB with TD64 or NSD"),
+    "dev_write": _hd("dev_write", ["dev", "block", "block_size", "buf", "len"], "LONG",
+                     "_dash_dev_rw(${dev}, ${block}, ${block_size}, (LONG)(${buf}), ${len}, TRUE)",
+                     "Writes len bytes of buf from block on: 0, or the device's error"),
+    "dev_cmd": _hd("dev_cmd", ["dev", "command", "length"], "LONG", "_dash_dev_cmd(${dev}, ${command}, ${length})",
+                   "Sends a command without data (TD_MOTOR, TD_CHANGESTATE, CMD_UPDATE...): 0, or the device's "
+                   "error; dev_actual gives its result"),
+    "dev_actual": _hd("dev_actual", ["dev"], "LONG",
+                      "_dash_dev_actual(${dev})",
+                      "io_Actual of the last command of dev (TD_CHANGESTATE: 0 with a disk in)"),
+}
+
+
 # not in DashOS yet, besides mui_* and gl_*: the program's arguments (their runtime reads the Workbench's message,
 # and DashOS's start does not pass argc/argv to the runtime; the help said "yes", asked by Forja)
 DASHOS_NOT_YET = {"arg", "arg_count"}
@@ -6659,7 +6724,8 @@ DASHOS_NOT_YET = {"arg", "arg_count"}
 
 def dashos_missing(name: str) -> bool:
     """A builtin of the Amiga that DashOS does not have yet (./dash --dashos: a compile error)"""
-    return name.startswith("mui_") and name not in DASHOS_MUI or name.startswith("gl_") or name in DASHOS_NOT_YET
+    return name.startswith("mui_") and name not in DASHOS_MUI or name.startswith("gl_") or name in DASHOS_NOT_YET \
+        or name in HANDLER_FUNCTIONS
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
@@ -6682,6 +6748,7 @@ ALL_BUILTINS = {
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **ZLIB_FUNCTIONS,          # Lorraine D6
+    **HANDLER_FUNCTIONS,       # DOS handlers (docs/HANDLER_LOOP.md)
     **UTF8_FUNCTIONS,          # Lorraine D5
     **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
     **DOUBLE_FUNCTIONS,        # Lorraine D3
