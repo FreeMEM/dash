@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1089 funciones, 1089 implementadas, 0 sin implementar.
+Total: 1092 funciones, 1092 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11688,6 +11688,9 @@ end
 | [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |
 | [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, 104 y 120, 120, 128. MUI 4 o más: con MUI 3.8 los campos se quedan con las preferencias del usuario |  |
 | [`mui_app_rexx(app, func)`](#mui_app_rexx) | — | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |
+| [`mui_app_iconify(on)`](#mui_app_iconify) | — | true cierra todas las ventanas de la aplicación y deja su icono en el Workbench (con doble clic en él vuelven a abrirse, como estaban); false las abre de nuevo desde el programa. Lo mismo que HIDE y SHOW de MUI por ARexx |  |
+| [`mui_app_iconified()`](#mui_app_iconified) | Bool | true mientras la aplicación está iconificada (sus ventanas cerradas y su icono en el Workbench) |  |
+| [`mui_app_icon(path)`](#mui_app_icon) | Bool | El icono (ruta sin ".info", como "PROGDIR:Programa") que deja la aplicación iconificada en el Workbench; sin él, el de MUI. false si no puede leerlo |  |
 | [`mui_rexx_fail(rc)`](#mui_rexx_fail) | — | Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin RESULT) |  |
 | [`mui_app_end()`](#mui_app_end) | — | Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar) |  |
 | [`mui_window_begin(title, id)`](#mui_window_begin) | Int (dirección) | Empieza una ventana (id 1-255: MUI recuerda su tamaño y su sitio; 0 ninguno) con un grupo raíz vertical |  |
@@ -11933,6 +11936,46 @@ Cada orden ARexx que llegue al puerto de la aplicación y que MUI no conteste so
 llama a `func` con la línea entera. Lo que devuelve es el RESULT. Corre mientras `mui_wait_event` espera.
 
 Ver también: [`mui_rexx_fail`](#mui_rexx_fail).
+
+<a id="mui_app_iconify"></a>
+
+### `mui_app_iconify(on)`
+
+- `on`: `true` para iconificar, `false` para volver.
+
+Con `true`, MUI cierra todas las ventanas de la aplicación y deja su icono en el Workbench (el de `mui_app_icon`, o el
+de MUI). Con doble clic en el icono vuelven a abrirse, como estaban, sin que el programa haga nada. Con `false` vuelven
+desde el programa. Es lo mismo que las órdenes HIDE y SHOW de MUI por ARexx. Mientras, el programa sigue: los
+eventos y los temporizadores llegan igual.
+
+```dash
+if ev == ID_ICONIFICAR      # un menú "Iconificar" con Amiga-I
+    mui_app_iconify(true)
+end
+```
+
+Ver también: [`mui_app_iconified`](#mui_app_iconified), [`mui_app_icon`](#mui_app_icon).
+
+<a id="mui_app_iconified"></a>
+
+### `mui_app_iconified()` → `Bool`
+
+`true` mientras la aplicación está iconificada: sus ventanas cerradas y su icono en el Workbench. Las ventanas siguen
+contando como abiertas para MUI (vuelven al salir del icono).
+
+Ver también: [`mui_app_iconify`](#mui_app_iconify).
+
+<a id="mui_app_icon"></a>
+
+### `mui_app_icon(path)` → `Bool`
+
+- `path`: la ruta del icono sin ".info", como `"PROGDIR:Programa"`.
+
+El icono que deja en el Workbench la aplicación iconificada (si no, el de MUI: `ENV:Sys/def_MUI` o el suyo). Se lee
+con icon.library y dura lo que la aplicación. `false` si no se puede leer (y queda el de antes), o mientras está
+iconificada.
+
+Ver también: [`mui_app_iconify`](#mui_app_iconify).
 
 <a id="mui_rexx_fail"></a>
 

@@ -23326,10 +23326,24 @@ static STRPTR _dash_mui_keep(STRPTR text) {
 
 static STRPTR *_dash_mui_entries(STRPTR options);
 
+/* mui_app_icon (Dash 2.20, Tachyon: iconify, issue #19 of PerspexSphinx): the icon of the iconified application
+   (MUIA_Application_DiskObject; without it MUI takes ENV:Sys/def_MUI or its own). It lives until the application
+   goes. IconBase is tentative, like the one of the commodities: whoever opens it closes it; if the other one closed
+   it first, the icon stays (a few bytes, at the end of the program). */
+#include <workbench/workbench.h>
+#include <proto/icon.h>
+struct Library *IconBase;
+static struct DiskObject *_dash_mui_icon = NULL;
+static BOOL _dash_mui_icon_lib = FALSE;
+
 static void _dash_mui_app_end(void) {
     _dash_mui_nmodal = _dash_mui_nsleep = 0;   /* (nothing to wake: the windows close as they go) */
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
+    if (_dash_mui_icon && IconBase) FreeDiskObject(_dash_mui_icon);
+    _dash_mui_icon = NULL;
+    if (_dash_mui_icon_lib && IconBase) { CloseLibrary(IconBase); IconBase = NULL; }
+    _dash_mui_icon_lib = FALSE;
     {
         LONG i;
         for (i = 0; i < 8; i++)
@@ -23392,6 +23406,30 @@ static void _dash_mui_app_rexx(APTR app, APTR func) {
 }
 
 static void _dash_mui_rexx_fail(LONG rc) { _dash_mui_rexx_rc = rc; }
+
+/* mui_app_iconify(on) / mui_app_iconified() (Dash 2.20, Tachyon: issue #19 of PerspexSphinx): MUI closes every
+   window of the application and leaves its icon on the Workbench (MUIA_Application_Iconified); a double click on it
+   opens them again. The same as MUI's HIDE and SHOW by ARexx, or the iconify gadget where MUI puts one. */
+static void _dash_mui_app_iconify(LONG on) {
+    if (_dash_mui_app) SetAttrs((Object *)_dash_mui_app, MUIA_Application_Iconified, on ? TRUE : FALSE, TAG_DONE);
+}
+
+static LONG _dash_mui_app_iconified(void) {
+    IPTR v = 0;
+    if (_dash_mui_app) GetAttr(MUIA_Application_Iconified, (Object *)_dash_mui_app, &v);
+    return v ? 1 : 0;
+}
+
+static LONG _dash_mui_app_icon(STRPTR path) {
+    struct DiskObject *d;
+    if (!_dash_mui_app || !path || !*path || _dash_mui_app_iconified()) return 0;
+    if (!IconBase) { IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36); _dash_mui_icon_lib = IconBase != NULL; }
+    if (!IconBase || !(d = GetDiskObject((CONST_STRPTR)path))) return 0;
+    SetAttrs((Object *)_dash_mui_app, MUIA_Application_DiskObject, (IPTR)d, TAG_DONE);
+    if (_dash_mui_icon) FreeDiskObject(_dash_mui_icon);
+    _dash_mui_icon = d;
+    return 1;
+}
 
 static APTR _dash_mui_add(Object *obj);
 

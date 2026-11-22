@@ -3914,6 +3914,20 @@ MUI_FUNCTIONS = {
                     "not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole "
                     "command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. "
                     "It runs while mui_wait_event waits"),
+    # Dash 2.20 (Tachyon, issue #19 of PerspexSphinx): iconify
+    "mui_app_iconify": BuiltinFunc(
+        name="mui_app_iconify", params=["on"], return_type="void", c_template="_dash_mui_app_iconify(${on})",
+        description="true closes every window of the application and leaves its icon on the Workbench (a double "
+                    "click on it opens them again, as they were); false opens them again from the program. The same "
+                    "as MUI's HIDE and SHOW by ARexx"),
+    "mui_app_iconified": BuiltinFunc(
+        name="mui_app_iconified", params=[], return_type="BOOL", c_template="_dash_mui_app_iconified()",
+        description="true while the application is iconified (its windows closed and its icon on the Workbench)"),
+    "mui_app_icon": BuiltinFunc(
+        name="mui_app_icon", params=["path"], return_type="BOOL", c_template="_dash_mui_app_icon(${path})",
+        reads_only=True,
+        description="The icon (path without \".info\", like \"PROGDIR:Programa\") that the iconified application "
+                    "leaves on the Workbench; without it, MUI's own. false if it cannot read it"),
     "mui_rexx_fail": BuiltinFunc(
         name="mui_rexx_fail", params=["rc"], return_type="void", c_template="_dash_mui_rexx_fail(${rc})",
         description="From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then)"),

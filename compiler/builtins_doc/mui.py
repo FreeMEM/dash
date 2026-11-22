@@ -121,6 +121,53 @@ ventanas que se abran después. El texto sigue negro: elige fondos claros, o gri
 The colours of every text field in the application (`mui_string`, `mui_text_editor`, `mui_combo`) in windows opened
 afterwards. The text stays black: pick light backgrounds, or greys it can be read on.
 """, ["mui_set_background"]),
+    "mui_app_iconify": _f("""\
+- `on`: `true` para iconificar, `false` para volver.
+
+Con `true`, MUI cierra todas las ventanas de la aplicación y deja su icono en el Workbench (el de `mui_app_icon`, o el
+de MUI). Con doble clic en el icono vuelven a abrirse, como estaban, sin que el programa haga nada. Con `false` vuelven
+desde el programa. Es lo mismo que las órdenes HIDE y SHOW de MUI por ARexx. Mientras, el programa sigue: los
+eventos y los temporizadores llegan igual.
+
+```dash
+if ev == ID_ICONIFICAR      # un menú "Iconificar" con Amiga-I
+    mui_app_iconify(true)
+end
+```
+""", """\
+- `on`: `true` to iconify, `false` to come back.
+
+With `true`, MUI closes every window of the application and leaves its icon on the Workbench (the one of
+`mui_app_icon`, or MUI's). A double click on the icon opens them again, as they were, with nothing for the program to
+do. With `false` they come back from the program. It is the same as MUI's HIDE and SHOW ARexx commands. Meanwhile the
+program goes on: events and timers still arrive.
+
+```dash
+if ev == ID_ICONIFY      # an "Iconify" menu item with Amiga-I
+    mui_app_iconify(true)
+end
+```
+""", ["mui_app_iconified", "mui_app_icon"]),
+    "mui_app_iconified": _f("""\
+`true` mientras la aplicación está iconificada: sus ventanas cerradas y su icono en el Workbench. Las ventanas siguen
+contando como abiertas para MUI (vuelven al salir del icono).
+""", """\
+`true` while the application is iconified: its windows closed and its icon on the Workbench. For MUI the windows
+still count as open (they come back on leaving the icon).
+""", ["mui_app_iconify"]),
+    "mui_app_icon": _f("""\
+- `path`: la ruta del icono sin ".info", como `"PROGDIR:Programa"`.
+
+El icono que deja en el Workbench la aplicación iconificada (si no, el de MUI: `ENV:Sys/def_MUI` o el suyo). Se lee
+con icon.library y dura lo que la aplicación. `false` si no se puede leer (y queda el de antes), o mientras está
+iconificada.
+""", """\
+- `path`: the icon's path without ".info", like `"PROGDIR:Program"`.
+
+The icon the iconified application leaves on the Workbench (otherwise MUI's: `ENV:Sys/def_MUI` or its own). It is read
+with icon.library and lasts as long as the application. `false` if it cannot be read (the previous one stays), or
+while it is iconified.
+""", ["mui_app_iconify"]),
     # ------------------------------------------------------------ ventanas
     "mui_window_begin": _f("""\
 - `title`: el título.
