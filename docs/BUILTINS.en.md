@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1087 functions, 1087 implemented, 0 not implemented.
+Total: 1088 functions, 1088 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4657,6 +4657,7 @@ it is not freed on its own: every `buffer_alloc` needs its `buffer_free`, or tha
 | [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | Get 32-bit long at offset (big-endian) |  |
 | [`buffer_set_float(buffer, offset, value)`](#buffer_set_float) | — | Set a 32-bit float (IEEE single, as a C float) at offset: the vertices of gl_draw_arrays |  |
 | [`buffer_get_float(buffer, offset)`](#buffer_get_float) | Double | Get the 32-bit float (IEEE single) at offset, as a Double |  |
+| [`buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`](#buffer_tex_span) | — | Fills count bytes of dest from offset with texels of a square texture of 2^shift bytes a side (one byte each), from (u, v) stepping (du, dv) per byte, all in 16.16 fixed point and wrapping round; each texel through a 256-byte table if table is not 0 (the light). The inner loop of a textured 3D engine: one call per line of a triangle |  |
 | [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Set 32-bit long at offset (big-endian) |  |
 | [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copy bytes between buffers |  |
 | [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Fill buffer region with byte value |  |
@@ -4757,6 +4758,23 @@ See also: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_draw_a
 Returns, as a `Double`, the 32-bit `float` at that position.
 
 See also: [`buffer_set_float`](#buffer_set_float).
+
+<a id="buffer_tex_span"></a>
+
+### `buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`
+
+- `dest`, `offset`: the buffer written (a pen buffer of a screen, say) and from where.
+- `count`: how many bytes.
+- `texture`: the texture, one byte per texel, row after row; square, `2^shift` a side.
+- `shift`: the side of the texture as a power of two: 7 for 128 x 128 (up to 12).
+- `u`, `v`: the texel of the first byte, in 16.16 fixed point (`x * 65536`).
+- `du`, `dv`: how much `u` and `v` move on each byte, 16.16 too. They wrap round outside the texture.
+- `table`: 0, or a 256-byte buffer each texel goes through (the light: one table per level, as Quake's colormap).
+
+It is the inner loop of a textured 3D engine: one call per line of a triangle, with the `u`, `v` of its two ends. It
+is in C: a few instructions per byte.
+
+See also: [`buffer_fill`](#buffer_fill), [`gfx_pens_draw`](#gfx_pens_draw).
 
 <a id="buffer_set_long"></a>
 

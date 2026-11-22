@@ -297,6 +297,7 @@ DESC_ES = {
     "buffer_set_word": "Pone el word de 16 bits de una posición (big-endian)",
     "buffer_get_long": "El long de 32 bits en una posición (big-endian)",
     "buffer_set_long": "Pone el long de 32 bits de una posición (big-endian)",
+    "buffer_tex_span": "Rellena count bytes con los de una textura cuadrada (u, v y sus pasos en coma fija 16.16), cada uno por una tabla si la hay: una línea de un triángulo con textura",
     "buffer_set_float": "Pone un float de 32 bits (el de C) en una posición: los vértices de gl_draw_arrays",
     "buffer_get_float": "El float de 32 bits de una posición, como Double",
     "buffer_copy": "Copia bytes de un búfer a otro",

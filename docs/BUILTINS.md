@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1087 funciones, 1087 implementadas, 0 sin implementar.
+Total: 1088 funciones, 1088 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -4657,6 +4657,7 @@ ficheros del Amiga (IFF).
 | [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | El long de 32 bits en una posición (big-endian) |  |
 | [`buffer_set_float(buffer, offset, value)`](#buffer_set_float) | — | Pone un float de 32 bits (el de C) en una posición: los vértices de gl_draw_arrays |  |
 | [`buffer_get_float(buffer, offset)`](#buffer_get_float) | Double | El float de 32 bits de una posición, como Double |  |
+| [`buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`](#buffer_tex_span) | — | Rellena count bytes con los de una textura cuadrada (u, v y sus pasos en coma fija 16.16), cada uno por una tabla si la hay: una línea de un triángulo con textura |  |
 | [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Pone el long de 32 bits de una posición (big-endian) |  |
 | [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copia bytes de un búfer a otro |  |
 | [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Llena una zona de un búfer con un byte |  |
@@ -4757,6 +4758,24 @@ Ver también: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_dr
 Devuelve, como `Double`, el `float` de 32 bits de esa posición.
 
 Ver también: [`buffer_set_float`](#buffer_set_float).
+
+<a id="buffer_tex_span"></a>
+
+### `buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`
+
+- `dest`, `offset`: el búfer donde se escribe (un búfer de lápices de una pantalla, por ejemplo) y desde dónde.
+- `count`: cuántos bytes.
+- `texture`: la textura, un byte por texel, fila tras fila; cuadrada, de `2^shift` de lado.
+- `shift`: el lado de la textura en potencia de dos: 7 para 128 x 128 (hasta 12).
+- `u`, `v`: el texel del primer byte, en coma fija 16.16 (`x * 65536`).
+- `du`, `dv`: cuánto avanzan `u` y `v` en cada byte, también en 16.16. Se dan la vuelta al salir de la textura.
+- `table`: 0, o un búfer de 256 bytes por el que pasa cada texel (la luz: una tabla por cada nivel, como el
+  colormap de Quake).
+
+Es el bucle de dentro de un motor 3D con texturas: una llamada por cada línea de un triángulo, con las `u`, `v` de
+sus dos extremos. Va en C: unas pocas instrucciones por byte.
+
+Ver también: [`buffer_fill`](#buffer_fill), [`gfx_pens_draw`](#gfx_pens_draw).
 
 <a id="buffer_set_long"></a>
 

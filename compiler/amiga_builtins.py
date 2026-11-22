@@ -2943,6 +2943,18 @@ BUFFER_FUNCTIONS = {
         needs_fileio=True,
         description="Get the 32-bit float (IEEE single) at offset, as a Double"
     ),
+    "buffer_tex_span": BuiltinFunc(
+        name="buffer_tex_span",
+        params=["dest", "offset", "count", "texture", "shift", "u", "v", "du", "dv", "table"],
+        return_type="void",
+        c_template="_dash_buffer_tex_span(${dest}, ${offset}, ${count}, ${texture}, ${shift}, ${u}, ${v}, ${du}, "
+                   "${dv}, ${table})",
+        needs_fileio=True,
+        description="Fills count bytes of dest from offset with texels of a square texture of 2^shift bytes a side "
+                    "(one byte each), from (u, v) stepping (du, dv) per byte, all in 16.16 fixed point and wrapping "
+                    "round; each texel through a 256-byte table if table is not 0 (the light). The inner loop of a "
+                    "textured 3D engine: one call per line of a triangle"
+    ),
     "buffer_set_long": BuiltinFunc(
         name="buffer_set_long",
         params=["buffer", "offset", "value"],

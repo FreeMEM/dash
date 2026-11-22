@@ -135,6 +135,8 @@ const BuiltinInfo builtin_info[] = {
     {"buffer_set_long", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_word", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_word", 3, 0, 1, 0, 0, 0u, 0u},
+    {"buffer_tex_span", 10, 0, 1, 0, 0, 0u, 0u},
+    {"buffer_tex_span", 10, 0, 1, 0, 0, 0u, 0u},
     {"build_date", 0, 3, 1, 0, 0, 0u, 0u},
     {"build_date", 0, 3, 1, 0, 0, 0u, 0u},
     {"build_time", 0, 3, 1, 0, 0, 0u, 0u},
@@ -2176,7 +2178,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2174;
+const int builtin_count = 2176;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},
