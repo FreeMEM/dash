@@ -822,8 +822,13 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
     runnable = [t for t in runnable if t not in shot_tests and t not in fpu_tests]
     mui = [t for t in runnable if "muimaster.library" in emu_needs(t)]
     net = [t for t in runnable if emu_net_port(t) is not None and t not in mui]
-    results = run_emu_boot([t for t in runnable if t not in mui and t not in net], machine, rom,
-                           os.environ.get(machine["sys_env"]), memcheck)
+    # the DOS handlers (# emu-handler) in a boot of their own: their devices and volumes stay mounted, and the tests
+    # that look at every disk (test_meter_disks) would see them
+    handlers = [t for t in runnable if emu_handler(t) is not None and t not in mui and t not in net]
+    results = run_emu_boot([t for t in runnable if t not in mui and t not in net and t not in handlers], machine,
+                           rom, os.environ.get(machine["sys_env"]), memcheck)
+    if handlers:
+        results += run_emu_boot(handlers, machine, rom, os.environ.get(machine["sys_env"]), memcheck)
     if net:
         # AmiSSL (tls_*): a system with it installed, $<sys_env>_SSL (tools/emu_sys_amissl.sh); 68020+
         ssl_tests = [t for t in net if "amisslmaster.library" in emu_needs(t)]

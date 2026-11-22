@@ -157,13 +157,17 @@ func fill_fib(fib: Int, key: Int)
     end
 end
 
+# (un tamaño fijo de 4 MB: la memoria libre cambia a cada momento, e Info daría cada vez otra cosa)
 func disk_info(info: Int)
     used = 1
     for f in files
         used = used + (f.cap + 511) / 512 + 1
     end
-    free = mem_total() / 512
-    info_fill(info, used + free, used, 512, ID_VALIDATED, volume)
+    total = 8192
+    if used > total
+        total = used
+    end
+    info_fill(info, total, used, 512, ID_VALIDATED, volume)
 end
 
 Main

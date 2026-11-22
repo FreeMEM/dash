@@ -49,10 +49,41 @@ Idea del usuario (2026-11-22). Dos fases, en orden:
 ## Pruebas
 
 - Ejemplo: `examples/handler_ram.dash`, un sistema de archivos mínimo en memoria (una carpeta, leer y escribir).
-- Runner: `# emu-handler: <fichero.dash> <NOMBRE:> [Device=... Unit=...]` compila el handler (por el mismo
-  camino que el test), lo monta con `C:Mount` antes de los programas y el test es un cliente normal que lo usa.
-  Sin `C:Mount` en el sistema emulado, el test se salta.
+- Runner: `# emu-handler: <fichero.dash>` compila el handler por el mismo camino que el test y lo deja en
+  `DH0:h_<test>`; el test es un cliente normal que escribe su mountlist, lo monta con `C:Mount` y lo usa.
+  `# emu-needs: C/Mount` salta el test si el sistema emulado no tiene Mount. `# emu-hardfile` añade un disco
+  crudo (`uaehf.device` unidad 1, 256 bloques de 512 bytes que empiezan por "BLOQ" y su número).
+- Tests: `test_handler_ram` (el ejemplo), `test_handler_bloques` (`FileSystem =` con `Device =`, lee bloques),
+  `test_handler_falla` (error de ejecución: registro, paquete contestado y copia nueva), cada uno con su `_directo`.
+
+## Fase 2: DashFS de solo lectura
+
+Repo local `~/Projects/dashfs-amiga` (sin subir: espera el sí del usuario).
+
+- `src/dashfs.dash`: el handler (`./dash --cpu 68020`). `src/seahash.dash` (seahash 4.1 en ensamblador del 68020,
+  con `mulu.l` de 64 bits) y `src/lz4.dash` (bloques LZ4 en ensamblador del 68000).
+- `herramientas/hacer_disco.rs`: discos de prueba con el RedoxFS de DashOS (ruta `../dashos/archivos/redoxfs`):
+  tildes, datos en el nodo, LZ4 y sin comprimir, cajones, comentario y bits, 300 ficheros (H-tree de un nivel), un
+  cajón que distingue mayúsculas, la instantánea "antes" y el volumen "Otro". `herramientas/lector.py`: lector de
+  referencia en Python (y `comprobar.py`, que lo prueba contra el manifiesto). `herramientas/seahash.py`.
+- `pruebas/correr.py`: el disco como `uaehf.device` unidad 1 de FS-UAE, el handler montado tres veces (ahora,
+  `INSTANTANEA=antes`, `VOLUMEN=Otro`) y un cliente que lo recorre todo y saca tamaños y sumas.
+- Opciones por `Control =` de la mountlist (`dn_Startup` es la FileSysStartupMsg): `VOLUMEN=`, `INSTANTANEA=`,
+  `NOMBRE=`, `SINSUMAS`, `LOG=`.
+- Formato (visto en el código de RedoxFS de DashOS): cabeceras en un anillo de 256 bloques de 4 KB al principio (la
+  buena es la de generación mayor con su suma bien); BlockPtr de 16 bytes (dirección: nivel 4 bits, nivel
+  descomprimido 4, índice 36, época 20; y la seahash de lo guardado); árbol de nodos de 4 niveles de TreeList (254
+  punteros); nodo de 4 KB (modo, tamaños, tiempos, record_level, flags INLINE_DATA y CASEFOLD, bits del Amiga,
+  atributos; desde el byte 128, 128 registros directos y listas de 1 a 4 niveles, o los datos en línea); carpetas con
+  la marca en level0[0] (niveles del H-tree) y la raíz en level0[1]; DirList: entradas de 4 bytes de nodo, 1 de largo
+  y el nombre en UTF-8, cuenta en 4092; registros comprimidos con 2 bytes de largo y LZ4.
 
 ## Bitácora
 
 - 2026-11-22: arranque. Worktree `.worktrees/dash-handler` desde main 1512fd1.
+- 2026-11-22: fase 1 hecha en la rama (12 tests de handlers en el emulador, 801/801 sin emulador). Fallos
+  encontrados por el camino: `--gcc` perdía los `@amiga struct` de un módulo importado (arreglado); contestar con
+  `ERROR_DEVICE_NOT_MOUNTED` al morir dejaba al cliente ante un requester (ahora `ERROR_OBJECT_NOT_FOUND`); un
+  `MODE_NEWFILE` dejaba el registro bloqueado para los demás (ahora se abre compartido).
+- 2026-11-22: fase 2 empezada. seahash y LZ4 en ensamblador comprobados en el A1200 emulado contra la referencia
+  (un registro de 128 KB de un disco real: 240 ms). El lector de Python lee todo el disco de prueba sin fallos.

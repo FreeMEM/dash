@@ -10479,6 +10479,8 @@ static void _dash_hd_reply(LONG pkt, LONG res1, LONG res2) {
     struct MsgPort *to;
     if (!p) return;
     if (pkt == _dash_hd_cur) _dash_hd_cur = 0;
+    /* the log up to date before the client goes on (it may read it at once) */
+    if (_dash_hd_logfh) Flush(_dash_hd_logfh);
     to = p->dp_Port;
     p->dp_Res1 = res1;
     p->dp_Res2 = res2;
