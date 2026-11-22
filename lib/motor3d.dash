@@ -1,0 +1,1206 @@
+# lib/motor3d.dash: un motor 3D por software para juegos, el de Titan Force.
+#
+# Como los juegos 3D del Amiga: cada esquina se transforma una vez, las caras de espaldas se quitan, las demas se
+# ordenan de lejos a cerca (cubetas por distancia) y se rellenan linea a linea en un bufer de lapices (un byte por
+# pixel), que se vuelca de una vez en la pantalla (gfx_pens_draw). Sin MiniGL: en un Amiga sin tarjeta 3D, MiniGL
+# dibuja por software (Wazp3D) y va mas lento.
+#
+# Dos acabados:
+# - liso: 8 tonos por color (o 4), cielo en franjas;
+# - tramado (m.trama = true): 4 tonos por color con el matiz cambiado (la sombra al morado, la luz al naranja), el
+#   paso entre dos tonos con una trama ordenada de Bayer 4 x 4, cielo de atardecer tramado y niebla de lejos.
+# Con pixel = 2 se pinta a la mitad del ancho y del alto y cada pixel se vuelca de 2 x 2 (mas rapido). Sin FPU,
+# las raices piden mathieeedoubtrans.library (la del Workbench).
+#
+# Lapices: 1-16 el cielo (tramado: 1 el horizonte y la niebla, 2-4 el cielo hacia arriba), 17 el suelo; los demas
+# para el juego (un modelo cargado con m3d_cargar va desde el lapiz que se le diga, 8 por color).
+#
+# Un fotograma:
+#     m3d_empezar(m)
+#     m3d_camara(m, ojo x, y, z, adonde mira x, y, z, campo de vision en grados)
+#     m3d_transformar(m, malla, matrices de sus huesos, primera esquina, ultima)
+#     m3d_poner(m, malla, primer triangulo, ultimo, doble, interior, hueso oculto)
+#     m3d_fondo(m)                       cielo y suelo
+#     m3d_suelo_rect(m, x0, z0, x1, z1, lapiz)   calles, sombras... (en el suelo, y = 0)
+#     m3d_niebla_suelo(m)                (tramado)
+#     m3d_pintar(m)                      los triangulos puestos, de lejos a cerca
+#     m3d_volcar(m)                      a la pantalla; despues screen_flip()
+#
+# Matrices de 3x4: [r00, r01, r02, tx, r10, r11, r12, ty, r20, r21, r22, tz]. Ejes: x a la derecha, y arriba, z
+# adelante. Las esquinas de la pantalla van en dieciseisavos de pixel.
+
+const M3D_CUBETAS = 256
+const M3D_CERCA = 0.5
+const M3D_NIEBLA = 1
+const M3D_SUELO = 17
+
+# Un modelo: esquinas (con su hueso, -1 si ya estan en el mundo) y triangulos (lapiz base, textura y u, v)
+struct M3dMalla
+    vx: [Float]
+    vy: [Float]
+    vz: [Float]
+    vh: [Int]
+    ta: [Int]
+    tb: [Int]
+    tc: [Int]
+    tcol: [Int]
+    tt: [Int]
+    tuv: [Int]
+    tsesgo: [Float]
+    tonos: Int
+    sesgo_lapiz: Int
+    sesgo: Float
+    hpadre: [Int]
+    hx: [Float]
+    hy: [Float]
+    hz: [Float]
+    tex_buf: Int
+    tex_base: Int
+    tex_lado: Int
+    tex_tablas: Int
+    qx: [Float]
+    qy: [Float]
+    qz: [Float]
+    sx: [Int]
+    sy: [Int]
+end
+
+struct M3d
+    an: Int
+    al: Int
+    pixel: Int
+    prof: Int
+    pant: Int
+    pal: Int
+    lut: Int
+    trama: Bool
+    niebla_desde: Float
+    niebla_hasta: Float
+    lejos: Float
+    vista: [Float]
+    foco: Float
+    ex: Float
+    ey: Float
+    ez: Float
+    fx: Float
+    fy: Float
+    fz: Float
+    ux: Float
+    uy: Float
+    uz: Float
+    lx: Float
+    ly: Float
+    lz: Float
+    lcx: Float
+    lcy: Float
+    lcz: Float
+    x0: [Int]
+    y0: [Int]
+    x1: [Int]
+    y1: [Int]
+    x2: [Int]
+    y2: [Int]
+    lapiz: [Int]
+    tex: [Int]
+    lado: [Int]
+    tabla: [Int]
+    uv: [Int]
+    n: Int
+    cabeza: [Int]
+    siguiente: [Int]
+end
+
+# ---------------- matrices ----------------
+
+func m3d_mul(a: [Float], b: [Float]) -> [Float]
+    var r: [Float] = []
+    for i in (0..2)
+        for j in (0..3)
+            v = a[i * 4] * b[j] + a[i * 4 + 1] * b[4 + j] + a[i * 4 + 2] * b[8 + j]
+            if j == 3
+                v = v + a[i * 4 + 3]
+            end
+            r.push(v)
+        end
+    end
+    return r
+end
+
+func m3d_tras(x: Float, y: Float, z: Float) -> [Float]
+    return [1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, y, 0.0, 0.0, 1.0, z]
+end
+
+func m3d_rx(g: Float) -> [Float]
+    c = Float(cos(g * 0.0174533))
+    s = Float(sin(g * 0.0174533))
+    return [1.0, 0.0, 0.0, 0.0, 0.0, c, 0.0 - s, 0.0, 0.0, s, c, 0.0]
+end
+
+func m3d_ry(g: Float) -> [Float]
+    c = Float(cos(g * 0.0174533))
+    s = Float(sin(g * 0.0174533))
+    return [c, 0.0, s, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0 - s, 0.0, c, 0.0]
+end
+
+func m3d_rz(g: Float) -> [Float]
+    c = Float(cos(g * 0.0174533))
+    s = Float(sin(g * 0.0174533))
+    return [c, 0.0 - s, 0.0, 0.0, s, c, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+end
+
+# ---------------- el motor y la pantalla ----------------
+
+# Abre la pantalla: RTG (o un modo AGA con display "PAL" o "NTSC", o el modo exacto si modo no es 0), con doble
+# bufer. prof: 8 (256 colores) o, en RTG, 16, 24 o 32 bits.
+func m3d_abrir(ancho: Int, alto: Int, prof: Int, display: String, modo: Int, titulo: String) -> Bool
+    if display != "RTG" and modo == 0
+        # AGA: alta resolucion desde 640 de ancho; entrelazado si el alto no cabe (PAL 256, NTSC 200)
+        modo = 0x21000
+        if display == "NTSC"
+            modo = 0x11000
+        end
+        if ancho >= 640
+            modo = modo + 0x8000
+        end
+        if (display == "NTSC" and alto > 200) or (display != "NTSC" and alto > 256)
+            modo = modo + 4
+        end
+        prof = 8
+    end
+    ok = false
+    if modo != 0
+        ok = screen_open_mode(modo, ancho, alto, prof, titulo)
+    else
+        ok = rtg_open_screen(ancho, alto, prof, titulo)
+    end
+    if not ok and prof == 8
+        ok = screen_open_custom(ancho, alto, 8, titulo)
+    end
+    if ok
+        screen_double_buffer()
+    end
+    return ok
+end
+
+# El motor para una pantalla de ancho x alto: pinta a 1/pixel de cada lado (pixel 1 con mas de 8 bits)
+func m3d_nuevo(ancho: Int, alto: Int, prof: Int, pixel: Int, trama: Bool) -> M3d
+    if pixel < 1 or prof > 8
+        pixel = 1
+    end
+    var vi: [Int] = []
+    var vf: [Float] = []
+    m = M3d(ancho / pixel, alto / pixel, pixel, prof, 0, 0, 0, trama, 110.0, 260.0, 200.0, vf, 1.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -0.42, 0.8, 0.43, 0.0, 0.0, 0.0,
+            [], [], [], [], [], [], [], [], [], [], [], 0, [], vi)
+    m.vista = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    m.pant = buffer_alloc(m.an * m.al)
+    m.pal = buffer_alloc(768)
+    buffer_fill(m.pal, 0, 768, 0)
+    m.lut = buffer_alloc(1024)
+    buffer_fill(m.lut, 0, 1024, 0)
+    for i in (0..M3D_CUBETAS - 1)
+        m.cabeza.push(-1)
+    end
+    return m
+end
+
+# Libera los buferes del motor (la pantalla se cierra con screen_close)
+func m3d_liberar(m: M3d)
+    buffer_free(m.pant)
+    buffer_free(m.pal)
+    buffer_free(m.lut)
+end
+
+# ---------------- la paleta ----------------
+
+# Un color de la paleta (8 bits por componente); tambien en m.pal (3 bytes por lapiz) y m.lut (0xRRGGBB, para las
+# pantallas de 16 a 32 bits)
+func m3d_color(m: M3d, i: Int, r: Int, g: Int, b: Int)
+    gfx_rgb8(i, r, g, b)
+    buffer_set_byte(m.pal, i * 3, r)
+    buffer_set_byte(m.pal, i * 3 + 1, g)
+    buffer_set_byte(m.pal, i * 3 + 2, b)
+    buffer_set_long(m.lut, i * 4, r * 65536 + g * 256 + b)
+end
+
+# 8 tonos de un color (de la sombra a la luz) desde el lapiz base
+func m3d_tonos(m: M3d, base: Int, r: Int, g: Int, b: Int)
+    for k in (0..7)
+        f = 0.55 + 0.75 * Float(k) / 7.0
+        m3d_color(m, base + k, _m3d_c8(Float(r) * f), _m3d_c8(Float(g) * f), _m3d_c8(Float(b) * f))
+    end
+end
+
+func _m3d_c8(v: Float) -> Int
+    if v > 255.0
+        return 255
+    end
+    if v < 0.0
+        return 0
+    end
+    return Int(v)
+end
+
+func _m3d_mezcla8(c: Int, fc: Float, o: Int, fo: Float) -> Int
+    return _m3d_c8(Float(c) * fc + Float(o) * fo)
+end
+
+# 4 tonos de un color con el matiz cambiado: la sombra tira al morado y la luz al naranja del atardecer
+func m3d_rampa(m: M3d, base: Int, r: Int, g: Int, b: Int)
+    m3d_color(m, base, _m3d_mezcla8(r, 0.40, 48, 0.45), _m3d_mezcla8(g, 0.40, 32, 0.45), _m3d_mezcla8(b, 0.40, 92, 0.45))
+    m3d_color(m, base + 1, _m3d_mezcla8(r, 0.70, 48, 0.20), _m3d_mezcla8(g, 0.70, 32, 0.20), _m3d_mezcla8(b, 0.70, 92, 0.20))
+    m3d_color(m, base + 2, r, g, b)
+    m3d_color(m, base + 3, _m3d_mezcla8(r, 0.75, 255, 0.35), _m3d_mezcla8(g, 0.75, 214, 0.35), _m3d_mezcla8(b, 0.75, 170, 0.35))
+end
+
+# Una componente aclarada, mas o menos 255 * (c / 255) ^ 0,6 (para colores muy oscuros; sin pow, que sin FPU pide
+# mathieeedoubtrans.library)
+func m3d_aclarar(c: Int) -> Int
+    if c <= 0
+        return 0
+    end
+    x = Float(c) / 255.0
+    return _m3d_c8(255.0 * (0.75 * Float(sqrt(x)) + 0.25 * x))
+end
+
+# El cielo y el suelo de partida: franjas azules y cesped; con trama, un atardecer
+func m3d_paleta_cielo(m: M3d)
+    if m.trama
+        m3d_color(m, 1, 242, 170, 150)
+        m3d_color(m, 2, 214, 112, 140)
+        m3d_color(m, 3, 138, 74, 150)
+        m3d_color(m, 4, 62, 44, 108)
+        m3d_color(m, M3D_SUELO, 104, 104, 112)
+    else
+        for k in (0..15)
+            m3d_color(m, 1 + k, (3 + k / 3) * 17, (6 + k / 3) * 17, (11 + k / 5) * 17)
+        end
+        m3d_color(m, M3D_SUELO, 102, 153, 85)
+    end
+end
+
+# ---------------- la trama ----------------
+
+# El umbral de la trama de Bayer de 4 x 4 en la columna x y la fila y (de 0 a 15)
+func _m3d_bayer(x: Int, y: Int) -> Int
+    xy = (x ^ y) & 3
+    return 8 * (xy & 1) + 4 * (y & 1) + 2 * ((xy >> 1) & 1) + ((y >> 1) & 1)
+end
+
+# Un lapiz tramado: a con un nivel de b (0 todo a, 16 todo b) en un solo numero (a + b * 256 + nivel * 65536); por
+# debajo de 256 es un lapiz liso. Sirve donde se pide un lapiz (m3d_suelo_rect, m3d_tri).
+func m3d_trama(a: Int, b: Int, nivel: Int) -> Int
+    if nivel <= 0
+        return a
+    end
+    if nivel >= 16
+        return b
+    end
+    return a + b * 256 + nivel * 65536
+end
+
+# Los 4 pixeles de la fila r (y & 3) de un lapiz tramado en un long (el primero arriba), desde la columna 0 mod 4
+func _m3d_fila(a: Int, b: Int, nivel: Int, r: Int) -> Int
+    v = 0
+    for c in (0..3)
+        p = a
+        if _m3d_bayer(c, r) < nivel
+            p = b
+        end
+        v = (v << 8) | p
+    end
+    return v
+end
+
+# Las columnas [xa, xb) desde fila con el dibujo v: de cuatro en cuatro, los sueltos de los bordes de uno en uno
+func _m3d_tramo(buf: Int, fila: Int, xa: Int, xb: Int, v: Int)
+    x = xa
+    while x < xb and (x & 3) != 0
+        buffer_set_byte(buf, fila + x, (v >> (24 - 8 * (x & 3))) & 255)
+        x = x + 1
+    end
+    while x + 4 <= xb
+        buffer_set_long(buf, fila + x, v)
+        x = x + 4
+    end
+    while x < xb
+        buffer_set_byte(buf, fila + x, (v >> (24 - 8 * (x & 3))) & 255)
+        x = x + 1
+    end
+end
+
+# Un velo sobre la fila y: el lapiz en los pixeles cuyo umbral queda por debajo del nivel; lo de debajo se ve por
+# los demas
+func _m3d_velo(buf: Int, an: Int, y: Int, lapiz: Int, nivel: Int)
+    if nivel >= 16
+        buffer_fill(buf, y * an, an, lapiz)
+        return
+    end
+    r = y & 3
+    for c in (0..3)
+        if _m3d_bayer(c, r) < nivel
+            x = c
+            while x < an
+                buffer_set_byte(buf, y * an + x, lapiz)
+                x = x + 4
+            end
+        end
+    end
+end
+
+# El nivel de niebla (0 a 16) a z metros de la camara (0 sin trama)
+func m3d_niebla(m: M3d, z: Float) -> Int
+    if not m.trama
+        return 0
+    end
+    f = (z - m.niebla_desde) / (m.niebla_hasta - m.niebla_desde)
+    if f <= 0.0
+        return 0
+    end
+    if f >= 1.0
+        return 16
+    end
+    return Int(f * 16.0)
+end
+
+# ---------------- relleno ----------------
+
+# Un triangulo de un lapiz (o un lapiz tramado, m3d_trama) en el bufer del motor. Se pinta cada pixel cuyo centro cae
+# dentro: dos triangulos que comparten un lado no dejan rendija ni pisan el mismo pixel.
+func m3d_tri(m: M3d, x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int, lapiz: Int)
+    buf = m.pant
+    an = m.an
+    al = m.al
+    tr = lapiz >= 256
+    v0 = 0
+    v1 = 0
+    v2 = 0
+    v3 = 0
+    if tr
+        la = lapiz & 255
+        lb = (lapiz >> 8) & 255
+        ln = lapiz >> 16
+        v0 = _m3d_fila(la, lb, ln, 0)
+        v1 = _m3d_fila(la, lb, ln, 1)
+        v2 = _m3d_fila(la, lb, ln, 2)
+        v3 = _m3d_fila(la, lb, ln, 3)
+    end
+    if y1 < y0
+        t = x0
+        x0 = x1
+        x1 = t
+        t = y0
+        y0 = y1
+        y1 = t
+    end
+    if y2 < y0
+        t = x0
+        x0 = x2
+        x2 = t
+        t = y0
+        y0 = y2
+        y2 = t
+    end
+    if y2 < y1
+        t = x1
+        x1 = x2
+        x2 = t
+        t = y1
+        y1 = y2
+        y2 = t
+    end
+    if y2 <= y0
+        return
+    end
+    # primera y ultima fila cuyo centro (y * 16 + 8) queda dentro
+    ya = (y0 + 7) / 16
+    if y0 + 7 < 0
+        ya = 0 - ((7 - y0) / 16)
+    end
+    yb = (y2 + 7) / 16
+    if y2 + 7 < 0
+        yb = 0 - ((7 - y2) / 16)
+    end
+    if ya < 0
+        ya = 0
+    end
+    if yb > al
+        yb = al
+    end
+    if yb <= ya
+        return
+    end
+    dl = y2 - y0
+    for y in (ya..yb - 1)
+        cy = y * 16 + 8
+        xl = x0 + Int(Float(x2 - x0) * Float(cy - y0) / Float(dl))
+        xs = 0
+        if cy < y1
+            xs = x0 + Int(Float(x1 - x0) * Float(cy - y0) / Float(y1 - y0))
+        else
+            if y2 == y1
+                xs = x1
+            else
+                xs = x1 + Int(Float(x2 - x1) * Float(cy - y1) / Float(y2 - y1))
+            end
+        end
+        izq = xl
+        der = xs
+        if xs < xl
+            izq = xs
+            der = xl
+        end
+        # columnas cuyo centro (x * 16 + 8) cae en [izq, der)
+        a = (izq + 7) / 16
+        if izq + 7 < 0
+            a = 0
+        end
+        b = (der + 7) / 16
+        if der + 7 < 0
+            b = 0
+        end
+        if a < 0
+            a = 0
+        end
+        if b > an
+            b = an
+        end
+        if b > a
+            if tr
+                r = y & 3
+                vr = v0
+                if r == 1
+                    vr = v1
+                end
+                if r == 2
+                    vr = v2
+                end
+                if r == 3
+                    vr = v3
+                end
+                _m3d_tramo(buf, y * an, a, b, vr)
+            else
+                buffer_fill(buf, y * an + a, b - a, lapiz)
+            end
+        end
+    end
+end
+
+# Un triangulo con textura, con u, v en cada esquina (sesentaicuatroavos de texel), afin por linea (como Quake sin la
+# correccion de perspectiva): cada linea es una llamada a buffer_tex_span. tex: la textura (2^lado de lado); tabla:
+# 256 bytes, texel -> lapiz.
+func m3d_tri_tex(m: M3d, x0: Int, y0: Int, u0: Int, v0: Int, x1: Int, y1: Int, u1: Int, v1: Int, x2: Int, y2: Int,
+                 u2: Int, v2: Int, tex: Int, lado: Int, tabla: Int)
+    buf = m.pant
+    an = m.an
+    al = m.al
+    if y1 < y0
+        t = x0
+        x0 = x1
+        x1 = t
+        t = y0
+        y0 = y1
+        y1 = t
+        t = u0
+        u0 = u1
+        u1 = t
+        t = v0
+        v0 = v1
+        v1 = t
+    end
+    if y2 < y0
+        t = x0
+        x0 = x2
+        x2 = t
+        t = y0
+        y0 = y2
+        y2 = t
+        t = u0
+        u0 = u2
+        u2 = t
+        t = v0
+        v0 = v2
+        v2 = t
+    end
+    if y2 < y1
+        t = x1
+        x1 = x2
+        x2 = t
+        t = y1
+        y1 = y2
+        y2 = t
+        t = u1
+        u1 = u2
+        u2 = t
+        t = v1
+        v1 = v2
+        v2 = t
+    end
+    if y2 <= y0
+        return
+    end
+    ya = (y0 + 7) / 16
+    if y0 + 7 < 0
+        ya = 0 - ((7 - y0) / 16)
+    end
+    yb = (y2 + 7) / 16
+    if y2 + 7 < 0
+        yb = 0 - ((7 - y2) / 16)
+    end
+    if ya < 0
+        ya = 0
+    end
+    if yb > al
+        yb = al
+    end
+    if yb <= ya
+        return
+    end
+    dl = y2 - y0
+    for y in (ya..yb - 1)
+        cy = y * 16 + 8
+        xl = x0 + Int(Float(x2 - x0) * Float(cy - y0) / Float(dl))
+        ul = u0 + (u2 - u0) * (cy - y0) / dl
+        vl = v0 + (v2 - v0) * (cy - y0) / dl
+        xs = x1
+        us = u1
+        vs = v1
+        if cy < y1
+            xs = x0 + Int(Float(x1 - x0) * Float(cy - y0) / Float(y1 - y0))
+            us = u0 + (u1 - u0) * (cy - y0) / (y1 - y0)
+            vs = v0 + (v1 - v0) * (cy - y0) / (y1 - y0)
+        else
+            if y2 != y1
+                xs = x1 + Int(Float(x2 - x1) * Float(cy - y1) / Float(y2 - y1))
+                us = u1 + (u2 - u1) * (cy - y1) / (y2 - y1)
+                vs = v1 + (v2 - v1) * (cy - y1) / (y2 - y1)
+            end
+        end
+        if xs < xl
+            t = xs
+            xs = xl
+            xl = t
+            t = us
+            us = ul
+            ul = t
+            t = vs
+            vs = vl
+            vl = t
+        end
+        if xs > xl
+            a = (xl + 7) / 16
+            if xl + 7 < 0
+                a = 0 - ((7 - xl) / 16)
+            end
+            b = (xs + 7) / 16
+            if xs + 7 < 0
+                b = 0 - ((7 - xs) / 16)
+            end
+            # paso por pixel en 16.16: (u en 1/64 de texel) * 16 * 65536 / 64 / (x en 1/16 de pixel)
+            du = Int(Float(us - ul) * 16384.0 / Float(xs - xl))
+            dv = Int(Float(vs - vl) * 16384.0 / Float(xs - xl))
+            # u, v en el centro del primer pixel
+            ini = a * 16 + 8 - xl
+            uu = ul * 1024 + (du / 16) * ini
+            vv = vl * 1024 + (dv / 16) * ini
+            if a < 0
+                uu = uu - du * a
+                vv = vv - dv * a
+                a = 0
+            end
+            if b > an
+                b = an
+            end
+            if b > a
+                buffer_tex_span(buf, y * an + a, b - a, tex, lado, uu, vv, du, dv, tabla)
+            end
+        end
+    end
+end
+
+# ---------------- la camara ----------------
+
+# La camara en (ex, ey, ez) mirando a (mx, my, mz), sin ladearse; fov: el campo de vision de lado a lado, en grados
+func m3d_camara(m: M3d, ex: Float, ey: Float, ez: Float, mx: Float, my: Float, mz: Float, fov: Float)
+    ax = mx - ex
+    ay = my - ey
+    az = mz - ez
+    la = Float(sqrt(ax * ax + ay * ay + az * az))
+    ax = ax / la
+    ay = ay / la
+    az = az / la
+    rgx = 0.0 - az
+    rgz = ax
+    lr = Float(sqrt(rgx * rgx + rgz * rgz))
+    rgx = rgx / lr
+    rgz = rgz / lr
+    upx = 0.0 - rgz * ay
+    upy = rgz * ax - rgx * az
+    upz = rgx * ay
+    m.vista = [rgx, 0.0, rgz, 0.0 - (rgx * ex + rgz * ez), upx, upy, upz, 0.0 - (upx * ex + upy * ey + upz * ez),
+               ax, ay, az, 0.0 - (ax * ex + ay * ey + az * ez)]
+    m.foco = Float(m.an / 2) / Float(tan(fov * 0.0087266))
+    m.ex = ex
+    m.ey = ey
+    m.ez = ez
+    m.fx = ax
+    m.fy = ay
+    m.fz = az
+    m.ux = upx
+    m.uy = upy
+    m.uz = upz
+    # la luz vista desde la camara
+    m.lcx = rgx * m.lx + rgz * m.lz
+    m.lcy = upx * m.lx + upy * m.ly + upz * m.lz
+    m.lcz = ax * m.lx + ay * m.ly + az * m.lz
+end
+
+# De donde viene la luz (en el mundo; se normaliza). Antes de m3d_camara.
+func m3d_luz(m: M3d, x: Float, y: Float, z: Float)
+    l = Float(sqrt(x * x + y * y + z * z))
+    if l > 0.0
+        m.lx = x / l
+        m.ly = y / l
+        m.lz = z / l
+    end
+end
+
+# ---------------- modelos ----------------
+
+func m3d_malla() -> M3dMalla
+    return M3dMalla([], [], [], [], [], [], [], [], [], [], [], 8, -1, 0.0, [], [], [], [], 0, 0, 0, 0, [], [], [], [], [])
+end
+
+# Una esquina (en el sistema de su hueso; -1: en el mundo); devuelve su numero
+func m3d_esquina(ml: M3dMalla, x: Float, y: Float, z: Float, hueso: Int) -> Int
+    ml.vx.push(x)
+    ml.vy.push(y)
+    ml.vz.push(z)
+    ml.vh.push(hueso)
+    ml.qx.push(0.0)
+    ml.qy.push(0.0)
+    ml.qz.push(0.0)
+    ml.sx.push(0)
+    ml.sy.push(0)
+    return ml.vx.length - 1
+end
+
+# Un triangulo liso entre tres esquinas, de cara hacia donde se ven a, b, c en el sentido de las agujas del reloj;
+# lapiz: el primero de sus tonos (ml.tonos: 8 u 4)
+func m3d_cara(ml: M3dMalla, a: Int, b: Int, c: Int, lapiz: Int)
+    ml.ta.push(a)
+    ml.tb.push(b)
+    ml.tc.push(c)
+    ml.tcol.push(lapiz)
+    ml.tt.push(-1)
+    ml.tsesgo.push(0.0)
+    for j in (0..5)
+        ml.tuv.push(0)
+    end
+end
+
+# Un cuadrilatero plano (dos triangulos a, b, c y a, c, d), con las esquinas en el sentido de las agujas del reloj
+# vistas desde fuera
+func m3d_cuad(ml: M3dMalla, a: Int, b: Int, c: Int, d: Int, lapiz: Int)
+    m3d_cara(ml, a, b, c, lapiz)
+    m3d_cara(ml, a, c, d, lapiz)
+end
+
+# Los ultimos n triangulos se ordenan como si estuvieran sesgo metros mas lejos (negativo: mas cerca). Para lo que va
+# pegado encima de otra cara (una ventana en su pared) y debe pintarse despues de ella.
+func m3d_sesgo(ml: M3dMalla, n: Int, sesgo: Float)
+    k = ml.tsesgo.length - n
+    if k < 0
+        k = 0
+    end
+    while k < ml.tsesgo.length
+        ml.tsesgo[k] = sesgo
+        k = k + 1
+    end
+end
+
+# Una caja (sin base) de centro (cx, cy, cz) y w x h x d, en el mundo (hueso -1) o en un hueso; 2 triangulos por cara
+# y 8 esquinas compartidas. tapa: con la de arriba.
+func m3d_caja(ml: M3dMalla, cx: Float, cy: Float, cz: Float, w: Float, h: Float, d: Float, lapiz: Int, tapa: Bool,
+              hueso: Int)
+    esq = [4, 5, 7, 6, 1, 0, 2, 3, 5, 1, 3, 7, 0, 4, 6, 2, 6, 7, 3, 2]
+    base = ml.vx.length
+    for e in (0..7)
+        x = cx - w / 2.0
+        if e % 2 == 1
+            x = cx + w / 2.0
+        end
+        y = cy - h / 2.0
+        if (e / 2) % 2 == 1
+            y = cy + h / 2.0
+        end
+        z = cz - d / 2.0
+        if e / 4 == 1
+            z = cz + d / 2.0
+        end
+        m3d_esquina(ml, x, y, z, hueso)
+    end
+    caras = 5
+    if not tapa
+        caras = 4
+    end
+    for f in (0..caras - 1)
+        m3d_cara(ml, base + esq[f * 4], base + esq[f * 4 + 1], base + esq[f * 4 + 2], lapiz)
+        m3d_cara(ml, base + esq[f * 4], base + esq[f * 4 + 2], base + esq[f * 4 + 3], lapiz)
+    end
+end
+
+func _m3d_palabra(buf: Int, pos: Int) -> Int
+    v = buffer_get_word(buf, pos)
+    if v > 32767
+        v = v - 65536
+    end
+    return v
+end
+
+# Carga un modelo con huesos: .tfs (TFRB, colores lisos) o .tft (TFRX, con texturas), los de
+# herramientas/blender de Titan Force (y del Taller 3D de Forja). Sus colores van a la paleta desde el lapiz
+# lapiz0, 8 lapices por color (con trama y colores lisos, 4 tonos, aclarados). Los huesos quedan en ml.hpadre y
+# ml.hx, hy, hz (la articulacion, desde la del padre). Devuelve cuantos colores, o -1.
+func m3d_cargar(m: M3d, ml: M3dMalla, nombre: String, lapiz0: Int) -> Int
+    tam = file_size(nombre)
+    if tam < 8
+        return -1
+    end
+    buf = buffer_alloc(tam)
+    magia = 0
+    if file_load(nombre, buf, tam) == tam
+        magia = buffer_get_long(buf, 0)
+    end
+    if magia != 0x54465242 and magia != 0x54465258
+        buffer_free(buf)
+        return -1
+    end
+    con_tex = magia == 0x54465258
+    nc = buffer_get_word(buf, 4)
+    pos = 6
+    for i in (0..nc - 1)
+        r = buffer_get_byte(buf, pos)
+        g = buffer_get_byte(buf, pos + 1)
+        b = buffer_get_byte(buf, pos + 2)
+        if m.trama and not con_tex
+            m3d_rampa(m, lapiz0 + i * 8, m3d_aclarar(r), m3d_aclarar(g), m3d_aclarar(b))
+        else
+            m3d_tonos(m, lapiz0 + i * 8, r, g, b)
+        end
+        pos = pos + 4
+    end
+    if con_tex
+        ntex = buffer_get_word(buf, pos)
+        lado = buffer_get_word(buf, pos + 2)
+        pos = pos + 4
+        ml.tex_buf = buf
+        ml.tex_base = buf + pos
+        ml.tex_lado = lado
+        pos = pos + ntex * (1 << lado) * (1 << lado)
+        # 8 tablas de luz: texel -> lapiz0 + color * 8 + tono
+        ml.tex_tablas = buffer_alloc(8 * 256)
+        for t in (0..7)
+            for i in (0..255)
+                buffer_set_byte(ml.tex_tablas, t * 256 + i, lapiz0 + (i % nc) * 8 + t)
+            end
+        end
+    end
+    nh = buffer_get_word(buf, pos)
+    pos = pos + 2
+    var ax: [Float] = []
+    var ay: [Float] = []
+    var az: [Float] = []
+    for h in (0..nh - 1)
+        padre = _m3d_palabra(buf, pos)
+        jx = Float(_m3d_palabra(buf, pos + 2)) / 100.0
+        jy = Float(_m3d_palabra(buf, pos + 4)) / 100.0
+        jz = Float(_m3d_palabra(buf, pos + 6)) / 100.0
+        nv = buffer_get_word(buf, pos + 8)
+        nt = buffer_get_word(buf, pos + 10)
+        pos = pos + 12
+        ax.push(jx)
+        ay.push(jy)
+        az.push(jz)
+        ml.hpadre.push(padre)
+        if padre >= 0
+            ml.hx.push(jx - ax[padre])
+            ml.hy.push(jy - ay[padre])
+            ml.hz.push(jz - az[padre])
+        else
+            ml.hx.push(jx)
+            ml.hy.push(jy)
+            ml.hz.push(jz)
+        end
+        base = ml.vx.length
+        for i in (0..nv - 1)
+            m3d_esquina(ml, Float(_m3d_palabra(buf, pos)) / 100.0, Float(_m3d_palabra(buf, pos + 2)) / 100.0,
+                        Float(_m3d_palabra(buf, pos + 4)) / 100.0, h)
+            pos = pos + 6
+        end
+        for i in (0..nt - 1)
+            ml.ta.push(base + buffer_get_word(buf, pos))
+            ml.tb.push(base + buffer_get_word(buf, pos + 2))
+            ml.tc.push(base + buffer_get_word(buf, pos + 4))
+            ml.tsesgo.push(0.0)
+            if con_tex
+                ml.tt.push(buffer_get_byte(buf, pos + 6))
+                ml.tcol.push(0)
+                for j in (0..5)
+                    ml.tuv.push(_m3d_palabra(buf, pos + 8 + j * 2))
+                end
+                pos = pos + 20
+            else
+                ml.tcol.push(lapiz0 + buffer_get_byte(buf, pos + 6) * 8)
+                ml.tt.push(-1)
+                for j in (0..5)
+                    ml.tuv.push(0)
+                end
+                pos = pos + 8
+            end
+        end
+    end
+    if not con_tex
+        buffer_free(buf)
+    end
+    return nc
+end
+
+# Libera las texturas de un modelo cargado
+func m3d_liberar_malla(ml: M3dMalla)
+    if ml.tex_buf != 0
+        buffer_free(ml.tex_buf)
+        buffer_free(ml.tex_tablas)
+        ml.tex_buf = 0
+        ml.tex_tablas = 0
+    end
+end
+
+# ---------------- un fotograma ----------------
+
+func m3d_empezar(m: M3d)
+    m.n = 0
+    for i in (0..M3D_CUBETAS - 1)
+        m.cabeza[i] = -1
+    end
+end
+
+# Las esquinas [v_ini, v_fin] a la camara y a la pantalla: las de un hueso h con huesos[h] (su matriz en el mundo),
+# las de hueso -1 tal cual
+func m3d_transformar(m: M3d, ml: M3dMalla, huesos: [[Float]], v_ini: Int, v_fin: Int)
+    var cam: [[Float]] = []
+    for h in (0..huesos.length - 1)
+        cam.push(m3d_mul(m.vista, huesos[h]))
+    end
+    vs = m.vista
+    for i in (v_ini..v_fin)
+        mm = vs
+        if ml.vh[i] >= 0
+            mm = cam[ml.vh[i]]
+        end
+        x = ml.vx[i]
+        y = ml.vy[i]
+        z = ml.vz[i]
+        qz = mm[8] * x + mm[9] * y + mm[10] * z + mm[11]
+        qx = mm[0] * x + mm[1] * y + mm[2] * z + mm[3]
+        qy = mm[4] * x + mm[5] * y + mm[6] * z + mm[7]
+        ml.qx[i] = qx
+        ml.qy[i] = qy
+        ml.qz[i] = qz
+        if qz > M3D_CERCA
+            ml.sx[i] = m.an * 8 + Int(16.0 * m.foco * qx / qz)
+            ml.sy[i] = m.al * 8 - Int(16.0 * m.foco * qy / qz)
+        end
+    end
+end
+
+# Los triangulos [t_ini, t_fin] (con sus esquinas ya transformadas) a la lista del fotograma: los de espaldas se
+# quitan (doble: se pintan como si miraran aqui; interior >= 0: se pintan de ese lapiz); luz por cara; con trama, la
+# trama entre tonos y la niebla. oculto >= 0: los de ese hueso no (la cabeza, con la camara dentro).
+func m3d_poner(m: M3d, ml: M3dMalla, t_ini: Int, t_fin: Int, doble: Bool, interior: Int, oculto: Int)
+    for k in (t_ini..t_fin)
+        a0 = ml.ta[k]
+        a1 = ml.tb[k]
+        a2 = ml.tc[k]
+        z0 = ml.qz[a0]
+        z1 = ml.qz[a1]
+        z2 = ml.qz[a2]
+        if z0 > M3D_CERCA and z1 > M3D_CERCA and z2 > M3D_CERCA and not (oculto >= 0 and ml.vh[a0] == oculto)
+            ux = ml.qx[a1] - ml.qx[a0]
+            uy = ml.qy[a1] - ml.qy[a0]
+            uz = z1 - z0
+            wx = ml.qx[a2] - ml.qx[a0]
+            wy = ml.qy[a2] - ml.qy[a0]
+            wz = z2 - z0
+            # (la camara es zurda: derecha, arriba, adelante; w x u da la normal hacia fuera)
+            nx = wy * uz - wz * uy
+            ny = wz * ux - wx * uz
+            nz = wx * uy - wy * ux
+            cara = nx * ml.qx[a0] + ny * ml.qy[a0] + nz * z0
+            lap = -1
+            tt = ml.tt[k]
+            zm = (z0 + z1 + z2) / 3.0
+            if cara >= 0.0 and doble
+                nx = 0.0 - nx
+                ny = 0.0 - ny
+                nz = 0.0 - nz
+                cara = -1.0
+            end
+            if cara < 0.0
+                ln = Float(sqrt(nx * nx + ny * ny + nz * nz))
+                nivel = 1
+                luz = 0.3
+                if ln > 0.0
+                    dl = (nx * m.lcx + ny * m.lcy + nz * m.lcz) / ln
+                    if dl < 0.0
+                        dl = 0.0
+                    end
+                    dc = (nx * m.ux + ny * m.uy + nz * m.uz) / ln
+                    if dc < 0.0
+                        dc = 0.0
+                    end
+                    luz = 0.3 + 0.55 * dl + 0.25 * dc
+                    if luz > 1.0
+                        luz = 1.0
+                    end
+                    nivel = Int(luz * 7.4)
+                    if nivel > 7
+                        nivel = 7
+                    end
+                end
+                if tt >= 0
+                    lap = nivel
+                else
+                    if m.trama
+                        # 4 tonos; entre dos, la trama en 4 pasos; de lejos, la niebla
+                        sl = (luz - 0.3) / 0.7 * 3.0
+                        if sl < 0.0
+                            sl = 0.0
+                        end
+                        if sl > 3.0
+                            sl = 3.0
+                        end
+                        nf = m3d_niebla(m, zm)
+                        if nf > 0
+                            lap = m3d_trama(ml.tcol[k] + Int(sl + 0.5), M3D_NIEBLA, nf)
+                        else
+                            tono = Int(sl)
+                            if tono > 2
+                                lap = ml.tcol[k] + 3
+                            else
+                                lap = m3d_trama(ml.tcol[k] + tono, ml.tcol[k] + tono + 1, Int((sl - Float(tono)) * 4.0) * 4)
+                            end
+                        end
+                    else
+                        if ml.tonos == 4
+                            lap = ml.tcol[k] + nivel / 2
+                        else
+                            lap = ml.tcol[k] + nivel
+                        end
+                    end
+                end
+            else
+                if interior >= 0
+                    lap = interior
+                    tt = -1
+                end
+            end
+            if lap >= 0
+                if ml.sesgo_lapiz >= 0 and ml.tcol[k] == ml.sesgo_lapiz
+                    zm = zm + ml.sesgo
+                end
+                zm = zm + ml.tsesgo[k]
+                _m3d_anadir(m, ml.sx[a0], ml.sy[a0], ml.sx[a1], ml.sy[a1], ml.sx[a2], ml.sy[a2], lap, ml, tt, k, zm)
+            end
+        end
+    end
+end
+
+func _m3d_anadir(m: M3d, x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int, lapiz: Int, ml: M3dMalla, tt: Int,
+                 k: Int, zm: Float)
+    q = m.n
+    if q >= m.x0.length
+        m.x0.push(0)
+        m.y0.push(0)
+        m.x1.push(0)
+        m.y1.push(0)
+        m.x2.push(0)
+        m.y2.push(0)
+        m.lapiz.push(0)
+        m.tex.push(0)
+        m.lado.push(0)
+        m.tabla.push(0)
+        for j in (0..5)
+            m.uv.push(0)
+        end
+        m.siguiente.push(-1)
+    end
+    m.x0[q] = x0
+    m.y0[q] = y0
+    m.x1[q] = x1
+    m.y1[q] = y1
+    m.x2[q] = x2
+    m.y2[q] = y2
+    m.lapiz[q] = lapiz
+    if tt >= 0
+        m.tex[q] = ml.tex_base + tt * (1 << (ml.tex_lado * 2))
+        m.lado[q] = ml.tex_lado
+        m.tabla[q] = ml.tex_tablas + lapiz * 256
+        for j in (0..5)
+            m.uv[q * 6 + j] = ml.tuv[k * 6 + j]
+        end
+    else
+        m.tex[q] = 0
+    end
+    bk = Int(zm * Float(M3D_CUBETAS) / m.lejos)
+    if bk >= M3D_CUBETAS
+        bk = M3D_CUBETAS - 1
+    end
+    if bk < 0
+        bk = 0
+    end
+    m.siguiente[q] = m.cabeza[bk]
+    m.cabeza[bk] = q
+    m.n = q + 1
+end
+
+# La fila del horizonte en el bufer (puede caer fuera)
+func m3d_horizonte(m: M3d) -> Int
+    if m.uy > 0.01
+        return m.al / 2 + Int(m.foco * m.fy / m.uy)
+    end
+    return m.al / 2
+end
+
+# El fondo: el cielo por encima del horizonte (franjas; con trama, tramado del horizonte hacia arriba) y el suelo
+func m3d_fondo(m: M3d)
+    pant = m.pant
+    an = m.an
+    horizonte = m3d_horizonte(m)
+    for y in (0..m.al - 1)
+        if y < horizonte
+            if m.trama
+                sc = Float(horizonte - y) / (Float(m.al) * 0.55) * 3.0
+                if sc >= 3.0
+                    buffer_fill(pant, y * an, an, 4)
+                else
+                    tc = Int(sc)
+                    nv = Int((sc - Float(tc)) * 16.0)
+                    if nv <= 0
+                        buffer_fill(pant, y * an, an, 1 + tc)
+                    else
+                        _m3d_tramo(pant, y * an, 0, an, _m3d_fila(1 + tc, 2 + tc, nv, y & 3))
+                    end
+                end
+            else
+                k = 16 - (horizonte - y) / 8
+                if k < 1
+                    k = 1
+                end
+                buffer_fill(pant, y * an, an, k)
+            end
+        else
+            buffer_fill(pant, y * an, an, M3D_SUELO)
+        end
+    end
+end
+
+# Un triangulo del suelo (y = 0) en el mundo: a la camara, recortado con el plano cercano y relleno
+func m3d_suelo_tri(m: M3d, x0: Float, z0: Float, x1: Float, z1: Float, x2: Float, z2: Float, lapiz: Int)
+    vista = m.vista
+    wx = [x0, x1, x2]
+    wz = [z0, z1, z2]
+    var px: [Float] = []
+    var py: [Float] = []
+    var pz: [Float] = []
+    for j in (0..2)
+        px.push(vista[0] * wx[j] + vista[2] * wz[j] + vista[3])
+        py.push(vista[4] * wx[j] + vista[6] * wz[j] + vista[7])
+        pz.push(vista[8] * wx[j] + vista[10] * wz[j] + vista[11])
+    end
+    if pz[0] <= M3D_CERCA and pz[1] <= M3D_CERCA and pz[2] <= M3D_CERCA
+        return
+    end
+    an = m.an
+    al = m.al
+    foco = m.foco
+    var rx2: [Int] = []
+    var ry2: [Int] = []
+    for j in (0..2)
+        j2 = (j + 1) % 3
+        dentro = pz[j] > M3D_CERCA
+        if dentro
+            rx2.push(an * 8 + Int(16.0 * foco * px[j] / pz[j]))
+            ry2.push(al * 8 - Int(16.0 * foco * py[j] / pz[j]))
+        end
+        if dentro != (pz[j2] > M3D_CERCA)
+            u = (M3D_CERCA - pz[j]) / (pz[j2] - pz[j])
+            cx2 = px[j] + (px[j2] - px[j]) * u
+            cy2 = py[j] + (py[j2] - py[j]) * u
+            rx2.push(an * 8 + Int(16.0 * foco * cx2 / M3D_CERCA))
+            ry2.push(al * 8 - Int(16.0 * foco * cy2 / M3D_CERCA))
+        end
+    end
+    if rx2.length >= 3
+        for j in (1..rx2.length - 2)
+            m3d_tri(m, rx2[0], ry2[0], rx2[j], ry2[j], rx2[j + 1], ry2[j + 1], lapiz)
+        end
+    end
+end
+
+# Un rectangulo del suelo, de (x0, z0) a (x1, z1)
+func m3d_suelo_rect(m: M3d, x0: Float, z0: Float, x1: Float, z1: Float, lapiz: Int)
+    m3d_suelo_tri(m, x0, z0, x0, z1, x1, z1, lapiz)
+    m3d_suelo_tri(m, x0, z0, x1, z1, x1, z0, lapiz)
+end
+
+# Con trama, la niebla sobre el suelo: la distancia de cada fila (igual en toda la fila: la camara no se ladea)
+func m3d_niebla_suelo(m: M3d)
+    if not m.trama
+        return
+    end
+    y0 = m3d_horizonte(m)
+    if y0 < 0
+        y0 = 0
+    end
+    for y in (y0..m.al - 1)
+        yc = 0.0 - (Float(y) + 0.5 - Float(m.al) / 2.0) / m.foco
+        dw = m.uy * yc + m.fy
+        if dw < 0.0
+            nf = m3d_niebla(m, (0.0 - m.ey) / dw)
+            if nf > 0
+                _m3d_velo(m.pant, m.an, y, M3D_NIEBLA, nf)
+            end
+        else
+            buffer_fill(m.pant, y * m.an, m.an, M3D_NIEBLA)
+        end
+    end
+end
+
+# Los triangulos puestos, de lejos a cerca
+func m3d_pintar(m: M3d)
+    b = M3D_CUBETAS - 1
+    while b >= 0
+        q = m.cabeza[b]
+        while q >= 0
+            if m.tex[q] == 0
+                m3d_tri(m, m.x0[q], m.y0[q], m.x1[q], m.y1[q], m.x2[q], m.y2[q], m.lapiz[q])
+            else
+                u = q * 6
+                m3d_tri_tex(m, m.x0[q], m.y0[q], m.uv[u], m.uv[u + 1], m.x1[q], m.y1[q], m.uv[u + 2], m.uv[u + 3],
+                            m.x2[q], m.y2[q], m.uv[u + 4], m.uv[u + 5], m.tex[q], m.lado[q], m.tabla[q])
+            end
+            q = m.siguiente[q]
+        end
+        b = b - 1
+    end
+end
+
+# El bufer a la pantalla (en 0, 0; cada pixel de m.pixel x m.pixel)
+func m3d_volcar(m: M3d)
+    if m.prof > 8
+        gfx_pens_draw_rgb(m.pant, m.an, m.al, 0, 0, m.lut)
+    else
+        gfx_pens_draw(m.pant, m.an, m.al, 0, 0, m.pixel)
+    end
+end

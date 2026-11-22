@@ -282,7 +282,10 @@ import "ventanas.dashui"            # ventanas MUI hechas con el editor visual (
 ```
 
 Las rutas son relativas al fichero que importa (o a la raíz del proyecto). `lib/amiga/` trae módulos listos:
-audio, blitter, copper, dos, gráficos, IFF, intuition, memoria, RTG, sprites, doble buffer.
+audio, blitter, copper, dos, gráficos, IFF, intuition, memoria, RTG, sprites, doble buffer. `lib/motor3d.dash` es un
+motor 3D por software para juegos (el de Titan Force): modelos con huesos, cámara, luz por cara, orden de lejos a
+cerca, texturas y un acabado tramado (pocos tonos, trama de Bayer, cielo de atardecer y niebla); su cabecera explica
+cómo se pinta un fotograma.
 
 ### 4.10 Memoria
 

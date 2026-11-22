@@ -282,7 +282,10 @@ import "ventanas.dashui"            # MUI windows made with the visual editor (s
 ```
 
 Paths are relative to the importing file (or to the project root). `lib/amiga/` comes with ready-made modules:
-audio, blitter, copper, dos, graphics, IFF, intuition, memory, RTG, sprites, double buffering.
+audio, blitter, copper, dos, graphics, IFF, intuition, memory, RTG, sprites, double buffering. `lib/motor3d.dash` is a
+software 3D engine for games (Titan Force's): models with bones, a camera, light per face, far-to-near order,
+textures and a dithered look (few shades, Bayer dithering, a sunset sky and fog); its header explains how a frame is
+drawn.
 
 ### 4.10 Memory
 

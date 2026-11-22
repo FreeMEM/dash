@@ -700,8 +700,15 @@ class SemanticAnalyzer(ASTVisitor):
             # The C variable keeps its first type: a string cannot become a number or vice versa
             new_type = self._infer_type(node.value)
             known = (DashType.UNKNOWN,)
+            numeros = (DashType.INT, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.BOOL)
+            cajas = (DashType.ARRAY_INT, DashType.ARRAY_STRING, DashType.ARRAY, DashType.DICT)
             if (symbol.dash_type not in known and new_type not in known
                     and (symbol.dash_type == DashType.STRING) != (new_type == DashType.STRING)):
+                self.error(f"Cannot assign a {new_type.name.lower()} to '{node.name}', "
+                           f"which holds a {symbol.dash_type.name.lower()}", node)
+            elif ((symbol.dash_type in numeros and new_type in cajas)
+                  or (symbol.dash_type in cajas and new_type in numeros)):
+                # un numero no pasa a ser una lista ni al reves (el C lo tragaba con un aviso: basura al leerla)
                 self.error(f"Cannot assign a {new_type.name.lower()} to '{node.name}', "
                            f"which holds a {symbol.dash_type.name.lower()}", node)
             elif symbol.dash_type == DashType.INT and new_type == DashType.FLOAT:
