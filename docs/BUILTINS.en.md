@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1081 functions, 1081 implemented, 0 not implemented.
+Total: 1082 functions, 1082 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -11665,6 +11665,7 @@ end
 | [`mui_list_count(list)`](#mui_list_count) | Int | Number of lines |  |
 | [`mui_list_get(list, pos)`](#mui_list_get) | String | Text of the line at pos ("" outside the list) |  |
 | [`mui_list_quiet(list, quiet)`](#mui_list_quiet) | — | While quiet the list is not redrawn (adding many lines) |  |
+| [`mui_list_stripes(list, on)`](#mui_list_stripes) | — | Rows in alternate colours, as set in the MUI prefs (MUI 5; older MUI ignores it) |  |
 | [`mui_on_double(list, id)`](#mui_on_double) | — | mui_wait_event returns id on a double click in the list |  |
 | [`mui_frame_begin(title, horizontal)`](#mui_frame_begin) | Int (address) | Start a group with a frame and a title ("" = none) |  |
 | [`mui_columns_begin(columns)`](#mui_columns_begin) | Int (address) | Start a grid group with that many columns (forms: label, field...) |  |
@@ -12344,6 +12345,17 @@ See also: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_value)
 To add many lines at once without each one being drawn.
 
 See also: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_add_lines).
+
+<a id="mui_list_stripes"></a>
+
+### `mui_list_stripes(list, on)`
+
+- `list`: the list (or a `mui_combo`).
+- `on`: `true` for rows in alternate colours, `false` to remove them.
+
+The two colours are the ones the user chose in the MUI prefs. With a MUI older than 5 it does nothing.
+
+See also: [`mui_list`](#mui_list), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_on_double"></a>
 

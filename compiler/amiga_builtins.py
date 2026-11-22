@@ -4197,6 +4197,13 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_list_quiet(${list}, ${quiet})",
         description="While quiet the list is not redrawn (adding many lines)"
     ),
+    "mui_list_stripes": BuiltinFunc(
+        name="mui_list_stripes",
+        params=["list", "on"],
+        return_type="void",
+        c_template="_dash_mui_list_stripes(${list}, ${on})",
+        description="Rows in alternate colours, as set in the MUI prefs (MUI 5; older MUI ignores it)"
+    ),
     "mui_on_double": BuiltinFunc(
         name="mui_on_double",
         params=["list", "id"],

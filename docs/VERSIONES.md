@@ -33,6 +33,13 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.20.0 (2026-11-22)
+
+Un builtin nuevo para MUI. Todo lo que compilaba sigue compilando igual.
+
+- **Nuevo:** `mui_list_stripes(list, true)` pone las filas de una lista en colores alternos, los de las preferencias
+  de MUI (MUI 5). Lo pidió el usuario para el cliente de Hangar.
+
 ### 2.19.0 (2026-11-21)
 
 Un builtin nuevo para la red. Todo lo que compilaba sigue compilando igual.

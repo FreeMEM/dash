@@ -710,6 +710,17 @@ output, a file), much faster than `mui_list_add` one by one: 300 lines with the 
 10.6 s one by one and 0.6 s this way. A list the program left quiet (`mui_list_quiet`) stays quiet.
 
 """, ["mui_list_add", "mui_list_quiet"]),
+    "mui_list_stripes": _f("""\
+- `list`: la lista (o un `mui_combo`).
+- `on`: `true` para filas de colores alternos, `false` para quitarlas.
+
+Los dos colores son los que el usuario eligió en las preferencias de MUI. Con un MUI anterior al 5 no hace nada.
+""", """\
+- `list`: the list (or a `mui_combo`).
+- `on`: `true` for rows in alternate colours, `false` to remove them.
+
+The two colours are the ones the user chose in the MUI prefs. With a MUI older than 5 it does nothing.
+""", ["mui_list", "mui_list_quiet"]),
     "mui_list_insert": _f("""\
 - `list`: la lista.
 - `pos`: dónde, desde 0; las de después bajan.

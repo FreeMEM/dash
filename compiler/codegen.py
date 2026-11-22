@@ -24169,6 +24169,15 @@ static void _dash_mui_list_quiet(APTR obj, LONG quiet) {
     if (quiet && free_at >= 0) _dash_mui_quiets[free_at] = list;
 }
 
+/* Rows in alternate colours (MUIA_List_Stripes, MUI 5 V21; the user's prefs say which; an older MUI ignores it) */
+#ifndef MUIA_List_Stripes
+#define MUIA_List_Stripes 0x8042a308
+#endif
+static void _dash_mui_list_stripes(APTR obj, LONG on) {
+    Object *list = _dash_mui_list_of(obj);
+    if (list) SetAttrs(list, MUIA_List_Stripes, on ? TRUE : FALSE, TAG_DONE);
+}
+
 static void _dash_mui_on_double(APTR obj, LONG id) {
     if (obj && _dash_mui_app && _dash_mui_kind(obj) == _DASH_MUI_LIST)
         _DASH_MUI_DO(obj, MUIM_Notify, MUIA_Listview_DoubleClick, TRUE,

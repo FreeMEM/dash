@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1081 funciones, 1081 implementadas, 0 sin implementar.
+Total: 1082 funciones, 1082 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -11672,6 +11672,7 @@ end
 | [`mui_list_count(list)`](#mui_list_count) | Int | Cuántas líneas hay |  |
 | [`mui_list_get(list, pos)`](#mui_list_get) | String | El texto de la línea de pos ("" fuera de la lista) |  |
 | [`mui_list_quiet(list, quiet)`](#mui_list_quiet) | — | Mientras está callada, la lista no se redibuja (para añadir muchas líneas) |  |
+| [`mui_list_stripes(list, on)`](#mui_list_stripes) | — | Filas de colores alternos, los de las preferencias de MUI (MUI 5; uno anterior no hace nada) |  |
 | [`mui_on_double(list, id)`](#mui_on_double) | — | mui_wait_event da id con un doble clic en la lista |  |
 | [`mui_frame_begin(title, horizontal)`](#mui_frame_begin) | Int (dirección) | Empieza un grupo con marco y un título ("" = ninguno) |  |
 | [`mui_columns_begin(columns)`](#mui_columns_begin) | Int (dirección) | Empieza un grupo en rejilla con tantas columnas (formularios: etiqueta, campo...) |  |
@@ -12356,6 +12357,17 @@ Ver también: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_va
 Para añadir muchas líneas de golpe sin que se vea cada una.
 
 Ver también: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_add_lines).
+
+<a id="mui_list_stripes"></a>
+
+### `mui_list_stripes(list, on)`
+
+- `list`: la lista (o un `mui_combo`).
+- `on`: `true` para filas de colores alternos, `false` para quitarlas.
+
+Los dos colores son los que el usuario eligió en las preferencias de MUI. Con un MUI anterior al 5 no hace nada.
+
+Ver también: [`mui_list`](#mui_list), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_on_double"></a>
 
