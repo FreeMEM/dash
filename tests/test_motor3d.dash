@@ -1,0 +1,105 @@
+# Test: lib/motor3d.dash, el motor 3D por software. Una caja delante de la camara (se ven el frente, un lado y la
+# tapa), en un bufer de 64 x 48 sin volcarlo: el fondo (cielo arriba, suelo abajo), la caja en el centro con sus
+# tonos, una calle en el suelo y, con trama, el cielo tramado y la caja con sus 4 tonos; la niebla de lejos.
+#
+# expect-out: liso: cielo 1 suelo 17 caja 1
+# expect-out: liso: caras de la caja con tonos distintos: 2
+# expect-out: calle: 1
+# expect-out: trama: cielo tramado 1
+# expect-out: trama: caja tramada o con tono 1
+# expect-out: niebla: 0 16 1
+# emu-needs: mathieeedoubtrans.library
+
+import "lib/motor3d.dash"
+
+Window W
+    title "Motor3D"
+    width 200
+    height 100
+end
+
+# cuantos pixeles del bufer tienen el lapiz p
+func contar(m: M3d, p: Int) -> Int
+    n = 0
+    for i in (0..m.an * m.al - 1)
+        if buffer_get_byte(m.pant, i) == p
+            n = n + 1
+        end
+    end
+    return n
+end
+
+func escena(m: M3d, ml: M3dMalla, lejos: Bool)
+    m3d_empezar(m)
+    m3d_camara(m, 4.0, 8.0, -12.0, 0.0, 2.0, 0.0, 90.0)
+    var nada: [[Float]] = []
+    m3d_transformar(m, ml, nada, 0, ml.vx.length - 1)
+    m3d_poner(m, ml, 0, ml.ta.length - 1, false, -1, -1)
+    m3d_fondo(m)
+    m3d_suelo_rect(m, 3.0, -6.0, 6.0, 0.0, 19)
+    m3d_niebla_suelo(m)
+    m3d_pintar(m)
+end
+
+Main
+    W.open
+    m = m3d_nuevo(64, 48, 8, 1, false)
+    m3d_paleta_cielo(m)
+    m3d_tonos(m, 32, 200, 100, 50)
+    m3d_color(m, 19, 150, 150, 150)
+    ml = m3d_malla()
+    m3d_caja(ml, 0.0, 2.0, 0.0, 4.0, 4.0, 4.0, 32, true, -1)
+    escena(m, ml, false)
+    cielo = 0
+    if buffer_get_byte(m.pant, 0) >= 1 and buffer_get_byte(m.pant, 0) <= 16
+        cielo = 1
+    end
+    suelo = buffer_get_byte(m.pant, 47 * 64 + 0)
+    caja = 0
+    centro = buffer_get_byte(m.pant, 24 * 64 + 32)
+    if centro >= 32 and centro <= 39
+        caja = 1
+    end
+    Print "liso: cielo #{cielo} suelo #{suelo} caja #{caja}"
+    tonos = 0
+    for p in (32..39)
+        if contar(m, p) > 0
+            tonos = tonos + 1
+        end
+    end
+    Print "liso: caras de la caja con tonos distintos: #{tonos}"
+    calle = 0
+    if contar(m, 19) > 0
+        calle = 1
+    end
+    Print "calle: #{calle}"
+    m3d_liberar(m)
+
+    t = m3d_nuevo(64, 48, 8, 1, true)
+    m3d_paleta_cielo(t)
+    m3d_rampa(t, 32, 200, 100, 50)
+    m3d_color(t, 19, 150, 150, 150)
+    escena(t, ml, false)
+    # el cielo tramado: en alguna fila hay dos lapices del cielo
+    tramado = 0
+    for y in (0..20)
+        a = buffer_get_byte(t.pant, y * 64)
+        b = buffer_get_byte(t.pant, y * 64 + 1)
+        if a != b and a >= 1 and a <= 4 and b >= 1 and b <= 4
+            tramado = 1
+        end
+    end
+    Print "trama: cielo tramado #{tramado}"
+    c = buffer_get_byte(t.pant, 24 * 64 + 32)
+    bien = 0
+    if c >= 32 and c <= 35
+        bien = 1
+    end
+    Print "trama: caja tramada o con tono #{bien}"
+    lejos = 0
+    if m3d_niebla(t, 300.0) == 16
+        lejos = 1
+    end
+    Print "niebla: #{m3d_niebla(t, 50.0)} #{m3d_niebla(t, 300.0)} #{lejos}"
+    m3d_liberar(t)
+end
