@@ -27,6 +27,7 @@ static struct { int *v; int n, cap; } fix_reads;
 static Obj *obj;
 int memcheck;
 int elf_be;
+int handler_mode;     /* --handler: un handler de DOS (docs/HANDLER_LOOP.md) */
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
 int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
 int fpu881;           /* --fpu: las instrucciones de la FPU en los bloques asm */
@@ -7271,6 +7272,10 @@ void gen_program(Program *p, Obj *o)
     }
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     if (p->version) set_rt_var("__dash_version", p->version, 0);   /* program_version() */
+#ifndef DASH_A64
+    /* un handler de DOS: _dash_init toma el mensaje de arranque por el paquete del DOS (HANDLER_RUNTIME) */
+    if (p->handler || handler_mode) set_rt_var("__dash_hd_on", NULL, 1);
+#endif
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
 #ifndef DASH_A64
     if (auto_brk) {

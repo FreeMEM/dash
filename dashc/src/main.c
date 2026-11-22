@@ -143,6 +143,7 @@ static void usage(void)
             "  --check        solo comprueba: da los errores sin hacer el ejecutable (sin -o); vale un módulo sin Main\n"
             "  --texto r=f    el texto de r (un módulo o el programa) se lee de f: lo que aún no se ha guardado\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
+            "  --handler      un handler de DOS (un sistema de archivos), que se monta con Mount (como @handler)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
             "  --tiempos      lo que lleva cada fase (y la memoria en uso)\n");
     exit(1);
@@ -217,6 +218,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
+        else if (!strcmp(argv[i], "--handler")) handler_mode = 1;
         else if (!strcmp(argv[i], "--be")) elf_be = 1;
         else if (!strcmp(argv[i], "--debug")) debug = 1;
         else if (!strcmp(argv[i], "--debug-info") && i + 1 < argc) return debug_info_show(argv[i + 1]);

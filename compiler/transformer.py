@@ -83,6 +83,7 @@ class DashASTBuilder(Transformer):
         self._links: List[str] = []
         self._c_blocks: List[str] = []
         self._stack = 0
+        self._handler = False
         self._workbench_output: Optional[str] = None
         self._catalog: Optional[tuple] = None
         self._version: Optional[str] = None
@@ -151,7 +152,8 @@ class DashASTBuilder(Transformer):
             stack=self._stack,
             workbench_output=self._workbench_output,
             catalog=self._catalog,
-            version=self._version
+            version=self._version,
+            handler=self._handler
         )
 
     def import_stmt(self, items) -> ImportStmt:
@@ -497,6 +499,11 @@ class DashASTBuilder(Transformer):
         """@catalog "Tachyon.catalog" 1 ("español"): the program's catalog of translations, its version
         (0: any) and the language of its own texts (default: english) (dashweb D71)."""
         self._catalog = (items[0].value, parse_int(items[1].value), items[2].value if len(items) > 2 else None)
+        return ""
+
+    def handler_directive(self, items) -> str:
+        """@handler: the program is a DOS handler, as with ./dash --handler (docs/HANDLER_LOOP.md)."""
+        self._handler = True
         return ""
 
     def workbench_output_directive(self, items) -> str:

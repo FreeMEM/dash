@@ -453,6 +453,7 @@ class DashCompiler:
         merged_functions: List[FunctionDef] = []
         merged_windows: List[WindowDef] = []
         merged_structs: List[StructDef] = []
+        merged_amiga_structs: list = []
         merged_enums: List[EnumDef] = []
         merged_extern_funcs: List[ExternFunc] = []
         merged_native_funcs: List[NativeFunc] = []
@@ -463,6 +464,7 @@ class DashCompiler:
         merged_workbench_output = main_ast.workbench_output
         merged_catalog = main_ast.catalog
         merged_version = main_ast.version
+        merged_handler = main_ast.handler
 
         # First, load all imports
         for import_stmt in main_ast.imports:
@@ -490,6 +492,7 @@ class DashCompiler:
             merged_links.extend(p for p in module_ast.links if p not in merged_links)
             merged_c_blocks.extend(module_ast.c_blocks)
             merged_stack = max(merged_stack, module_ast.stack)
+            merged_handler = merged_handler or module_ast.handler
             if merged_workbench_output is None:
                 merged_workbench_output = module_ast.workbench_output   # the program's own wins
             if merged_catalog is None:
@@ -513,6 +516,9 @@ class DashCompiler:
 
             # Add public structs
             merged_structs.extend(module_ast.structs)
+            # and the @amiga struct of the module (lib/amiga/handler.dash: they were lost by --gcc)
+            merged_amiga_structs.extend(s for s in module_ast.amiga_structs
+                                        if all(s.name != m.name for m in merged_amiga_structs))
 
             # Add public enums
             merged_enums.extend(module_ast.enums)
@@ -539,6 +545,7 @@ class DashCompiler:
             constants=all_constants,
             global_vars=all_global_vars,
             structs=all_structs,
+            amiga_structs=merged_amiga_structs + list(main_ast.amiga_structs),
             enums=all_enums,
             windows=all_windows,
             main=main_ast.main,
@@ -552,7 +559,8 @@ class DashCompiler:
             stack=merged_stack,
             workbench_output=merged_workbench_output,
             catalog=merged_catalog,
-            version=merged_version
+            version=merged_version,
+            handler=merged_handler
         )
 
     def compile(self, source: str, filename: str = "<input>") -> tuple[str, AnalysisResult]:

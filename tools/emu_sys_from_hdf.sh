@@ -43,7 +43,7 @@ for lib in asl diskfont iffparse locale mathieeesingtrans mathieeedoubbas mathie
     "$XDF" "$tmp/disk.hdf" read "Libs/$lib.library" "$2/Libs/$lib.library" >/dev/null 2>&1 \
         && echo "Libs/$lib.library"
 done
-for cmd in Assign MakeDir LoadWB AddDataTypes SetPatch; do
+for cmd in Assign MakeDir LoadWB AddDataTypes SetPatch Mount; do
     "$XDF" "$tmp/disk.hdf" read "C/$cmd" "$2/C/$cmd" >/dev/null 2>&1 && echo "C/$cmd"
 done
 if "$XDF" "$tmp/disk.hdf" list Classes >/dev/null 2>&1; then

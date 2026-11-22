@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | amiga_struct_def | interface_def | enum_def | window_def | function_def | export_func | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | amiga_struct_def | interface_def | enum_def | window_def | function_def | export_func | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | handler_directive | main_block | comment_line)*
 
     // Constant declaration
     // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
@@ -83,6 +83,8 @@ dash_grammar_minimal = r"""
     workbench_output_directive: "@workbench_output" ESCAPED_STRING
     catalog_directive: "@catalog" ESCAPED_STRING INT ESCAPED_STRING?
     version_directive: "@version" ESCAPED_STRING
+    // the program is a DOS handler (docs/HANDLER_LOOP.md): lib/amiga/handler.dash says it
+    handler_directive: "@handler"
 
     // Main block
     main_block: "Main" instruction* "end"

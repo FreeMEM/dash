@@ -367,6 +367,20 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
                               error_message="./dash: " + (result.stdout + result.stderr).strip()[:300],
                               duration=time.time() - start_time)
 
+    handler = emu_handler(test_file)
+    if handler is not None:
+        # '# emu-handler: x.dash': that DOS handler, built the same way as the test (--gcc, or ./dash with its
+        # dash-direct options), goes to the emulated disk as DH0:h_<test> (run_emu_boot)
+        cmd = [str(PROJECT_ROOT / "dash"), "--handler", str(PROJECT_ROOT / handler), "-o", str(bin_dir / f"h_{name}")]
+        cmd[1:1] = ["--gcc"] if direct is None else []
+        cmd += direct or (["--fpu"] if wants_fpu(test_file) else [])
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=120,
+                                env={k: v for k, v in os.environ.items() if k != "DASH_TEST_AUTOCLOSE"})
+        if result.returncode != 0:
+            return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
+                              error_message="handler: " + (result.stdout + result.stderr).strip()[-300:],
+                              duration=time.time() - start_time)
+
     duration = time.time() - start_time
     return TestResult(
         name=name,
@@ -375,6 +389,30 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         compile_ok=True,
         duration=duration
     )
+
+
+def emu_handler(test_file: Path) -> Optional[str]:
+    """'# emu-handler: examples/handler_ram.dash': a DOS handler the test mounts (docs/HANDLER_LOOP.md)"""
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# emu-handler:"):
+            return l.split(":", 1)[1].strip()
+    return None
+
+
+def emu_hardfile(test_file: Path) -> bool:
+    """'# emu-hardfile': a raw disk on uaehf.device unit 1 (FS-UAE hard_drive_1, nothing mounted), 256 blocks of 512
+    bytes, each block i starting with "BLOQ" and i in four digits (the handler tests read it with dev_read)"""
+    return any(l.strip() == "# emu-hardfile" for l in test_file.read_text().splitlines())
+
+
+def hardfile_config() -> str:
+    image = PROJECT_ROOT / "build" / "emu_bloques.img"
+    image.parent.mkdir(exist_ok=True)
+    data = bytearray(512 * 256)
+    for i in range(256):
+        data[i * 512:i * 512 + 8] = b"BLOQ%04d" % i
+    image.write_bytes(bytes(data))
+    return f"hard_drive_1 = {image}\nhard_drive_1_type = rdb\n"
 
 
 def run_error_test(test_file: Path) -> TestResult:
@@ -746,6 +784,8 @@ def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -
             return (Path(system) / "Devs" / name).exists()
         if name.startswith("Keymaps/"):     # a keymap (only the CoffinOS disk has them: "Keymaps/e")
             return (Path(system) / "Devs" / name).exists()
+        if name.startswith("C/"):           # a command ("C/Mount": the handler tests)
+            return (Path(system) / name).exists()
         return any(p.name.lower() == name.lower() for p in (Path(system) / "Classes").rglob("*"))
 
     missing = [n for n in needs if not found(n)]
@@ -970,7 +1010,10 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     def catalogs(hd):
         sys.path.insert(0, str(PROJECT_ROOT / "tools"))
         from catalogo import build_catalog
+        import shutil
         for t, _ in selected:
+            if emu_handler(t) is not None:   # its handler, as DH0:h_<test>
+                shutil.copy(PROJECT_ROOT / "bin" / f"h_{t.stem}", Path(hd) / f"h_{t.stem}")
             for ct in emu_catalogs(t):
                 name, language, data = build_catalog(ct.read_text(encoding="utf-8"))
                 out = Path(hd) / "Catalogs" / language / name
@@ -980,6 +1023,8 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
             (Path(hd) / "Libs").mkdir(exist_ok=True)   # (emu_run: DASHRUN:Libs goes to LIBS:)
             import shutil
             shutil.copy(minigl_library(), Path(hd) / "Libs" / "minigl.library")
+    if not disk and any(emu_hardfile(t) for t, _ in selected):
+        extra_config += hardfile_config()
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
                             args=[emu_args(t) for t, _ in selected],
