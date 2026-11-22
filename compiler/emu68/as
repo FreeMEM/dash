@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""El ensamblador que gcc llama para 68020 o más (gcc -B compiler/emu68/, ver compiler/cflags.py): el as de bebbo
+con un rodeo para el JIT de Emu68 1.1.0-beta.1, que lo contaron David Martínez y BordanBordan (Tachyon se colgaba al
+crear el contexto de QuickJS en una PiStorm).
+
+Emu68 traduce muls.l/mulu.l de 32 bits a smull/umull de ARM, que dejan el producto de 64 bits en el registro, y desde
+la 1.1.0-beta.1 su lsr.l Dn,Dm desplaza los 64 bits sin truncarlos: (a * b) >> n sale mal si van en el mismo bloque
+del JIT. La 1.0.7 y la 1.1.0-alpha.1 no lo tienen. El rodeo: tras cada muls.l/mulu.l de 32 bits, un move.l del
+registro en sí mismo, que Emu68 traduce como una escritura de 32 bits (limpia la mitad alta). Las banderas quedan
+como tras tst.l: N y Z del resultado, como las deja la multiplicación (V a 0).
+
+Lee el .s que le da gcc (o la entrada, con -pipe), lo arregla y llama al as de verdad con los mismos argumentos.
+    compiler/emu68/as --filtro < x.s        (solo el arreglo, a la salida)
+"""
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+# muls.l/mulu.l (o mulsl/mulul) con un solo registro de destino; la forma de 64 bits lleva "dh:dl"
+MUL32 = re.compile(r"^(?:\s*[\w.$]+:)?(\s+)mul[su]\.?l\s+([^;|]*?),\s*(%?[dD][0-7])\s*(?:[;|].*)?$", re.I)
+
+
+def arreglar(texto: str) -> str:
+    out = []
+    en_linea = False      # entre #APP y #NO_APP: asm en línea del programa, que se deja tal cual
+    for linea in texto.splitlines(keepends=True):
+        out.append(linea)
+        t = linea.strip()
+        if t == "#APP":
+            en_linea = True
+        elif t == "#NO_APP":
+            en_linea = False
+        m = None if en_linea else MUL32.match(linea.rstrip("\r\n"))
+        if m and ":" not in m.group(2):
+            r = m.group(3)
+            out.append(f"\tmove.l {r},{r}\n")
+    return "".join(out)
+
+
+def as_de_verdad() -> str:
+    if os.environ.get("DASH_AS_REAL"):
+        return os.environ["DASH_AS_REAL"]
+    for d in ("/opt/amiga/m68k-amigaos/bin", os.path.expanduser("~/amiga-gcc/m68k-amigaos/bin")):
+        if os.path.exists(os.path.join(d, "as")):
+            return os.path.join(d, "as")
+    return "m68k-amigaos-as"
+
+
+def main(args):
+    if args[:1] == ["--filtro"]:
+        sys.stdout.write(arreglar(sys.stdin.read()))
+        return 0
+    # la entrada: el último argumento que no es una opción ni el valor de -o (sin ninguno, la entrada estándar)
+    entrada, i = None, 0
+    while i < len(args):
+        a = args[i]
+        if a in ("-o", "-I", "--defsym") and i + 1 < len(args):
+            i += 2
+            continue
+        if not a.startswith("-") or a == "-":
+            entrada = i
+        i += 1
+    texto = sys.stdin.read() if entrada is None or args[entrada] == "-" else open(args[entrada], errors="surrogateescape").read()
+    with tempfile.NamedTemporaryFile("w", suffix=".s", delete=False, errors="surrogateescape") as f:
+        f.write(arreglar(texto))
+        tmp = f.name
+    try:
+        nuevos = list(args)
+        if entrada is None:
+            nuevos.append(tmp)
+        else:
+            nuevos[entrada] = tmp
+        return subprocess.call([as_de_verdad()] + nuevos)
+    finally:
+        os.unlink(tmp)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

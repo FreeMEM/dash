@@ -50,7 +50,16 @@ def cpu_flags(cpu: str = None, fpu: bool = False) -> list:
         flags = ["-m68020"]
     if fpu:
         flags.append("-m68881")
-    return flags
+    return flags + emu68_flags(flags)
+
+
+def emu68_flags(flags: list) -> list:
+    """For 68020 or more: gcc -B compiler/emu68/, whose "as" puts a move.l dN,dN after every 32-bit muls.l/mulu.l
+    (the JIT of Emu68 1.1.0-beta.1 got (a * b) >> n wrong: see compiler/emu68/as). Nothing for the 68000."""
+    import os
+    if "-m68020" not in flags:
+        return []
+    return ["-B" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "emu68") + os.sep]
 
 
 def opt_flags(no_optimize: bool = False, small: bool = False):
