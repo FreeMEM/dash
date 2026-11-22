@@ -1,0 +1,9 @@
+# Test: una lista en una variable que guarda un numero (./dash --gcc lo aceptaba con un aviso del C y leia basura;
+# ./dash decia "aqui no se puede usar [ ]"; le paso a Titan Force con alto, el de la pantalla)
+# expect: Cannot assign a array to 'alto', which holds a int
+# expect-dash: no se puede guardar una lista en alto, que guarda un Int
+Main
+    alto = 512
+    alto = [3.6, 6.4]
+    Print "#{alto[0]}"
+end

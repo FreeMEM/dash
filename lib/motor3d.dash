@@ -46,6 +46,7 @@ struct M3dMalla
     tcol: [Int]
     tt: [Int]
     tuv: [Int]
+    tsesgo: [Float]
     tonos: Int
     sesgo_lapiz: Int
     sesgo: Float
@@ -667,7 +668,7 @@ end
 # ---------------- modelos ----------------
 
 func m3d_malla() -> M3dMalla
-    return M3dMalla([], [], [], [], [], [], [], [], [], [], 8, -1, 0.0, [], [], [], [], 0, 0, 0, 0, [], [], [], [], [])
+    return M3dMalla([], [], [], [], [], [], [], [], [], [], [], 8, -1, 0.0, [], [], [], [], 0, 0, 0, 0, [], [], [], [], [])
 end
 
 # Una esquina (en el sistema de su hueso; -1: en el mundo); devuelve su numero
@@ -692,8 +693,29 @@ func m3d_cara(ml: M3dMalla, a: Int, b: Int, c: Int, lapiz: Int)
     ml.tc.push(c)
     ml.tcol.push(lapiz)
     ml.tt.push(-1)
+    ml.tsesgo.push(0.0)
     for j in (0..5)
         ml.tuv.push(0)
+    end
+end
+
+# Un cuadrilatero plano (dos triangulos a, b, c y a, c, d), con las esquinas en el sentido de las agujas del reloj
+# vistas desde fuera
+func m3d_cuad(ml: M3dMalla, a: Int, b: Int, c: Int, d: Int, lapiz: Int)
+    m3d_cara(ml, a, b, c, lapiz)
+    m3d_cara(ml, a, c, d, lapiz)
+end
+
+# Los ultimos n triangulos se ordenan como si estuvieran sesgo metros mas lejos (negativo: mas cerca). Para lo que va
+# pegado encima de otra cara (una ventana en su pared) y debe pintarse despues de ella.
+func m3d_sesgo(ml: M3dMalla, n: Int, sesgo: Float)
+    k = ml.tsesgo.length - n
+    if k < 0
+        k = 0
+    end
+    while k < ml.tsesgo.length
+        ml.tsesgo[k] = sesgo
+        k = k + 1
     end
 end
 
@@ -820,6 +842,7 @@ func m3d_cargar(m: M3d, ml: M3dMalla, nombre: String, lapiz0: Int) -> Int
             ml.ta.push(base + buffer_get_word(buf, pos))
             ml.tb.push(base + buffer_get_word(buf, pos + 2))
             ml.tc.push(base + buffer_get_word(buf, pos + 4))
+            ml.tsesgo.push(0.0)
             if con_tex
                 ml.tt.push(buffer_get_byte(buf, pos + 6))
                 ml.tcol.push(0)
@@ -986,6 +1009,7 @@ func m3d_poner(m: M3d, ml: M3dMalla, t_ini: Int, t_fin: Int, doble: Bool, interi
                 if ml.sesgo_lapiz >= 0 and ml.tcol[k] == ml.sesgo_lapiz
                     zm = zm + ml.sesgo
                 end
+                zm = zm + ml.tsesgo[k]
                 _m3d_anadir(m, ml.sx[a0], ml.sy[a0], ml.sx[a1], ml.sy[a1], ml.sx[a2], ml.sy[a2], lap, ml, tt, k, zm)
             end
         end

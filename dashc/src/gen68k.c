@@ -6019,6 +6019,10 @@ static void check_assign_type(Node *n, int tt, int et)
         return;                                        /* lo que no se sabe bien, como hace ./dash --gcc */
     if ((tt == TY_STR) != (et == TY_STR))
         why = "";
+    else if ((tt == TY_INT || tt == TY_BOOL || tt == TY_FLOAT || tt == TY_DOUBLE || tt == TY_FIXED) !=
+             (et == TY_INT || et == TY_BOOL || et == TY_FLOAT || et == TY_DOUBLE || et == TY_FIXED) &&
+             (IS_ARR(tt) || IS_DICT(tt) || IS_STRUCT(tt) || IS_ARR(et) || IS_DICT(et) || IS_STRUCT(et)))
+        why = "";                                      /* un número no pasa a ser una lista, un struct... ni al revés */
     else if (tt == TY_INT && (et == TY_FLOAT || et == TY_DOUBLE || et == TY_FIXED))
         why = " (usa Int())";
     else if (tt == TY_FLOAT && et == TY_DOUBLE)
