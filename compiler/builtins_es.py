@@ -1182,6 +1182,13 @@ DESC_ES = {
                             "que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, "
                             "104 y 120, 120, 128. MUI 4 o más: con MUI 3.8 los campos se quedan con las "
                             "preferencias del usuario",
+    "mui_app_iconify": "true cierra todas las ventanas de la aplicación y deja su icono en el Workbench (con doble "
+                       "clic en él vuelven a abrirse, como estaban); false las abre de nuevo desde el programa. Lo "
+                       "mismo que HIDE y SHOW de MUI por ARexx",
+    "mui_app_iconified": "true mientras la aplicación está iconificada (sus ventanas cerradas y su icono en el "
+                         "Workbench)",
+    "mui_app_icon": "El icono (ruta sin \".info\", como \"PROGDIR:Programa\") que deja la aplicación iconificada en "
+                    "el Workbench; sin él, el de MUI. false si no puede leerlo",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "

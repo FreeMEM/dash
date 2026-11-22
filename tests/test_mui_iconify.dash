@@ -1,0 +1,32 @@
+# Iconify a MUI application (mui_app_iconify, mui_app_iconified, mui_app_icon; Tachyon, issue #19 of PerspexSphinx):
+# its window closes and comes back, and the icon it leaves is one of a file (none: false).
+# emu-needs: muimaster.library
+# expect-out: icono que no hay: false
+# expect-out: icono: true
+# expect-out: antes: false
+# expect-out: iconificada: true
+# expect-out: de vuelta: false
+# expect-out: fin
+
+Main
+    if mui_app_begin("Iconificar", "DASHICONIFICAR") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Iconificar", 0)
+            g = mui_vgroup_begin()
+                t = mui_text("hola")
+            mui_group_end()
+        mui_window_end()
+        mui_window_open(w)
+        Print "icono que no hay: #{mui_app_icon("RAM:no_hay_tal_icono")}"
+        icon_save("RAM:icono_app", "", 3, "", "")
+        Print "icono: #{mui_app_icon("RAM:icono_app")}"
+        Print "antes: #{mui_app_iconified()}"
+        mui_app_iconify(true)
+        Print "iconificada: #{mui_app_iconified()}"
+        mui_app_iconify(false)
+        Print "de vuelta: #{mui_app_iconified()}"
+        mui_app_end()
+        Print "fin"
+    end
+end
