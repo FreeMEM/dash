@@ -101,4 +101,19 @@ Lo que Wazp3D, con su configuración de serie, no hace (también en un programa 
 comprueba al abrir, dibujando y leyendo el píxel del centro, así que con otra biblioteca que lo haga bien no cambia
 nada.
 
+
+## Dibujar en bloque
+
+`gl_draw_arrays` y `gl_draw_elements` mandan de una vez un bloque de esquinas preparado en búferes (3 `float` por
+esquina, con `buffer_set_float` o de un fichero; 4 bytes de color por esquina), y `gl_mult_matrix` pone de una vez el
+giro y el desplazamiento de una pieza (los huesos de un modelo). Lo pidió el juego Titan Force (`~/Projects/titanforce`).
+
+Medido en `coffin` con MiniGL Classic sobre Wazp3D, un robot de 1200 triángulos en 17 piezas y un barrio de casas: con
+`gl_vertex` uno a uno, quitando antes las caras de espaldas, el dibujo llevaba unos 116 ms por fotograma; con
+`gl_draw_arrays` (sin quitarlas, porque MiniGL calcula cada esquina antes de ver si la cara se ve) unos 133 ms, y con
+`gl_draw_elements` unos 258 ms. Con Wazp3D lo que cuesta es el trabajo de MiniGL en cada esquina, no las llamadas: en
+bloque no se gana. Las tres están pensadas para una tarjeta 3D (PiStorm3D, Warp3D), sin probar. Para ese juego, un
+motor por software en Dash (las cuentas, el orden y el relleno con `buffer_fill` en un búfer de lápices, volcado con
+`gfx_pens_draw`) fue tres veces más rápido que MiniGL sobre Wazp3D.
+
 Sin probar: PiStorm3D, RadeonGL y MiniGL Classic con una tarjeta 3D o con QuarkTex.

@@ -69,6 +69,71 @@ Devuelve `true` desde que se pulsó el botón de cerrar de la ventana. Para el b
 Returns `true` once the close gadget of the window was clicked. For the drawing loop: `while not gl_closed()`. On
 `gl_open_screen` there is no gadget: leave with `gl_key` or `key_down`.
 """, ["gl_key", "key_down"]),
+    "gl_draw_arrays": _f("""\
+- `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`: un búfer con 3 `float` por esquina (x, y, z), puestos con `buffer_set_float` o leídos de un fichero.
+- `colors`: un búfer con 4 bytes por esquina (rojo, verde, azul, alfa, de 0 a 255), o 0 para usar el color de
+  `gl_color`.
+- `first`: la primera esquina que se dibuja, desde 0.
+- `count`: cuántas esquinas.
+
+Dibuja todas esas esquinas de una vez (`glDrawArrays`), con la matriz y el estado de ese momento: un modelo de 1200
+triángulos son 3600 llamadas menos en cada fotograma. Los búferes se preparan una vez y se mueven con
+`gl_mult_matrix` o `gl_translate` y `gl_rotate`. Está pensado para una tarjeta 3D (sin probar): con MiniGL Classic
+sobre Wazp3D, que lo hace todo por software, no fue más rápido que `gl_vertex` (docs/MINIGL.md).
+""", """\
+- `mode`: the shape, as in `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`: a buffer with 3 `float`s per corner (x, y, z), set with `buffer_set_float` or read from a file.
+- `colors`: a buffer with 4 bytes per corner (red, green, blue, alpha, 0 to 255), or 0 to use the `gl_color` one.
+- `first`: the first corner drawn, from 0.
+- `count`: how many corners.
+
+Draws all those corners at once (`glDrawArrays`), with the matrix and the state of that moment: a model of 1200
+triangles is 3600 calls fewer each frame. The buffers are made once and moved with `gl_mult_matrix` or `gl_translate`
+and `gl_rotate`. It is meant for a 3D card (untested): with MiniGL Classic over Wazp3D, all in software, it was not
+faster than `gl_vertex` (docs/MINIGL.en.md).
+""", ["gl_begin", "buffer_set_float", "gl_mult_matrix"]),
+    "gl_draw_elements": _f("""\
+- `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`, `colors`: como en `gl_draw_arrays` (`colors` puede ser 0).
+- `nverts`: cuántas esquinas hay en `vertices`.
+- `indices`: un búfer con los números de las esquinas de cada figura, 2 bytes cada uno (0 es la primera de
+  `vertices`), puestos con `buffer_set_word` o leídos de un fichero.
+- `count`: cuántos números se usan.
+
+Como `gl_draw_arrays`, pero cada esquina va una sola vez en `vertices` aunque la compartan varias caras: MiniGL la
+debería calcular una vez (bloquea las `nverts` esquinas con `glLockArrays` y dibuja con `glDrawElements`). Está
+pensado para una tarjeta 3D (sin probar): con MiniGL Classic sobre Wazp3D fue más lento que `gl_draw_arrays`
+(docs/MINIGL.md).
+""", """\
+- `mode`: the shape, as in `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`, `colors`: as in `gl_draw_arrays` (`colors` may be 0).
+- `nverts`: how many corners there are in `vertices`.
+- `indices`: a buffer with the numbers of the corners of each shape, 2 bytes each (0 is the first of `vertices`),
+  set with `buffer_set_word` or read from a file.
+- `count`: how many numbers are used.
+
+As `gl_draw_arrays`, but each corner is only once in `vertices` however many faces share it: MiniGL should work it out
+once (it locks the `nverts` corners with `glLockArrays` and draws with `glDrawElements`). It is meant for a 3D card
+(untested): with MiniGL Classic over Wazp3D it was slower than `gl_draw_arrays` (docs/MINIGL.en.md).
+""", ["gl_draw_arrays", "gl_mult_matrix"]),
+    "gl_mult_matrix": _f("""\
+- `a`, `b`, `c`, `tx`: la primera fila de la matriz.
+- `d`, `e`, `f`, `ty`: la segunda.
+- `g`, `h`, `i`, `tz`: la tercera (la cuarta es 0, 0, 0, 1).
+
+Multiplica la matriz activa por esa: un giro (las 3 primeras columnas) y un desplazamiento (`tx`, `ty`, `tz`) en una
+sola llamada (`glMultMatrixf`). Es lo que hace falta para los huesos de un modelo: el programa calcula la matriz de
+cada hueso y la pone antes de dibujar su pieza.
+""", """\
+- `a`, `b`, `c`, `tx`: the first row of the matrix.
+- `d`, `e`, `f`, `ty`: the second.
+- `g`, `h`, `i`, `tz`: the third (the fourth is 0, 0, 0, 1).
+
+Multiplies the current matrix by that one: a rotation (the first 3 columns) and a translation (`tx`, `ty`, `tz`) in
+a single call (`glMultMatrixf`). It is what the bones of a model need: the program works out the matrix of each bone
+and sets it before drawing its piece.
+""", ["gl_push_matrix", "gl_draw_arrays", "gl_translate"]),
     "gl_begin": _f("""\
 - `mode`: la figura, con los números de OpenGL (`lib/amiga/gl.dash`): `GL_POINTS` 0, `GL_LINES` 1, `GL_LINE_LOOP` 2,
   `GL_LINE_STRIP` 3, `GL_TRIANGLES` 4, `GL_TRIANGLE_STRIP` 5, `GL_TRIANGLE_FAN` 6, `GL_QUADS` 7, `GL_QUAD_STRIP` 8,

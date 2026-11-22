@@ -234,6 +234,14 @@ with `buffer_free`.
                           ["buffer_set_long"]),
     "buffer_set_long": _f(_BUF_ES + "- `value`: el número.\n", _BUF_EN + "- `value`: the number.\n",
                           ["buffer_get_long"]),
+    "buffer_set_float": _f(_BUF_ES + "- `value`: el número (un `Float`, un `Int` o un `Double`).\n\n"
+                           "Lo guarda como un `float` de C de 32 bits, el que piden MiniGL y `gl_draw_arrays`.\n",
+                           _BUF_EN + "- `value`: the number (a `Float`, an `Int` or a `Double`).\n\n"
+                           "It is stored as a 32-bit C `float`, the one MiniGL and `gl_draw_arrays` take.\n",
+                           ["buffer_get_float", "gl_draw_arrays"]),
+    "buffer_get_float": _f(_BUF_ES + "\nDevuelve, como `Double`, el `float` de 32 bits de esa posición.\n",
+                           _BUF_EN + "\nReturns, as a `Double`, the 32-bit `float` at that position.\n",
+                           ["buffer_set_float"]),
     "buffer_copy": _f("""\
 - `dest`, `dest_offset`: adónde.
 - `src`, `src_offset`: de dónde.

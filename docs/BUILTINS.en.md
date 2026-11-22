@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1082 functions, 1082 implemented, 0 not implemented.
+Total: 1087 functions, 1087 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4655,6 +4655,8 @@ it is not freed on its own: every `buffer_alloc` needs its `buffer_free`, or tha
 | [`buffer_get_word(buffer, offset)`](#buffer_get_word) | Int | Get 16-bit word at offset (big-endian) |  |
 | [`buffer_set_word(buffer, offset, value)`](#buffer_set_word) | — | Set 16-bit word at offset (big-endian) |  |
 | [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | Get 32-bit long at offset (big-endian) |  |
+| [`buffer_set_float(buffer, offset, value)`](#buffer_set_float) | — | Set a 32-bit float (IEEE single, as a C float) at offset: the vertices of gl_draw_arrays |  |
+| [`buffer_get_float(buffer, offset)`](#buffer_get_float) | Double | Get the 32-bit float (IEEE single) at offset, as a Double |  |
 | [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Set 32-bit long at offset (big-endian) |  |
 | [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copy bytes between buffers |  |
 | [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Fill buffer region with byte value |  |
@@ -4732,6 +4734,29 @@ See also: [`buffer_get_word`](#buffer_get_word).
 Returns the signed 32-bit number at that position, high byte first.
 
 See also: [`buffer_set_long`](#buffer_set_long).
+
+<a id="buffer_set_float"></a>
+
+### `buffer_set_float(buffer, offset, value)`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+- `value`: the number (a `Float`, an `Int` or a `Double`).
+
+It is stored as a 32-bit C `float`, the one MiniGL and `gl_draw_arrays` take.
+
+See also: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_draw_arrays).
+
+<a id="buffer_get_float"></a>
+
+### `buffer_get_float(buffer, offset)` → `Double`
+
+- `buffer`: the buffer.
+- `offset`: the position, in bytes from the start.
+
+Returns, as a `Double`, the 32-bit `float` at that position.
+
+See also: [`buffer_set_float`](#buffer_set_float).
 
 <a id="buffer_set_long"></a>
 
@@ -13172,6 +13197,9 @@ end
 | `gl_look_at(ex, ey, ez, cx, cy, cz, ux, uy, uz)` | — | A camera at (ex, ey, ez) looking at (cx, cy, cz), with (ux, uy, uz) up (gluLookAt) |  |
 | [`gl_begin(mode)`](#gl_begin) | — | Starts a shape: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, GL_POLYGON...; its corners with gl_vertex until gl_end |  |
 | `gl_end()` | — | Ends the shape of gl_begin |  |
+| [`gl_draw_arrays(mode, vertices, colors, first, count)`](#gl_draw_arrays) | — | Draws count corners at once from buffers (glDrawArrays), from corner first: vertices, 3 floats each (x, y, z; buffer_set_float or a file); colors, 4 bytes each (r, g, b, a), or 0 for the color of gl_color. mode as in gl_begin. One call for a whole block (meant for a 3D card; with Wazp3D it was not faster than gl_vertex) |  |
+| [`gl_draw_elements(mode, vertices, colors, nverts, indices, count)`](#gl_draw_elements) | — | Draws count corners at once by their numbers (glDrawElements): vertices and colors as in gl_draw_arrays, nverts of them; indices, 2 bytes each (0 is the first of vertices). The nverts corners are locked (glLockArrays), for a 3D card (with Wazp3D it was slower) |  |
+| [`gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`](#gl_mult_matrix) | — | Multiplies the current matrix by a 3x4 one given by rows (a b c tx, d e f ty, g h i tz): a rotation and a translation in one call, as the bones of a model |  |
 | `gl_vertex(x, y, z)` | — | A corner, with the color, normal and texture point set last |  |
 | `gl_color(r, g, b)` | — | The color of the next corners, each part from 0.0 to 1.0 |  |
 | `gl_color_alpha(r, g, b, a)` | — | As gl_color, with the opacity a (0.0 to 1.0; with GL_BLEND) |  |
@@ -13231,6 +13259,54 @@ See also: `gl_key`, [`key_down`](#key_down).
 The corners go with `gl_vertex` until `gl_end`. The front faces are the ones seen counterclockwise, as in OpenGL.
 
 See also: `gl_vertex`, `gl_end`, `gl_color`.
+
+<a id="gl_draw_arrays"></a>
+
+### `gl_draw_arrays(mode, vertices, colors, first, count)`
+
+- `mode`: the shape, as in `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`: a buffer with 3 `float`s per corner (x, y, z), set with `buffer_set_float` or read from a file.
+- `colors`: a buffer with 4 bytes per corner (red, green, blue, alpha, 0 to 255), or 0 to use the `gl_color` one.
+- `first`: the first corner drawn, from 0.
+- `count`: how many corners.
+
+Draws all those corners at once (`glDrawArrays`), with the matrix and the state of that moment: a model of 1200
+triangles is 3600 calls fewer each frame. The buffers are made once and moved with `gl_mult_matrix` or `gl_translate`
+and `gl_rotate`. It is meant for a 3D card (untested): with MiniGL Classic over Wazp3D, all in software, it was not
+faster than `gl_vertex` (docs/MINIGL.en.md).
+
+See also: [`gl_begin`](#gl_begin), [`buffer_set_float`](#buffer_set_float), [`gl_mult_matrix`](#gl_mult_matrix).
+
+<a id="gl_draw_elements"></a>
+
+### `gl_draw_elements(mode, vertices, colors, nverts, indices, count)`
+
+- `mode`: the shape, as in `gl_begin` (`GL_TRIANGLES`...).
+- `vertices`, `colors`: as in `gl_draw_arrays` (`colors` may be 0).
+- `nverts`: how many corners there are in `vertices`.
+- `indices`: a buffer with the numbers of the corners of each shape, 2 bytes each (0 is the first of `vertices`),
+  set with `buffer_set_word` or read from a file.
+- `count`: how many numbers are used.
+
+As `gl_draw_arrays`, but each corner is only once in `vertices` however many faces share it: MiniGL should work it out
+once (it locks the `nverts` corners with `glLockArrays` and draws with `glDrawElements`). It is meant for a 3D card
+(untested): with MiniGL Classic over Wazp3D it was slower than `gl_draw_arrays` (docs/MINIGL.en.md).
+
+See also: [`gl_draw_arrays`](#gl_draw_arrays), [`gl_mult_matrix`](#gl_mult_matrix).
+
+<a id="gl_mult_matrix"></a>
+
+### `gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`
+
+- `a`, `b`, `c`, `tx`: the first row of the matrix.
+- `d`, `e`, `f`, `ty`: the second.
+- `g`, `h`, `i`, `tz`: the third (the fourth is 0, 0, 0, 1).
+
+Multiplies the current matrix by that one: a rotation (the first 3 columns) and a translation (`tx`, `ty`, `tz`) in
+a single call (`glMultMatrixf`). It is what the bones of a model need: the program works out the matrix of each bone
+and sets it before drawing its piece.
+
+See also: `gl_push_matrix`, [`gl_draw_arrays`](#gl_draw_arrays), `gl_translate`.
 
 <a id="gl_texture"></a>
 

@@ -8047,6 +8047,50 @@ static void _dash_gl_look_at(float ex, float ey, float ez, float cx, float cy, f
 }
 
 static void _dash_gl_begin(LONG mode) { if (_dash_gl_c) _GL_ENUM(3, mode); }
+
+/* count corners at once (glVertexPointer, glColorPointer, glDrawArrays): vertices, 3 floats each; colors, 4 bytes
+   each (r, g, b, a), or NULL for the current color. The arrays are only on for this call. */
+static void _dash_gl_draw_arrays(LONG mode, APTR vertices, APTR colors, LONG first, LONG count) {
+    if (!_dash_gl_c || !vertices || count <= 0 || first < 0) return;
+    _GLF(87, (APTR, LONG, ULONG, LONG, const void *))(_dash_gl_c, 3, 0x1406, 0, vertices);   /* glVertexPointer */
+    _GL_ENUM(27, 0x8074);                                                           /* GL_VERTEX_ARRAY on */
+    if (colors) {
+        _GLF(16, (APTR, LONG, ULONG, LONG, const void *))(_dash_gl_c, 4, 0x1401, 0, colors);  /* glColorPointer */
+        _GL_ENUM(27, 0x8076);                                                       /* GL_COLOR_ARRAY on */
+    }
+    _GLF(24, (APTR, ULONG, LONG, LONG))(_dash_gl_c, (ULONG)mode, first, count);        /* glDrawArrays */
+    if (colors) _GL_ENUM(23, 0x8076);
+    _GL_ENUM(23, 0x8074);
+}
+
+/* count corners by their numbers (glDrawElements, 16-bit numbers): the nverts corners are locked (glLockArrays) so
+   each one is transformed once, however many faces share it */
+static void _dash_gl_draw_elements(LONG mode, APTR vertices, APTR colors, LONG nverts, APTR indices, LONG count) {
+    if (!_dash_gl_c || !vertices || !indices || nverts <= 0 || count <= 0) return;
+    _GLF(87, (APTR, LONG, ULONG, LONG, const void *))(_dash_gl_c, 3, 0x1406, 0, vertices);   /* glVertexPointer */
+    _GL_ENUM(27, 0x8074);
+    if (colors) {
+        _GLF(16, (APTR, LONG, ULONG, LONG, const void *))(_dash_gl_c, 4, 0x1401, 0, colors);  /* glColorPointer */
+        _GL_ENUM(27, 0x8076);
+    }
+    _GLF(46, (APTR, LONG, LONG))(_dash_gl_c, 0, nverts);                                    /* glLockArrays */
+    _GLF(26, (APTR, ULONG, LONG, ULONG, const void *))(_dash_gl_c, (ULONG)mode, count, 0x1403, indices);  /* glDrawElements */
+    _GLF(82, (APTR))(_dash_gl_c);                                                           /* glUnlockArrays */
+    if (colors) _GL_ENUM(23, 0x8076);
+    _GL_ENUM(23, 0x8074);
+}
+
+/* The current matrix times a 3x4 one by rows (GL keeps them by columns) */
+static void _dash_gl_mult_matrix(float a, float b, float c, float tx, float d, float e, float f, float ty, float g,
+                                 float h, float i, float tz) {
+    float m[16];
+    if (!_dash_gl_c) return;
+    m[0] = a; m[1] = d; m[2] = g; m[3] = 0.0f;
+    m[4] = b; m[5] = e; m[6] = h; m[7] = 0.0f;
+    m[8] = c; m[9] = f; m[10] = i; m[11] = 0.0f;
+    m[12] = tx; m[13] = ty; m[14] = tz; m[15] = 1.0f;
+    _GLF(49, (APTR, float *))(_dash_gl_c, m);   /* glMultMatrixf */
+}
 static void _dash_gl_end(void) { if (_dash_gl_c) _GLF(28, (APTR))(_dash_gl_c); }
 
 static void _dash_gl_vertex(float x, float y, float z) {
@@ -21581,6 +21625,27 @@ static void _dash_buffer_set_long(APTR buffer, LONG offset, ULONG value) {
     p[1] = (value >> 16) & 0xFF;
     p[2] = (value >> 8) & 0xFF;
     p[3] = value & 0xFF;
+}
+
+/* A C float (IEEE single, big-endian as the 68k keeps it), byte by byte: the offset may be odd */
+static void _dash_buffer_set_float(APTR buffer, LONG offset, float value) {
+    union { float f; UBYTE b[4]; } u;
+    UBYTE *p = (UBYTE *)buffer + offset;
+    u.f = value;
+    p[0] = u.b[0];
+    p[1] = u.b[1];
+    p[2] = u.b[2];
+    p[3] = u.b[3];
+}
+
+static double _dash_buffer_get_float(APTR buffer, LONG offset) {
+    union { float f; UBYTE b[4]; } u;
+    UBYTE *p = (UBYTE *)buffer + offset;
+    u.b[0] = p[0];
+    u.b[1] = p[1];
+    u.b[2] = p[2];
+    u.b[3] = p[3];
+    return (double)u.f;
 }
 
 static void _dash_buffer_copy(APTR dest, LONG dest_offset, APTR src, LONG src_offset, LONG length) {

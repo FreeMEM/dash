@@ -2927,6 +2927,22 @@ BUFFER_FUNCTIONS = {
         needs_fileio=True,
         description="Get 32-bit long at offset (big-endian)"
     ),
+    "buffer_set_float": BuiltinFunc(
+        name="buffer_set_float",
+        params=["buffer", "offset", "value"],
+        return_type="void",
+        c_template="_dash_buffer_set_float(${buffer}, ${offset}, ${value})",
+        needs_fileio=True,
+        description="Set a 32-bit float (IEEE single, as a C float) at offset: the vertices of gl_draw_arrays"
+    ),
+    "buffer_get_float": BuiltinFunc(
+        name="buffer_get_float",
+        params=["buffer", "offset"],
+        return_type="double",
+        c_template="_dash_buffer_get_float(${buffer}, ${offset})",
+        needs_fileio=True,
+        description="Get the 32-bit float (IEEE single) at offset, as a Double"
+    ),
     "buffer_set_long": BuiltinFunc(
         name="buffer_set_long",
         params=["buffer", "offset", "value"],
@@ -6559,6 +6575,20 @@ GL_FUNCTIONS = {
                     "Starts a shape: GL_TRIANGLES, GL_QUADS, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_LINES, "
                     "GL_POLYGON...; its corners with gl_vertex until gl_end"),
     "gl_end": _gl("gl_end", [], "void", "Ends the shape of gl_begin"),
+    "gl_draw_arrays": _gl("gl_draw_arrays", ["mode", "vertices", "colors", "first", "count"], "void",
+                          "Draws count corners at once from buffers (glDrawArrays), from corner first: vertices, "
+                          "3 floats each (x, y, z; buffer_set_float or a file); colors, 4 bytes each (r, g, b, a), "
+                          "or 0 for the color of gl_color. mode as in gl_begin. One call for a whole block (meant for a "
+                          "3D card; with Wazp3D it was not faster than gl_vertex)"),
+    "gl_draw_elements": _gl("gl_draw_elements", ["mode", "vertices", "colors", "nverts", "indices", "count"],
+                            "void",
+                            "Draws count corners at once by their numbers (glDrawElements): vertices and colors as in "
+                            "gl_draw_arrays, nverts of them; indices, 2 bytes each (0 is the first of vertices). The "
+                            "nverts corners are locked (glLockArrays), for a 3D card (with Wazp3D it was slower)"),
+    "gl_mult_matrix": _gl("gl_mult_matrix", ["a", "b", "c", "tx", "d", "e", "f", "ty", "g", "h", "i", "tz"],
+                          "void",
+                          "Multiplies the current matrix by a 3x4 one given by rows (a b c tx, d e f ty, g h i tz): "
+                          "a rotation and a translation in one call, as the bones of a model"),
     "gl_vertex": _gl("gl_vertex", ["x", "y", "z"], "void",
                      "A corner, with the color, normal and texture point set last"),
     "gl_color": _gl("gl_color", ["r", "g", "b"], "void", "The color of the next corners, each part from 0.0 to 1.0"),

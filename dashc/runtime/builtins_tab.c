@@ -121,12 +121,16 @@ const BuiltinInfo builtin_info[] = {
     {"buffer_free", 1, 0, 1, 0, 0, 0u, 0u},
     {"buffer_get_byte", 2, 1, 1, 0, 0, 0u, 0u},
     {"buffer_get_byte", 2, 1, 1, 0, 0, 0u, 0u},
+    {"buffer_get_float", 2, 5, 1, 0, 0, 0u, 0u},
+    {"buffer_get_float", 2, 5, 1, 0, 0, 0u, 0u},
     {"buffer_get_long", 2, 1, 1, 0, 0, 0u, 0u},
     {"buffer_get_long", 2, 1, 1, 0, 0, 0u, 0u},
     {"buffer_get_word", 2, 1, 1, 0, 0, 0u, 0u},
     {"buffer_get_word", 2, 1, 1, 0, 0, 0u, 0u},
     {"buffer_set_byte", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_byte", 3, 0, 1, 0, 0, 0u, 0u},
+    {"buffer_set_float", 3, 0, 1, 0, 0, 0u, 4u},
+    {"buffer_set_float", 3, 0, 1, 0, 0, 0u, 4u},
     {"buffer_set_long", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_long", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_word", 3, 0, 1, 0, 0, 0u, 0u},
@@ -653,6 +657,10 @@ const BuiltinInfo builtin_info[] = {
     {"gl_cull_face", 1, 0, 0, 0, 2, 0u, 0u},
     {"gl_disable", 1, 0, 0, 0, 2, 0u, 0u},
     {"gl_disable", 1, 0, 0, 0, 2, 0u, 0u},
+    {"gl_draw_arrays", 5, 0, 0, 0, 2, 0u, 0u},
+    {"gl_draw_arrays", 5, 0, 0, 0, 2, 0u, 0u},
+    {"gl_draw_elements", 6, 0, 0, 0, 2, 0u, 0u},
+    {"gl_draw_elements", 6, 0, 0, 0, 2, 0u, 0u},
     {"gl_enable", 1, 0, 0, 0, 2, 0u, 0u},
     {"gl_enable", 1, 0, 0, 0, 2, 0u, 0u},
     {"gl_end", 0, 0, 0, 0, 2, 0u, 0u},
@@ -673,6 +681,8 @@ const BuiltinInfo builtin_info[] = {
     {"gl_look_at", 9, 0, 0, 0, 2, 0u, 511u},
     {"gl_matrix_mode", 1, 0, 0, 0, 2, 0u, 0u},
     {"gl_matrix_mode", 1, 0, 0, 0, 2, 0u, 0u},
+    {"gl_mult_matrix", 12, 0, 0, 0, 2, 0u, 4095u},
+    {"gl_mult_matrix", 12, 0, 0, 0, 2, 0u, 4095u},
     {"gl_normal", 3, 0, 0, 0, 2, 0u, 7u},
     {"gl_normal", 3, 0, 0, 0, 2, 0u, 7u},
     {"gl_open", 2, 2, 0, 0, 2, 0u, 0u},
@@ -2166,7 +2176,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2164;
+const int builtin_count = 2174;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

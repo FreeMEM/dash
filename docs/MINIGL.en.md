@@ -100,4 +100,19 @@ What Wazp3D, with its default settings, does not do (also from a C program, so i
 `GL_CULL_FACE` took away the front faces (the ones seen counterclockwise). It checks this when opening, by drawing
 and reading the middle pixel, so with another library that gets it right nothing changes.
 
+
+## Drawing in blocks
+
+`gl_draw_arrays` and `gl_draw_elements` send a block of corners prepared in buffers at once (3 `float`s per corner,
+with `buffer_set_float` or from a file; 4 color bytes per corner), and `gl_mult_matrix` sets the rotation and the
+translation of a piece at once (the bones of a model). The game Titan Force asked for them (`~/Projects/titanforce`).
+
+Measured on `coffin` with MiniGL Classic over Wazp3D, a robot of 1200 triangles in 17 pieces and a neighbourhood of
+houses: with `gl_vertex` one by one, dropping the faces seen from behind first, drawing took about 116 ms a frame; with
+`gl_draw_arrays` (without dropping them, as MiniGL works out each corner before seeing whether the face shows) about
+133 ms, and with `gl_draw_elements` about 258 ms. With Wazp3D what costs is MiniGL's work on each corner, not the
+calls: blocks gain nothing. The three are meant for a 3D card (PiStorm3D, Warp3D), untested. For that game, a software
+engine in Dash (the maths, the ordering and the filling with `buffer_fill` in a pen buffer, shown with
+`gfx_pens_draw`) was three times faster than MiniGL over Wazp3D.
+
 Not tried: PiStorm3D, RadeonGL, and MiniGL Classic with a 3D card or with QuarkTex.
