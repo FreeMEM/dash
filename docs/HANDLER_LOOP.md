@@ -87,3 +87,9 @@ Repo local `~/Projects/dashfs-amiga` (sin subir: espera el sí del usuario).
   `MODE_NEWFILE` dejaba el registro bloqueado para los demás (ahora se abre compartido).
 - 2026-11-22: fase 2 empezada. seahash y LZ4 en ensamblador comprobados en el A1200 emulado contra la referencia
   (un registro de 128 KB de un disco real: 240 ms). El lector de Python lee todo el disco de prueba sin fallos.
+- 2026-11-22: fase 2 hecha (repo local `dashfs-amiga`, sin subir): `pruebas/correr.py` 628/628 por `./dash` y por
+  `--gcc` (ahora, la instantánea y el otro volumen; comentario, bits, nombres sin mayúsculas, `//`, escritura
+  rechazada, posiciones). Sin probar: hardware real, 68060, discos de más de 4 GB (TD64), enlaces simbólicos; el
+  espacio libre de `Info` sale como lleno.
+- 2026-11-22: batería completa 1976/1980: los 3 `test_run_capture` fallaban por `test_env_get_text` (de main), que
+  dejaba la carpeta `ENV:DashPrueba` (arreglado: la borra); `emu500/test_zlib`, tiempo agotado por carga (solo pasa).
