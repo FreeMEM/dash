@@ -1234,7 +1234,7 @@ class SemanticAnalyzer(ASTVisitor):
                 if num:
                     return num
             return None
-        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)):
+        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess, ArrayAccess)):
             return _num_kind(list_elem_type(self._declared_list_type(expr)))
         return None
 
