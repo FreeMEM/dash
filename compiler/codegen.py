@@ -3184,6 +3184,33 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
     _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
 }
 
+/* gfx_pens_draw_rgb (Titan Force): an image of pens through a table of 256 colors 0xRRGGBB into RGB24 (a buffer kept
+   between calls), then gfx_rgb_draw: one WritePixelArray on RTG. The game draws with 256 pens and shows them on a
+   screen of 16 to 32 bits without the 4 bits per gun of a palette. */
+static UBYTE *_dash_pens_rgb_buf = NULL;
+static LONG _dash_pens_rgb_size = 0;
+static void _dash_gfx_pens_draw_rgb(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG colors) {
+    const UBYTE *src = (const UBYTE *)buffer, *tab = (const UBYTE *)colors;
+    UBYTE *d;
+    LONG n, i;
+    if (!buffer || !colors || w <= 0 || h <= 0) return;
+    n = w * h;
+    if (n * 3 > _dash_pens_rgb_size) {
+        if (_dash_pens_rgb_buf) FreeVec(_dash_pens_rgb_buf);
+        _dash_pens_rgb_buf = (UBYTE *)AllocVec(n * 3, MEMF_ANY);
+        _dash_pens_rgb_size = _dash_pens_rgb_buf ? n * 3 : 0;
+        if (!_dash_pens_rgb_buf) return;
+    }
+    d = _dash_pens_rgb_buf;
+    for (i = 0; i < n; i++) {
+        const UBYTE *c = tab + src[i] * 4;   /* 0x00RRGGBB, big-endian: byte 0 unused */
+        *d++ = c[1];
+        *d++ = c[2];
+        *d++ = c[3];
+    }
+    _dash_rgb_draw((LONG)_dash_pens_rgb_buf, w, h, x, y);
+}
+
 /* Sets bits x0 to x1 - 1 of a plane row (bit 7 of byte 0 is the first pixel) */
 static void _dash_bits_set(UBYTE *r, LONG x0, LONG x1) {
     LONG b0 = x0 >> 3, b1 = (x1 - 1) >> 3;

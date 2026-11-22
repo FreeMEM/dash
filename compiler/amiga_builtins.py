@@ -5031,6 +5031,11 @@ RGB_FUNCTIONS = {
                          "_dash_rgb_draw(${buffer}, ${width}, ${height}, ${x}, ${y})",
                          "Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one "
                          "WritePixelArray; palette screens: the closest pens)"),
+    "gfx_pens_draw_rgb": _gfx("gfx_pens_draw_rgb", ["buffer", "width", "height", "x", "y", "colors"], "void",
+                              "_dash_gfx_pens_draw_rgb(${buffer}, ${width}, ${height}, ${x}, ${y}, ${colors})",
+                              "Draw an image of pens (one byte a pixel) at x, y with the colors of a table (256 longs "
+                              "0xRRGGBB, a buffer of 1024 bytes) instead of the screen's palette: for a screen of "
+                              "16, 24 or 32 bits (RTG, one WritePixelArray); on a palette screen, the closest pens"),
     "gfx_rgb_draw_scaled": _gfx("gfx_rgb_draw_scaled", ["buffer", "width", "height", "x", "y", "dest_width",
                                                         "dest_height"], "void",
                                 "_dash_rgb_draw_scaled(${buffer}, ${width}, ${height}, ${x}, ${y}, ${dest_width}, "
