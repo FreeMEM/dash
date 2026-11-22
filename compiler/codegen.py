@@ -3186,6 +3186,33 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
     _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
 }
 
+/* gfx_pens_draw_rgb (Titan Force): an image of pens through a table of 256 colors 0xRRGGBB into RGB24 (a buffer kept
+   between calls), then gfx_rgb_draw: one WritePixelArray on RTG. The game draws with 256 pens and shows them on a
+   screen of 16 to 32 bits without the 4 bits per gun of a palette. */
+static UBYTE *_dash_pens_rgb_buf = NULL;
+static LONG _dash_pens_rgb_size = 0;
+static void _dash_gfx_pens_draw_rgb(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG colors) {
+    const UBYTE *src = (const UBYTE *)buffer, *tab = (const UBYTE *)colors;
+    UBYTE *d;
+    LONG n, i;
+    if (!buffer || !colors || w <= 0 || h <= 0) return;
+    n = w * h;
+    if (n * 3 > _dash_pens_rgb_size) {
+        if (_dash_pens_rgb_buf) FreeVec(_dash_pens_rgb_buf);
+        _dash_pens_rgb_buf = (UBYTE *)AllocVec(n * 3, MEMF_ANY);
+        _dash_pens_rgb_size = _dash_pens_rgb_buf ? n * 3 : 0;
+        if (!_dash_pens_rgb_buf) return;
+    }
+    d = _dash_pens_rgb_buf;
+    for (i = 0; i < n; i++) {
+        const UBYTE *c = tab + src[i] * 4;   /* 0x00RRGGBB, big-endian: byte 0 unused */
+        *d++ = c[1];
+        *d++ = c[2];
+        *d++ = c[3];
+    }
+    _dash_rgb_draw((LONG)_dash_pens_rgb_buf, w, h, x, y);
+}
+
 /* Sets bits x0 to x1 - 1 of a plane row (bit 7 of byte 0 is the first pixel) */
 static void _dash_bits_set(UBYTE *r, LONG x0, LONG x1) {
     LONG b0 = x0 >> 3, b1 = (x1 - 1) >> 3;
@@ -21992,6 +22019,31 @@ static double _dash_buffer_get_float(APTR buffer, LONG offset) {
     return (double)u.f;
 }
 
+/* A line of a textured triangle: count texels of a square texture of 2^shift a side, from (u, v) by (du, dv), 16.16
+   fixed point, wrapping round; through table (256 bytes: the light, as Quake's colormap) if there is one */
+static void _dash_buffer_tex_span(APTR dest, LONG offset, LONG count, APTR texture, LONG shift, LONG u, LONG v, LONG du,
+                                  LONG dv, APTR table) {
+    UBYTE *d;
+    const UBYTE *t = (const UBYTE *)texture, *m = (const UBYTE *)table;
+    ULONG mask, uu = (ULONG)u, vv = (ULONG)v;
+    if (!dest || !texture || count <= 0 || shift < 0 || shift > 12) return;
+    mask = (1UL << shift) - 1;
+    d = (UBYTE *)dest + offset;
+    if (m) {
+        while (count-- > 0) {
+            *d++ = m[t[(((vv >> 16) & mask) << shift) | ((uu >> 16) & mask)]];
+            uu += (ULONG)du;
+            vv += (ULONG)dv;
+        }
+    } else {
+        while (count-- > 0) {
+            *d++ = t[(((vv >> 16) & mask) << shift) | ((uu >> 16) & mask)];
+            uu += (ULONG)du;
+            vv += (ULONG)dv;
+        }
+    }
+}
+
 static void _dash_buffer_copy(APTR dest, LONG dest_offset, APTR src, LONG src_offset, LONG length) {
     CopyMem((UBYTE *)src + src_offset, (UBYTE *)dest + dest_offset, length);
 }
@@ -23618,10 +23670,24 @@ static STRPTR _dash_mui_keep(STRPTR text) {
 
 static STRPTR *_dash_mui_entries(STRPTR options);
 
+/* mui_app_icon (Dash 2.20, Tachyon: iconify, issue #19 of PerspexSphinx): the icon of the iconified application
+   (MUIA_Application_DiskObject; without it MUI takes ENV:Sys/def_MUI or its own). It lives until the application
+   goes. IconBase is tentative, like the one of the commodities: whoever opens it closes it; if the other one closed
+   it first, the icon stays (a few bytes, at the end of the program). */
+#include <workbench/workbench.h>
+#include <proto/icon.h>
+struct Library *IconBase;
+static struct DiskObject *_dash_mui_icon = NULL;
+static BOOL _dash_mui_icon_lib = FALSE;
+
 static void _dash_mui_app_end(void) {
     _dash_mui_nmodal = _dash_mui_nsleep = 0;   /* (nothing to wake: the windows close as they go) */
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
+    if (_dash_mui_icon && IconBase) FreeDiskObject(_dash_mui_icon);
+    _dash_mui_icon = NULL;
+    if (_dash_mui_icon_lib && IconBase) { CloseLibrary(IconBase); IconBase = NULL; }
+    _dash_mui_icon_lib = FALSE;
     {
         LONG i;
         for (i = 0; i < 8; i++)
@@ -23684,6 +23750,30 @@ static void _dash_mui_app_rexx(APTR app, APTR func) {
 }
 
 static void _dash_mui_rexx_fail(LONG rc) { _dash_mui_rexx_rc = rc; }
+
+/* mui_app_iconify(on) / mui_app_iconified() (Dash 2.20, Tachyon: issue #19 of PerspexSphinx): MUI closes every
+   window of the application and leaves its icon on the Workbench (MUIA_Application_Iconified); a double click on it
+   opens them again. The same as MUI's HIDE and SHOW by ARexx, or the iconify gadget where MUI puts one. */
+static void _dash_mui_app_iconify(LONG on) {
+    if (_dash_mui_app) SetAttrs((Object *)_dash_mui_app, MUIA_Application_Iconified, on ? TRUE : FALSE, TAG_DONE);
+}
+
+static LONG _dash_mui_app_iconified(void) {
+    IPTR v = 0;
+    if (_dash_mui_app) GetAttr(MUIA_Application_Iconified, (Object *)_dash_mui_app, &v);
+    return v ? 1 : 0;
+}
+
+static LONG _dash_mui_app_icon(STRPTR path) {
+    struct DiskObject *d;
+    if (!_dash_mui_app || !path || !*path || _dash_mui_app_iconified()) return 0;
+    if (!IconBase) { IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36); _dash_mui_icon_lib = IconBase != NULL; }
+    if (!IconBase || !(d = GetDiskObject((CONST_STRPTR)path))) return 0;
+    SetAttrs((Object *)_dash_mui_app, MUIA_Application_DiskObject, (IPTR)d, TAG_DONE);
+    if (_dash_mui_icon) FreeDiskObject(_dash_mui_icon);
+    _dash_mui_icon = d;
+    return 1;
+}
 
 static APTR _dash_mui_add(Object *obj);
 

@@ -139,6 +139,8 @@ const BuiltinInfo builtin_info[] = {
     {"buffer_set_long", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_word", 3, 0, 1, 0, 0, 0u, 0u},
     {"buffer_set_word", 3, 0, 1, 0, 0, 0u, 0u},
+    {"buffer_tex_span", 10, 0, 1, 0, 0, 0u, 0u},
+    {"buffer_tex_span", 10, 0, 1, 0, 0, 0u, 0u},
     {"build_date", 0, 3, 1, 0, 0, 0u, 0u},
     {"build_date", 0, 3, 1, 0, 0, 0u, 0u},
     {"build_time", 0, 3, 1, 0, 0, 0u, 0u},
@@ -621,6 +623,8 @@ const BuiltinInfo builtin_info[] = {
     {"gfx_pen_outline", 1, 0, 1, 0, 0, 0u, 0u},
     {"gfx_pens_draw", 6, 0, 1, 0, 0, 0u, 0u},
     {"gfx_pens_draw", 6, 0, 1, 0, 0, 0u, 0u},
+    {"gfx_pens_draw_rgb", 6, 0, 0, 0, 0, 0u, 0u},
+    {"gfx_pens_draw_rgb", 6, 0, 0, 0, 0, 0u, 0u},
     {"gfx_pixel", 2, 0, 1, 0, 0, 0u, 0u},
     {"gfx_pixel", 2, 0, 1, 0, 0, 0u, 0u},
     {"gfx_pixel_read", 2, 1, 1, 0, 0, 0u, 0u},
@@ -1045,6 +1049,12 @@ const BuiltinInfo builtin_info[] = {
     {"mui_app_end", 0, 0, 1, 0, 0, 0u, 0u},
     {"mui_app_field_colors", 9, 0, 1, 0, 2, 0u, 0u},
     {"mui_app_field_colors", 9, 0, 1, 0, 2, 0u, 0u},
+    {"mui_app_icon", 1, 2, 0, 0, 2, 1u, 0u},
+    {"mui_app_icon", 1, 2, 0, 0, 2, 1u, 0u},
+    {"mui_app_iconified", 0, 2, 1, 0, 2, 0u, 0u},
+    {"mui_app_iconified", 0, 2, 1, 0, 2, 0u, 0u},
+    {"mui_app_iconify", 1, 0, 1, 0, 2, 0u, 0u},
+    {"mui_app_iconify", 1, 0, 1, 0, 2, 0u, 0u},
     {"mui_app_rexx", 2, 0, 1, 0, 2, 0u, 0u},
     {"mui_app_rexx", 2, 0, 1, 0, 2, 0u, 0u},
     {"mui_balance", 0, 1, 1, 0, 2, 0u, 0u},
@@ -2214,7 +2224,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2212;
+const int builtin_count = 2222;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

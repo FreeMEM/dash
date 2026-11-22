@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1106 functions, 1106 implemented, 0 not implemented.
+Total: 1111 functions, 1111 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -4657,6 +4657,7 @@ it is not freed on its own: every `buffer_alloc` needs its `buffer_free`, or tha
 | [`buffer_get_long(buffer, offset)`](#buffer_get_long) | Int | Get 32-bit long at offset (big-endian) |  |
 | [`buffer_set_float(buffer, offset, value)`](#buffer_set_float) | — | Set a 32-bit float (IEEE single, as a C float) at offset: the vertices of gl_draw_arrays |  |
 | [`buffer_get_float(buffer, offset)`](#buffer_get_float) | Double | Get the 32-bit float (IEEE single) at offset, as a Double |  |
+| [`buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`](#buffer_tex_span) | — | Fills count bytes of dest from offset with texels of a square texture of 2^shift bytes a side (one byte each), from (u, v) stepping (du, dv) per byte, all in 16.16 fixed point and wrapping round; each texel through a 256-byte table if table is not 0 (the light). The inner loop of a textured 3D engine: one call per line of a triangle |  |
 | [`buffer_set_long(buffer, offset, value)`](#buffer_set_long) | — | Set 32-bit long at offset (big-endian) |  |
 | [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_copy) | — | Copy bytes between buffers |  |
 | [`buffer_fill(buffer, offset, length, value)`](#buffer_fill) | — | Fill buffer region with byte value |  |
@@ -4757,6 +4758,23 @@ See also: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_draw_a
 Returns, as a `Double`, the 32-bit `float` at that position.
 
 See also: [`buffer_set_float`](#buffer_set_float).
+
+<a id="buffer_tex_span"></a>
+
+### `buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`
+
+- `dest`, `offset`: the buffer written (a pen buffer of a screen, say) and from where.
+- `count`: how many bytes.
+- `texture`: the texture, one byte per texel, row after row; square, `2^shift` a side.
+- `shift`: the side of the texture as a power of two: 7 for 128 x 128 (up to 12).
+- `u`, `v`: the texel of the first byte, in 16.16 fixed point (`x * 65536`).
+- `du`, `dv`: how much `u` and `v` move on each byte, 16.16 too. They wrap round outside the texture.
+- `table`: 0, or a 256-byte buffer each texel goes through (the light: one table per level, as Quake's colormap).
+
+It is the inner loop of a textured 3D engine: one call per line of a triangle, with the `u`, `v` of its two ends. It
+is in C: a few instructions per byte.
+
+See also: [`buffer_fill`](#buffer_fill), [`gfx_pens_draw`](#gfx_pens_draw).
 
 <a id="buffer_set_long"></a>
 
@@ -5794,6 +5812,7 @@ it goes straight; on a palette screen each pixel takes the closest colour.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | [`gfx_rgb_draw(buffer, width, height, x, y)`](#gfx_rgb_draw) | — | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
+| [`gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`](#gfx_pens_draw_rgb) | — | Draw an image of pens (one byte a pixel) at x, y with the colors of a table (256 longs 0xRRGGBB, a buffer of 1024 bytes) instead of the screen's palette: for a screen of 16, 24 or 32 bits (RTG, one WritePixelArray); on a palette screen, the closest pens |  |
 | [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#gfx_rgb_draw_scaled) | — | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
 
 <a id="gfx_rgb_draw"></a>
@@ -5807,6 +5826,21 @@ it goes straight; on a palette screen each pixel takes the closest colour.
 Draws it in one go. On a palette screen, each pixel takes the closest colour.
 
 See also: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_pens_draw).
+
+<a id="gfx_pens_draw_rgb"></a>
+
+### `gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`
+
+- `buffer`: a buffer with one byte per pixel, the colour number (pen), row after row, as in `gfx_pens_draw`.
+- `width`, `height`: the size of the image.
+- `x`, `y`: where the top left corner goes.
+- `colors`: a 1024-byte buffer: 256 numbers `0xRRGGBB` (`buffer_set_long`), the colour of each pen.
+
+As `gfx_pens_draw`, but the colours come from the table and not from the screen's palette: on a 16, 24 or 32-bit
+screen (RTG) each pen has its colour with 8 bits per gun, without the 4 bits of `gfx_rgb`. It is turned into RGB in C
+and goes in one `WritePixelArray`. On a palette screen the closest pens are used (slower).
+
+See also: [`gfx_pens_draw`](#gfx_pens_draw), [`gfx_rgb_draw`](#gfx_rgb_draw), [`rtg_open_screen`](#rtg_open_screen).
 
 <a id="gfx_rgb_draw_scaled"></a>
 
@@ -11770,6 +11804,9 @@ end
 | [`mui_set_text_pen(obj, r, g, b)`](#mui_set_text_pen) | — | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
 | [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_app_field_colors) | — | The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, combo), inactive and active, and their cursor; the windows opened after it take them. The text stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128. MUI 4 or newer: with MUI 3.8 the fields keep the user's prefs |  |
 | [`mui_app_rexx(app, func)`](#mui_app_rexx) | — | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
+| [`mui_app_iconify(on)`](#mui_app_iconify) | — | true closes every window of the application and leaves its icon on the Workbench (a double click on it opens them again, as they were); false opens them again from the program. The same as MUI's HIDE and SHOW by ARexx |  |
+| [`mui_app_iconified()`](#mui_app_iconified) | Bool | true while the application is iconified (its windows closed and its icon on the Workbench) |  |
+| [`mui_app_icon(path)`](#mui_app_icon) | Bool | The icon (path without ".info", like "PROGDIR:Programa") that the iconified application leaves on the Workbench; without it, MUI's own. false if it cannot read it |  |
 | [`mui_rexx_fail(rc)`](#mui_rexx_fail) | — | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
 | [`mui_app_end()`](#mui_app_end) | — | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
 | [`mui_window_begin(title, id)`](#mui_window_begin) | Int (address) | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
@@ -12015,6 +12052,46 @@ Every ARexx command reaching the application's port that MUI does not answer its
 calls `func` with the whole line. What it returns is the RESULT. It runs while `mui_wait_event` waits.
 
 See also: [`mui_rexx_fail`](#mui_rexx_fail).
+
+<a id="mui_app_iconify"></a>
+
+### `mui_app_iconify(on)`
+
+- `on`: `true` to iconify, `false` to come back.
+
+With `true`, MUI closes every window of the application and leaves its icon on the Workbench (the one of
+`mui_app_icon`, or MUI's). A double click on the icon opens them again, as they were, with nothing for the program to
+do. With `false` they come back from the program. It is the same as MUI's HIDE and SHOW ARexx commands. Meanwhile the
+program goes on: events and timers still arrive.
+
+```dash
+if ev == ID_ICONIFY      # an "Iconify" menu item with Amiga-I
+    mui_app_iconify(true)
+end
+```
+
+See also: [`mui_app_iconified`](#mui_app_iconified), [`mui_app_icon`](#mui_app_icon).
+
+<a id="mui_app_iconified"></a>
+
+### `mui_app_iconified()` → `Bool`
+
+`true` while the application is iconified: its windows closed and its icon on the Workbench. For MUI the windows
+still count as open (they come back on leaving the icon).
+
+See also: [`mui_app_iconify`](#mui_app_iconify).
+
+<a id="mui_app_icon"></a>
+
+### `mui_app_icon(path)` → `Bool`
+
+- `path`: the icon's path without ".info", like `"PROGDIR:Program"`.
+
+The icon the iconified application leaves on the Workbench (otherwise MUI's: `ENV:Sys/def_MUI` or its own). It is read
+with icon.library and lasts as long as the application. `false` if it cannot be read (the previous one stays), or
+while it is iconified.
+
+See also: [`mui_app_iconify`](#mui_app_iconify).
 
 <a id="mui_rexx_fail"></a>
 

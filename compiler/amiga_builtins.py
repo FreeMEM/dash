@@ -2943,6 +2943,18 @@ BUFFER_FUNCTIONS = {
         needs_fileio=True,
         description="Get the 32-bit float (IEEE single) at offset, as a Double"
     ),
+    "buffer_tex_span": BuiltinFunc(
+        name="buffer_tex_span",
+        params=["dest", "offset", "count", "texture", "shift", "u", "v", "du", "dv", "table"],
+        return_type="void",
+        c_template="_dash_buffer_tex_span(${dest}, ${offset}, ${count}, ${texture}, ${shift}, ${u}, ${v}, ${du}, "
+                   "${dv}, ${table})",
+        needs_fileio=True,
+        description="Fills count bytes of dest from offset with texels of a square texture of 2^shift bytes a side "
+                    "(one byte each), from (u, v) stepping (du, dv) per byte, all in 16.16 fixed point and wrapping "
+                    "round; each texel through a 256-byte table if table is not 0 (the light). The inner loop of a "
+                    "textured 3D engine: one call per line of a triangle"
+    ),
     "buffer_set_long": BuiltinFunc(
         name="buffer_set_long",
         params=["buffer", "offset", "value"],
@@ -3902,6 +3914,20 @@ MUI_FUNCTIONS = {
                     "not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole "
                     "command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. "
                     "It runs while mui_wait_event waits"),
+    # Dash 2.20 (Tachyon, issue #19 of PerspexSphinx): iconify
+    "mui_app_iconify": BuiltinFunc(
+        name="mui_app_iconify", params=["on"], return_type="void", c_template="_dash_mui_app_iconify(${on})",
+        description="true closes every window of the application and leaves its icon on the Workbench (a double "
+                    "click on it opens them again, as they were); false opens them again from the program. The same "
+                    "as MUI's HIDE and SHOW by ARexx"),
+    "mui_app_iconified": BuiltinFunc(
+        name="mui_app_iconified", params=[], return_type="BOOL", c_template="_dash_mui_app_iconified()",
+        description="true while the application is iconified (its windows closed and its icon on the Workbench)"),
+    "mui_app_icon": BuiltinFunc(
+        name="mui_app_icon", params=["path"], return_type="BOOL", c_template="_dash_mui_app_icon(${path})",
+        reads_only=True,
+        description="The icon (path without \".info\", like \"PROGDIR:Programa\") that the iconified application "
+                    "leaves on the Workbench; without it, MUI's own. false if it cannot read it"),
     "mui_rexx_fail": BuiltinFunc(
         name="mui_rexx_fail", params=["rc"], return_type="void", c_template="_dash_mui_rexx_fail(${rc})",
         description="From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then)"),
@@ -5019,6 +5045,11 @@ RGB_FUNCTIONS = {
                          "_dash_rgb_draw(${buffer}, ${width}, ${height}, ${x}, ${y})",
                          "Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one "
                          "WritePixelArray; palette screens: the closest pens)"),
+    "gfx_pens_draw_rgb": _gfx("gfx_pens_draw_rgb", ["buffer", "width", "height", "x", "y", "colors"], "void",
+                              "_dash_gfx_pens_draw_rgb(${buffer}, ${width}, ${height}, ${x}, ${y}, ${colors})",
+                              "Draw an image of pens (one byte a pixel) at x, y with the colors of a table (256 longs "
+                              "0xRRGGBB, a buffer of 1024 bytes) instead of the screen's palette: for a screen of "
+                              "16, 24 or 32 bits (RTG, one WritePixelArray); on a palette screen, the closest pens"),
     "gfx_rgb_draw_scaled": _gfx("gfx_rgb_draw_scaled", ["buffer", "width", "height", "x", "y", "dest_width",
                                                         "dest_height"], "void",
                                 "_dash_rgb_draw_scaled(${buffer}, ${width}, ${height}, ${x}, ${y}, ${dest_width}, "

@@ -467,6 +467,35 @@ async function modelTests() {
         assert.strictEqual(p2.handler, null);
         assert.deepStrictEqual(p2.edits, [{ line: 0, text: 'const EVENTO_3 = 3' }]);
     });
+    await check('double click: the event of an object, with a number and a name if it has none (Jose)', () => {
+        const doc = { dashui: 1, windows: [{ name: 'Principal', title: 'Hola', close: 99,
+            menus: [{ title: 'Proyecto', items: [{ label: 'Acerca de...', key: 'A' }, { separator: true }] }],
+            root: { type: 'vgroup', children: [
+                { type: 'button', name: 'saludar', label: '_Saludar', event: 1 },
+                { type: 'button', label: 'Botón' }, { type: 'button', label: '_Saludar' },
+                { type: 'string', name: 'nombre', change: 4 }, { type: 'list' }, { type: 'text', text: 'x' },
+                { type: 'checkbox' }] } }] };
+        assert.deepStrictEqual(M.prepareEvent(doc, 0, { path: [0] }, []), { event: 1, name: 'saludar', key: 'event', changed: false });
+        // taken: the const values of the .dash (1, 2, 99): the lowest free one is 3
+        assert.deepStrictEqual(M.prepareEvent(doc, 0, { path: [1] }, [1, 2, 99]), { event: 3, name: 'boton', key: 'event', changed: true });
+        assert.strictEqual(doc.windows[0].root.children[1].event, 3);
+        // a name that is there already takes a number
+        assert.strictEqual(M.prepareEvent(doc, 0, { path: [2] }, []).name, 'saludar1');
+        assert.strictEqual(M.prepareEvent(doc, 0, { path: [3] }, []).key, 'change');      // a field with only change
+        assert.strictEqual(M.prepareEvent(doc, 0, { path: [4] }, []).key, 'change');
+        assert.match(M.prepareEvent(doc, 0, { path: [5] }, []).error, /no da eventos/);
+        assert.deepStrictEqual(M.prepareEvent(doc, 0, { window: true }, []), { event: 99, name: 'Principal', key: 'close', changed: false });
+        const item = M.prepareEvent(doc, 0, { menu: ['menus', 0, 0] }, []);
+        assert.strictEqual(item.name, 'acerca_de');
+        assert(item.event > 0 && doc.windows[0].menus[0].items[0].event === item.event);
+        assert.match(M.prepareEvent(doc, 0, { menu: ['menus', 0, 1] }, []).error, /no da eventos/);
+        assert.strictEqual(M.nameFromText('\u001bc_Nueva Partida!'), 'nueva_partida');
+        assert.strictEqual(M.nameFromText('end'), '');
+        assert.deepStrictEqual(L.constValues('const A = 1\nconst B = 99  # salir\nconst C = "x"\n'), [1, 99]);
+        // @version before the imports: the constant goes after them, not at the start (as in Forja)
+        const plan = L.addHandler('# x\n@version "x 1"\n\nimport "v.dashui"\n\nconst EV_A = 1\n\nMain\n    ev = mui_wait_event()\nend\n', 3, 'boton');
+        assert.deepStrictEqual(plan.edits[0], { line: 6, text: 'const ID_BOTON = 3' });
+    });
     await check('model: preview shows every object with its path', () => {
         const w = M.newWindow('W');
         w.title = 'Hola <b>';
@@ -729,7 +758,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newGraphic', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.mapEditor', 'editor:dash.spriteEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newGraphic', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.openEvent', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.mapEditor', 'editor:dash.spriteEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: a new sprite, BOB or map (Amiga-B in Forja) is written and opened in its editor', async () => {

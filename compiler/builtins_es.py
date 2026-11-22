@@ -297,6 +297,7 @@ DESC_ES = {
     "buffer_set_word": "Pone el word de 16 bits de una posición (big-endian)",
     "buffer_get_long": "El long de 32 bits en una posición (big-endian)",
     "buffer_set_long": "Pone el long de 32 bits de una posición (big-endian)",
+    "buffer_tex_span": "Rellena count bytes con los de una textura cuadrada (u, v y sus pasos en coma fija 16.16), cada uno por una tabla si la hay: una línea de un triángulo con textura",
     "buffer_set_float": "Pone un float de 32 bits (el de C) en una posición: los vértices de gl_draw_arrays",
     "buffer_get_float": "El float de 32 bits de una posición, como Double",
     "buffer_copy": "Copia bytes de un búfer a otro",
@@ -390,6 +391,8 @@ DESC_ES = {
     # Imágenes RGB desde un búfer
     "gfx_rgb_draw": "Dibuja un búfer RGB24 (3 bytes por píxel, filas una tras otra) en x, y (RTG: con un "
                     "WritePixelArray; pantallas de paleta: los colores más cercanos)",
+    "gfx_pens_draw_rgb": "Dibuja una imagen de lápices con los colores de una tabla (256 longs 0xRRGGBB) en vez "
+                         "de la paleta: para pantallas de 16 a 32 bits",
     "gfx_rgb_draw_scaled": "Dibuja un búfer RGB24 en x, y a dest_width x dest_height (el píxel más cercano, fila a fila)",
     # Imágenes (datatypes)
     "image_load": "Una imagen de un fichero con los datatypes (ILBM; PNG, GIF, JPEG si el sistema los tiene), con los "
@@ -1207,6 +1210,13 @@ DESC_ES = {
                             "que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, "
                             "104 y 120, 120, 128. MUI 4 o más: con MUI 3.8 los campos se quedan con las "
                             "preferencias del usuario",
+    "mui_app_iconify": "true cierra todas las ventanas de la aplicación y deja su icono en el Workbench (con doble "
+                       "clic en él vuelven a abrirse, como estaban); false las abre de nuevo desde el programa. Lo "
+                       "mismo que HIDE y SHOW de MUI por ARexx",
+    "mui_app_iconified": "true mientras la aplicación está iconificada (sus ventanas cerradas y su icono en el "
+                         "Workbench)",
+    "mui_app_icon": "El icono (ruta sin \".info\", como \"PROGDIR:Programa\") que deja la aplicación iconificada en "
+                    "el Workbench; sin él, el de MUI. false si no puede leerlo",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "

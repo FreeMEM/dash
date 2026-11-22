@@ -1,0 +1,54 @@
+# Test: gfx_pens_draw_rgb on a graphics card screen (RTG, 16 bits; Titan Force): an image of pens with the colours of
+# a table of 0xRRGGBB, not the screen's palette: pens 0 to 3 as red, green, blue and a grey that 4 bits per gun
+# cannot make (0x7A7A7A), each read back with gfx_pixel_rgb (16 bits: 5 or 6 bits per gun)
+# rtg
+# expect-out: rojo: ok
+# expect-out: verde: ok
+# expect-out: azul: ok
+# expect-out: gris: ok
+# expect-out: fin
+
+Window W
+    title "Lápices RGB"
+    width 320
+    height 200
+end
+
+func canal(c: Int, s: Int) -> Int
+    return (c >> s) & 255
+end
+
+func cerca(nombre: String, x: Int, y: Int, r: Int, g: Int, b: Int)
+    c = gfx_pixel_rgb(x, y)
+    if (canal(c, 16) - r).abs() <= 10 and (canal(c, 8) - g).abs() <= 10 and (canal(c, 0) - b).abs() <= 10
+        Print nombre + ": ok"
+    else
+        Print nombre + ": #{str_from_int(c, 16)} en #{x},#{y}"
+    end
+end
+
+Main
+    W.open
+    colores = buffer_alloc(1024)
+    buffer_fill(colores, 0, 1024, 0)
+    buffer_set_long(colores, 0, 0xFF0000)
+    buffer_set_long(colores, 4, 0x00FF00)
+    buffer_set_long(colores, 8, 0x0000FF)
+    buffer_set_long(colores, 12, 0x7A7A7A)
+    # 40 x 10: cuatro franjas de 10 columnas con los lápices 0 a 3
+    img = buffer_alloc(400)
+    for y in (0..9)
+        for x in (0..39)
+            buffer_set_byte(img, y * 40 + x, x / 10)
+        end
+    end
+    gfx_pens_draw_rgb(img, 40, 10, 20, 30, colores)
+    cerca("rojo", 25, 35, 255, 0, 0)
+    cerca("verde", 35, 35, 0, 255, 0)
+    cerca("azul", 45, 35, 0, 0, 255)
+    cerca("gris", 55, 35, 0x7A, 0x7A, 0x7A)
+    buffer_free(img)
+    buffer_free(colores)
+    W.close
+    Print "fin"
+end
