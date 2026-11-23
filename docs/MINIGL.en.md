@@ -116,3 +116,16 @@ engine in Dash (the maths, the ordering and the filling with `buffer_fill` in a 
 `gfx_pens_draw`) was three times faster than MiniGL over Wazp3D.
 
 Not tried: PiStorm3D, RadeonGL, and MiniGL Classic with a 3D card or with QuarkTex.
+
+## The 3D engine with MiniGL
+
+`lib/motor3d.dash` can fill with MiniGL: `m3d_abrir_gl(width, height, own)` instead of `m3d_abrir`, and `m3d_con_gl(m)`
+after `m3d_nuevo` (before `m3d_cargar`, which uploads the textures). The engine still does the maths, drops the back
+faces, lights and sorts far to near; MiniGL only fills the triangles, in 2D and in that order, with no Z buffer: the
+same picture as in software, with filtered textures and the dither turned into a mix of colours. The ground fog goes
+into the colour of each band of 4 rows, without transparency: with Wazp3D, blending with `GL_BLEND` went towards
+black. To end the frame, `m3d_mostrar(m)`; `m3d_texto` writes on top in both paths and `m3d_cerrar(m)` closes. Asked
+for by Titan Force (`RENDER=MINIGL`). In `coffin` with Wazp3D it runs at 1-2 frames a second (MiniGL in software);
+untested with a 3D card. `m3d_abrir_gl(..., true)` opens a 16-bit screen of its own: in `coffin`, Wazp3D draws there
+with the colours swapped; in a Workbench window they come out right.
+
