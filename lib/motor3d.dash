@@ -28,11 +28,23 @@
 #
 # Matrices de 3x4: [r00, r01, r02, tx, r10, r11, r12, ty, r20, r21, r22, tz]. Ejes: x a la derecha, y arriba, z
 # adelante. Las esquinas de la pantalla van en dieciseisavos de pixel.
+#
+# Con tarjeta 3D (MiniGL): m3d_abrir_gl en vez de m3d_abrir y m3d_con_gl(m) justo despues de m3d_nuevo (antes de
+# m3d_cargar, que sube las texturas). Todo sigue igual (transformar, quitar caras, luz, orden de lejos a cerca),
+# pero cada triangulo lo rellena MiniGL en vez del programa: el mismo dibujo, con la textura filtrada y la trama
+# hecha mezcla de colores. Para acabar el fotograma, m3d_mostrar(m) (screen_flip o gl_swap); m3d_texto escribe
+# encima (los fps) en los dos casos; m3d_cerrar(m) cierra la pantalla o MiniGL.
 
 const M3D_CUBETAS = 256
 const M3D_CERCA = 0.5
 const M3D_NIEBLA = 1
 const M3D_SUELO = 17
+# (los numeros de OpenGL que usa el camino de MiniGL: los de lib/amiga/gl.dash)
+const M3D_GL_TRIANGULOS = 4
+const M3D_GL_CUADROS = 7
+const M3D_GL_PROYECCION = 0x1701
+const M3D_GL_MODELO = 0x1700
+const M3D_GL_PROFUNDIDAD = 0x0B71
 
 # Un modelo: esquinas (con su hueso, -1 si ya estan en el mundo) y triangulos (lapiz base, textura y u, v)
 struct M3dMalla
@@ -63,6 +75,8 @@ struct M3dMalla
     qz: [Float]
     sx: [Int]
     sy: [Int]
+    # con MiniGL, cada textura del modelo en MiniGL
+    gl_tex: [Int]
 end
 
 struct M3d
@@ -108,6 +122,9 @@ struct M3d
     n: Int
     cabeza: [Int]
     siguiente: [Int]
+    # MiniGL: m3d_con_gl; la textura de cada triangulo de la lista (su numero en MiniGL)
+    gl: Bool
+    gltex: [Int]
 end
 
 # ---------------- matrices ----------------
@@ -189,9 +206,10 @@ func m3d_nuevo(ancho: Int, alto: Int, prof: Int, pixel: Int, trama: Bool) -> M3d
     end
     var vi: [Int] = []
     var vf: [Float] = []
+    var vg: [Int] = []
     m = M3d(ancho / pixel, alto / pixel, pixel, prof, 0, 0, 0, trama, 110.0, 260.0, 200.0, vf, 1.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -0.42, 0.8, 0.43, 0.0, 0.0, 0.0,
-            [], [], [], [], [], [], [], [], [], [], [], 0, [], vi)
+            [], [], [], [], [], [], [], [], [], [], [], 0, [], vi, false, vg)
     m.vista = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
     m.pant = buffer_alloc(m.an * m.al)
     m.pal = buffer_alloc(768)
@@ -368,6 +386,14 @@ end
 # Un triangulo de un lapiz (o un lapiz tramado, m3d_trama) en el bufer del motor. Se pinta cada pixel cuyo centro cae
 # dentro: dos triangulos que comparten un lado no dejan rendija ni pisan el mismo pixel.
 func m3d_tri(m: M3d, x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int, lapiz: Int)
+    if m.gl
+        gl_texture_bind(0)
+        gl_begin(M3D_GL_TRIANGULOS)
+        _m3d_gl_lapiz(m, lapiz, 1.0)
+        _m3d_gl_tri(x0, y0, x1, y1, x2, y2)
+        gl_end()
+        return
+    end
     buf = m.pant
     an = m.an
     al = m.al
@@ -668,7 +694,7 @@ end
 # ---------------- modelos ----------------
 
 func m3d_malla() -> M3dMalla
-    return M3dMalla([], [], [], [], [], [], [], [], [], [], [], 8, -1, 0.0, [], [], [], [], 0, 0, 0, 0, [], [], [], [], [])
+    return M3dMalla([], [], [], [], [], [], [], [], [], [], [], 8, -1, 0.0, [], [], [], [], 0, 0, 0, 0, [], [], [], [], [], [])
 end
 
 # Una esquina (en el sistema de su hueso; -1: en el mundo); devuelve su numero
@@ -805,6 +831,9 @@ func m3d_cargar(m: M3d, ml: M3dMalla, nombre: String, lapiz0: Int) -> Int
                 buffer_set_byte(ml.tex_tablas, t * 256 + i, lapiz0 + (i % nc) * 8 + t)
             end
         end
+        if m.gl
+            _m3d_gl_texturas(m, ml, ntex)
+        end
     end
     nh = buffer_get_word(buf, pos)
     pos = pos + 2
@@ -868,6 +897,12 @@ end
 
 # Libera las texturas de un modelo cargado
 func m3d_liberar_malla(ml: M3dMalla)
+    for t in ml.gl_tex
+        if t != 0
+            gl_texture_free(t)
+        end
+    end
+    ml.gl_tex = []
     if ml.tex_buf != 0
         buffer_free(ml.tex_buf)
         buffer_free(ml.tex_tablas)
@@ -1030,6 +1065,7 @@ func _m3d_anadir(m: M3d, x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int, l
         m.tex.push(0)
         m.lado.push(0)
         m.tabla.push(0)
+        m.gltex.push(0)
         for j in (0..5)
             m.uv.push(0)
         end
@@ -1048,6 +1084,10 @@ func _m3d_anadir(m: M3d, x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int, l
         m.tabla[q] = ml.tex_tablas + lapiz * 256
         for j in (0..5)
             m.uv[q * 6 + j] = ml.tuv[k * 6 + j]
+        end
+        m.gltex[q] = 0
+        if tt < ml.gl_tex.length
+            m.gltex[q] = ml.gl_tex[tt]
         end
     else
         m.tex[q] = 0
@@ -1074,6 +1114,10 @@ end
 
 # El fondo: el cielo por encima del horizonte (franjas; con trama, tramado del horizonte hacia arriba) y el suelo
 func m3d_fondo(m: M3d)
+    if m.gl
+        _m3d_gl_fondo(m)
+        return
+    end
     pant = m.pant
     an = m.an
     horizonte = m3d_horizonte(m)
@@ -1141,6 +1185,10 @@ func m3d_suelo_tri(m: M3d, x0: Float, z0: Float, x1: Float, z1: Float, x2: Float
             ry2.push(al * 8 - Int(16.0 * foco * cy2 / M3D_CERCA))
         end
     end
+    if m.gl
+        _m3d_gl_suelo(m, rx2, ry2, lapiz)
+        return
+    end
     if rx2.length >= 3
         for j in (1..rx2.length - 2)
             m3d_tri(m, rx2[0], ry2[0], rx2[j], ry2[j], rx2[j + 1], ry2[j + 1], lapiz)
@@ -1157,6 +1205,10 @@ end
 # Con trama, la niebla sobre el suelo: la distancia de cada fila (igual en toda la fila: la camara no se ladea)
 func m3d_niebla_suelo(m: M3d)
     if not m.trama
+        return
+    end
+    if m.gl
+        # (con MiniGL, la niebla ya va en el color del suelo: _m3d_gl_suelo y el fondo)
         return
     end
     y0 = m3d_horizonte(m)
@@ -1179,6 +1231,10 @@ end
 
 # Los triangulos puestos, de lejos a cerca
 func m3d_pintar(m: M3d)
+    if m.gl
+        _m3d_gl_pintar(m)
+        return
+    end
     b = M3D_CUBETAS - 1
     while b >= 0
         q = m.cabeza[b]
@@ -1198,9 +1254,405 @@ end
 
 # El bufer a la pantalla (en 0, 0; cada pixel de m.pixel x m.pixel)
 func m3d_volcar(m: M3d)
+    if m.gl
+        # (MiniGL ya lo ha pintado; se ve con m3d_mostrar)
+        return
+    end
     if m.prof > 8
         gfx_pens_draw_rgb(m.pant, m.an, m.al, 0, 0, m.lut)
     else
         gfx_pens_draw(m.pant, m.an, m.al, 0, 0, m.pixel)
     end
+end
+
+# ---------------- MiniGL ----------------
+
+# Abre MiniGL de ancho x alto: en una ventana del Workbench o (propia) en una pantalla suya de 16 bits. False sin
+# minigl.library 29 o mas, sin FPU o si no abre.
+func m3d_abrir_gl(ancho: Int, alto: Int, propia: Bool) -> Bool
+    if propia
+        return gl_open_screen(ancho, alto)
+    end
+    return gl_open(ancho, alto)
+end
+
+# El motor pinta con MiniGL (despues de m3d_nuevo y antes de m3d_cargar): todo se dibuja en 2D, en el orden del
+# motor por software (de lejos a cerca), sin Z-buffer, sobre m.an x m.al estirado a la ventana
+func m3d_con_gl(m: M3d)
+    m.gl = true
+    gl_disable(M3D_GL_PROFUNDIDAD)
+    gl_matrix_mode(M3D_GL_PROYECCION)
+    gl_load_identity()
+    gl_ortho(0.0, Float(m.an), Float(m.al), 0.0, -1.0, 1.0)
+    gl_matrix_mode(M3D_GL_MODELO)
+    gl_load_identity()
+end
+
+# Ensena el fotograma: screen_flip o, con MiniGL, gl_swap
+func m3d_mostrar(m: M3d)
+    if m.gl
+        gl_swap()
+    else
+        screen_flip()
+    end
+end
+
+# Cierra la pantalla o MiniGL
+func m3d_cerrar(m: M3d)
+    if m.gl
+        gl_close()
+    else
+        screen_close()
+    end
+end
+
+# True si se cerro la ventana de MiniGL
+func m3d_cerrada(m: M3d) -> Bool
+    return m.gl and gl_closed()
+end
+
+# Un texto corto sobre un recuadro en (x, y) de la pantalla, despues de m3d_volcar (los fps): con MiniGL, con una
+# letra propia de 3 x 5 (cifras, f, p, s, punto y espacio)
+func m3d_texto(m: M3d, x: Int, y: Int, texto: String, fondo: Int, letra: Int)
+    if not m.gl
+        gfx_pen(fondo)
+        gfx_rect(x, y, x + 10 + gfx_text_len(texto), y + 16)
+        gfx_pen(letra)
+        gfx_text_at(x + 5, y + 12, texto)
+        return
+    end
+    letras = "0123456789fps."
+    dibujos = [0x7B6F, 0x2C97, 0x73E7, 0x73CF, 0x5BC9, 0x79CF, 0x79EF, 0x7292, 0x7BEF, 0x7BCF, 0x39A4, 0x6BA4, 0x388E, 0x0002]
+    e = 2.0 / Float(m.pixel)
+    x0 = Float(x) / Float(m.pixel)
+    y0 = Float(y) / Float(m.pixel)
+    gl_texture_bind(0)
+    gl_begin(M3D_GL_CUADROS)
+    _m3d_gl_lapiz(m, fondo, 1.0)
+    _m3d_gl_cuadro(x0, y0, x0 + e * (4.0 * Float(texto.length) + 3.0), y0 + e * 9.0)
+    _m3d_gl_lapiz(m, letra, 1.0)
+    for i in (0..texto.length - 1)
+        d = 0
+        for j in (0..letras.length - 1)
+            if letras[j:j + 1] == texto[i:i + 1]
+                d = dibujos[j]
+            end
+        end
+        for f in (0..4)
+            for c in (0..2)
+                if (d >> (14 - f * 3 - c)) & 1 == 1
+                    cx = x0 + e * (2.0 + 4.0 * Float(i) + Float(c))
+                    cy = y0 + e * (2.0 + Float(f))
+                    _m3d_gl_cuadro(cx, cy, cx + e, cy + e)
+                end
+            end
+        end
+    end
+    gl_end()
+end
+
+func _m3d_gl_cuadro(x0: Float, y0: Float, x1: Float, y1: Float)
+    gl_vertex(x0, y0, 0.0)
+    gl_vertex(x1, y0, 0.0)
+    gl_vertex(x1, y1, 0.0)
+    gl_vertex(x0, y1, 0.0)
+end
+
+# El color de un lapiz (o de un lapiz tramado: la mezcla de los dos), por f
+func _m3d_gl_lapiz(m: M3d, lapiz: Int, f: Float)
+    a = lapiz & 255
+    r = Float(buffer_get_byte(m.pal, a * 3))
+    g = Float(buffer_get_byte(m.pal, a * 3 + 1))
+    b = Float(buffer_get_byte(m.pal, a * 3 + 2))
+    if lapiz >= 256
+        o = (lapiz >> 8) & 255
+        t = Float((lapiz >> 16) & 255) / 16.0
+        r = r + (Float(buffer_get_byte(m.pal, o * 3)) - r) * t
+        g = g + (Float(buffer_get_byte(m.pal, o * 3 + 1)) - g) * t
+        b = b + (Float(buffer_get_byte(m.pal, o * 3 + 2)) - b) * t
+    end
+    gl_color(r * f / 255.0, g * f / 255.0, b * f / 255.0)
+end
+
+# Un triangulo con las esquinas en dieciseisavos de pixel (entre gl_begin y gl_end)
+func _m3d_gl_tri(x0: Int, y0: Int, x1: Int, y1: Int, x2: Int, y2: Int)
+    gl_vertex(Float(x0) / 16.0, Float(y0) / 16.0, 0.0)
+    gl_vertex(Float(x1) / 16.0, Float(y1) / 16.0, 0.0)
+    gl_vertex(Float(x2) / 16.0, Float(y2) / 16.0, 0.0)
+end
+
+func _m3d_le(buf: Int, pos: Int, v: Int)
+    buffer_set_byte(buf, pos, v & 255)
+    buffer_set_byte(buf, pos + 1, (v >> 8) & 255)
+    buffer_set_byte(buf, pos + 2, (v >> 16) & 255)
+    buffer_set_byte(buf, pos + 3, (v >> 24) & 255)
+end
+
+# Las texturas de un modelo a MiniGL: cada texel con el color de su tono mas claro (el 7: x 1,3); la luz de la cara
+# (gl_color) llega hasta 1 / 1,3. gl_texture toma una imagen de image_decode: pasan por un BMP de 24 bits en T:.
+func _m3d_gl_texturas(m: M3d, ml: M3dMalla, ntex: Int)
+    lado = 1 << ml.tex_lado
+    lut = buffer_alloc(768)
+    for i in (0..255)
+        l = buffer_get_byte(ml.tex_tablas, 7 * 256 + i)
+        # BMP: azul, verde, rojo
+        buffer_set_byte(lut, i * 3, buffer_get_byte(m.pal, l * 3 + 2))
+        buffer_set_byte(lut, i * 3 + 1, buffer_get_byte(m.pal, l * 3 + 1))
+        buffer_set_byte(lut, i * 3 + 2, buffer_get_byte(m.pal, l * 3))
+    end
+    tam = 54 + lado * lado * 3
+    bmp = buffer_alloc(tam)
+    buffer_fill(bmp, 0, 54, 0)
+    buffer_set_byte(bmp, 0, 66)
+    buffer_set_byte(bmp, 1, 77)
+    _m3d_le(bmp, 2, tam)
+    _m3d_le(bmp, 10, 54)
+    _m3d_le(bmp, 14, 40)
+    _m3d_le(bmp, 18, lado)
+    _m3d_le(bmp, 22, lado)
+    buffer_set_byte(bmp, 26, 1)
+    buffer_set_byte(bmp, 28, 24)
+    _m3d_le(bmp, 34, lado * lado * 3)
+    fichero = "T:motor3d_tex.bmp"
+    for t in (0..ntex - 1)
+        src = ml.tex_base + t * lado * lado
+        for y in (0..lado - 1)
+            # el BMP va de abajo arriba
+            fila = 54 + (lado - 1 - y) * lado * 3
+            o = y * lado
+            for x in (0..lado - 1)
+                i = buffer_get_byte(src, o + x) * 3
+                p = fila + x * 3
+                buffer_set_byte(bmp, p, buffer_get_byte(lut, i))
+                buffer_set_byte(bmp, p + 1, buffer_get_byte(lut, i + 1))
+                buffer_set_byte(bmp, p + 2, buffer_get_byte(lut, i + 2))
+            end
+        end
+        id = 0
+        if file_save(fichero, bmp, tam)
+            d = image_decode(fichero, lado, lado)
+            if d != 0
+                id = gl_texture(d)
+                image_decoded_free(d)
+            end
+        end
+        ml.gl_tex.push(id)
+    end
+    file_delete(fichero)
+    buffer_free(bmp)
+    buffer_free(lut)
+end
+
+# El fondo con MiniGL: franjas de 2 filas con el color del cielo de cada una (con trama, la mezcla) y el suelo
+func _m3d_gl_fondo(m: M3d)
+    horizonte = m3d_horizonte(m)
+    gl_texture_bind(0)
+    gl_begin(M3D_GL_CUADROS)
+    y = 0
+    while y < m.al
+        y2 = y + 2
+        lapiz = M3D_SUELO
+        if y < horizonte
+            if y2 > horizonte
+                y2 = horizonte
+            end
+            if m.trama
+                sc = Float(horizonte - y) / (Float(m.al) * 0.55) * 3.0
+                lapiz = 4
+                if sc < 3.0
+                    tc = Int(sc)
+                    lapiz = m3d_trama(1 + tc, 2 + tc, Int((sc - Float(tc)) * 16.0))
+                end
+            else
+                lapiz = 16 - (horizonte - y) / 8
+                if lapiz < 1
+                    lapiz = 1
+                end
+            end
+        else
+            if not m.trama
+                y2 = m.al
+            end
+        end
+        if y2 > m.al
+            y2 = m.al
+        end
+        if y >= horizonte and m.trama
+            _m3d_gl_lapiz_niebla(m, lapiz, _m3d_niebla_fila(m, Float(y) + 1.0))
+        else
+            _m3d_gl_lapiz(m, lapiz, 1.0)
+        end
+        _m3d_gl_cuadro(0.0, Float(y), Float(m.an), Float(y2))
+        y = y2
+    end
+    gl_end()
+end
+
+# La niebla del suelo (0 a 16) en la fila y del bufer, como m3d_niebla_suelo (0 sin trama)
+func _m3d_niebla_fila(m: M3d, y: Float) -> Int
+    if not m.trama
+        return 0
+    end
+    yc = 0.0 - (y - Float(m.al) / 2.0) / m.foco
+    dw = m.uy * yc + m.fy
+    if dw >= 0.0
+        return 16
+    end
+    return m3d_niebla(m, (0.0 - m.ey) / dw)
+end
+
+# El color de un lapiz (o tramado) llevado hacia el de la niebla en nf / 16
+func _m3d_gl_lapiz_niebla(m: M3d, lapiz: Int, nf: Int)
+    a = lapiz & 255
+    r = Float(buffer_get_byte(m.pal, a * 3))
+    g = Float(buffer_get_byte(m.pal, a * 3 + 1))
+    b = Float(buffer_get_byte(m.pal, a * 3 + 2))
+    if lapiz >= 256
+        o = (lapiz >> 8) & 255
+        t = Float((lapiz >> 16) & 255) / 16.0
+        r = r + (Float(buffer_get_byte(m.pal, o * 3)) - r) * t
+        g = g + (Float(buffer_get_byte(m.pal, o * 3 + 1)) - g) * t
+        b = b + (Float(buffer_get_byte(m.pal, o * 3 + 2)) - b) * t
+    end
+    if nf > 0
+        t = Float(nf) / 16.0
+        r = r + (Float(buffer_get_byte(m.pal, M3D_NIEBLA * 3)) - r) * t
+        g = g + (Float(buffer_get_byte(m.pal, M3D_NIEBLA * 3 + 1)) - g) * t
+        b = b + (Float(buffer_get_byte(m.pal, M3D_NIEBLA * 3 + 2)) - b) * t
+    end
+    gl_color(r / 255.0, g / 255.0, b / 255.0)
+end
+
+# Un poligono del suelo con MiniGL (esquinas en dieciseisavos de pixel): sin niebla, de una vez; con trama, en franjas
+# de 4 filas, cada una con la niebla de su fila del medio (MiniGL no mezcla igual en todas partes: sin transparencias)
+func _m3d_gl_suelo(m: M3d, xs: [Int], ys: [Int], lapiz: Int)
+    n = xs.length
+    if n < 3
+        return
+    end
+    gl_texture_bind(0)
+    if not m.trama
+        gl_begin(M3D_GL_TRIANGULOS)
+        _m3d_gl_lapiz(m, lapiz, 1.0)
+        for j in (1..n - 2)
+            _m3d_gl_tri(xs[0], ys[0], xs[j], ys[j], xs[j + 1], ys[j + 1])
+        end
+        gl_end()
+        return
+    end
+    var px: [Float] = []
+    var py: [Float] = []
+    ya = 1000000.0
+    yb = -1000000.0
+    for j in (0..n - 1)
+        px.push(Float(xs[j]) / 16.0)
+        py.push(Float(ys[j]) / 16.0)
+        if py[j] < ya
+            ya = py[j]
+        end
+        if py[j] > yb
+            yb = py[j]
+        end
+    end
+    if ya < 0.0
+        ya = 0.0
+    end
+    if yb > Float(m.al)
+        yb = Float(m.al)
+    end
+    f = Int(ya / 4.0) * 4
+    gl_begin(M3D_GL_TRIANGULOS)
+    while Float(f) < yb
+        y0 = Float(f)
+        y1 = y0 + 4.0
+        # el poligono entre las filas y0 e y1 (recortado por arriba y por abajo)
+        var ax: [Float] = []
+        var ay: [Float] = []
+        for j in (0..n - 1)
+            k = (j + 1) % n
+            dj = py[j] >= y0
+            dk = py[k] >= y0
+            if dj
+                ax.push(px[j])
+                ay.push(py[j])
+            end
+            if dj != dk
+                ax.push(px[j] + (px[k] - px[j]) * (y0 - py[j]) / (py[k] - py[j]))
+                ay.push(y0)
+            end
+        end
+        var bx: [Float] = []
+        var by: [Float] = []
+        na = ax.length
+        for j in (0..na - 1)
+            k = (j + 1) % na
+            dj = ay[j] <= y1
+            dk = ay[k] <= y1
+            if dj
+                bx.push(ax[j])
+                by.push(ay[j])
+            end
+            if dj != dk
+                bx.push(ax[j] + (ax[k] - ax[j]) * (y1 - ay[j]) / (ay[k] - ay[j]))
+                by.push(y1)
+            end
+        end
+        if bx.length >= 3
+            _m3d_gl_lapiz_niebla(m, lapiz, _m3d_niebla_fila(m, y0 + 2.0))
+            for j in (1..bx.length - 2)
+                gl_vertex(bx[0], by[0], 0.0)
+                gl_vertex(bx[j], by[j], 0.0)
+                gl_vertex(bx[j + 1], by[j + 1], 0.0)
+            end
+        end
+        f = f + 4
+    end
+    gl_end()
+end
+
+# Los triangulos puestos con MiniGL, de lejos a cerca; un gl_begin por tramo seguido con la misma textura
+func _m3d_gl_pintar(m: M3d)
+    actual = -1
+    abierto = false
+    b = M3D_CUBETAS - 1
+    while b >= 0
+        q = m.cabeza[b]
+        while q >= 0
+            tex = 0
+            if m.tex[q] != 0
+                tex = m.gltex[q]
+            end
+            if tex != actual or not abierto
+                if abierto
+                    gl_end()
+                end
+                gl_texture_bind(tex)
+                gl_begin(M3D_GL_TRIANGULOS)
+                abierto = true
+                actual = tex
+            end
+            if m.tex[q] != 0
+                # la luz de la cara: el tono (0 a 7) de las tablas de m3d_cargar
+                f = (0.55 + 0.75 * Float(m.lapiz[q]) / 7.0) / 1.3
+                gl_color(f, f, f)
+                esc = 1.0 / Float(64 << m.lado[q])
+                u = q * 6
+                gl_tex_coord(Float(m.uv[u]) * esc, Float(m.uv[u + 1]) * esc)
+                gl_vertex(Float(m.x0[q]) / 16.0, Float(m.y0[q]) / 16.0, 0.0)
+                gl_tex_coord(Float(m.uv[u + 2]) * esc, Float(m.uv[u + 3]) * esc)
+                gl_vertex(Float(m.x1[q]) / 16.0, Float(m.y1[q]) / 16.0, 0.0)
+                gl_tex_coord(Float(m.uv[u + 4]) * esc, Float(m.uv[u + 5]) * esc)
+                gl_vertex(Float(m.x2[q]) / 16.0, Float(m.y2[q]) / 16.0, 0.0)
+            else
+                _m3d_gl_lapiz(m, m.lapiz[q], 1.0)
+                _m3d_gl_tri(m.x0[q], m.y0[q], m.x1[q], m.y1[q], m.x2[q], m.y2[q])
+            end
+            q = m.siguiente[q]
+        end
+        b = b - 1
+    end
+    if abierto
+        gl_end()
+    end
+    gl_texture_bind(0)
 end

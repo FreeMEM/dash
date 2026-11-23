@@ -117,3 +117,15 @@ motor por software en Dash (las cuentas, el orden y el relleno con `buffer_fill`
 `gfx_pens_draw`) fue tres veces más rápido que MiniGL sobre Wazp3D.
 
 Sin probar: PiStorm3D, RadeonGL y MiniGL Classic con una tarjeta 3D o con QuarkTex.
+
+## El motor 3D con MiniGL
+
+`lib/motor3d.dash` puede rellenar con MiniGL: `m3d_abrir_gl(ancho, alto, propia)` en vez de `m3d_abrir` y
+`m3d_con_gl(m)` después de `m3d_nuevo` (antes de `m3d_cargar`, que sube las texturas). El motor sigue haciendo las
+cuentas, quita las caras de espaldas, pone la luz y ordena de lejos a cerca; MiniGL solo rellena los triángulos, en 2D
+y en ese orden, sin Z-buffer: el mismo dibujo que por software, con la textura filtrada y la trama hecha mezcla de
+colores. La niebla del suelo va en el color de cada franja de 4 filas, sin transparencias: con Wazp3D, la mezcla con
+`GL_BLEND` salía hacia negro. Para acabar el fotograma, `m3d_mostrar(m)`; `m3d_texto` escribe encima en los dos
+caminos y `m3d_cerrar(m)` cierra. Lo pidió Titan Force (`RENDER=MINIGL`). En `coffin` con Wazp3D va a 1-2 fotogramas
+por segundo (MiniGL por software); sin probar con una tarjeta 3D. `m3d_abrir_gl(..., true)` abre una pantalla propia
+de 16 bits: en `coffin`, ahí Wazp3D pinta con los colores cambiados; en una ventana del Workbench salen bien.
