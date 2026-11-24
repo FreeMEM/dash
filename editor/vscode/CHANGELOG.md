@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-24)
 
 - **Double click to the code of an event**, as in Visual Basic or Delphi (asked by Jose in Dash Amiga #2244; Forja's
   window editor does the same): a double click on an object of the tree or the preview, on the title of the window
@@ -11,8 +11,6 @@
   tabs and lists, `ack` for text fields. Command `dash.openEvent`.
 - The constant of a new event goes after the `import`s and `const`s also when a directive (`@version`) comes before
   them; it went to the start of the file.
-
-## 0.6.0 (2026-11-17)
 
 On Linux and DashOS the extension is the IDE of Dash, as Forja is on the Amiga (asked by the user; FORJA_LOOP 6.1 of
 Forja). For a Dash newer than 2.15.0 (its `main` of 2026-11-17: `./dash --check` with every error and `--texto`, and
