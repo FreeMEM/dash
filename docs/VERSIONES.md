@@ -33,12 +33,33 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
-### 2.20.0 (2026-11-22)
+### 2.20.0 (2026-11-24)
 
-Un builtin nuevo para MUI. Todo lo que compilaba sigue compilando igual.
+Builtins nuevos para MUI, MiniGL, gráficos y handlers de DOS, un motor 3D en `lib/` y dos arreglos. Todo lo que
+compilaba sigue compilando igual, salvo un programa que metía un número donde va una lista (ver abajo).
 
 - **Nuevo:** `mui_list_stripes(list, true)` pone las filas de una lista en colores alternos, los de las preferencias
   de MUI (MUI 5). Lo pidió el usuario para el cliente de Hangar.
+- **Nuevo:** `mui_app_iconify(on)`, `mui_app_iconified()` y `mui_app_icon(ruta)`: iconificar una aplicación MUI
+  desde el programa, por ejemplo con un menú Amiga-I, y elegir el icono que deja en el Workbench. Lo pidió
+  PerspexSphinx para Tachyon.
+- **Nuevo:** handlers de DOS escritos en Dash: `./dash --handler` (o `@handler`) y `lib/amiga/handler.dash`, con 19
+  builtins para paquetes, volúmenes y bloques del dispositivo. Ejemplo `examples/handler_ram.dash` y sección 28 del
+  manual. Idea del usuario.
+- **Nuevo:** MiniGL en bloque, `gl_draw_arrays`, `gl_draw_elements` y `gl_mult_matrix`, y `buffer_set_float` /
+  `buffer_get_float`. Para Titan Force.
+- **Nuevo:** `buffer_tex_span`, una línea de un triángulo con textura (motor 3D por software), y
+  `gfx_pens_draw_rgb`, una imagen de lápices con una tabla de colores 0xRRGGBB para pantallas de 16 a 32 bits. Para
+  Titan Force.
+- **Nuevo:** `lib/motor3d.dash`, el motor 3D por software de Titan Force para otros juegos: modelos con huesos,
+  cámara, luz, texturas, tramado, y relleno con MiniGL (`m3d_abrir_gl`, `m3d_con_gl`) para quien tenga tarjeta 3D.
+- **Arreglo:** rodeo del fallo del JIT de Emu68 1.1.0-beta.1 con las multiplicaciones de 32 bits (Tachyon se colgaba
+  en una PiStorm). Lo contaron David Martínez y BordanBordan. Lo arregla también Emu68 1.1.0-beta.2.
+- **Arreglo:** con `--gcc`, escribir en una `[[Float]]` (`l[i][j] = 1.5`) daba error; el camino directo ya iba bien.
+- **Cambio:** un número no pasa a ser una lista ni al revés. Con `--gcc` se aceptaba con un aviso del C y leía
+  basura; ahora los dos caminos dan un error claro. Si un programa lo hacía, estaba mal y hay que corregirlo.
+- Extensión de VS Code 0.6.0, aparte: doble clic en un objeto del editor de `.dashui` lleva al código de su evento,
+  como en el diseñador de Forja. Lo pidió Jose.
 
 ### 2.19.0 (2026-11-21)
 

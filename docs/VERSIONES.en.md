@@ -32,12 +32,32 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
-### 2.20.0 (2026-11-22)
+### 2.20.0 (2026-11-24)
 
-One new builtin for MUI. Everything that compiled still compiles the same.
+New builtins for MUI, MiniGL, graphics and DOS handlers, a 3D engine in `lib/` and two fixes. Everything that
+compiled still compiles the same, except a program that put a number where a list goes (see below).
 
 - **New:** `mui_list_stripes(list, true)` shows a list's rows in alternate colours, the ones set in the MUI prefs
   (MUI 5). Requested for the Hangar client.
+- **New:** `mui_app_iconify(on)`, `mui_app_iconified()` and `mui_app_icon(path)`: iconify an MUI application from
+  the program, for instance with an Amiga-I menu, and choose the icon it leaves on the Workbench. Requested by
+  PerspexSphinx for Tachyon.
+- **New:** DOS handlers written in Dash: `./dash --handler` (or `@handler`) and `lib/amiga/handler.dash`, with 19
+  builtins for packets, volumes and device blocks. Example `examples/handler_ram.dash` and section 28 of the
+  manual.
+- **New:** batched MiniGL, `gl_draw_arrays`, `gl_draw_elements` and `gl_mult_matrix`, and `buffer_set_float` /
+  `buffer_get_float`. For Titan Force.
+- **New:** `buffer_tex_span`, one line of a textured triangle (software 3D engine), and `gfx_pens_draw_rgb`, a pen
+  image with a 0xRRGGBB colour table for 16 to 32-bit screens. For Titan Force.
+- **New:** `lib/motor3d.dash`, Titan Force's software 3D engine for other games: skinned models, camera, lighting,
+  textures, dithering, and filling with MiniGL (`m3d_abrir_gl`, `m3d_con_gl`) for those with a 3D card.
+- **Fix:** workaround for the Emu68 1.1.0-beta.1 JIT bug with 32-bit multiplications (Tachyon hung on a PiStorm).
+  Reported by David Martínez and BordanBordan. Emu68 1.1.0-beta.2 fixes it too.
+- **Fix:** with `--gcc`, writing to a `[[Float]]` (`l[i][j] = 1.5`) gave an error; the direct path already worked.
+- **Change:** a number no longer becomes a list or the other way round. `--gcc` accepted it with a C warning and
+  read garbage; now both paths give a clear error. A program that did it was wrong and needs fixing.
+- VS Code extension 0.6.0, separately: a double click on an object in the `.dashui` editor goes to its event's code,
+  as in Forja's designer. Requested by Jose.
 
 ### 2.19.0 (2026-11-21)
 
