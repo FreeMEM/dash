@@ -4965,6 +4965,21 @@ TLS_FUNCTIONS = {
     "tls_resumed": _text("tls_resumed", ["tls"], "BOOL", "_dash_tls_resumed(${tls})",
                          "True if the connection resumed an earlier session with the same server "
                          "(no key exchange)"),
+    # certificates that cannot be verified, accepted after asking the user (as browsers do)
+    "tls_last_cert": _text("tls_last_cert", ["host"], "STRPTR", "_dash_tls_last_cert(${host})",
+                           "The last certificate of host (\"\": of any server) that could not be verified, in lines to "
+                           "show the user: server, subject, issuer, dates, SHA-256 fingerprint and reason; \"\" if none"),
+    "tls_last_fingerprint": _text("tls_last_fingerprint", ["host"], "STRPTR", "_dash_tls_last_fingerprint(${host})",
+                                  "The SHA-256 fingerprint (\"AB:CD:...\") of tls_last_cert(host); \"\" if none"),
+    "tls_trust": _text("tls_trust", ["fingerprint"], "BOOL", "_dash_tls_trust(${fingerprint})",
+                       "From now on, while the program runs, accept the certificate with that SHA-256 fingerprint "
+                       "although it cannot be verified (the others are checked as always); false if it is not a "
+                       "fingerprint or there are 64 already"),
+    "tls_untrust": _text("tls_untrust", ["fingerprint"], "BOOL", "_dash_tls_untrust(${fingerprint})",
+                         "Stop accepting a certificate of tls_trust (also a session already kept with it); false if "
+                         "it was not accepted"),
+    "tls_trust_clear": _text("tls_trust_clear", [], "void", "_dash_tls_trust_clear()",
+                             "Stop accepting every certificate of tls_trust"),
 }
 
 # =============================================================================

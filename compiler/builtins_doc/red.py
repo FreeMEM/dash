@@ -43,11 +43,23 @@ something else, the "Network in a task of its own" group.
 Conexiones cifradas (TLS, lo de HTTPS) con AmiSSL, que tiene que estar instalado. Se conecta el socket con
 `net_connect` y después `tls_connect(socket, host)` negocia la TLS comprobando el certificado del servidor. Desde
 ahí se envía y recibe con `tls_send` y `tls_recv`, y al acabar `tls_close` y `net_close`.
+
+**Un certificado que no se puede comprobar** (autofirmado, de un emisor desconocido, caducado...) hace fallar la
+conexión, como debe. Para aceptarlo después de avisar al usuario, como hacen los navegadores: `tls_last_cert(host)`
+da sus datos para enseñarlos, y si el usuario lo acepta, `tls_trust(tls_last_fingerprint(host))`. Desde ahí se acepta
+ese certificado, y solo ese, también por `net_bg_open_tls`. Dura lo que dure el programa: para recordarlo, el programa
+guarda la huella en sus ajustes y llama a `tls_trust` al arrancar.
 """,
         "en": """\
 Encrypted connections (TLS, what HTTPS uses) with AmiSSL, which must be installed. Connect the socket with
 `net_connect` and then `tls_connect(socket, host)` negotiates TLS checking the server's certificate. From then on,
 send and receive with `tls_send` and `tls_recv`, and at the end `tls_close` and `net_close`.
+
+**A certificate that cannot be verified** (self-signed, from an unknown issuer, expired...) makes the connection fail,
+as it should. To accept it after warning the user, as browsers do: `tls_last_cert(host)` gives its details to show,
+and if the user accepts it, `tls_trust(tls_last_fingerprint(host))`. From then on that certificate, and only that one,
+is accepted, also through `net_bg_open_tls`. It lasts while the program runs: to remember it, the program keeps the
+fingerprint in its settings and calls `tls_trust` at start.
 """,
     },
     "NETBG_FUNCTIONS": {
@@ -287,6 +299,89 @@ Starts TLS without waiting. Returns the connection, or -1. Then `tls_connect_pol
     "tls_resumed": _f(_T_ES + "\nDevuelve `true` si retomó una sesión anterior con el mismo servidor, sin volver a intercambiar claves (más rápido).\n",
                       _T_EN + "\nReturns `true` if it resumed an earlier session with the same server, without exchanging keys again (faster).\n",
                       []),
+    "tls_last_cert": _f("""\
+- `host`: el servidor, como se le dio a `tls_connect` o `net_bg_open_tls`; `""`: el último que falló, sea cual sea.
+
+Devuelve el último certificado de ese servidor que no se pudo comprobar, en líneas para enseñar al usuario, o `""`
+si no hay ninguno:
+
+```
+Servidor: 192.168.1.10
+Para: nas.local (Mi NAS)
+Emitido por: nas.local (Mi NAS)
+Desde: 2026-01-01 00:00 UTC
+Hasta: 2036-01-01 00:00 UTC
+Huella SHA-256: 92:86:4C:...:BB:77
+Motivo: self-signed certificate
+```
+
+Se guarda al fallar la conexión: se puede leer después de liberarla. Guarda los de los 4 últimos servidores.
+""", """\
+- `host`: the server, as given to `tls_connect` or `net_bg_open_tls`; `""`: the last one that failed, whichever.
+
+Returns the last certificate of that server that could not be verified, in lines to show the user, or `""` if there
+is none:
+
+```
+Servidor: 192.168.1.10
+Para: nas.local (My NAS)
+Emitido por: nas.local (My NAS)
+Desde: 2026-01-01 00:00 UTC
+Hasta: 2036-01-01 00:00 UTC
+Huella SHA-256: 92:86:4C:...:BB:77
+Motivo: self-signed certificate
+```
+
+(Server, subject, issuer, valid from, valid until, SHA-256 fingerprint and reason.) It is kept when the connection
+fails: it can be read after the connection is freed. The ones of the last 4 servers are kept.
+""", ["tls_last_fingerprint", "tls_trust", "net_error"]),
+    "tls_last_fingerprint": _f("""\
+- `host`: como en `tls_last_cert`.
+
+Devuelve la huella SHA-256 de `tls_last_cert(host)`, en hexadecimal con dos puntos (`"92:86:4C:..."`, como la
+enseñan los navegadores), o `""`.
+""", """\
+- `host`: as in `tls_last_cert`.
+
+Returns the SHA-256 fingerprint of `tls_last_cert(host)`, in hexadecimal with colons (`"92:86:4C:..."`, as browsers
+show it), or `""`.
+""", ["tls_trust"]),
+    "tls_trust": _f("""\
+- `fingerprint`: la huella SHA-256 del certificado del servidor: 64 cifras hexadecimales, en mayúsculas o
+  minúsculas, con dos puntos o sin ellos.
+
+Desde ahora, mientras dure el programa, acepta ese certificado aunque no se pueda comprobar, en todas las conexiones
+(`tls_connect`, `tls_connect_start`, `net_bg_open_tls`). Los demás certificados se comprueban como siempre. Devuelve
+`false` si no es una huella o si ya hay 64 aceptadas.
+
+```dash
+if tls_connect(s, host) < 0 and tls_last_cert(host) != ""
+    # enseñar tls_last_cert(host) al usuario y, si lo acepta:
+    tls_trust(tls_last_fingerprint(host))
+end
+```
+""", """\
+- `fingerprint`: the SHA-256 fingerprint of the server's certificate: 64 hexadecimal digits, upper or lower case,
+  with colons or without.
+
+From now on, while the program runs, accept that certificate although it cannot be verified, in every connection
+(`tls_connect`, `tls_connect_start`, `net_bg_open_tls`). Other certificates are checked as always. Returns `false`
+if it is not a fingerprint or 64 are accepted already.
+
+```dash
+if tls_connect(s, host) < 0 and tls_last_cert(host) != ""
+    # show tls_last_cert(host) to the user and, if they accept it:
+    tls_trust(tls_last_fingerprint(host))
+end
+```
+""", ["tls_last_cert", "tls_untrust"]),
+    "tls_untrust": _f("- `fingerprint`: como en `tls_trust`.\n\nDeja de aceptar ese certificado. Una sesión ya guardada con "
+                      "él no se retoma sin volver a comprobarlo. Devuelve `false` si no estaba aceptado.\n",
+                      "- `fingerprint`: as in `tls_trust`.\n\nStop accepting that certificate. A session already kept with "
+                      "it is not resumed without checking it again. Returns `false` if it was not accepted.\n",
+                      ["tls_trust", "tls_trust_clear"]),
+    "tls_trust_clear": _f("Deja de aceptar todos los certificados de `tls_trust`.\n",
+                          "Stop accepting every certificate of `tls_trust`.\n", ["tls_untrust"]),
     # ------------------------------------------------------------ red en una tarea
     "net_bg_open": _f("""\
 - `host`, `port`, `timeout_ms`: como en `net_connect`.

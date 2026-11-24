@@ -371,6 +371,14 @@ DESC_ES = {
     "tls_recv_buffer": "Como net_recv_buffer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse",
     "tls_close": "Acaba la TLS de la conexión (después, net_close del socket)",
     "tls_resumed": "True si la conexión retomó una sesión anterior con el mismo servidor (sin intercambiar claves)",
+    "tls_last_cert": "El último certificado de host (\"\": de cualquier servidor) que no se pudo comprobar, en líneas para "
+                     "enseñar al usuario: servidor, para quién, quién lo emite, fechas, huella SHA-256 y motivo; \"\" si no hay",
+    "tls_last_fingerprint": "La huella SHA-256 (\"AB:CD:...\") de tls_last_cert(host); \"\" si no hay",
+    "tls_trust": "Desde ahora, mientras dure el programa, acepta el certificado con esa huella SHA-256 aunque no se pueda "
+                 "comprobar (los demás se comprueban como siempre); false si no es una huella o ya hay 64",
+    "tls_untrust": "Deja de aceptar un certificado de tls_trust (también una sesión ya guardada con él); false si no "
+                   "estaba aceptado",
+    "tls_trust_clear": "Deja de aceptar todos los certificados de tls_trust",
     # Fuentes y colores
     "font_open": "Abre una fuente (\"helvetica.font\", tamaño en píxeles, 2 como poco): la fuente, o 0 si no hay",
     "font_use": "Escribe con esta fuente",

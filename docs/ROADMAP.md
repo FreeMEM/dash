@@ -889,6 +889,8 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - [x] `x = d[k]` de un diccionario de diccionarios es un diccionario de su tipo (D53)
 - [x] `image_from_rgb` en pantallas RTG sin `picture.datatype` (D54)
 - [x] TLS: la sesión de cada servidor se reanuda en la siguiente conexión, `tls_resumed` (D55)
+- [x] TLS: aceptar un certificado que no se puede comprobar tras avisar al usuario: `tls_last_cert`,
+  `tls_last_fingerprint`, `tls_trust`, `tls_untrust`, `tls_trust_clear` (2.21.0, lo pidió el usuario)
 - [x] `-D_DASH_PIXGUARD`: guardas en los búferes de píxeles para cazar escrituras fuera (D56)
 - dashweb publica su primera versión de prueba, v0.1.0-alfa (2026-10-18)
 

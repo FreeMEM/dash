@@ -29,7 +29,8 @@ Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A50
 Tests with "# emu-net: PORT" run in their own boot with FS-UAE's bsdsocket.library (the PC's
 network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <line>" out);
 "# emu-net-tls: PORT" makes it a TLS server, "# emu-http: PORT" an HTTP server that answers every request with JSON:
-its method, path, Content-Type, X-Prueba header and body (lib/red/http.dash). Tests with "# emu-needs: amisslmaster.library" boot
+its method, path, Content-Type, X-Prueba header and body (lib/red/http.dash); "# emu-net-tls-cert: PORT FILE"
+(repeatable) one more TLS echo server with the certificate of FILE (tests/certs: self-signed). Tests with "# emu-needs: amisslmaster.library" boot
 the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
@@ -636,9 +637,28 @@ def emu_net_port(test_file: Path) -> Optional[int]:
     bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
     reads one line and answers "eco: <line>" before closing."""
     for l in test_file.read_text().splitlines():
-        if l.startswith("# emu-net:") or l.startswith("# emu-net-tls:") or l.startswith("# emu-http:"):
-            return int(l.split(":", 1)[1].strip())
+        if l.startswith("# emu-net:") or l.startswith("# emu-net-tls:") or l.startswith("# emu-http:") or \
+                l.startswith("# emu-net-tls-cert:"):
+            return int(l.split(":", 1)[1].split()[0])
     return None
+
+
+def emu_tls_certs(test_file: Path) -> dict:
+    """'# emu-net-tls-cert: PORT FILE' (tls_trust): one more TLS echo server, on PORT, with the certificate and key
+    of FILE (a PEM of tests/certs, self-signed: AmiSSL cannot verify it). A test may have several."""
+    out = {}
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# emu-net-tls-cert:"):
+            port, name = l.split(":", 1)[1].split()
+            out[int(port)] = PROJECT_ROOT / name
+    return out
+
+
+def emu_cert_ports(tests) -> dict:
+    out = {}
+    for t in tests:
+        out.update(emu_tls_certs(t))
+    return out
 
 
 def emu_http(test_file: Path) -> bool:
@@ -655,7 +675,7 @@ def emu_net_tls(test_file: Path) -> bool:
 
 class _EchoServer:
     """The server of '# emu-net:' tests, in a thread while the emulator runs (TLS on tls_ports)."""
-    def __init__(self, ports, tls_ports=(), http_ports=()):
+    def __init__(self, ports, tls_ports=(), http_ports=(), cert_ports=None):
         import http.server
         import json
         import socketserver
@@ -732,9 +752,11 @@ class _EchoServer:
                 self.wfile.write(b"eco: " + line)
 
         class TLSServer(socketserver.ThreadingTCPServer):
+            context = None
+
             def get_request(self):
                 sock, addr = super().get_request()
-                return context.wrap_socket(sock, server_side=True), addr
+                return (self.context or context).wrap_socket(sock, server_side=True), addr
 
             def handle_error(self, request, client_address):
                 pass   # a client that refuses the certificate (a test of that) is not an error here
@@ -742,7 +764,13 @@ class _EchoServer:
         socketserver.ThreadingTCPServer.allow_reuse_address = True
         self.servers = [(TLSServer if port in tls_ports else socketserver.ThreadingTCPServer)(
                             ("127.0.0.1", port), HTTPHandler if port in http_ports else Handler)
-                        for port in ports]
+                        for port in ports if port not in (cert_ports or {})]
+        import ssl
+        for port, pem in (cert_ports or {}).items():   # '# emu-net-tls-cert:' servers, each with its certificate
+            server = TLSServer(("127.0.0.1", port), Handler)
+            server.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            server.context.load_cert_chain(pem)
+            self.servers.append(server)
         for server in self.servers:
             threading.Thread(target=server.serve_forever, daemon=True).start()
 
@@ -846,7 +874,7 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         if servers:
             server = _EchoServer(sorted({emu_net_port(t) for t in servers}),
                                  {emu_net_port(t) for t in servers if emu_net_tls(t)},
-                                 {emu_net_port(t) for t in servers if emu_http(t)})
+                                 {emu_net_port(t) for t in servers if emu_http(t)}, emu_cert_ports(servers))
             try:
                 if plain:
                     results += run_emu_boot(plain, machine, rom, os.environ.get(machine["sys_env"]), memcheck,
@@ -975,7 +1003,7 @@ def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memc
     machine = dict(machine, config=COFFIN_CONFIG)
     net = [t for t in runnable if emu_net_port(t) is not None]
     server = _EchoServer(sorted({emu_net_port(t) for t in net}), {emu_net_port(t) for t in net if emu_net_tls(t)},
-                         {emu_net_port(t) for t in net if emu_http(t)}) if net else None
+                         {emu_net_port(t) for t in net if emu_http(t)}, emu_cert_ports(net)) if net else None
     try:
         # a program that hangs would leave every later one without its turn: boot again from the next one
         results, todo = [], list(runnable)

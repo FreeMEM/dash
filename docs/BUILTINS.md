@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1111 funciones, 1111 implementadas, 0 sin implementar.
+Total: 1116 funciones, 1116 implementadas, 0 sin implementar.
 
 <a id="graphics_basic"></a>
 
@@ -5470,6 +5470,12 @@ Conexiones cifradas (TLS, lo de HTTPS) con AmiSSL, que tiene que estar instalado
 `net_connect` y después `tls_connect(socket, host)` negocia la TLS comprobando el certificado del servidor. Desde
 ahí se envía y recibe con `tls_send` y `tls_recv`, y al acabar `tls_close` y `net_close`.
 
+**Un certificado que no se puede comprobar** (autofirmado, de un emisor desconocido, caducado...) hace fallar la
+conexión, como debe. Para aceptarlo después de avisar al usuario, como hacen los navegadores: `tls_last_cert(host)`
+da sus datos para enseñarlos, y si el usuario lo acepta, `tls_trust(tls_last_fingerprint(host))`. Desde ahí se acepta
+ese certificado, y solo ese, también por `net_bg_open_tls`. Dura lo que dure el programa: para recordarlo, el programa
+guarda la huella en sus ajustes y llama a `tls_trust` al arrancar.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | [`tls_connect(sock, host)`](#tls_connect) | Int | TLS sobre un socket conectado, comprobando el certificado de host; -1 si no (net_error) |  |
@@ -5481,6 +5487,11 @@ ahí se envía y recibe con `tls_send` y `tls_recv`, y al acabar `tls_close` y `
 | [`tls_recv_buffer(tls, buffer, max, timeout_ms)`](#tls_recv_buffer) | Int | Como net_recv_buffer: cuántos, 0 si se acabó el tiempo, -1 al cerrarse |  |
 | [`tls_close(tls)`](#tls_close) | — | Acaba la TLS de la conexión (después, net_close del socket) |  |
 | [`tls_resumed(tls)`](#tls_resumed) | Bool | True si la conexión retomó una sesión anterior con el mismo servidor (sin intercambiar claves) |  |
+| [`tls_last_cert(host)`](#tls_last_cert) | String | El último certificado de host ("": de cualquier servidor) que no se pudo comprobar, en líneas para enseñar al usuario: servidor, para quién, quién lo emite, fechas, huella SHA-256 y motivo; "" si no hay |  |
+| [`tls_last_fingerprint(host)`](#tls_last_fingerprint) | String | La huella SHA-256 ("AB:CD:...") de tls_last_cert(host); "" si no hay |  |
+| [`tls_trust(fingerprint)`](#tls_trust) | Bool | Desde ahora, mientras dure el programa, acepta el certificado con esa huella SHA-256 aunque no se pueda comprobar (los demás se comprueban como siempre); false si no es una huella o ya hay 64 |  |
+| [`tls_untrust(fingerprint)`](#tls_untrust) | Bool | Deja de aceptar un certificado de tls_trust (también una sesión ya guardada con él); false si no estaba aceptado |  |
+| [`tls_trust_clear()`](#tls_trust_clear) | — | Deja de aceptar todos los certificados de tls_trust |  |
 
 <a id="tls_connect"></a>
 
@@ -5574,6 +5585,78 @@ Ver también: [`net_close`](#net_close).
 - `tls`: la conexión TLS.
 
 Devuelve `true` si retomó una sesión anterior con el mismo servidor, sin volver a intercambiar claves (más rápido).
+
+<a id="tls_last_cert"></a>
+
+### `tls_last_cert(host)` → `String`
+
+- `host`: el servidor, como se le dio a `tls_connect` o `net_bg_open_tls`; `""`: el último que falló, sea cual sea.
+
+Devuelve el último certificado de ese servidor que no se pudo comprobar, en líneas para enseñar al usuario, o `""`
+si no hay ninguno:
+
+```
+Servidor: 192.168.1.10
+Para: nas.local (Mi NAS)
+Emitido por: nas.local (Mi NAS)
+Desde: 2026-01-01 00:00 UTC
+Hasta: 2036-01-01 00:00 UTC
+Huella SHA-256: 92:86:4C:...:BB:77
+Motivo: self-signed certificate
+```
+
+Se guarda al fallar la conexión: se puede leer después de liberarla. Guarda los de los 4 últimos servidores.
+
+Ver también: [`tls_last_fingerprint`](#tls_last_fingerprint), [`tls_trust`](#tls_trust), [`net_error`](#net_error).
+
+<a id="tls_last_fingerprint"></a>
+
+### `tls_last_fingerprint(host)` → `String`
+
+- `host`: como en `tls_last_cert`.
+
+Devuelve la huella SHA-256 de `tls_last_cert(host)`, en hexadecimal con dos puntos (`"92:86:4C:..."`, como la
+enseñan los navegadores), o `""`.
+
+Ver también: [`tls_trust`](#tls_trust).
+
+<a id="tls_trust"></a>
+
+### `tls_trust(fingerprint)` → `Bool`
+
+- `fingerprint`: la huella SHA-256 del certificado del servidor: 64 cifras hexadecimales, en mayúsculas o
+  minúsculas, con dos puntos o sin ellos.
+
+Desde ahora, mientras dure el programa, acepta ese certificado aunque no se pueda comprobar, en todas las conexiones
+(`tls_connect`, `tls_connect_start`, `net_bg_open_tls`). Los demás certificados se comprueban como siempre. Devuelve
+`false` si no es una huella o si ya hay 64 aceptadas.
+
+```dash
+if tls_connect(s, host) < 0 and tls_last_cert(host) != ""
+    # enseñar tls_last_cert(host) al usuario y, si lo acepta:
+    tls_trust(tls_last_fingerprint(host))
+end
+```
+
+Ver también: [`tls_last_cert`](#tls_last_cert), [`tls_untrust`](#tls_untrust).
+
+<a id="tls_untrust"></a>
+
+### `tls_untrust(fingerprint)` → `Bool`
+
+- `fingerprint`: como en `tls_trust`.
+
+Deja de aceptar ese certificado. Una sesión ya guardada con él no se retoma sin volver a comprobarlo. Devuelve `false` si no estaba aceptado.
+
+Ver también: [`tls_trust`](#tls_trust), [`tls_trust_clear`](#tls_trust_clear).
+
+<a id="tls_trust_clear"></a>
+
+### `tls_trust_clear()`
+
+Deja de aceptar todos los certificados de `tls_trust`.
+
+Ver también: [`tls_untrust`](#tls_untrust).
 
 <a id="font_functions"></a>
 

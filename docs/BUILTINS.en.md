@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 1111 functions, 1111 implemented, 0 not implemented.
+Total: 1116 functions, 1116 implemented, 0 not implemented.
 
 <a id="graphics_basic"></a>
 
@@ -5469,6 +5469,12 @@ Encrypted connections (TLS, what HTTPS uses) with AmiSSL, which must be installe
 `net_connect` and then `tls_connect(socket, host)` negotiates TLS checking the server's certificate. From then on,
 send and receive with `tls_send` and `tls_recv`, and at the end `tls_close` and `net_close`.
 
+**A certificate that cannot be verified** (self-signed, from an unknown issuer, expired...) makes the connection fail,
+as it should. To accept it after warning the user, as browsers do: `tls_last_cert(host)` gives its details to show,
+and if the user accepts it, `tls_trust(tls_last_fingerprint(host))`. From then on that certificate, and only that one,
+is accepted, also through `net_bg_open_tls`. It lasts while the program runs: to remember it, the program keeps the
+fingerprint in its settings and calls `tls_trust` at start.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | [`tls_connect(sock, host)`](#tls_connect) | Int | TLS over a connected socket, verifying the certificate for host; -1 if not (net_error) |  |
@@ -5480,6 +5486,11 @@ send and receive with `tls_send` and `tls_recv`, and at the end `tls_close` and 
 | [`tls_recv_buffer(tls, buffer, max, timeout_ms)`](#tls_recv_buffer) | Int | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
 | [`tls_close(tls)`](#tls_close) | — | End TLS on the connection (net_close the socket after) |  |
 | [`tls_resumed(tls)`](#tls_resumed) | Bool | True if the connection resumed an earlier session with the same server (no key exchange) |  |
+| [`tls_last_cert(host)`](#tls_last_cert) | String | The last certificate of host ("": of any server) that could not be verified, in lines to show the user: server, subject, issuer, dates, SHA-256 fingerprint and reason; "" if none |  |
+| [`tls_last_fingerprint(host)`](#tls_last_fingerprint) | String | The SHA-256 fingerprint ("AB:CD:...") of tls_last_cert(host); "" if none |  |
+| [`tls_trust(fingerprint)`](#tls_trust) | Bool | From now on, while the program runs, accept the certificate with that SHA-256 fingerprint although it cannot be verified (the others are checked as always); false if it is not a fingerprint or there are 64 already |  |
+| [`tls_untrust(fingerprint)`](#tls_untrust) | Bool | Stop accepting a certificate of tls_trust (also a session already kept with it); false if it was not accepted |  |
+| [`tls_trust_clear()`](#tls_trust_clear) | — | Stop accepting every certificate of tls_trust |  |
 
 <a id="tls_connect"></a>
 
@@ -5573,6 +5584,79 @@ See also: [`net_close`](#net_close).
 - `tls`: the TLS connection.
 
 Returns `true` if it resumed an earlier session with the same server, without exchanging keys again (faster).
+
+<a id="tls_last_cert"></a>
+
+### `tls_last_cert(host)` → `String`
+
+- `host`: the server, as given to `tls_connect` or `net_bg_open_tls`; `""`: the last one that failed, whichever.
+
+Returns the last certificate of that server that could not be verified, in lines to show the user, or `""` if there
+is none:
+
+```
+Servidor: 192.168.1.10
+Para: nas.local (My NAS)
+Emitido por: nas.local (My NAS)
+Desde: 2026-01-01 00:00 UTC
+Hasta: 2036-01-01 00:00 UTC
+Huella SHA-256: 92:86:4C:...:BB:77
+Motivo: self-signed certificate
+```
+
+(Server, subject, issuer, valid from, valid until, SHA-256 fingerprint and reason.) It is kept when the connection
+fails: it can be read after the connection is freed. The ones of the last 4 servers are kept.
+
+See also: [`tls_last_fingerprint`](#tls_last_fingerprint), [`tls_trust`](#tls_trust), [`net_error`](#net_error).
+
+<a id="tls_last_fingerprint"></a>
+
+### `tls_last_fingerprint(host)` → `String`
+
+- `host`: as in `tls_last_cert`.
+
+Returns the SHA-256 fingerprint of `tls_last_cert(host)`, in hexadecimal with colons (`"92:86:4C:..."`, as browsers
+show it), or `""`.
+
+See also: [`tls_trust`](#tls_trust).
+
+<a id="tls_trust"></a>
+
+### `tls_trust(fingerprint)` → `Bool`
+
+- `fingerprint`: the SHA-256 fingerprint of the server's certificate: 64 hexadecimal digits, upper or lower case,
+  with colons or without.
+
+From now on, while the program runs, accept that certificate although it cannot be verified, in every connection
+(`tls_connect`, `tls_connect_start`, `net_bg_open_tls`). Other certificates are checked as always. Returns `false`
+if it is not a fingerprint or 64 are accepted already.
+
+```dash
+if tls_connect(s, host) < 0 and tls_last_cert(host) != ""
+    # show tls_last_cert(host) to the user and, if they accept it:
+    tls_trust(tls_last_fingerprint(host))
+end
+```
+
+See also: [`tls_last_cert`](#tls_last_cert), [`tls_untrust`](#tls_untrust).
+
+<a id="tls_untrust"></a>
+
+### `tls_untrust(fingerprint)` → `Bool`
+
+- `fingerprint`: as in `tls_trust`.
+
+Stop accepting that certificate. A session already kept with it is not resumed without checking it again. Returns `false` if it was not accepted.
+
+See also: [`tls_trust`](#tls_trust), [`tls_trust_clear`](#tls_trust_clear).
+
+<a id="tls_trust_clear"></a>
+
+### `tls_trust_clear()`
+
+Stop accepting every certificate of `tls_trust`.
+
+See also: [`tls_untrust`](#tls_untrust).
 
 <a id="font_functions"></a>
 
