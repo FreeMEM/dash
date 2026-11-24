@@ -32,6 +32,15 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.21.0 (unreleased)
+
+- **New:** accept a TLS certificate that cannot be verified (self-signed, from an unknown issuer, expired...) after
+  warning the user, as browsers do. `tls_last_cert(host)` gives its details to show (server, who it is for, who
+  issued it, dates, SHA-256 fingerprint and reason), `tls_last_fingerprint(host)` its fingerprint, and
+  `tls_trust(fingerprint)` accepts it from then on, also through `net_bg_open_tls`; `tls_untrust` and
+  `tls_trust_clear` take it back. Other certificates are still checked, and a resumed session does not get past the
+  list. The user asked for it, for Tachyon, Trasfondo, Hangar and the other programs made with Dash.
+
 ### 2.20.0 (2026-11-24)
 
 New builtins for MUI, MiniGL, graphics and DOS handlers, a 3D engine in `lib/` and two fixes. Everything that

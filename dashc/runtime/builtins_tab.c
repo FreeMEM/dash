@@ -2065,6 +2065,10 @@ const BuiltinInfo builtin_info[] = {
     {"tls_connect_poll", 1, 1, 0, 0, 0, 0u, 0u},
     {"tls_connect_start", 3, 1, 0, 0, 0, 2u, 0u},
     {"tls_connect_start", 3, 1, 0, 0, 0, 2u, 0u},
+    {"tls_last_cert", 1, 3, 0, 0, 0, 1u, 0u},
+    {"tls_last_cert", 1, 3, 0, 0, 0, 1u, 0u},
+    {"tls_last_fingerprint", 1, 3, 0, 0, 0, 1u, 0u},
+    {"tls_last_fingerprint", 1, 3, 0, 0, 0, 1u, 0u},
     {"tls_recv", 3, 3, 0, 0, 0, 0u, 0u},
     {"tls_recv", 3, 3, 0, 0, 0, 0u, 0u},
     {"tls_recv_buffer", 4, 1, 0, 0, 0, 0u, 0u},
@@ -2075,6 +2079,12 @@ const BuiltinInfo builtin_info[] = {
     {"tls_send", 2, 1, 0, 0, 0, 2u, 0u},
     {"tls_send_buffer", 3, 1, 0, 0, 0, 0u, 0u},
     {"tls_send_buffer", 3, 1, 0, 0, 0, 0u, 0u},
+    {"tls_trust", 1, 2, 0, 0, 0, 1u, 0u},
+    {"tls_trust", 1, 2, 0, 0, 0, 1u, 0u},
+    {"tls_trust_clear", 0, 0, 0, 0, 0, 0u, 0u},
+    {"tls_trust_clear", 0, 0, 0, 0, 0, 0u, 0u},
+    {"tls_untrust", 1, 2, 0, 0, 0, 1u, 0u},
+    {"tls_untrust", 1, 2, 0, 0, 0, 1u, 0u},
     {"tone_play", 4, 0, 1, 0, 0, 0u, 0u},
     {"tone_play", 4, 0, 1, 0, 0, 0u, 0u},
     {"tooltype", 2, 3, 0, 0, 0, 3u, 0u},
@@ -2224,7 +2234,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
     {"wm_zip", 1, 2, 1, 0, 0, 0u, 0u},
 };
-const int builtin_count = 2222;
+const int builtin_count = 2232;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

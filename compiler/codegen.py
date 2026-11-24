@@ -14840,6 +14840,17 @@ static void _dash_tls_sess_use(LONG t, SSL *ssl, STRPTR host) {
 }
 
 /* Connection t is over: its session kept if it can be resumed, its host freed */
+/* Drop the session kept for the server of a connection (its certificate is not trusted any more) */
+static void _dash_tls_sess_drop(LONG t, SSL *ssl) {
+    LONG i;
+    if (!_dash_tls_host[t]) return;
+    _dash_tls_saved[t] = 1;   /* (and this connection's is not kept) */
+    if ((i = _dash_tls_sess_find(_dash_tls_host[t], _dash_tls_peer_port(ssl))) >= 0) {
+        SSL_SESSION_free(_dash_tls_sess[i]);
+        _dash_tls_sess[i] = NULL;
+    }
+}
+
 static void _dash_tls_forget(LONG t, BOOL keep) {
     if (keep) _dash_tls_sess_keep(t);
     if (_dash_tls_host[t]) { FreeVec(_dash_tls_host[t]); _dash_tls_host[t] = NULL; }
@@ -14872,6 +14883,226 @@ static void _dash_tls_seed(void) {
     RAND_seed(seed, sizeof(seed));
 }
 
+/* Certificates the program accepts although they cannot be verified (tls_trust), as a browser's exceptions: the
+   SHA-256 of the server's own certificate. The verify callback lets that certificate through, whatever failed in
+   its chain (another issuer, its name, its dates); any other one is checked as always. They last while the program
+   runs: it keeps them in its settings and calls tls_trust again at start. The network task reads them: Forbid. */
+#define _DASH_TLS_TRUST_MAX 64
+static UBYTE _dash_tls_trusted[_DASH_TLS_TRUST_MAX][32];
+static LONG _dash_tls_ntrusted = 0;
+/* The last certificates that could not be verified (tls_last_cert), one per server, the last 4: written by the
+   process that owns the network, read by the program (Forbid). By server, not only the last one: with the
+   connections of net_bg_open_tls another failure may come between a failure and the question to the user. */
+#define _DASH_TLS_BAD_MAX 4
+typedef struct { char host[64]; char fp[96]; char text[720]; } _DashTlsBad;
+static _DashTlsBad _dash_tls_bad[_DASH_TLS_BAD_MAX];
+static LONG _dash_tls_bad_next = 0, _dash_tls_bad_last = -1;
+static LONG _dash_tls_cur = -1;                 /* the connection whose handshake goes on (for the callback) */
+static BYTE _dash_tls_let[_DASH_TLS_MAX];       /* its certificate did not verify and tls_trust let it through */
+static char _dash_tls_why[100];                 /* why the last verification failed (net_error): a copy */
+
+/* The reason of a verification that failed, in OpenSSL's words ("self-signed certificate", "certificate has
+   expired", "hostname mismatch"...), copied: net_error may be read after AmiSSL is closed (net_release) */
+static const char *_dash_tls_reason(long v) {
+    strncpy(_dash_tls_why, (const char *)X509_verify_cert_error_string(v), sizeof(_dash_tls_why) - 1);
+    _dash_tls_why[sizeof(_dash_tls_why) - 1] = 0;
+    return _dash_tls_why;
+}
+
+static BOOL _dash_tls_digest(X509 *c, UBYTE *md) {
+    unsigned int n = 0;
+    return c && X509_digest(c, EVP_sha256(), md, &n) && n == 32;
+}
+
+/* "AB:CD:..." (95 characters), as browsers and openssl x509 -fingerprint -sha256 show it */
+static void _dash_tls_fp_text(const UBYTE *md, char *out) {
+    static const char hex[] = "0123456789ABCDEF";
+    LONG i;
+    for (i = 0; i < 32; i++) {
+        *out++ = hex[md[i] >> 4];
+        *out++ = hex[md[i] & 15];
+        if (i < 31) *out++ = ':';
+    }
+    *out = 0;
+}
+
+/* 64 hex digits, in either case, with ':', '-' or spaces between them or not */
+static BOOL _dash_tls_fp_parse(STRPTR s, UBYTE *md) {
+    LONG n = 0, v;
+    UBYTE c;
+    if (!s) return FALSE;
+    for (; (c = *s); s++) {
+        if (c == ':' || c == ' ' || c == '-') continue;
+        if (c >= '0' && c <= '9') v = c - '0';
+        else if ((c | 32) >= 'a' && (c | 32) <= 'f') v = (c | 32) - 'a' + 10;
+        else return FALSE;
+        if (n >= 64) return FALSE;
+        if (n & 1) md[n >> 1] |= (UBYTE)v;
+        else md[n >> 1] = (UBYTE)(v << 4);
+        n++;
+    }
+    return n == 64;
+}
+
+static LONG _dash_tls_trust_find(const UBYTE *md) {   /* (with Forbid) */
+    LONG i, j;
+    for (i = 0; i < _dash_tls_ntrusted; i++) {
+        for (j = 0; j < 32 && _dash_tls_trusted[i][j] == md[j]; j++) ;
+        if (j == 32) return i;
+    }
+    return -1;
+}
+
+static BOOL _dash_tls_is_trusted(const UBYTE *md) {
+    LONG i;
+    Forbid();
+    i = _dash_tls_trust_find(md);
+    Permit();
+    return i >= 0;
+}
+
+static BOOL _dash_tls_trust(STRPTR fp) {
+    UBYTE md[32];
+    BOOL ok = TRUE;
+    if (!_dash_tls_fp_parse(fp, md)) return FALSE;
+    Forbid();
+    if (_dash_tls_trust_find(md) < 0) {
+        if (_dash_tls_ntrusted < _DASH_TLS_TRUST_MAX) CopyMem(md, _dash_tls_trusted[_dash_tls_ntrusted++], 32);
+        else ok = FALSE;
+    }
+    Permit();
+    return ok;
+}
+
+static BOOL _dash_tls_untrust(STRPTR fp) {
+    UBYTE md[32];
+    LONG i;
+    if (!_dash_tls_fp_parse(fp, md)) return FALSE;
+    Forbid();
+    if ((i = _dash_tls_trust_find(md)) >= 0 && i != --_dash_tls_ntrusted)
+        CopyMem(_dash_tls_trusted[_dash_tls_ntrusted], _dash_tls_trusted[i], 32);
+    Permit();
+    return i >= 0;
+}
+
+static void _dash_tls_trust_clear(void) {
+    _dash_tls_ntrusted = 0;
+}
+
+/* A name of a certificate in words: its CN, with its O in brackets; the whole name if it has no CN */
+static void _dash_tls_name_text(X509_NAME *nm, char *out, LONG max) {
+    char o[64];
+    LONG n;
+    out[0] = 0;
+    if (!nm) return;
+    if (X509_NAME_get_text_by_NID(nm, NID_commonName, out, max) <= 0) {
+        X509_NAME_oneline(nm, out, max);
+        return;
+    }
+    n = strlen(out);
+    if (X509_NAME_get_text_by_NID(nm, NID_organizationName, o, sizeof(o)) > 0 && strcmp(o, out) &&
+        n + (LONG)strlen(o) + 4 < max) {
+        out[n++] = ' ';
+        out[n++] = '(';
+        strcpy(out + n, o);
+        strcat(out, ")");
+    }
+}
+
+static void _dash_tls_date(const ASN1_TIME *t, char *out) {
+    union { struct tm tm; LONG room[16]; } u;   /* (AmiSSL's struct tm may be longer than the C library's) */
+    memset(&u, 0, sizeof(u));
+    if (t && ASN1_TIME_to_tm(t, &u.tm))
+        sprintf(out, "%04d-%02d-%02d %02d:%02d UTC", (int)u.tm.tm_year + 1900, (int)u.tm.tm_mon + 1,
+                (int)u.tm.tm_mday, (int)u.tm.tm_hour, (int)u.tm.tm_min);
+    else strcpy(out, "?");
+}
+
+/* Keep a certificate that could not be verified, in words, for tls_last_cert (in the owner's process: the text
+   is made here, with its AmiSSL) */
+static void _dash_tls_note(LONG t, X509 *c, const UBYTE *md, const char *why) {
+    char text[720], to[128], by[128], from[32], until[32], fp[96];
+    const char *host = t >= 0 && _dash_tls_host[t] ? (const char *)_dash_tls_host[t] : "";
+    LONG i;
+    _dash_tls_fp_text(md, fp);
+    _dash_tls_name_text(X509_get_subject_name(c), to, sizeof(to));
+    _dash_tls_name_text(X509_get_issuer_name(c), by, sizeof(by));
+    _dash_tls_date(X509_get0_notBefore(c), from);
+    _dash_tls_date(X509_get0_notAfter(c), until);
+    sprintf(text, "Servidor: %.63s\\nPara: %s\\nEmitido por: %s\\nDesde: %s\\nHasta: %s\\nHuella SHA-256: %s\\nMotivo: %.99s",
+            host, to, by, from, until, fp, why);
+    Forbid();
+    for (i = 0; i < _DASH_TLS_BAD_MAX && !(_dash_tls_bad[i].fp[0] && !strncmp(_dash_tls_bad[i].host, host, 63)); i++) ;
+    if (i == _DASH_TLS_BAD_MAX) {
+        i = _dash_tls_bad_next;
+        _dash_tls_bad_next = (_dash_tls_bad_next + 1) % _DASH_TLS_BAD_MAX;
+    }
+    strncpy(_dash_tls_bad[i].host, host, 63);
+    _dash_tls_bad[i].host[63] = 0;
+    strcpy(_dash_tls_bad[i].fp, fp);
+    strcpy(_dash_tls_bad[i].text, text);
+    _dash_tls_bad_last = i;
+    Permit();
+}
+
+/* tls_last_cert / tls_last_fingerprint: of that host ("" or nil: the last one that failed); "" if none */
+static STRPTR _dash_tls_last(STRPTR host, BOOL fp_only) {
+    char b[720];
+    LONG i = _dash_tls_bad_last;
+    b[0] = 0;
+    Forbid();
+    if (host && *host)
+        for (i = 0; i < _DASH_TLS_BAD_MAX && !(_dash_tls_bad[i].fp[0] && !strncmp(_dash_tls_bad[i].host, (char *)host, 63)); i++) ;
+    if (i >= 0 && i < _DASH_TLS_BAD_MAX) strcpy(b, fp_only ? _dash_tls_bad[i].fp : _dash_tls_bad[i].text);
+    Permit();
+    return _dash_str_dup((STRPTR)b, TRUE);
+}
+
+static STRPTR _dash_tls_last_cert(STRPTR host) { return _dash_tls_last(host, FALSE); }
+static STRPTR _dash_tls_last_fingerprint(STRPTR host) { return _dash_tls_last(host, TRUE); }
+
+/* OpenSSL's verify callback: what did not verify goes on only for a certificate of tls_trust (the server's own,
+   whatever failed in its chain); anything else stops as without the callback, and is kept for tls_last_cert */
+static int _dash_tls_verify(int ok, X509_STORE_CTX *x) {
+    X509 *c;
+    UBYTE md[32];
+    if (ok) return 1;
+    c = X509_STORE_CTX_get0_cert(x);
+    if (!_dash_tls_digest(c, md)) return 0;
+    if (_dash_tls_is_trusted(md)) {
+        if (_dash_tls_cur >= 0) _dash_tls_let[_dash_tls_cur] = 1;
+        return 1;
+    }
+    _dash_tls_note(_dash_tls_cur, c, md, _dash_tls_reason(X509_STORE_CTX_get_error(x)));
+    return 0;
+}
+
+static void _dash_tls_sess_drop(LONG t, SSL *ssl);
+
+/* Once the handshake is done: a certificate that did not verify goes on only if it is trusted now. A resumed
+   session does not go through the callback (it brings the certificate of the session it resumes, and its
+   verification): it is checked here, so a tls_untrust counts for it too. FALSE: net_error says why */
+static BOOL _dash_tls_accepted(LONG t, SSL *ssl) {
+    long v = SSL_get_verify_result(ssl);
+    X509 *c;
+    UBYTE md[32];
+    if (v == X509_V_OK) return TRUE;
+    c = SSL_get0_peer_certificate(ssl);
+    if (_dash_tls_digest(c, md)) {
+        if (_dash_tls_is_trusted(md)) return TRUE;
+        _dash_tls_note(t, c, md, _dash_tls_reason(v));
+    }
+    _dash_net_err = _dash_tls_reason(v);
+    _dash_tls_sess_drop(t, ssl);   /* (its session is not resumed again) */
+    return FALSE;
+}
+
+/* Why a handshake failed: the certificate's reason if it did not verify (and tls_trust did not let it through) */
+static const char *_dash_tls_failed(LONG t, SSL *ssl) {
+    long v = SSL_get_verify_result(ssl);
+    return v != X509_V_OK && !_dash_tls_let[t] ? _dash_tls_reason(v) : "fallo al negociar TLS";
+}
+
 static BOOL _dash_tls_init(void) {
     if (!_dash_net_init()) return FALSE;     /* (the network's owner only) */
     if (_dash_tls_ctx) return TRUE;
@@ -14896,7 +15127,7 @@ static BOOL _dash_tls_init(void) {
     _dash_tls_ctx = SSL_CTX_new(TLS_client_method());
     if (!_dash_tls_ctx) { _dash_net_err = "error de TLS"; return FALSE; }
     SSL_CTX_set_default_verify_paths(_dash_tls_ctx);
-    SSL_CTX_set_verify(_dash_tls_ctx, SSL_VERIFY_PEER, NULL);
+    SSL_CTX_set_verify(_dash_tls_ctx, SSL_VERIFY_PEER, _dash_tls_verify);
     return TRUE;
 }
 
@@ -14933,7 +15164,7 @@ static void _dash_tls_name(SSL *ssl, STRPTR host) {
 /* TLS over a connected socket, checking the certificate and that it is for host:
    the connection, or -1 (net_error() says why) */
 static LONG _dash_tls_connect(LONG sock, STRPTR host) {
-    LONG slot;
+    LONG slot, r;
     SSL *ssl;
     if (sock < 0 || !host || !_dash_tls_init()) return -1;
     for (slot = 0; slot < _DASH_TLS_MAX && _dash_tls_ssl[slot]; slot++) ;
@@ -14943,9 +15174,12 @@ static LONG _dash_tls_connect(LONG sock, STRPTR host) {
     SSL_set_fd(ssl, sock);
     _dash_tls_name(ssl, host);
     _dash_tls_sess_use(slot, ssl, host);
-    if (SSL_connect(ssl) != 1) {
-        long v = SSL_get_verify_result(ssl);
-        _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
+    _dash_tls_let[slot] = 0;
+    _dash_tls_cur = slot;
+    r = SSL_connect(ssl);
+    _dash_tls_cur = -1;
+    if (r != 1 || !_dash_tls_accepted(slot, ssl)) {
+        if (r != 1) _dash_net_err = _dash_tls_failed(slot, ssl);
         _dash_tls_forget(slot, FALSE);
         SSL_free(ssl);
         return -1;
@@ -14976,6 +15210,7 @@ static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
     SSL_set_connect_state(ssl);
     _dash_tls_ssl[slot] = ssl;
     _dash_tls_shaking[slot] = TRUE;
+    _dash_tls_let[slot] = 0;
     _dash_tls_timeout[slot] = timeout_ms;
     _dash_tls_deadline[slot] = _dash_net_now() + timeout_ms;
     _dash_tls_state[slot] = -1;
@@ -14990,7 +15225,6 @@ static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
 static LONG _dash_tls_connect_poll(LONG t) {
     SSL *ssl = _dash_tls_get(t);
     LONG r, e, off = 0;
-    long v;
     if (!ssl) return -1;
     if (!_dash_tls_shaking[t]) return 1;
     {
@@ -14998,15 +15232,17 @@ static LONG _dash_tls_connect_poll(LONG t) {
         if (gap > 500) _dash_tls_deadline[t] += gap;   /* the program was busy: that time does not count */
         _dash_tls_polled[t] = now;
     }
+    _dash_tls_cur = t;
     r = SSL_connect(ssl);
-    if (r == 1) {
+    _dash_tls_cur = -1;
+    if (r == 1 && _dash_tls_accepted(t, ssl)) {
         IoctlSocket(SSL_get_fd(ssl), FIONBIO, (char *)&off);
         _dash_tls_shaking[t] = FALSE;
         _dash_tls_sess_keep(t);
         return 1;
     }
-    e = SSL_get_error(ssl, r);
-    if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) {
+    if (r == 1) ;   /* (a certificate no longer trusted: _dash_tls_accepted said why) */
+    else if ((e = SSL_get_error(ssl, r)) == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) {
         LONG state = (LONG)SSL_get_state(ssl);
         if (state != _dash_tls_state[t]) {
             _dash_tls_state[t] = state;
@@ -15014,10 +15250,7 @@ static LONG _dash_tls_connect_poll(LONG t) {
         }
         if (_dash_net_now() - _dash_tls_deadline[t] < 0) return 0;
         _dash_net_err = "tiempo agotado al negociar TLS";
-    } else {
-        v = SSL_get_verify_result(ssl);
-        _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
-    }
+    } else _dash_net_err = _dash_tls_failed(t, ssl);
     _dash_tls_forget(t, FALSE);
     SSL_free(ssl);
     _dash_tls_ssl[t] = NULL;

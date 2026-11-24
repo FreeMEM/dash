@@ -1,0 +1,70 @@
+# Test: tls_trust con net_bg_open_tls (lo pidió el usuario): la conexión de la tarea de la red a un servidor con un
+# certificado autofirmado falla, net_bg_error dice por qué y el programa ve el certificado con tls_last_cert; tras
+# tls_trust con su huella conecta. Otro certificado (autofirmado_b) sigue fallando.
+# emu-net-tls-cert: 40881 tests/certs/autofirmado_a.pem
+# emu-net-tls-cert: 40882 tests/certs/autofirmado_b.pem
+# emu-needs: amisslmaster.library
+# dash-direct:
+# expect-out: a: 6 self-signed certificate
+# expect-out: huella: 92:86:4C:8E:ED:2C:AC:97:A7:7B:D4:F5:3C:9E:52:3E:36:3B:8F:D1:26:E2:DA:13:71:05:40:69:CF:C4:BB:77
+# expect-out: Servidor: 127.0.0.1
+# expect-out: Motivo: self-signed certificate
+# expect-out: confia: true
+# expect-out: a: 4
+# expect-out: eco: hola tls
+# expect-out: b: 6 self-signed certificate
+# expect-out: huella de b: A1:13:B8:DA:89:6D:75:8A:30:33:06:70:18:64:66:A5:BF:7B:B8:91:AA:2F:6E:7F:92:41:7B:2A:9E:20:1D:04
+# expect-out: fin
+
+# lo que llegue hasta que se cierre (-1), como texto
+func todo(c: Int) -> String
+    buf = buffer_alloc(256)
+    t = ""
+    n = 0
+    vueltas = 0
+    while n >= 0 and vueltas < 250
+        n = net_bg_recv(c, buf, 256)
+        if n > 0
+            t = t + str_from_buffer(buf, 0, n)
+        elif n == 0
+            time_delay_ms(40)
+        end
+        vueltas = vueltas + 1
+    end
+    buffer_free(buf)
+    return str_replace(str_replace(t, "\r", ""), "\n", "")
+end
+
+func esperar(c: Int, estado: Int)
+    vueltas = 0
+    while net_bg_state(c) < estado and vueltas < 400
+        time_delay_ms(40)
+        vueltas = vueltas + 1
+    end
+end
+
+Main
+    c = net_bg_open_tls("127.0.0.1", 40881, 8000)
+    esperar(c, 5)
+    Print "a: #{net_bg_state(c)} " + net_bg_error(c)
+    net_bg_close(c)
+    huella = tls_last_fingerprint("127.0.0.1")
+    Print "huella: " + huella
+    lineas = str_split(tls_last_cert(""), "\n")
+    Print lineas[0]
+    Print lineas[lineas.length - 1]
+    Print "confia: #{tls_trust(huella)}"
+    c = net_bg_open_tls("127.0.0.1", 40881, 8000)
+    esperar(c, 4)
+    Print "a: #{net_bg_state(c)}"
+    net_bg_send(c, "hola tls\r\n")
+    Print todo(c)
+    net_bg_close(c)
+    b = net_bg_open_tls("127.0.0.1", 40882, 8000)
+    esperar(b, 5)
+    Print "b: #{net_bg_state(b)} " + net_bg_error(b)
+    net_bg_close(b)
+    Print "huella de b: " + tls_last_fingerprint("")
+    net_bg_stop()
+    Print "fin"
+end

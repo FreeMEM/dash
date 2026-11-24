@@ -512,6 +512,8 @@ s = net_connect_start("host", 80, 10000)  # sin esperar: net_connect_poll(s) 1 /
 t = tls_connect_start(s, "host", 10000)   # net_connect_stage(s); tls_connect_poll(t) 1 / 0 / -1
 ev = mui_wait_event_signals(net_signal())   # despierta con eventos del socket (0: la pila no puede, sondear)
 tls_resumed(t)                       # true si reutilizó una sesión anterior con ese servidor
+tls_last_cert(host)                  # el último certificado de host que no se pudo comprobar, para el usuario
+tls_trust(tls_last_fingerprint(host))   # aceptarlo (huella SHA-256); tls_untrust(h), tls_trust_clear()
 srv = net_listen(8080)               # servidor TCP (0: cualquier puerto libre, net_port(srv)); -1 si está ocupado
 c = net_accept(srv, 1000)            # siguiente conexión o -1 (0: solo mirar); net_peer(c) = "a.b.c.d"
 u = net_udp_open(5000)               # UDP (0: cualquier puerto libre); net_close(u)

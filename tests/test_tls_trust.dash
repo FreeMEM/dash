@@ -1,0 +1,75 @@
+# Test: aceptar un certificado que no se puede comprobar (tls_trust; lo pidió el usuario). El servidor de eco de
+# 40881 tiene un certificado autofirmado (tests/certs/autofirmado_a.pem): tls_connect falla, net_error dice por qué
+# y tls_last_cert / tls_last_fingerprint lo cuentan. Tras tls_trust con su huella conecta, y la siguiente conexión
+# retoma la sesión. Otro certificado (autofirmado_b, en 40882) sigue fallando. Tras tls_untrust o tls_trust_clear,
+# la sesión ya guardada no se salta la comprobación.
+# emu-net-tls-cert: 40881 tests/certs/autofirmado_a.pem
+# emu-net-tls-cert: 40882 tests/certs/autofirmado_b.pem
+# emu-needs: amisslmaster.library
+# memcheck
+# expect-out: antes: []
+# expect-out: a: fallo self-signed certificate
+# expect-out: Servidor: 127.0.0.1
+# expect-out: Para: localhost (Dash pruebas a)
+# expect-out: Emitido por: localhost (Dash pruebas a)
+# expect-out: Desde: 2026-01-01 00:00 UTC
+# expect-out: Hasta: 2126-01-01 00:00 UTC
+# expect-out: Huella SHA-256: 92:86:4C:8E:ED:2C:AC:97:A7:7B:D4:F5:3C:9E:52:3E:36:3B:8F:D1:26:E2:DA:13:71:05:40:69:CF:C4:BB:77
+# expect-out: Motivo: self-signed certificate
+# expect-out: huella: 92:86:4C:8E:ED:2C:AC:97:A7:7B:D4:F5:3C:9E:52:3E:36:3B:8F:D1:26:E2:DA:13:71:05:40:69:CF:C4:BB:77
+# expect-out: de localhost: []
+# expect-out: mala: false
+# expect-out: confia: true
+# expect-out: a: nueva, eco: dos
+# expect-out: a otra vez: reanudada, eco: tres
+# expect-out: b: fallo self-signed certificate
+# expect-out: huella de b: A1:13:B8:DA:89:6D:75:8A:30:33:06:70:18:64:66:A5:BF:7B:B8:91:AA:2F:6E:7F:92:41:7B:2A:9E:20:1D:04
+# expect-out: quita: true
+# expect-out: a sin confianza: fallo self-signed certificate
+# expect-out: quita otra vez: false
+# expect-out: confia sin dos puntos: true
+# expect-out: a otra vez: nueva, eco: seis
+# expect-out: a reanudada: reanudada, eco: siete
+# expect-out: a tras borrar: fallo self-signed certificate
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func probar(nombre: String, puerto: Int, texto: String)
+    s = net_connect("127.0.0.1", puerto, 5000)
+    t = tls_connect(s, "127.0.0.1")
+    if t < 0
+        Print nombre + ": fallo " + net_error()
+    else
+        estado = "nueva"
+        if tls_resumed(t)
+            estado = "reanudada"
+        end
+        tls_send(t, texto + "\n")
+        r = tls_recv(t, 100, 5000)
+        Print nombre + ": " + estado + ", " + str_trim(r)
+        tls_close(t)
+    end
+    net_close(s)
+end
+
+Main
+    Print "antes: [" + tls_last_cert("") + "]"
+    probar("a", 40881, "uno")
+    Print tls_last_cert("127.0.0.1")
+    huella = tls_last_fingerprint("")
+    Print "huella: " + huella
+    Print "de localhost: [" + tls_last_fingerprint("localhost") + "]"
+    Print "mala: #{tls_trust("12:34")}"
+    Print "confia: #{tls_trust(huella)}"
+    probar("a", 40881, "dos")
+    probar("a otra vez", 40881, "tres")
+    probar("b", 40882, "cuatro")
+    Print "huella de b: " + tls_last_fingerprint("127.0.0.1")
+    Print "quita: #{tls_untrust(huella)}"
+    probar("a sin confianza", 40881, "cinco")
+    Print "quita otra vez: #{tls_untrust(huella)}"
+    Print "confia sin dos puntos: #{tls_trust(str_lower(str_replace(huella, ":", "")))}"
+    probar("a otra vez", 40881, "seis")
+    probar("a reanudada", 40881, "siete")
+    tls_trust_clear()
+    probar("a tras borrar", 40881, "ocho")
+end

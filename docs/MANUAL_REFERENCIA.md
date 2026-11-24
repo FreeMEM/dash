@@ -2409,12 +2409,25 @@ Para compilar hacen falta las cabeceras del SDK: `tools/get_amissl.sh` las desca
 | `tls_connect_start(socket, host, ms)` | Como `tls_connect` sin esperar a la negociacion: la conexion o -1 |
 | `tls_connect_poll(t)` | 1 negociada (certificado comprobado), 0 todavia no, -1 fallo (`t` se libera; el socket sigue abierto) |
 | `tls_resumed(t)` | `true` si la conexion reanudo una sesion anterior con el mismo servidor |
+| `tls_last_cert(host)` | El ultimo certificado de `host` que no se pudo comprobar, en lineas para el usuario (`""`: de cualquiera) |
+| `tls_last_fingerprint(host)` | Su huella SHA-256, `"AB:CD:..."` |
+| `tls_trust(huella)` | Acepta ese certificado aunque no se pueda comprobar, mientras dure el programa |
+| `tls_untrust(huella)`, `tls_trust_clear()` | Deja de aceptarlo / de aceptar todos |
 
 Dash guarda la sesion de cada servidor (nombre y puerto; hasta 8) cuando una conexion ha leido algo
 o se cierra (TLS 1.3 la manda despues de negociar), y la siguiente conexion a ese servidor la
 reanuda: no se comprueba otra vez el certificado. Con TLS 1.3 el intercambio de claves se repite
 igualmente (en un A1200 emulado, 9 s nueva y 7,9 s reanudada); con TLS 1.2 tambien se lo salta.
 Las conexiones abiertas a la vez antes de que la primera lea algo no tienen sesion que reanudar.
+
+Un certificado que no se puede comprobar (autofirmado, de un emisor desconocido, caducado, de otro
+nombre) hace fallar la conexion. Para aceptarlo despues de avisar al usuario, como un navegador (lo
+pidio el usuario): `tls_last_cert(host)` da el servidor, para quien es, quien lo emite, sus fechas, su
+huella SHA-256 y el motivo; si el usuario lo acepta, `tls_trust(tls_last_fingerprint(host))`. Desde
+ahi se acepta ese certificado, y solo ese, en todas las conexiones, tambien las de `net_bg_open_tls`;
+los demas se comprueban como siempre. Una sesion reanudada de un certificado aceptado asi se mira
+otra vez contra la lista: tras `tls_untrust` ya no vale. La lista dura lo que el programa: para
+recordarla, el programa guarda las huellas en sus ajustes y llama a `tls_trust` al arrancar.
 
 ```
 s = net_connect("ejemplo.org", 443, 10000)

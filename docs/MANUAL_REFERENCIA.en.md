@@ -2409,12 +2409,26 @@ Compiling requires the SDK headers: `tools/get_amissl.sh` downloads them.
 | `tls_connect_start(socket, host, ms)` | Like `tls_connect` without waiting for the handshake: the connection or -1 |
 | `tls_connect_poll(t)` | 1 negotiated (certificate checked), 0 not yet, -1 failed (`t` is freed; the socket stays open) |
 | `tls_resumed(t)` | `true` if the connection resumed a previous session with the same server |
+| `tls_last_cert(host)` | The last certificate of `host` that could not be verified, in lines for the user (`""`: of any) |
+| `tls_last_fingerprint(host)` | Its SHA-256 fingerprint, `"AB:CD:..."` |
+| `tls_trust(fingerprint)` | Accept that certificate although it cannot be verified, while the program runs |
+| `tls_untrust(fingerprint)`, `tls_trust_clear()` | Stop accepting it / all of them |
 
 Dash stores each server's session (name and port; up to 8) once a connection has read something
 or is closed (TLS 1.3 sends it after the handshake), and the next connection to that server
 resumes it: the certificate is not checked again. With TLS 1.3 the key exchange is repeated
 anyway (on an emulated A1200, 9 s new and 7.9 s resumed); with TLS 1.2 that is skipped too.
 Connections opened at the same time before the first one reads anything have no session to resume.
+
+A certificate that cannot be verified (self-signed, from an unknown issuer, expired, for another
+name) makes the connection fail. To accept it after warning the user, as a browser does (the user
+asked for it): `tls_last_cert(host)` gives the server, who it is for, who issued it, its dates, its
+SHA-256 fingerprint and the reason; if the user accepts it, `tls_trust(tls_last_fingerprint(host))`.
+From then on that certificate, and only that one, is accepted in every connection, also those of
+`net_bg_open_tls`; the others are checked as always. A resumed session of a certificate accepted
+this way is checked against the list again: after `tls_untrust` it is no longer valid. The list
+lasts as long as the program: to remember it, the program keeps the fingerprints in its settings and
+calls `tls_trust` at start.
 
 ```
 s = net_connect("ejemplo.org", 443, 10000)
