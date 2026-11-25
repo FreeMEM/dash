@@ -4014,7 +4014,8 @@ MUI_FUNCTIONS = {
         params=["label"],
         return_type="APTR",
         c_template="_dash_mui_button(${label})",
-        description="Button (an underscore before a letter makes it the keyboard shortcut)"
+        description="Button (an underscore before a letter makes it the keyboard shortcut); mui_set_value 1 keeps "
+                    "it drawn pressed (the tab or list on show) and 0 lets it go"
     ),
     "mui_on_press": BuiltinFunc(
         name="mui_on_press",
@@ -4108,7 +4109,7 @@ MUI_FUNCTIONS = {
         params=["obj"],
         return_type="LONG",
         c_template="_dash_mui_get_value(${obj})",
-        description="Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0"
+        description="Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0, button kept pressed 1/0"
     ),
     "mui_set_value": BuiltinFunc(
         name="mui_set_value",

@@ -1,5 +1,5 @@
 # MUI values: text field, checkbox, cycle, slider, progress bar, label; get/set of values
-# and texts, enable/disable, and the change events that mui_set_value fires.
+# and texts, enable/disable, a button kept pressed, and the change events that mui_set_value fires.
 # emu-needs: muimaster.library
 # expect-out: campo: http://aminet.net/
 # expect-out: campo nuevo: España
@@ -10,6 +10,7 @@
 # expect-out: barra 40
 # expect-out: texto: Listo
 # expect-out: título: Otra ventana
+# expect-out: botón hundido 1, suelto 0
 # expect-out: sin valor 0
 # expect-out: fin
 
@@ -64,6 +65,12 @@ Main
         Print "texto: " + mui_get_text(estado)
         mui_set_text(win, "Otra ventana")
         Print "título: " + mui_get_text(win)
+        # un botón que se queda hundido (la lista que se ve, en Hangar) y se suelta
+        mui_set_value(boton, 1)
+        h = mui_get_value(boton)
+        mui_set_value(boton, 0)
+        v = mui_get_value(boton)
+        Print "botón hundido #{h}, suelto #{v}"
         mui_set_enabled(boton, false)
         v = mui_get_value(boton)
         Print "sin valor #{v}"

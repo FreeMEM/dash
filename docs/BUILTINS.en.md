@@ -11903,7 +11903,7 @@ end
 | [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (address) | Start a horizontal group inside the open group |  |
 | [`mui_group_end()`](#mui_group_end) | — | End the open group |  |
 | [`mui_text(text)`](#mui_text) | Int (address) | Text object (MUI text codes allowed) |  |
-| [`mui_button(label)`](#mui_button) | Int (address) | Button (an underscore before a letter makes it the keyboard shortcut) |  |
+| [`mui_button(label)`](#mui_button) | Int (address) | Button (an underscore before a letter makes it the keyboard shortcut); mui_set_value 1 keeps it drawn pressed (the tab or list on show) and 0 lets it go |  |
 | [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event returns id when the button is pressed |  |
 | [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
 | [`mui_on_activate(win, id)`](#mui_on_activate) | — | mui_wait_event returns id when the window becomes the active one (a click on it, opening it, mui_window_activate) |  |
@@ -11916,7 +11916,7 @@ end
 | [`mui_cycle(options)`](#mui_cycle) | Int (address) | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
 | [`mui_slider(min, max, value)`](#mui_slider) | Int (address) | Horizontal slider |  |
 | [`mui_gauge(max)`](#mui_gauge) | Int (address) | Progress bar from 0 to max |  |
-| [`mui_get_value(obj)`](#mui_get_value) | Int | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0 |  |
+| [`mui_get_value(obj)`](#mui_get_value) | Int | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0, button kept pressed 1/0 |  |
 | [`mui_set_value(obj, value)`](#mui_set_value) | — | Set the value (fires mui_on_change like the user would) |  |
 | [`mui_get_text(obj)`](#mui_get_text) | String | Text of a text field, text, button or window title |  |
 | [`mui_set_text(obj, text)`](#mui_set_text) | — | Change the text of a text field, text, button, menu item or window title |  |
