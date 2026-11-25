@@ -33,7 +33,7 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
-### 2.21.0 (sin publicar)
+### 2.21.0 (2026-11-25)
 
 - **Nuevo:** aceptar un certificado TLS que no se puede comprobar (autofirmado, de un emisor desconocido,
   caducado...) después de avisar al usuario, como hacen los navegadores. `tls_last_cert(host)` da sus datos para
@@ -41,6 +41,9 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
   su huella, y `tls_trust(huella)` lo acepta desde ese momento, también por `net_bg_open_tls`; `tls_untrust` y
   `tls_trust_clear` lo quitan. Los demás certificados se siguen comprobando, y una sesión reanudada no se salta la
   lista. Lo pidió el usuario, para Tachyon, Trasfondo, Hangar y los demás programas hechos con Dash.
+- **dashgit** (en el paquete del Amiga): si el certificado de un servidor https no se puede comprobar, enseña sus datos
+  y pregunta si aceptarlo; `dashgit certificados` los lista y los olvida, y `--aceptar-cert HUELLA` lo acepta sin
+  preguntar, para guiones. Lo pidió el usuario.
 
 ### 2.20.0 (2026-11-24)
 
