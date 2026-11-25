@@ -11910,7 +11910,7 @@ end
 | [`mui_hgroup_begin()`](#mui_hgroup_begin) | Int (dirección) | Empieza un grupo horizontal dentro del grupo abierto |  |
 | [`mui_group_end()`](#mui_group_end) | — | Acaba el grupo abierto |  |
 | [`mui_text(text)`](#mui_text) | Int (dirección) | Un texto (con los códigos de texto de MUI) |  |
-| [`mui_button(label)`](#mui_button) | Int (dirección) | Un botón (un guion bajo delante de una letra la hace su atajo de teclado) |  |
+| [`mui_button(label)`](#mui_button) | Int (dirección) | Un botón (un guion bajo delante de una letra la hace su atajo de teclado); mui_set_value 1 lo deja hundido (la pestaña o la lista que se ve) y 0 lo suelta |  |
 | [`mui_on_press(obj, id)`](#mui_on_press) | — | mui_wait_event da id cuando se pulsa el botón |  |
 | [`mui_on_close(win, id)`](#mui_on_close) | — | mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por defecto: -1) |  |
 | [`mui_on_activate(win, id)`](#mui_on_activate) | — | mui_wait_event da id cuando la ventana pasa a ser la activa (un clic en ella, al abrirla, mui_window_activate) |  |
@@ -11923,7 +11923,7 @@ end
 | [`mui_cycle(options)`](#mui_cycle) | Int (dirección) | Un gadget de opciones que cambian al pulsarlo; opciones separadas por \| ("Uno\|Dos\|Tres") |  |
 | [`mui_slider(min, max, value)`](#mui_slider) | Int (dirección) | Un deslizador horizontal |  |
 | [`mui_gauge(max)`](#mui_gauge) | Int (dirección) | Una barra de progreso de 0 a max |  |
-| [`mui_get_value(obj)`](#mui_get_value) | Int | El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0 |  |
+| [`mui_get_value(obj)`](#mui_get_value) | Int | El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0, botón hundido 1/0 |  |
 | [`mui_set_value(obj, value)`](#mui_set_value) | — | Cambia el valor (dispara mui_on_change como lo haría el usuario) |  |
 | [`mui_get_text(obj)`](#mui_get_text) | String | El texto de un campo de texto, un texto, un botón o el título de una ventana |  |
 | [`mui_set_text(obj, text)`](#mui_set_text) | — | Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una ventana |  |

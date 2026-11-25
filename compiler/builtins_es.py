@@ -1247,7 +1247,7 @@ DESC_ES = {
     "mui_hgroup_begin": "Empieza un grupo horizontal dentro del grupo abierto",
     "mui_group_end": "Acaba el grupo abierto",
     "mui_text": "Un texto (con los códigos de texto de MUI)",
-    "mui_button": "Un botón (un guion bajo delante de una letra la hace su atajo de teclado)",
+    "mui_button": "Un botón (un guion bajo delante de una letra la hace su atajo de teclado); mui_set_value 1 lo deja hundido (la pestaña o la lista que se ve) y 0 lo suelta",
     "mui_on_press": "mui_wait_event da id cuando se pulsa el botón",
     "mui_on_drop": "mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron",
     "mui_on_close": "mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por "
@@ -1262,7 +1262,7 @@ DESC_ES = {
     "mui_cycle": "Un gadget de opciones que cambian al pulsarlo; opciones separadas por | (\"Uno|Dos|Tres\")",
     "mui_slider": "Un deslizador horizontal",
     "mui_gauge": "Una barra de progreso de 0 a max",
-    "mui_get_value": "El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0",
+    "mui_get_value": "El valor: casilla 1/0, opción elegida, nivel del deslizador, progreso, marca de menú 1/0, botón hundido 1/0",
     "mui_set_value": "Cambia el valor (dispara mui_on_change como lo haría el usuario)",
     "mui_get_text": "El texto de un campo de texto, un texto, un botón o el título de una ventana",
     "mui_set_text": "Cambia el texto de un campo de texto, un texto, un botón, una opción de menú o el título de una "

@@ -24776,6 +24776,7 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Checked;   /* the check mark (Lorraine D13) */
     case _DASH_MUI_TOGGLE:
     case _DASH_MUI_RADIO:  return MUIA_Selected;            /* pressed or not (Lorraine D14) */
+    case _DASH_MUI_BUTTON: return MUIA_Selected;            /* kept pressed: the button of the list on show (Hangar) */
     }
     return 0;
 }
