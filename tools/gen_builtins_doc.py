@@ -81,11 +81,17 @@ TEXTS = {
         "unimplemented": "**sin implementar**",
         "total": "Total: {total} funciones, {implemented} implementadas, {missing} sin implementar.",
         "example": "**Ejemplo** (`{path}`, que también es un test: se prueba con los demás):",
-        "index": "**Índice.** Las que tienen enlace están explicadas más abajo.",
+        "index": "**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.",
         "more_examples": "**Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los "
                          "enseña en la ficha de cada función que usan):",
         "returns": "Devuelve",
         "see": "Ver también",
+        "toc": "**Índice** de los grupos. En cada función explicada, su nombre lleva a la tabla de su grupo y "
+               "el enlace \"índice\", aquí.",
+        "toc_anchor": "indice",
+        "toc_link": "índice",
+        "back": "[Volver al índice](#indice)",
+        "count": "{n} funciones",
         "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
                   "APTR": "Int (dirección)", "DashArrayLong *": "[Int]"},
     },
@@ -99,11 +105,17 @@ TEXTS = {
         "unimplemented": "**not implemented**",
         "total": "Total: {total} functions, {implemented} implemented, {missing} not implemented.",
         "example": "**Example** (`{path}`, which is also a test: it runs with the others):",
-        "index": "**Index.** The ones with a link are explained further down.",
+        "index": "**The group's functions.** The ones with a link are explained further down.",
         "more_examples": "**More examples**, small ones, of some functions (they are tests too; the Amiga help "
                          "shows them in the page of each function they use):",
         "returns": "Returns",
         "see": "See also",
+        "toc": "**Index** of the groups. In each explained function, its name takes you to its group's table and "
+               "the \"index\" link, here.",
+        "toc_anchor": "index",
+        "toc_link": "index",
+        "back": "[Back to the index](#index)",
+        "count": "{n} functions",
         "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
                   "APTR": "Int (address)", "DashArrayLong *": "[Int]"},
     },
@@ -127,16 +139,19 @@ def ret_type(b, t: dict, default=None):
     return t["types"].get(b.return_type, default)
 
 
-def details(lang: str, group: dict, t: dict) -> list:
-    """The explained functions of a group: a heading with an anchor each, the text and the related ones"""
+def details(lang: str, group: dict, t: dict, table: str) -> list:
+    """The explained functions of a group: a heading with an anchor each, the text and the related ones. The
+    heading takes you back to the group's table (its anchor, table) and to the index (Ferrán García, who reads
+    this file on the Amiga with the Markdown datatype)"""
     out = []
     for name, b in group.items():
         doc = builtins_doc.FUNCS.get(name)
         if not doc:
             continue
         ret = ret_type(b, t)
-        head = f"### `{name}({', '.join(b.params)})`"
-        out += [f'<a id="{name}"></a>', "", head + (f" → `{ret}`" if ret else ""), "", doc[lang].strip(), ""]
+        head = f"### [`{name}({', '.join(b.params)})`](#{table})" + (f" → `{ret}`" if ret else "")
+        head += f" · [{t['toc_link']}](#{t['toc_anchor']})"
+        out += [f'<a id="{name}"></a>', "", head, "", doc[lang].strip(), ""]
         if doc.get("see"):
             out += [t["see"] + ": " + ", ".join(f"[`{s}`](#{s})" if s in builtins_doc.FUNCS else f"`{s}`"
                                                 for s in doc["see"]) + ".", ""]
@@ -171,6 +186,7 @@ def render(lang: str) -> str:
     lines = [t["switch"], "", t["title"], "", t["generated"], "", *t["missing"], ""]
     total = implemented = 0
     sections = []
+    toc = []
     for attr, title_es, title_en in GROUPS:
         group = getattr(builtins_module, attr)
         rows = []
@@ -193,6 +209,7 @@ def render(lang: str) -> str:
             ret = ret_type(b, t, b.return_type) if b.return_type != "void" else "—"
             rows.append(f"| {call} | {ret} | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
+        toc.append(f"- [{title}](#{attr.lower()}) ({t['count'].format(n=len(group))})")
         sections += [f'<a id="{attr.lower()}"></a>', "", f"## {title}", ""]   # an anchor without accents
         gdoc = builtins_doc.GROUPS.get(attr)
         if gdoc:
@@ -205,8 +222,10 @@ def render(lang: str) -> str:
                 sections += [t["more_examples"] + " " + ", ".join(f"`{p}`" for p in more) + ".", ""]
             if examples:
                 sections += [t["index"], ""]
-        sections += [t["header"], "|---|---|---|---|", *rows, ""]
-        sections += details(lang, group, t)
+        table = f"{attr.lower()}_table"
+        sections += [f'<a id="{table}"></a>', "", t["header"], "|---|---|---|---|", *rows, ""]
+        sections += details(lang, group, t, table)
+        sections += [t["back"], ""]
     # every builtin must be in a group: a new group missing from GROUPS would be left out silently
     listed = {name for attr, _, _ in GROUPS for name in getattr(builtins_module, attr)}
     left_out = sorted(set(builtins_module.ALL_BUILTINS) - listed)
@@ -214,6 +233,7 @@ def render(lang: str) -> str:
         raise SystemExit(f"tools/gen_builtins_doc.py: builtins in no group of GROUPS: {', '.join(left_out)}")
     lines.append(t["total"].format(total=total, implemented=implemented, missing=total - implemented))
     lines.append("")
+    lines += [f'<a id="{t["toc_anchor"]}"></a>', "", t["toc"], "", *toc, ""]
     return "\n".join(lines + sections)
 
 

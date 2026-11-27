@@ -12,6 +12,24 @@ Design catalog of the built-in functions for AmigaOS.
 
 ---
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [1. GRAPHICS - 2D Drawing](#1-graphics---2d-drawing)
+- [2. ADVANCED GRAPHICS](#2-advanced-graphics)
+- [3. DOS - Files and System](#3-dos---files-and-system)
+- [4. AUDIO - Sound](#4-audio---sound)
+- [5. INPUT](#5-input)
+- [6. INTUITION - Extended GUI](#6-intuition---extended-gui)
+- [7. SYSTEM](#7-system)
+- [Constants](#constants)
+- [Summary](#summary)
+<!-- /indice -->
+
+<a id="1-graphics---2d-drawing"></a>
+
 ## 1. GRAPHICS - 2D Drawing
 
 ### 1.1 Colors and Modes
@@ -69,7 +87,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `gfx_copy(sx, sy, w, h, dx, dy)` | `ClipBlit()` | Copy a region within the window |
 | `gfx_blit(bitmap, sx, sy, dx, dy, w, h)` | `BltBitMapRastPort()` | Blit from a bitmap · **Does not exist.** Now: `bitmap_blit(id, sx, sy, w, h, dx, dy)` |
 
+[Back to the index](#index)
+
 ---
+
+<a id="2-advanced-graphics"></a>
 
 ## 2. ADVANCED GRAPHICS
 
@@ -127,7 +149,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `copper_end(cl)` | `CEND()` | End the list · **Now:** `copper_end()` |
 | `copper_install(cl)` | viewport->UCopIns | Install · **Now:** `copper_install()` |
 
+[Back to the index](#index)
+
 ---
+
+<a id="3-dos---files-and-system"></a>
 
 ## 3. DOS - Files and System
 
@@ -165,7 +191,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `input(prompt)` | `FGets(stdin)` | Read user input · **Does not exist.** Now: `console_read(buffer, max)` |
 | `cls()` | `Printf("\033[2J")` | Clear the console · **Does not exist.** |
 
+[Back to the index](#index)
+
 ---
+
+<a id="4-audio---sound"></a>
 
 ## 4. AUDIO - Sound
 
@@ -199,7 +229,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `mod_position(pos)` | ptplayer | Jump to a position · **Does not exist.** Now: `music_position(pos)` |
 | `mod_volume(vol)` | ptplayer | Master volume · **Does not exist.** Now: `music_volume(vol)` |
 
+[Back to the index](#index)
+
 ---
+
+<a id="5-input"></a>
 
 ## 5. INPUT
 
@@ -231,7 +265,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `joy_right(port)` | hardware | Right |
 | `joy_fire(port)` | hardware | Fire |
 
+[Back to the index](#index)
+
 ---
+
+<a id="6-intuition---extended-gui"></a>
 
 ## 6. INTUITION - Extended GUI
 
@@ -288,7 +326,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `listview_clear(gad)` | GT_SetGadgetAttrs | Clear |
 | `listview_selected(gad)` | GT_GetGadgetAttrs | Selected item |
 
+[Back to the index](#index)
+
 ---
+
+<a id="7-system"></a>
 
 ## 7. SYSTEM
 
@@ -316,7 +358,11 @@ Design catalog of the built-in functions for AmigaOS.
 | `version_os()` | `SysBase->LibNode` | AmigaOS version · **Does not exist.** |
 | `version_cpu()` | `SysBase->AttnFlags` | CPU type · **Does not exist.** |
 
+[Back to the index](#index)
+
 ---
+
+<a id="constants"></a>
 
 ## Constants
 
@@ -352,7 +398,11 @@ JOY_PORT1 = 0
 JOY_PORT2 = 1
 ```
 
+[Back to the index](#index)
+
 ---
+
+<a id="summary"></a>
 
 ## Summary
 
@@ -371,3 +421,5 @@ That was the plan. Today Dash has **738 builtins**, all implemented; 96 of them 
 design anticipated: GadTools, ReAction and MUI, networking (TCP client and server, UDP, TLS with AmiSSL, SANA-II drivers),
 images via datatypes, fonts, RTG, tasks, commodities, language catalogs, date and time... The real list,
 with what each one does, is in [BUILTINS.md](BUILTINS.en.md).
+
+[Back to the index](#index)

@@ -21,6 +21,19 @@ python3 tools/gen_ayuda.py --salida DIR
 python3 tools/gen_ayuda.py --check          # solo comprueba
 ```
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Las fichas](#las-fichas)
+- [El fichero](#el-fichero)
+- [Leerlo desde Dash](#leerlo-desde-dash)
+- [El AmigaGuide](#el-amigaguide)
+<!-- /indice -->
+
+<a id="las-fichas"></a>
+
 ## Las fichas
 
 Todo es una ficha, con una clave única (letras, cifras y `_`):
@@ -35,6 +48,10 @@ Todo es una ficha, con una clave única (letras, cifras y `_`):
 
 Las claves `m...` son las mismas en los dos idiomas (el manual en inglés tiene los mismos apartados; el generador lo
 comprueba).
+
+[Volver al índice](#indice)
+
+<a id="el-fichero"></a>
 
 ## El fichero
 
@@ -160,6 +177,10 @@ solo allí) y `%ejemplo tests/test_doc_ficheros.dash` (de dónde sale su ejemplo
 El texto no lleva marcas de Markdown. Los nombres de funciones dentro del texto no son enlaces en el `.ayuda` (en el
 AmigaGuide sí); un lector puede buscar una palabra del texto en el índice de nombres para hacerla enlace.
 
+[Volver al índice](#indice)
+
+<a id="leerlo-desde-dash"></a>
+
 ## Leerlo desde Dash
 
 `lib/ayuda.dash` lo hace con poca memoria (un búfer de 512 bytes y el de la ficha que se lee):
@@ -186,6 +207,10 @@ Además: `ayuda_fichas` (cuántas hay), `ayuda_tipo`, `ayuda_prefijo(a, "sou", 1
 `ayuda_plegar`. `tests/ayuda/leer_fichas.dash` es la prueba: `tests/unit/test_gen_ayuda.py` la corre en el emulador
 con `tests/run_tests.py --emu`.
 
+[Volver al índice](#indice)
+
+<a id="el-amigaguide"></a>
+
 ## El AmigaGuide
 
 Un nodo por ficha, con la clave por nombre (la portada es `MAIN`), en el mismo orden, así que `Browse` pasa de un
@@ -193,3 +218,5 @@ grupo a sus funciones. `@index` es el nodo `indice`; `Contents` (`@toc`) lleva d
 apartado a su capítulo. En el texto, los nombres de funciones que tienen ficha son enlaces. Abre con el MultiView de
 AmigaOS 3.1 (probado en el emulador: necesita `REXX:` y `HELP:` asignados, como en un Workbench normal); tarda unos
 segundos en cargar, porque son 1,2 MB.
+
+[Volver al índice](#indice)

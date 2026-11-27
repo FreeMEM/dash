@@ -5,6 +5,46 @@
 
 One line per thing. Every builtin explained, with its parameters and tested examples: [BUILTINS.en.md](BUILTINS.en.md).
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [Compile](#compile)
+- [Program Structure](#program-structure)
+- [Variables & Types](#variables--types)
+- [Operators](#operators)
+- [Text](#text)
+- [Control Flow](#control-flow)
+- [Functions](#functions)
+- [Structs with Methods](#structs-with-methods)
+- [Interfaces](#interfaces)
+- [Arrays](#arrays)
+- [Window & Events](#window--events)
+- [Menus (Intuition)](#menus-intuition)
+- [MUI (68020+, MUI 3.8/5; SDK: tools/get_mui_sdk.sh)](#mui-68020-mui-385-sdk-toolsget_mui_sdksh)
+- [Graphics Functions](#graphics-functions)
+- [Sprites, BOBs, Copper, Bitmaps](#sprites-bobs-copper-bitmaps)
+- [RTG (CyberGraphX / Picasso96)](#rtg-cybergraphx--picasso96)
+- [Screens, Windows and Gadgets (Intuition, GadTools)](#screens-windows-and-gadgets-intuition-gadtools)
+- [ReAction (up to 4 windows; window.class V44: OS 3.5+, tested on 3.2)](#reaction-up-to-4-windows-windowclass-v44-os-35-tested-on-32)
+- [Input Functions](#input-functions)
+- [Audio Functions](#audio-functions)
+- [File Functions](#file-functions)
+- [Buffers and Raw Memory](#buffers-and-raw-memory)
+- [System Functions](#system-functions)
+- [Tasks (C in another process)](#tasks-c-in-another-process)
+- [Desktop Canvas (Workbench backdrop)](#desktop-canvas-workbench-backdrop)
+- [Network (TCP and UDP, bsdsocket.library)](#network-tcp-and-udp-bsdsocketlibrary)
+- [Program Arguments](#program-arguments)
+- [Memory Management](#memory-management)
+- [Common Patterns](#common-patterns)
+- [Key Codes](#key-codes)
+- [Standard Colors](#standard-colors)
+<!-- /indice -->
+
+<a id="compile"></a>
+
 ## Compile
 ```
 ./dash prog.dash -o prog            # gcc -O2, 68000, 16 KB stack minimum
@@ -28,6 +68,10 @@ DASH_CFLAGS="-Os" ./dash ...        # extra gcc options
 ```
 Programs need Kickstart 3.0+. A 68000 is enough, except for MUI 5 and AmiSSL (TLS), which need a 68020.
 
+[Back to the index](#index)
+
+<a id="program-structure"></a>
+
 ## Program Structure
 ```
 import "lib/x.dash"         # Module (path relative to this file); "x.dashui": MUI windows
@@ -39,6 +83,10 @@ Window Win title "" end     # Windows
 func name() end             # Functions
 Main ... end                # Entry point
 ```
+
+[Back to the index](#index)
+
+<a id="variables--types"></a>
 
 ## Variables & Types
 ```
@@ -57,6 +105,10 @@ player = Player(10,20)      # Struct instance
 var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)
 ```
 
+[Back to the index](#index)
+
+<a id="operators"></a>
+
 ## Operators
 ```
 +  -  *  /  %               # Arithmetic
@@ -69,6 +121,10 @@ const MASK = 1 << 4         # const: also an Int expression of numbers and earli
 +                           # String concatenation
 "abc" < "abd"               # Strings: == != compare text, < > <= >= the order (strcmp)
 ```
+
+[Back to the index](#index)
+
+<a id="text"></a>
 
 ## Text
 ```
@@ -90,6 +146,10 @@ t = file_read_text("f.html")   # whole file (nil if missing); file_write_text("f
 str_from_buffer(buf, 0, n)  str_to_buffer(s, buf, 0)
 ```
 
+[Back to the index](#index)
+
+<a id="control-flow"></a>
+
 ## Control Flow
 ```
 if cond                     while cond
@@ -110,6 +170,10 @@ end                             ...
 break / continue            # inside while/for only
 ```
 
+[Back to the index](#index)
+
+<a id="functions"></a>
+
 ## Functions
 ```
 func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}, {Int: T}
@@ -126,6 +190,10 @@ C code: `@native func f(x: Int) -> Int """ return x; """ end` (a function in C),
 `@native(borrow) func ...` (the C only uses its arguments during the call: they are not kept until
 exit), `@header "#include <x.h>"`, `@link "lib/x.c"` (a C source, object or library linked with the program; its
 directory goes to `-I`), `@c """ ... """ end` (C at top level, after the Dash prototypes: callbacks).
+
+[Back to the index](#index)
+
+<a id="structs-with-methods"></a>
 
 ## Structs with Methods
 ```
@@ -145,6 +213,10 @@ d["k"].push(x)              # methods of elements too: l[0].mover(1), filas[i].c
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```
 
+[Back to the index](#index)
+
+<a id="interfaces"></a>
+
 ## Interfaces
 ```
 interface Orden             # methods only; no fields, no Orden()
@@ -155,6 +227,10 @@ struct Escribir: Orden      # has its methods, same parameters and return (struc
 end
 var pila: [Orden] = []      # any struct that has it; o.deshacer() calls its struct's (a table per type)
 ```
+
+[Back to the index](#index)
+
+<a id="arrays"></a>
 
 ## Arrays
 ```
@@ -175,6 +251,10 @@ d.get("c", 0)                # the value, or the default if missing (one lookup;
 e = {1: "uno", 7: "siete"}   # Int keys: {Int: T} (var e: {Int: String} = {}), same methods; keys() is [Int]
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
+
+[Back to the index](#index)
+
+<a id="window--events"></a>
 
 ## Window & Events
 ```
@@ -210,6 +290,10 @@ Main
 end
 ```
 
+[Back to the index](#index)
+
+<a id="menus-intuition"></a>
+
 ## Menus (Intuition)
 ```
 menu_title("Project")       # builds the strip; menu_attach() puts it on the current window
@@ -217,6 +301,10 @@ menu_item("Quit", "Q", 9)   # Amiga+Q; menu_separator(), menu_sub(label, key, id
 menu_check_item("Grid", "G", 10)   # with a check mark: menu_checked(10) 1 / 0
 menu_attach()               # then On Menu: menu_id(); menu_enable(id, false) ghosts an item
 ```
+
+[Back to the index](#index)
+
+<a id="mui-68020-mui-385-sdk-toolsget_mui_sdksh"></a>
 
 ## MUI (68020+, MUI 3.8/5; SDK: tools/get_mui_sdk.sh)
 ```
@@ -265,6 +353,10 @@ mui_app_end()                           # also at exit
 import "win.dashui"                     # visual editor file: v = Main_create() (struct: v.window, named objects)
 ```
 
+[Back to the index](#index)
+
+<a id="graphics-functions"></a>
+
 ## Graphics Functions
 ```
 gfx_pen(color)              # Set draw color (0-31)
@@ -303,6 +395,10 @@ img = image_from_rgb(buf, w, h, alfa)   # pixels RGB (or RGBA) in a buffer; pict
 gfx_clear()                 # Clear screen; gfx_clear_color(c)
 ```
 
+[Back to the index](#index)
+
+<a id="sprites-bobs-copper-bitmaps"></a>
+
 ## Sprites, BOBs, Copper, Bitmaps
 ```
 sprite_load(0, "nave.iff")  # hardware sprite: 16-pixel frames side by side; sprite_frame(0, n)
@@ -317,6 +413,10 @@ bitmap_blit(3, sx, sy, w, h, dx, dy)   # to the screen; bitmap_blit_mask(src, ma
 bitmap_draw_to(3) ... bitmap_draw_screen()   # gfx_ draws into the bitmap, then on the screen again
 ```
 
+[Back to the index](#index)
+
+<a id="rtg-cybergraphx--picasso96"></a>
+
 ## RTG (CyberGraphX / Picasso96)
 ```
 rtg_available()  rtg_is_active()     # a card library is there; the screen is on the card
@@ -326,6 +426,10 @@ rtg_write_array(buf, bpr, x, y, w, h)   # ARGB 32-bit buffer, bpr bytes a row; r
 bm = rtg_alloc_bitmap(w, h, 32)      # rtg_blit(bm, sx, sy, dx, dy, w, h), rtg_scale_blit, rtg_free_bitmap(bm)
 rtg_rgb(r, g, b)  rtg_argb(a, r, g, b)  rtg_rgb_r/_g/_b(c)
 ```
+
+[Back to the index](#index)
+
+<a id="screens-windows-and-gadgets-intuition-gadtools"></a>
 
 ## Screens, Windows and Gadgets (Intuition, GadTools)
 ```
@@ -348,6 +452,10 @@ file_open_dialog("Load", "#?")              # ASL (file_save_dialog too); then f
 `ev = gt_wait_event()` (id, -2 = close; `gt_event()` without waiting); `gt_get_value`, `gt_set_value`,
 `gt_get_string`, `gt_set_text`, `gt_enable`, `gt_disable`; `gt_cleanup()`.
 
+[Back to the index](#index)
+
+<a id="reaction-up-to-4-windows-windowclass-v44-os-35-tested-on-32"></a>
+
 ## ReAction (up to 4 windows; window.class V44: OS 3.5+, tested on 3.2)
 ```
 w = ra_window_create("T", 300, 200)  # 1-4 (0: failed), the current one; ra_window_use(w), ra_event_window()
@@ -360,6 +468,10 @@ ev = ra_wait_event()                 # gadget id or RA_EVENT_CLOSE(); ra_handle_
 ra_get_value(4)  ra_set_value(4, 10)  ra_get_string(2)  ra_set_string(2, "x")  ra_enable_gadget(1)
 ra_window_close()
 ```
+
+[Back to the index](#index)
+
+<a id="input-functions"></a>
 
 ## Input Functions
 ```
@@ -383,6 +495,10 @@ joy_up(1) joy_down(1)       # Direction bools
 joy_left(1) joy_right(1)
 ```
 
+[Back to the index](#index)
+
+<a id="audio-functions"></a>
+
 ## Audio Functions
 ```
 sound_load(id, "file.8svx") # Load an IFF 8SVX sound
@@ -401,6 +517,10 @@ music_volume(0-64)          # Set volume
 music_stop()                # Stop playback
 music_pos()  music_row()    # where it plays (order list, row 0-63); music_position(n), music_free()
 ```
+
+[Back to the index](#index)
+
+<a id="file-functions"></a>
 
 ## File Functions
 ```
@@ -424,6 +544,10 @@ n = file_load("f", buf, max)  file_save("f", buf, n)   # whole file to/from a bu
 console_write("t")  console_read(buf, max)
 ```
 
+[Back to the index](#index)
+
+<a id="buffers-and-raw-memory"></a>
+
 ## Buffers and Raw Memory
 ```
 b = buffer_alloc(1024)      # zeroed bytes, not freed by themselves: buffer_free(b)
@@ -431,6 +555,10 @@ buffer_set_byte(b, 0, 65)  buffer_get_byte(b, 0)   # also _word and _long (big-e
 buffer_copy(dst, 0, src, 0, n)  buffer_fill(b, 0, n, 0)
 peek_byte(addr)  poke_byte(addr, v)   # also _word and _long: any address
 ```
+
+[Back to the index](#index)
+
+<a id="system-functions"></a>
 
 ## System Functions
 ```
@@ -481,6 +609,10 @@ n = cpu_sample()            # tasks since the last sample, most first: cpu_task_
 cpu_total()                 # per thousand, all tasks (the rest is idle); cpu_stop()
 ```
 
+[Back to the index](#index)
+
+<a id="tasks-c-in-another-process"></a>
+
 ## Tasks (C in another process)
 ```
 t = task_start(f, arg)      # @native func f(arg: Int) -> Int in another process (C only); 0 = failed
@@ -492,6 +624,10 @@ task_free(t)                # forget it (waits); task_signal(): mask for mui_wai
 # (the first to use it, until its task ends): _dash_net_connect_start/poll, _send_buffer/_recv_buffer, _dash_tls_*_buffer...
 ```
 
+[Back to the index](#index)
+
+<a id="desktop-canvas-workbench-backdrop"></a>
+
 ## Desktop Canvas (Workbench backdrop)
 ```
 d = desktop_canvas(x, y, w, h)          # an area of the desktop, behind the icons (negative: from right/bottom)
@@ -499,6 +635,10 @@ desktop_canvas_on_draw(d, paint)        # func paint(x, y, w, h) draws with gfx_
 desktop_canvas_update(d)                # draw again; desktop_canvas_update_area(d, x, y, w, h): only that part
 desktop_canvas_free(d)                  # the wallpaper back (also at exit)
 ```
+
+[Back to the index](#index)
+
+<a id="network-tcp-and-udp-bsdsocketlibrary"></a>
 
 ## Network (TCP and UDP, bsdsocket.library)
 ```
@@ -522,11 +662,19 @@ m = net_udp_recv(u, 1500, 1000)      # "" = none in time, nil = error; net_udp_f
 ```
 No HTTP builtin: a program speaks HTTP itself over `net_`/`tls_`. No raw sockets or raw SANA-II frames.
 
+[Back to the index](#index)
+
+<a id="program-arguments"></a>
+
 ## Program Arguments
 ```
 arg_count()                 # arguments from the Shell; from the Workbench, the project icons (arg(i): full path)
 arg(0)                      # the first one ("" if missing)
 ```
+
+[Back to the index](#index)
+
+<a id="memory-management"></a>
 
 ## Memory Management
 > Strings: freed automatically (each variable owns its text; temporaries are
@@ -548,6 +696,10 @@ ptr = arena_alloc(a, size)  # Allocate
 arena_reset(a)              # Reset all
 arena_free(a)               # Free arena; arena_used(a), arena_available(a)
 ```
+
+[Back to the index](#index)
+
+<a id="common-patterns"></a>
 
 ## Common Patterns
 
@@ -587,6 +739,10 @@ end
 file_close(h)
 ```
 
+[Back to the index](#index)
+
+<a id="key-codes"></a>
+
 ## Key Codes
 | Key | Code | Key | Code |
 |-----|------|-----|------|
@@ -595,6 +751,10 @@ file_close(h)
 | LEFT | 79 | DOWN | 77 |
 | RIGHT | 78 | F1-F10 | 80-89 |
 
+[Back to the index](#index)
+
+<a id="standard-colors"></a>
+
 ## Standard Colors
 | Index | Typical Use |
 |-------|-------------|
@@ -602,3 +762,5 @@ file_close(h)
 | 1 | Text/Foreground |
 | 2 | Highlight |
 | 3 | Shadow |
+
+[Back to the index](#index)

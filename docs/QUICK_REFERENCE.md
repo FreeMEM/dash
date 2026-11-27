@@ -5,6 +5,46 @@
 
 Una línea por cosa. Cada builtin explicado, con sus parámetros y ejemplos que se prueban: [BUILTINS.md](BUILTINS.md).
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Compilar](#compilar)
+- [Estructura del programa](#estructura-del-programa)
+- [Variables y tipos](#variables-y-tipos)
+- [Operadores](#operadores)
+- [Texto](#texto)
+- [Control de flujo](#control-de-flujo)
+- [Funciones](#funciones)
+- [Structs con métodos](#structs-con-métodos)
+- [Interfaces](#interfaces)
+- [Arrays](#arrays)
+- [Ventanas y eventos](#ventanas-y-eventos)
+- [Menús (Intuition)](#menús-intuition)
+- [MUI (68020+, MUI 3.8/5; SDK: tools/get_mui_sdk.sh)](#mui-68020-mui-385-sdk-toolsget_mui_sdksh)
+- [Funciones gráficas](#funciones-gráficas)
+- [Sprites, BOBs, Copper, Bitmaps](#sprites-bobs-copper-bitmaps)
+- [RTG (CyberGraphX / Picasso96)](#rtg-cybergraphx--picasso96)
+- [Pantallas, ventanas y gadgets (Intuition, GadTools)](#pantallas-ventanas-y-gadgets-intuition-gadtools)
+- [ReAction (hasta 4 ventanas; window.class V44: OS 3.5+, probado en 3.2)](#reaction-hasta-4-ventanas-windowclass-v44-os-35-probado-en-32)
+- [Funciones de entrada](#funciones-de-entrada)
+- [Funciones de audio](#funciones-de-audio)
+- [Funciones de ficheros](#funciones-de-ficheros)
+- [Buffers y memoria en bruto](#buffers-y-memoria-en-bruto)
+- [Funciones del sistema](#funciones-del-sistema)
+- [Tareas (C en otro proceso)](#tareas-c-en-otro-proceso)
+- [Lienzo del escritorio (fondo del Workbench)](#lienzo-del-escritorio-fondo-del-workbench)
+- [Red (TCP y UDP, bsdsocket.library)](#red-tcp-y-udp-bsdsocketlibrary)
+- [Argumentos del programa](#argumentos-del-programa)
+- [Gestión de memoria](#gestión-de-memoria)
+- [Patrones habituales](#patrones-habituales)
+- [Códigos de tecla](#códigos-de-tecla)
+- [Colores estándar](#colores-estándar)
+<!-- /indice -->
+
+<a id="compilar"></a>
+
 ## Compilar
 ```
 ./dash prog.dash -o prog            # gcc -O2, 68000, pila mínima de 16 KB
@@ -28,6 +68,10 @@ DASH_CFLAGS="-Os" ./dash ...        # opciones extra de gcc
 ```
 Los programas necesitan Kickstart 3.0 o superior. Basta un 68000, salvo para MUI 5 y AmiSSL (TLS), que piden un 68020.
 
+[Volver al índice](#indice)
+
+<a id="estructura-del-programa"></a>
+
 ## Estructura del programa
 ```
 import "lib/x.dash"         # Módulo (ruta relativa a este fichero); "x.dashui": ventanas MUI
@@ -39,6 +83,10 @@ Window Win title "" end     # Ventanas
 func name() end             # Funciones
 Main ... end                # Punto de entrada
 ```
+
+[Volver al índice](#indice)
+
+<a id="variables-y-tipos"></a>
 
 ## Variables y tipos
 ```
@@ -57,6 +105,10 @@ player = Player(10,20)      # Instancia de struct
 var lista: Nodo = nil       # nil: ningún struct/lista/String (x == nil, x = nil)
 ```
 
+[Volver al índice](#indice)
+
+<a id="operadores"></a>
+
 ## Operadores
 ```
 +  -  *  /  %               # Aritméticos
@@ -69,6 +121,10 @@ const MASK = 1 << 4         # const: también una expresión Int de números y c
 +                           # Concatenación de textos
 "abc" < "abd"               # Textos: == != comparan el texto, < > <= >= el orden (strcmp)
 ```
+
+[Volver al índice](#indice)
+
+<a id="texto"></a>
 
 ## Texto
 ```
@@ -90,6 +146,10 @@ t = file_read_text("f.html")   # el fichero entero (nil si no está); file_write
 str_from_buffer(buf, 0, n)  str_to_buffer(s, buf, 0)
 ```
 
+[Volver al índice](#indice)
+
+<a id="control-de-flujo"></a>
+
 ## Control de flujo
 ```
 if cond                     while cond
@@ -110,6 +170,10 @@ end                             ...
 break / continue            # solo dentro de while/for
 ```
 
+[Volver al índice](#indice)
+
+<a id="funciones"></a>
+
 ## Funciones
 ```
 func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}, {Int: T}
@@ -126,6 +190,10 @@ Código C: `@native func f(x: Int) -> Int """ return x; """ end` (una función e
 `@native(borrow) func ...` (el C solo usa sus argumentos durante la llamada: no se guardan hasta
 la salida), `@header "#include <x.h>"`, `@link "lib/x.c"` (un fuente C, objeto o librería que se enlaza con el programa; su
 directorio va a `-I`), `@c """ ... """ end` (C a nivel superior, tras los prototipos de Dash: callbacks).
+
+[Volver al índice](#indice)
+
+<a id="structs-con-métodos"></a>
 
 ## Structs con métodos
 ```
@@ -145,6 +213,10 @@ d["k"].push(x)              # métodos de elementos también: l[0].mover(1), fil
 # weak padre: Nodo          # campo que apunta sin retener (sin ciclos: punteros al padre)
 ```
 
+[Volver al índice](#indice)
+
+<a id="interfaces"></a>
+
 ## Interfaces
 ```
 interface Orden             # solo métodos; sin campos, sin Orden()
@@ -155,6 +227,10 @@ struct Escribir: Orden      # tiene sus métodos, con los mismos parámetros y r
 end
 var pila: [Orden] = []      # cualquier struct que la tenga; o.deshacer() llama al de su struct (una tabla por tipo)
 ```
+
+[Volver al índice](#indice)
+
+<a id="arrays"></a>
 
 ## Arrays
 ```
@@ -175,6 +251,10 @@ d.get("c", 0)                # el valor, o el de por defecto si no está (una b�
 e = {1: "uno", 7: "siete"}   # claves Int: {Int: T} (var e: {Int: String} = {}), mismos métodos; keys() es [Int]
 "Hola Dash"[5:]             # también en textos: "Dash"
 ```
+
+[Volver al índice](#indice)
+
+<a id="ventanas-y-eventos"></a>
 
 ## Ventanas y eventos
 ```
@@ -210,6 +290,10 @@ Main
 end
 ```
 
+[Volver al índice](#indice)
+
+<a id="menús-intuition"></a>
+
 ## Menús (Intuition)
 ```
 menu_title("Project")       # monta la tira; menu_attach() la pone en la ventana actual
@@ -217,6 +301,10 @@ menu_item("Quit", "Q", 9)   # Amiga+Q; menu_separator(), menu_sub(label, key, id
 menu_check_item("Grid", "G", 10)   # con marca: menu_checked(10) 1 / 0
 menu_attach()               # luego On Menu: menu_id(); menu_enable(id, false) apaga una opción
 ```
+
+[Volver al índice](#indice)
+
+<a id="mui-68020-mui-385-sdk-toolsget_mui_sdksh"></a>
 
 ## MUI (68020+, MUI 3.8/5; SDK: tools/get_mui_sdk.sh)
 ```
@@ -265,6 +353,10 @@ mui_app_end()                           # también al salir
 import "win.dashui"                     # fichero del editor visual: v = Main_create() (struct: v.window, objetos con nombre)
 ```
 
+[Volver al índice](#indice)
+
+<a id="funciones-gráficas"></a>
+
 ## Funciones gráficas
 ```
 gfx_pen(color)              # Color de dibujo (0-31)
@@ -303,6 +395,10 @@ img = image_from_rgb(buf, w, h, alfa)   # píxeles RGB (o RGBA) en un buffer; pi
 gfx_clear()                 # Borra la pantalla; gfx_clear_color(c)
 ```
 
+[Volver al índice](#indice)
+
+<a id="sprites-bobs-copper-bitmaps"></a>
+
 ## Sprites, BOBs, Copper, Bitmaps
 ```
 sprite_load(0, "nave.iff")  # sprite de hardware: fotogramas de 16 píxeles uno al lado de otro; sprite_frame(0, n)
@@ -317,6 +413,10 @@ bitmap_blit(3, sx, sy, w, h, dx, dy)   # a la pantalla; bitmap_blit_mask(src, ma
 bitmap_draw_to(3) ... bitmap_draw_screen()   # gfx_ dibuja en el bitmap, y luego otra vez en la pantalla
 ```
 
+[Volver al índice](#indice)
+
+<a id="rtg-cybergraphx--picasso96"></a>
+
 ## RTG (CyberGraphX / Picasso96)
 ```
 rtg_available()  rtg_is_active()     # hay librería de tarjeta; la pantalla está en la tarjeta
@@ -326,6 +426,10 @@ rtg_write_array(buf, bpr, x, y, w, h)   # buffer ARGB de 32 bits, bpr bytes por 
 bm = rtg_alloc_bitmap(w, h, 32)      # rtg_blit(bm, sx, sy, dx, dy, w, h), rtg_scale_blit, rtg_free_bitmap(bm)
 rtg_rgb(r, g, b)  rtg_argb(a, r, g, b)  rtg_rgb_r/_g/_b(c)
 ```
+
+[Volver al índice](#indice)
+
+<a id="pantallas-ventanas-y-gadgets-intuition-gadtools"></a>
 
 ## Pantallas, ventanas y gadgets (Intuition, GadTools)
 ```
@@ -348,6 +452,10 @@ file_open_dialog("Load", "#?")              # ASL (también file_save_dialog); l
 `ev = gt_wait_event()` (id, -2 = cerrar; `gt_event()` sin esperar); `gt_get_value`, `gt_set_value`,
 `gt_get_string`, `gt_set_text`, `gt_enable`, `gt_disable`; `gt_cleanup()`.
 
+[Volver al índice](#indice)
+
+<a id="reaction-hasta-4-ventanas-windowclass-v44-os-35-probado-en-32"></a>
+
 ## ReAction (hasta 4 ventanas; window.class V44: OS 3.5+, probado en 3.2)
 ```
 w = ra_window_create("T", 300, 200)  # 1-4 (0: falló), la actual; ra_window_use(w), ra_event_window()
@@ -360,6 +468,10 @@ ev = ra_wait_event()                 # id del gadget o RA_EVENT_CLOSE(); ra_hand
 ra_get_value(4)  ra_set_value(4, 10)  ra_get_string(2)  ra_set_string(2, "x")  ra_enable_gadget(1)
 ra_window_close()
 ```
+
+[Volver al índice](#indice)
+
+<a id="funciones-de-entrada"></a>
 
 ## Funciones de entrada
 ```
@@ -383,6 +495,10 @@ joy_up(1) joy_down(1)       # Direcciones como Bool
 joy_left(1) joy_right(1)
 ```
 
+[Volver al índice](#indice)
+
+<a id="funciones-de-audio"></a>
+
 ## Funciones de audio
 ```
 sound_load(id, "file.8svx") # Carga un sonido IFF 8SVX
@@ -401,6 +517,10 @@ music_volume(0-64)          # Volumen
 music_stop()                # Para la música
 music_pos()  music_row()    # por dónde va (lista de orden, fila 0-63); music_position(n), music_free()
 ```
+
+[Volver al índice](#indice)
+
+<a id="funciones-de-ficheros"></a>
 
 ## Funciones de ficheros
 ```
@@ -424,6 +544,10 @@ n = file_load("f", buf, max)  file_save("f", buf, n)   # el fichero entero a/des
 console_write("t")  console_read(buf, max)
 ```
 
+[Volver al índice](#indice)
+
+<a id="buffers-y-memoria-en-bruto"></a>
+
 ## Buffers y memoria en bruto
 ```
 b = buffer_alloc(1024)      # bytes a cero, no se liberan solos: buffer_free(b)
@@ -431,6 +555,10 @@ buffer_set_byte(b, 0, 65)  buffer_get_byte(b, 0)   # también _word y _long (big
 buffer_copy(dst, 0, src, 0, n)  buffer_fill(b, 0, n, 0)
 peek_byte(addr)  poke_byte(addr, v)   # también _word y _long: cualquier dirección
 ```
+
+[Volver al índice](#indice)
+
+<a id="funciones-del-sistema"></a>
 
 ## Funciones del sistema
 ```
@@ -481,6 +609,10 @@ n = cpu_sample()            # tareas desde la última muestra, de más a menos: 
 cpu_total()                 # por mil, todas las tareas (el resto es reposo); cpu_stop()
 ```
 
+[Volver al índice](#indice)
+
+<a id="tareas-c-en-otro-proceso"></a>
+
 ## Tareas (C en otro proceso)
 ```
 t = task_start(f, arg)      # @native func f(arg: Int) -> Int en otro proceso (solo C); 0 = falló
@@ -492,6 +624,10 @@ task_free(t)                # la olvida (espera); task_signal(): máscara para m
 # (el primero que la usa, hasta que acaba su tarea): _dash_net_connect_start/poll, _send_buffer/_recv_buffer, _dash_tls_*_buffer...
 ```
 
+[Volver al índice](#indice)
+
+<a id="lienzo-del-escritorio-fondo-del-workbench"></a>
+
 ## Lienzo del escritorio (fondo del Workbench)
 ```
 d = desktop_canvas(x, y, w, h)          # una zona del escritorio, detrás de los iconos (negativo: desde la derecha/abajo)
@@ -499,6 +635,10 @@ desktop_canvas_on_draw(d, paint)        # func paint(x, y, w, h) dibuja con gfx_
 desktop_canvas_update(d)                # dibujar otra vez; desktop_canvas_update_area(d, x, y, w, h): solo esa parte
 desktop_canvas_free(d)                  # vuelve el fondo de pantalla (también al salir)
 ```
+
+[Volver al índice](#indice)
+
+<a id="red-tcp-y-udp-bsdsocketlibrary"></a>
 
 ## Red (TCP y UDP, bsdsocket.library)
 ```
@@ -522,11 +662,19 @@ m = net_udp_recv(u, 1500, 1000)      # "" = nada a tiempo, nil = error; net_udp_
 ```
 No hay builtin de HTTP: el programa habla HTTP él mismo sobre `net_`/`tls_`. No hay sockets en bruto ni tramas SANA-II en bruto.
 
+[Volver al índice](#indice)
+
+<a id="argumentos-del-programa"></a>
+
 ## Argumentos del programa
 ```
 arg_count()                 # argumentos del Shell; desde el Workbench, los iconos de proyecto (arg(i): ruta completa)
 arg(0)                      # el primero ("" si no hay)
 ```
+
+[Volver al índice](#indice)
+
+<a id="gestión-de-memoria"></a>
 
 ## Gestión de memoria
 > Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
@@ -548,6 +696,10 @@ ptr = arena_alloc(a, size)  # Reserva
 arena_reset(a)              # Vacía todo
 arena_free(a)               # Libera la arena; arena_used(a), arena_available(a)
 ```
+
+[Volver al índice](#indice)
+
+<a id="patrones-habituales"></a>
 
 ## Patrones habituales
 
@@ -587,6 +739,10 @@ end
 file_close(h)
 ```
 
+[Volver al índice](#indice)
+
+<a id="códigos-de-tecla"></a>
+
 ## Códigos de tecla
 | Tecla | Código | Tecla | Código |
 |-------|--------|-------|--------|
@@ -595,6 +751,10 @@ file_close(h)
 | LEFT | 79 | DOWN | 77 |
 | RIGHT | 78 | F1-F10 | 80-89 |
 
+[Volver al índice](#indice)
+
+<a id="colores-estándar"></a>
+
 ## Colores estándar
 | Índice | Uso habitual |
 |--------|--------------|
@@ -602,3 +762,5 @@ file_close(h)
 | 1 | Texto/primer plano |
 | 2 | Resalte |
 | 3 | Sombra |
+
+[Volver al índice](#indice)

@@ -21,6 +21,19 @@ python3 tools/gen_ayuda.py --salida DIR
 python3 tools/gen_ayuda.py --check          # only checks
 ```
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [The pages](#the-pages)
+- [The file](#the-file)
+- [Reading it from Dash](#reading-it-from-dash)
+- [The AmigaGuide](#the-amigaguide)
+<!-- /indice -->
+
+<a id="the-pages"></a>
+
 ## The pages
 
 Everything is a page ("ficha"), with a unique key (letters, digits and `_`):
@@ -34,6 +47,10 @@ Everything is a page ("ficha"), with a unique key (letters, digits and `_`):
 | `I` cover and indexes | `inicio`, `manual`, `grupos`, `indice` | lists of links |
 
 The `m...` keys are the same in both languages (the English manual has the same sections; the generator checks it).
+
+[Back to the index](#index)
+
+<a id="the-file"></a>
 
 ## The file
 
@@ -159,6 +176,10 @@ it has one). Those of the groups: `%funciones 42` and `%ejemplo ...`. A reader m
 The text carries no Markdown marks. Function names inside the text are not links in the `.ayuda` (in the AmigaGuide
 they are); a reader can look a word of the text up in the names index to make it a link.
 
+[Back to the index](#index)
+
+<a id="reading-it-from-dash"></a>
+
 ## Reading it from Dash
 
 `lib/ayuda.dash` does it with little memory (a 512-byte buffer and the one of the page being read):
@@ -185,6 +206,10 @@ Also: `ayuda_fichas` (how many there are), `ayuda_tipo`, `ayuda_prefijo(a, "sou"
 `ayuda_plegar`. `tests/ayuda/leer_fichas.dash` is the test: `tests/unit/test_gen_ayuda.py` runs it in the emulator
 with `tests/run_tests.py --emu`.
 
+[Back to the index](#index)
+
+<a id="the-amigaguide"></a>
+
 ## The AmigaGuide
 
 One node per page, named by its key (the cover is `MAIN`), in the same order, so `Browse` goes from a group to its
@@ -192,3 +217,5 @@ functions. `@index` is the `indice` node; `Contents` (`@toc`) goes from a functi
 to its chapter. In the text, the names of functions that have a page are links. It opens in AmigaOS 3.1's MultiView
 (tried in the emulator: it needs `REXX:` and `HELP:` assigned, as on a normal Workbench); it takes a few seconds to
 load, as it is 1.2 MB.
+
+[Back to the index](#index)

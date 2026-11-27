@@ -6,6 +6,21 @@ Las funciones `gl_*` dibujan en 3D con MiniGL, la parte de OpenGL 1.x del Amiga.
 `./dash --gcc`), con y sin `--fpu`. Lo pidió el usuario (paso 5.3 de `FORJA_LOOP` de Forja). Lista completa:
 [BUILTINS.md](BUILTINS.md#3d-con-minigl).
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Qué hace falta](#qué-hace-falta)
+- [Cómo se usa](#cómo-se-usa)
+- [Coma flotante](#coma-flotante)
+- [Probado en el emulador](#probado-en-el-emulador)
+- [Dibujar en bloque](#dibujar-en-bloque)
+- [El motor 3D con MiniGL](#el-motor-3d-con-minigl)
+<!-- /indice -->
+
+<a id="qué-hace-falta"></a>
+
 ## Qué hace falta
 
 - `minigl.library` 29 o más. Hay varias, todas con la misma interfaz:
@@ -18,6 +33,10 @@ Las funciones `gl_*` dibujan en 3D con MiniGL, la parte de OpenGL 1.x del Amiga.
 
 Dash no necesita el SDK de MiniGL: llama a la biblioteca por su tabla de funciones (ABI 5 de
 `libraries/minigl_dispatch.h`), con los números de OpenGL.
+
+[Volver al índice](#indice)
+
+<a id="cómo-se-usa"></a>
 
 ## Cómo se usa
 
@@ -68,11 +87,19 @@ end
 
 Los números van a MiniGL como `float`: valen un `Float`, un `Int` o un `Double`. Los colores, de 0.0 a 1.0.
 
+[Volver al índice](#indice)
+
+<a id="coma-flotante"></a>
+
 ## Coma flotante
 
 Los programas `gl_*` no piden `--fpu`: van igual sin ella, porque el runtime pasa los números a la biblioteca como
 `float` de C. Pero la biblioteca sí necesita FPU, así que la máquina la tiene. Con `--fpu` las cuentas del programa
 (ángulos, `sin`, `cos`, matrices propias) van con la FPU en vez de por software: es lo recomendable.
+
+[Volver al índice](#indice)
+
+<a id="probado-en-el-emulador"></a>
 
 ## Probado en el emulador
 
@@ -101,6 +128,10 @@ Lo que Wazp3D, con su configuración de serie, no hace (también en un programa 
 comprueba al abrir, dibujando y leyendo el píxel del centro, así que con otra biblioteca que lo haga bien no cambia
 nada.
 
+[Volver al índice](#indice)
+
+
+<a id="dibujar-en-bloque"></a>
 
 ## Dibujar en bloque
 
@@ -118,6 +149,10 @@ motor por software en Dash (las cuentas, el orden y el relleno con `buffer_fill`
 
 Sin probar: PiStorm3D, RadeonGL y MiniGL Classic con una tarjeta 3D o con QuarkTex.
 
+[Volver al índice](#indice)
+
+<a id="el-motor-3d-con-minigl"></a>
+
 ## El motor 3D con MiniGL
 
 `lib/motor3d.dash` puede rellenar con MiniGL: `m3d_abrir_gl(ancho, alto, propia)` en vez de `m3d_abrir` y
@@ -129,3 +164,5 @@ colores. La niebla del suelo va en el color de cada franja de 4 filas, sin trans
 caminos y `m3d_cerrar(m)` cierra. Lo pidió Titan Force (`RENDER=MINIGL`). En `coffin` con Wazp3D va a 1-2 fotogramas
 por segundo (MiniGL por software); sin probar con una tarjeta 3D. `m3d_abrir_gl(..., true)` abre una pantalla propia
 de 16 bits: en `coffin`, ahí Wazp3D pinta con los colores cambiados; en una ventana del Workbench salen bien.
+
+[Volver al índice](#indice)

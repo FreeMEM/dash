@@ -8,6 +8,8 @@
 
 ---
 
+<a id="table-of-contents"></a>
+
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
@@ -40,7 +42,11 @@
 27. [3D with MiniGL](#27-3d-with-minigl)
 28. [DOS handlers (file systems)](#28-dos-handlers-file-systems)
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="1-introduction"></a>
 
 ## 1. Introduction
 
@@ -173,7 +179,11 @@ program exit. For the count to be useful, `Main` releases its variables when it 
 this mode). Freed blocks are filled with `0xDB` and the last 64 are not reused, so they can be
 recognized. It is slower and uses a little more memory; without the option it costs nothing.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="2-program-structure"></a>
 
 ## 2. Program Structure
 
@@ -231,7 +241,11 @@ The parts can go in any order, except that a constant can only use those defined
 x = 10  # Comment at the end of a line
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="3-variables-and-data-types"></a>
 
 ## 3. Variables and Data Types
 
@@ -443,7 +457,11 @@ Print b                         # error: Variable 'b' is not defined
 
 To use a value computed inside afterwards, create the variable before the block (`b = 0`).
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="4-constants"></a>
 
 ## 4. Constants
 
@@ -479,7 +497,11 @@ Main
 end
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="5-operators"></a>
 
 ## 5. Operators
 
@@ -699,7 +721,11 @@ From strongest to weakest:
 10. `and`
 11. `or`
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="6-control-structures"></a>
 
 ## 6. Control Structures
 
@@ -816,7 +842,11 @@ inside a loop, they are an error: to leave the `EventLoop` use `Stop`.
 | `return valor` | Returns from a function with a value |
 | `return` | Returns from a function without a value |
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="7-functions"></a>
 
 ## 7. Functions
 
@@ -910,7 +940,11 @@ Using a local variable from outside is an error (`lambdas cannot use local varia
 to be passed as a parameter. A named function is stored in a variable without parentheses: `g = doble`,
 `var g: Func = doble` or a global `var g: Func = doble`; then `g(4)` calls it.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="8-structures-structs"></a>
 
 ## 8. Structures (Structs)
 
@@ -1049,7 +1083,11 @@ end
   struct goes: there is no way down from the interface to the struct.
 - `nil` works as for any struct.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="9-enumerations"></a>
 
 ## 9. Enumerations
 
@@ -1092,7 +1130,11 @@ end
 direccion = Direccion.ARRIBA
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="10-arrays"></a>
 
 ## 10. Arrays
 
@@ -1304,7 +1346,11 @@ end
 
 `Array` is still an untyped list (its elements are read as integers).
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="11-screens"></a>
 
 ## 11. Screens
 
@@ -1407,7 +1453,11 @@ end
 - On RTG systems, `screen_open_custom()` can use non-native resolutions
 - Always close the screen when you are done to free resources
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="12-windows-and-events"></a>
 
 ## 12. Windows and Events
 
@@ -1556,7 +1606,11 @@ Main
 end
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="13-graphics"></a>
 
 ## 13. Graphics
 
@@ -1917,7 +1971,11 @@ Main
 end
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="14-input-keyboard-mouse-joystick"></a>
 
 ## 14. Input (Keyboard, Mouse, Joystick)
 
@@ -2057,7 +2115,11 @@ if joy_fire(1)
 end
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="15-audio-and-music"></a>
 
 ## 15. Audio and Music
 
@@ -2140,7 +2202,11 @@ tone_play(0, 440, 64, 500)  # A 440 Hz, half a second (sine wave)
 tone_play(1, 523, 48, 250)  # C
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="16-file-system"></a>
 
 ## 16. File System
 
@@ -2441,6 +2507,10 @@ end
 net_close(s)
 ```
 
+[Back to the index](#table-of-contents)
+
+<a id="17-memory-management"></a>
+
 ## 17. Memory Management
 
 ### Strings (automatic)
@@ -2601,7 +2671,11 @@ arena_free(arena)
 | Enemy/bullet pools | Arena Allocator |
 | Persistent game data | Reference Counting |
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="18-system-functions"></a>
 
 ## 18. System Functions
 
@@ -2775,7 +2849,11 @@ ok = notify("Backup done", "12 files to Work:Photos")
 shows it for a moment and keeps it in its panel's list. If the bar isn't running, it stays in that list
 (`ENV:Trasfondo.avisos`) and the bar shows it when it starts. It returns false if it got to neither.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="19-user-interface---gadtools"></a>
 
 ## 19. User Interface - GadTools
 
@@ -3081,7 +3159,11 @@ number field, only the digits), with C copy the whole text and with X cut it. MU
 themselves, with right Amiga or Ctrl + V, and copy what is selected. With MUI 3.8, which does not, `mui_string` and
 `mui_combo` work like the GadTools ones (reported by Alex Agauser and Ferrán García).
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="20-user-interface---reaction"></a>
 
 ## 20. User Interface - ReAction
 
@@ -3480,7 +3562,11 @@ Each one explained, with its parameters and an example run by the tests: [BUILTI
 | Ideal for | Editors, games | Dialogs, forms |
 | Visual style | Classic | Modern |
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="20b-user-interface---mui"></a>
 
 ## 20b. User Interface - MUI
 
@@ -3681,7 +3767,11 @@ and a second window). This is how it looks on an emulated A1200 with AmigaOS 3.1
 
 ![Browser window in MUI](img/mui_navegador.png)
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="21-modules-and-imports"></a>
 
 ## 21. Modules and Imports
 
@@ -4354,6 +4444,10 @@ that. On RTG, with Picasso96, the drawing is read and compared in the screen's f
 by row. Trasfondo measuring every second, on a 68030 without JIT with uaegfx at 16 bits: from 99 % CPU down to 22 % with the
 veil and the areas (and from 21.5 % to 15.5 % on the A1200).
 
+[Back to the index](#table-of-contents)
+
+<a id="22-complete-examples"></a>
+
 ## 22. Complete Examples
 
 ### Example 1: Hello World with a Window
@@ -4594,7 +4688,11 @@ Main
 end
 ```
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="23-quick-reference"></a>
 
 ## 23. Quick Reference
 
@@ -4652,7 +4750,11 @@ happens on failure and the related ones).
 | LEFT | 79 |
 | RIGHT | 78 |
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="24-dash-20-the-straight-compiler"></a>
 
 ## 24. Dash 2.0: the straight compiler
 
@@ -4908,6 +5010,10 @@ from this documentation with `tools/gen_ayuda.py`.
 Everything else is the same: the language, the builtins, the runtime, the programs' error messages and what they
 need to start (Kickstart 3.0 and a 68000; MUI 5 and TLS, a 68020).
 
+[Back to the index](#table-of-contents)
+
+<a id="25-dashos-aarch64"></a>
+
 ## 25. DashOS (AArch64)
 
 The same Dash program also compiles for DashOS, the system for the Raspberry Pi with an Amiga box inside. It is an
@@ -5024,7 +5130,11 @@ end
 - The Amiga's memory is big-endian. In a little-endian program, `Word` and `Long` fields are read and written with
   their bytes swapped, so they hold the same values as on the Amiga. `peek_*` and `poke_*` use the processor's order.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="26-inline-assembler"></a>
 
 ## 26. Inline assembler
 
@@ -5129,7 +5239,11 @@ Demo examples: `examples/asm_barras.dash` (raster bars: the loop of every frame,
 `examples/asm_copper.dash` (a copper bar with its list in chip memory and a VBlank server in asm that moves it; it
 takes the system's display away and leaves it as it was at the end).
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="27-3d-with-minigl"></a>
 
 ## 27. 3D with MiniGL
 
@@ -5170,7 +5284,11 @@ from `image_decode` (`gl_texture`), lights (`gl_light`), fog (`gl_fog`) and `gl_
 what was tried in the emulator and what Wazp3D does not do, in [MINIGL.en.md](MINIGL.en.md). Example:
 `examples/gl_cubo.dash`.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="28-dos-handlers-file-systems"></a>
 
 ## 28. DOS handlers (file systems)
 
@@ -5237,7 +5355,11 @@ MINE:
 Complete example: `examples/handler_ram.dash`, a disk in memory (read, write, list, rename, delete, protection and
 comments). Tests in the emulator: `tests/test_handler_*.dash`, with `# emu-handler:` in the runner.
 
+[Back to the index](#table-of-contents)
+
 ---
+
+<a id="appendix-common-errors"></a>
 
 ## Appendix: Common Errors
 
@@ -5282,3 +5404,5 @@ A variable keeps the type of its first assignment. Adding a number to a string d
 ---
 
 **Dash Language** - Created to revive the magic of programming on the Amiga.
+
+[Back to the index](#table-of-contents)

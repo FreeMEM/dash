@@ -6,6 +6,21 @@ The `gl_*` functions draw in 3D with MiniGL, the Amiga's part of OpenGL 1.x. The
 `./dash --gcc`), with and without `--fpu`. Asked for by the user (step 5.3 of Forja's `FORJA_LOOP`). Full list:
 [BUILTINS.en.md](BUILTINS.en.md#3d-with-minigl).
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [What is needed](#what-is-needed)
+- [How to use it](#how-to-use-it)
+- [Floating point](#floating-point)
+- [Tried in the emulator](#tried-in-the-emulator)
+- [Drawing in blocks](#drawing-in-blocks)
+- [The 3D engine with MiniGL](#the-3d-engine-with-minigl)
+<!-- /indice -->
+
+<a id="what-is-needed"></a>
+
 ## What is needed
 
 - `minigl.library` 29 or newer. There are several, all with the same interface:
@@ -18,6 +33,10 @@ The `gl_*` functions draw in 3D with MiniGL, the Amiga's part of OpenGL 1.x. The
 
 Dash does not need the MiniGL SDK: it calls the library through its table of functions (ABI 5 of
 `libraries/minigl_dispatch.h`), with OpenGL's numbers.
+
+[Back to the index](#index)
+
+<a id="how-to-use-it"></a>
 
 ## How to use it
 
@@ -68,11 +87,19 @@ end
 
 The numbers go to MiniGL as `float`: a `Float`, an `Int` or a `Double` is fine. Colours go from 0.0 to 1.0.
 
+[Back to the index](#index)
+
+<a id="floating-point"></a>
+
 ## Floating point
 
 `gl_*` programs do not need `--fpu`: they work the same without it, because the runtime hands the numbers to the
 library as C `float`. But the library does need a FPU, so the machine has one. With `--fpu` the program's own maths
 (angles, `sin`, `cos`, its own matrices) use the FPU instead of software: that is the advice.
+
+[Back to the index](#index)
+
+<a id="tried-in-the-emulator"></a>
 
 ## Tried in the emulator
 
@@ -100,6 +127,10 @@ What Wazp3D, with its default settings, does not do (also from a C program, so i
 `GL_CULL_FACE` took away the front faces (the ones seen counterclockwise). It checks this when opening, by drawing
 and reading the middle pixel, so with another library that gets it right nothing changes.
 
+[Back to the index](#index)
+
+
+<a id="drawing-in-blocks"></a>
 
 ## Drawing in blocks
 
@@ -117,6 +148,10 @@ engine in Dash (the maths, the ordering and the filling with `buffer_fill` in a 
 
 Not tried: PiStorm3D, RadeonGL, and MiniGL Classic with a 3D card or with QuarkTex.
 
+[Back to the index](#index)
+
+<a id="the-3d-engine-with-minigl"></a>
+
 ## The 3D engine with MiniGL
 
 `lib/motor3d.dash` can fill with MiniGL: `m3d_abrir_gl(width, height, own)` instead of `m3d_abrir`, and `m3d_con_gl(m)`
@@ -128,4 +163,6 @@ black. To end the frame, `m3d_mostrar(m)`; `m3d_texto` writes on top in both pat
 for by Titan Force (`RENDER=MINIGL`). In `coffin` with Wazp3D it runs at 1-2 frames a second (MiniGL in software);
 untested with a 3D card. `m3d_abrir_gl(..., true)` opens a 16-bit screen of its own: in `coffin`, Wazp3D draws there
 with the colours swapped; in a Workbench window they come out right.
+
+[Back to the index](#index)
 

@@ -8,6 +8,8 @@
 
 ---
 
+<a id="tabla-de-contenidos"></a>
+
 ## Tabla de Contenidos
 
 1. [Introduccion](#1-introduccion)
@@ -40,7 +42,11 @@
 27. [3D con MiniGL](#27-3d-con-minigl)
 28. [Handlers de DOS (sistemas de archivos)](#28-handlers-de-dos-sistemas-de-archivos)
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="1-introduccion"></a>
 
 ## 1. Introduccion
 
@@ -173,7 +179,11 @@ salir del programa. Para que la cuenta sea util, `Main` suelta sus variables al 
 este modo). Los bloques liberados se rellenan con `0xDB` y los 64 ultimos no se reutilizan, para
 reconocerlos. Es mas lento y gasta algo mas de memoria; sin la opcion no cuesta nada.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="2-estructura-del-programa"></a>
 
 ## 2. Estructura del Programa
 
@@ -231,7 +241,11 @@ Las partes pueden ir en cualquier orden, salvo que una constante solo puede usar
 x = 10  # Comentario al final de linea
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="3-variables-y-tipos-de-datos"></a>
 
 ## 3. Variables y Tipos de Datos
 
@@ -443,7 +457,11 @@ Print b                         # error: Variable 'b' is not defined
 
 Para usar despues un valor calculado dentro, crear la variable antes del bloque (`b = 0`).
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="4-constantes"></a>
 
 ## 4. Constantes
 
@@ -479,7 +497,11 @@ Main
 end
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="5-operadores"></a>
 
 ## 5. Operadores
 
@@ -700,7 +722,11 @@ De mas fuerte a mas debil:
 10. `and`
 11. `or`
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="6-estructuras-de-control"></a>
 
 ## 6. Estructuras de Control
 
@@ -817,7 +843,11 @@ dentro de un bucle, son un error: para salir del `EventLoop` se usa `Stop`.
 | `return valor` | Retorna de una funcion con valor |
 | `return` | Retorna de una funcion sin valor |
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="7-funciones"></a>
 
 ## 7. Funciones
 
@@ -911,7 +941,11 @@ Usar una variable local de fuera es un error (`lambdas cannot use local variable
 que pasarla como parametro. Una funcion con nombre se guarda en una variable sin parentesis: `g = doble`,
 `var g: Func = doble` o una global `var g: Func = doble`; despues `g(4)` la llama.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="8-estructuras-structs"></a>
 
 ## 8. Estructuras (Structs)
 
@@ -1050,7 +1084,11 @@ end
   concreto: no hay forma de bajar de la interfaz al struct.
 - `nil` vale como en cualquier struct.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="9-enumeraciones"></a>
 
 ## 9. Enumeraciones
 
@@ -1093,7 +1131,11 @@ end
 direccion = Direccion.ARRIBA
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="10-arrays"></a>
 
 ## 10. Arrays
 
@@ -1305,7 +1347,11 @@ end
 
 `Array` sigue siendo una lista sin tipo (sus elementos se leen como enteros).
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="11-screens-pantallas"></a>
 
 ## 11. Screens (Pantallas)
 
@@ -1408,7 +1454,11 @@ end
 - En sistemas RTG, `screen_open_custom()` puede usar resoluciones no nativas
 - Siempre cierra la screen al terminar para liberar recursos
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="12-ventanas-y-eventos"></a>
 
 ## 12. Ventanas y Eventos
 
@@ -1556,7 +1606,11 @@ Main
 end
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="13-graficos"></a>
 
 ## 13. Graficos
 
@@ -1917,7 +1971,11 @@ Main
 end
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="14-entrada-teclado-raton-joystick"></a>
 
 ## 14. Entrada (Teclado, Raton, Joystick)
 
@@ -2057,7 +2115,11 @@ if joy_fire(1)
 end
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="15-audio-y-musica"></a>
 
 ## 15. Audio y Musica
 
@@ -2140,7 +2202,11 @@ tone_play(0, 440, 64, 500)  # La 440 Hz, medio segundo (onda senoidal)
 tone_play(1, 523, 48, 250)  # Do
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="16-sistema-de-archivos"></a>
 
 ## 16. Sistema de Archivos
 
@@ -2440,6 +2506,10 @@ end
 net_close(s)
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
+<a id="17-gestion-de-memoria"></a>
+
 ## 17. Gestion de Memoria
 
 ### Strings (automatico)
@@ -2600,7 +2670,11 @@ arena_free(arena)
 | Pools de enemigos/balas | Arena Allocator |
 | Datos de juego persistentes | Reference Counting |
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="18-funciones-del-sistema"></a>
 
 ## 18. Funciones del Sistema
 
@@ -2774,7 +2848,11 @@ Lo recibe la barra de [Trasfondo](https://github.com/FreeMEM/trasfondo) (su puer
 `NOTIFY`), que lo enseña un momento y lo guarda en la lista de su panel. Si la barra no está en marcha, queda en esa
 lista (`ENV:Trasfondo.avisos`) y lo verá al arrancar. Da false si no llegó a ninguno de los dos sitios.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="19-interfaz-de-usuario---gadtools"></a>
 
 ## 19. Interfaz de Usuario - GadTools
 
@@ -3080,7 +3158,11 @@ primera línea; en uno de números, solo las cifras), con C copian todo el texto
 pegan solos, con Amiga derecha o Ctrl + V, y copian lo que esté seleccionado. Con MUI 3.8, que no lo hace,
 `mui_string` y `mui_combo` funcionan como los de GadTools (lo contaron Alex Agauser y Ferrán García).
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="20-interfaz-de-usuario---reaction"></a>
 
 ## 20. Interfaz de Usuario - ReAction
 
@@ -3479,7 +3561,11 @@ Cada una explicada, con sus parámetros y un ejemplo que se prueba: [BUILTINS.md
 | Ideal para | Editores, juegos | Dialogos, formularios |
 | Estilo visual | Clasico | Moderno |
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="20b-interfaz-de-usuario---mui"></a>
 
 ## 20b. Interfaz de Usuario - MUI
 
@@ -3681,7 +3767,11 @@ y una segunda ventana). Así se ve en un A1200 emulado con AmigaOS 3.1 y MUI 5:
 
 ![Ventana del navegador en MUI](img/mui_navegador.png)
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="21-modulos-e-imports"></a>
 
 ## 21. Modulos e Imports
 
@@ -4353,6 +4443,10 @@ ahorra. En RTG, con Picasso96, el dibujo se lee y se compara en el formato de la
 a fila. Trasfondo midiendo cada segundo, en un 68030 sin JIT con uaegfx a 16 bits: del 99 % de CPU al 22 % con el
 velo y las areas (y del 21,5 % al 15,5 % en el A1200).
 
+[Volver al índice](#tabla-de-contenidos)
+
+<a id="22-ejemplos-completos"></a>
+
 ## 22. Ejemplos Completos
 
 ### Ejemplo 1: Hola Mundo con Ventana
@@ -4593,7 +4687,11 @@ Main
 end
 ```
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="23-referencia-rapida"></a>
 
 ## 23. Referencia Rapida
 
@@ -4651,7 +4749,11 @@ pasa si falla y las relacionadas).
 | LEFT | 79 |
 | RIGHT | 78 |
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="24-dash-20-el-compilador-directo"></a>
 
 ## 24. Dash 2.0: el compilador directo
 
@@ -4907,6 +5009,10 @@ esta documentación con `tools/gen_ayuda.py`.
 Lo demás es igual: el lenguaje, los builtins, el runtime, los mensajes de error de los programas y lo que
 necesitan para arrancar (Kickstart 3.0 y un 68000; MUI 5 y TLS, un 68020).
 
+[Volver al índice](#tabla-de-contenidos)
+
+<a id="25-dashos-aarch64"></a>
+
 ## 25. DashOS (AArch64)
 
 El mismo programa Dash compila también para DashOS, el sistema para Raspberry Pi con una caja Amiga dentro. Es un
@@ -5025,7 +5131,11 @@ end
   dando la vuelta a los bytes, así que valen lo mismo que en el Amiga. `peek_*` y `poke_*` usan el orden del
   procesador.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="26-ensamblador-en-línea"></a>
 
 ## 26. Ensamblador en línea
 
@@ -5131,7 +5241,11 @@ Ejemplos de demo: `examples/asm_barras.dash` (barras de raster: el bucle de cada
 `examples/asm_copper.dash` (una barra de copper con la lista en memoria chip y un servidor de VBlank en asm que la
 mueve; quita la pantalla del sistema y la deja como estaba al acabar).
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="27-3d-con-minigl"></a>
 
 ## 27. 3D con MiniGL
 
@@ -5171,7 +5285,11 @@ Hay estado (`gl_enable`, `gl_blend_func`...), matrices (`gl_perspective`, `gl_or
 desde `image_decode` (`gl_texture`), luces (`gl_light`), niebla (`gl_fog`) y `gl_read_pixel` para pruebas. Todo,
 con lo probado en el emulador y lo que Wazp3D no hace, en [MINIGL.md](MINIGL.md). Ejemplo: `examples/gl_cubo.dash`.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="28-handlers-de-dos-sistemas-de-archivos"></a>
 
 ## 28. Handlers de DOS (sistemas de archivos)
 
@@ -5238,7 +5356,11 @@ MIO:
 Ejemplo completo: `examples/handler_ram.dash`, un disco en memoria (leer, escribir, listar, renombrar, borrar,
 protección y notas). Pruebas en el emulador: `tests/test_handler_*.dash`, con `# emu-handler:` en el runner.
 
+[Volver al índice](#tabla-de-contenidos)
+
 ---
+
+<a id="apendice-errores-comunes"></a>
 
 ## Apendice: Errores Comunes
 
@@ -5283,3 +5405,5 @@ Una variable conserva el tipo de su primera asignacion. Sumar un numero a un tex
 ---
 
 **Dash Language** - Creado para revivir la magia de programar en Amiga.
+
+[Volver al índice](#tabla-de-contenidos)
