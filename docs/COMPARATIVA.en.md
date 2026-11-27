@@ -4,6 +4,22 @@
 
 Dash against the classic “easy” languages (AmiBlitz3 and AMOS Professional) and against C (SAS/C and GCC), with the same programs measured on the same emulated Amiga.
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [Summary](#summary)
+- [Speed](#speed)
+- [Memory and size](#memory-and-size)
+- [Why the numbers look like this](#why-the-numbers-look-like-this)
+- [Stability](#stability)
+- [What each one covers](#what-each-one-covers)
+- [How it was measured](#how-it-was-measured)
+<!-- /indice -->
+
+<a id="summary"></a>
+
 ## Summary
 
 - Speed: Dash is on par with C (GCC) for arithmetic and calls, and the fastest with strings and lists. AmiBlitz3 and AMOS are 10 to 40 times slower for arithmetic, calls and lists, and 1.2 to 2 times slower with strings. SAS/C wins floating point (the ROM's FFP). C wins drawing lines: Dash is 8 % behind on the A1200 and 19 % on the A500 (it draws in a window); AmiBlitz3 and AMOS up to 66 % on the A500.
@@ -11,6 +27,10 @@ Dash against the classic “easy” languages (AmiBlitz3 and AMOS Professional) 
 - Memory: Dash uses the least while running (17 KB on average), then SAS/C (21 KB), AmiBlitz3 (30 KB) and GCC (39 KB). AMOS needs about 170 KB. With a screen, Dash and AmiBlitz3 use about 45 KB more than C (Dash draws in a window).
 - Stability: Dash and AMOS stop cleanly on a division by zero; C hangs the Amiga and AmiBlitz3 goes on with a wrong result. On an index out of range only AMOS reports it; Dash ignores it without corrupting memory; AmiBlitz3 and C write outside the list.
 - Features: Dash covers system windows (GadTools, MUI, ReAction), RTG, networking and TLS from the language itself. AMOS rules hardware games (AMAL, bobs, music) but ignores the OS. AmiBlitz3 reaches everything, at the cost of pointers and manual memory.
+
+[Back to the index](#index)
+
+<a id="speed"></a>
 
 ## Speed
 
@@ -40,6 +60,10 @@ Milliseconds for each whole program (load, start and work) in FS-UAE at real spe
 | flotante (20,000 floating point additions and multiplications) | 2,385 | 3,375 | 5,355 | **1,243** | 2,027 |
 | lineas (2,000 lines on a 320×256, 32-color screen) | 6,851 | 9,549 | 9,222 | 5,826 | **5,744** |
 
+[Back to the index](#index)
+
+<a id="memory-and-size"></a>
+
 ## Memory and size
 
 Executable size and memory used while running (the largest drop of free memory while it runs, minus the 64 KB stack of the process).
@@ -51,6 +75,10 @@ Executable size and memory used while running (the largest drop of free memory w
 | Memory while running (mean) (A1200) | 16,566 B | 30,265 B | 169,156 B | 20,932 B | 38,502 B |
 | With a screen (lines) (A1200) | 113,272 B | 118,208 B | 187,888 B | 67,952 B | 68,264 B |
 
+[Back to the index](#index)
+
+<a id="why-the-numbers-look-like-this"></a>
+
 ## Why the numbers look like this
 
 **Dash and GCC.** Dash doesn't compile better than GCC: it writes C that the same GCC compiles, and where both do the same work they tie (loop and calls). It wins where it uses its own runtime instead of the C library. To turn a number into text it gets two digits per division, instead of libnix's general-purpose sprintf, which parses the format as it goes. For the remainder (%) it uses the 68000's 16-bit division when the numbers fit, instead of libgcc's 32-bit routine. And it prints with dos.library's Printf, without C's printf buffers: that's why it uses less memory. A C programmer could do the same by hand; the test measures what you get writing the usual way in each language.
@@ -60,6 +88,10 @@ Executable size and memory used while running (the largest drop of free memory w
 **AmiBlitz3.** It makes the smallest executables (476 bytes for an empty one), since it only links the routines you use, and it starts first. With integers it is 6 to 13 times slower than C (GCC). It was built with -r, which its help says optimizes for size, and every other option at its default: not tuned, and the code it generates not examined. Without its debugger it checks nothing: dividing by zero gives 2147483647 and an index out of range writes over other memory.
 
 **AMOS Pro.** Its compiler copies its library routines and system data into every executable (it says so while compiling). That's why an empty program takes 54 KB, needs almost a second to start while it sets up its own screen system, and uses about 165 KB. Procedures are the slowest part: 34 to 41 times slower than C. In return it checks errors like its interpreter does: on a division by zero or an index out of range, it stops with an error.
+
+[Back to the index](#index)
+
+<a id="stability"></a>
 
 ## Stability
 
@@ -72,6 +104,10 @@ What happens on two typical bugs, on an emulated A1200 with OS 3.1. Each test in
 | AMOS Pro | Stops with an error (code 20); the Amiga goes on | Stops with an error (code 20); the Amiga goes on |
 | SAS/C 6.59 | The Amiga hangs | Writes outside the list and goes on |
 | GCC 6.5 | The Amiga hangs | Writes outside the list and goes on |
+
+[Back to the index](#index)
+
+<a id="what-each-one-covers"></a>
 
 ## What each one covers
 
@@ -92,6 +128,10 @@ From each one's documentation and what Coffin OS R65 ships; not all of it is mea
 | Runtime errors | Message and clean exit, no Guru | With the debugger; without it, no | Error message | Guru | Guru | Guru | Guru |
 | Where you write it | VS Code on the PC (and emulator) | Its own IDE on the Amiga | Its own IDE on the Amiga | Amiga | PC | Amiga or PC | Amiga |
 
+[Back to the index](#index)
+
+<a id="how-it-was-measured"></a>
+
 ## How it was measured
 
 - Machines: FS-UAE at real (cycle-exact) speed, Kickstart 3.1. A1200: 68020 at 14 MHz with 8 MB fast RAM. A500: 68000 at 7 MHz.
@@ -102,3 +142,5 @@ From each one's documentation and what Coffin OS R65 ships; not all of it is mea
 - The lines test found a Dash bug: on a 68000, opening its own screen gave a Guru (SA_Pens). Fixed in PR #55; Dash's A500 lines figure is with the fix.
 
 Each language's programs, the timer (timeit.c), the data and this generator are in tools/comparativa.
+
+[Back to the index](#index)

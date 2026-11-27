@@ -6,6 +6,21 @@ Un "Glade para MUI": se monta la ventana con el ratón (grupos, botones, campos,
 programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_station`: VS Code + Amiberry, carpeta
 `DEV:`; ver el `ARCHITECTURE.md` de AmiCachy, sección 5).
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Decisiones](#decisiones)
+- [El formato `.dashui`](#el-formato-dashui)
+- [La extensión](#la-extensión)
+- [Plan (tareas 20-24)](#plan-tareas-20-24)
+- [Estado](#estado)
+- [Ver en Amiga (IDE, tarea 20)](#ver-en-amiga-ide-tarea-20)
+<!-- /indice -->
+
+<a id="decisiones"></a>
+
 ## Decisiones
 
 1. **Formato propio, `.dashui` (JSON), como el `.ui` de Glade.** El usuario no recuerda el formato que se habló; este
@@ -40,6 +55,10 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
      al principio era `tools/emu_run.py --screenshot`, unos 30 s). Detalle al final.
      Con la casilla "al cambiar" (`dash.emulator.previewOnChange`), vuelve a pedirla solo 1,2 s después del último
      cambio (una cada vez; las que llegan mientras tanto se juntan en una); si el emulador falla, se apaga sola.
+
+[Volver al índice](#indice)
+
+<a id="el-formato-dashui"></a>
 
 ## El formato `.dashui`
 
@@ -143,6 +162,10 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   `tools/catalogo.py cd` junto con los del programa (ver "Traducciones" en `docs/MANUAL_REFERENCIA.md`). El editor
   visual los conserva, pero todavía no los enseña ni los cambia: se ponen editando el fichero como texto.
 
+[Volver al índice](#indice)
+
+<a id="la-extensión"></a>
+
 ## La extensión
 
 - **Editor propio** (`CustomTextEditorProvider`) para `*.dashui`: el JSON queda en el documento de VS Code (deshacer,
@@ -175,6 +198,10 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
 - Una dependencia en tiempo de ejecución, `vscode-languageclient` (el cliente del servidor de lenguaje, va dentro
   del paquete con esbuild). Para empaquetar, `@vscode/vsce` en un `node_modules` local (no global).
 
+[Volver al índice](#indice)
+
+<a id="plan-tareas-20-24"></a>
+
 ## Plan (tareas 20-24)
 
 - 20: esqueleto de la extensión (resaltado, comandos Compilar y Ejecutar) y `compiler/dashui.py` con `import
@@ -184,6 +211,10 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   (propiedades desconocidas se guardan tal cual).
 - 23: "Ver en Amiga" con la captura.
 - 24: la ventana del navegador (`examples/mui_navegador.dash`) rehecha con un `.dashui`; documentación.
+
+[Volver al índice](#indice)
+
+<a id="estado"></a>
 
 ## Estado
 
@@ -199,6 +230,10 @@ en `main` y en la sección "Unreleased" de `editor/vscode/CHANGELOG.md`, aún si
 
 Pendiente: no hay selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
 
+[Volver al índice](#indice)
+
+<a id="ver-en-amiga-ide-tarea-20"></a>
+
 ## Ver en Amiga (IDE, tarea 20)
 
 Un Amiga emulado que se queda encendido entre vistas (se apaga tras 10 minutos sin usarlo):
@@ -208,4 +243,6 @@ está abierta y acaba. En pantallas planares la captura son los planos tal cual 
 PC hace el PNG (`emu_run.planar_to_png`). La extensión mantiene uno por máquina y no recompila una ventana que no ha
 cambiado. Medido: arranque 2,5 s (A1200 3.1), 5 s (3.2) y 1,7 s (68040 RTG); cada vista, 2,4 s, 2,5 s y 1,8 s (antes,
 unos 30 s cada una).
+
+[Volver al índice](#indice)
 

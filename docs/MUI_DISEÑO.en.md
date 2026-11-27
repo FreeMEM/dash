@@ -5,6 +5,19 @@
 Works with MUI 3.8 (muimaster.library V19) or MUI 5. The full list of `mui_` builtins is in
 `docs/BUILTINS.md`.
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [Decisions](#decisions)
+- [API](#api)
+- [Example: the browser window](#example-the-browser-window)
+- [Under the hood](#under-the-hood)
+<!-- /indice -->
+
+<a id="decisions"></a>
+
 ## Decisions
 
 1. **`mui_` builtins**, no new syntax for now. MUI objects are values the program
@@ -21,6 +34,10 @@ Works with MUI 3.8 (muimaster.library V19) or MUI 5. The full list of `mui_` bui
 5. **Declarative format: `.dashui`** (decided in task 19). A JSON file produced by the visual editor that
    the program uses with `import "ventana.dashui"`; `compiler/dashui.py` turns it into Dash code using these
    builtins. Format and rules in `docs/MUI_EDITOR.md`.
+
+[Back to the index](#index)
+
+<a id="api"></a>
 
 ## API
 
@@ -165,6 +182,10 @@ The custom class (`MUI_CreateCustomClass` on top of `Area`) implements `MUIM_Ask
 handled by the program with a `mui_scrollbar` alongside: the browser draws from the line the scrollbar indicates. It is faster
 and simpler than putting the area inside a `Virtgroup`.
 
+[Back to the index](#index)
+
+<a id="example-the-browser-window"></a>
+
 ## Example: the browser window
 
 ```ruby
@@ -231,6 +252,10 @@ Main
 end
 ```
 
+[Back to the index](#index)
+
+<a id="under-the-hood"></a>
+
 ## Under the hood
 
 - **Headers:** the runtime defines `NO_INLINE_STDARG` before `proto/muimaster.h` and uses its own array-based
@@ -252,3 +277,5 @@ end
   `--autoclose`: when the time is up `mui_wait_event` returns -1, as when closing, and the program exits along its normal path (whatever comes after the loop runs); if it still has not finished 5 s later, it is killed outright.
 - **Error chain:** no muimaster, a window that will not open or a 68000 → message on standard output and
   `mui_app_begin` returns 0; the program decides what to do.
+
+[Back to the index](#index)

@@ -3,6 +3,26 @@
 Resumen al día del lenguaje para escribir código Dash. Referencia completa: `docs/QUICK_REFERENCE.md` y
 `docs/MANUAL_REFERENCIA.md`; la lista real de builtins es `docs/BUILTINS.md`.
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Estructura de un programa](#estructura-de-un-programa)
+- [Variables y tipos (primera asignación declara)](#variables-y-tipos-primera-asignación-declara)
+- [Control de flujo](#control-de-flujo)
+- [Funciones (tipos opcionales)](#funciones-tipos-opcionales)
+- [Arrays y strings](#arrays-y-strings)
+- [Structs con métodos y enums](#structs-con-métodos-y-enums)
+- [FFI](#ffi)
+- [Ensamblador en línea (68000, sintaxis de Motorola; docs/ASM_DISEÑO.md)](#ensamblador-en-línea-68000-sintaxis-de-motorola-docsasm_diseñomd)
+- [Ventanas y eventos](#ventanas-y-eventos)
+- [Scope léxico](#scope-léxico)
+- [Qué C genera](#qué-c-genera)
+<!-- /indice -->
+
+<a id="estructura-de-un-programa"></a>
+
 ## Estructura de un programa
 ```ruby
 import "lib/math_utils.dash"   # imports (rutas relativas)
@@ -18,6 +38,10 @@ Main
 end
 ```
 
+[Volver al índice](#indice)
+
+<a id="variables-y-tipos-primera-asignación-declara"></a>
+
 ## Variables y tipos (primera asignación declara)
 ```ruby
 x = 10
@@ -30,6 +54,10 @@ f = Fixed(1.5)                 # coma fija 16.16 (DashFixed): Fixed*Int entero, 
 x = 1.5                        # Float (por software, runtime/softfloat)
 c = 0xDFF000                   # literales hex y binarios (0b1010)
 ```
+
+[Volver al índice](#indice)
+
+<a id="control-de-flujo"></a>
 
 ## Control de flujo
 ```ruby
@@ -53,6 +81,10 @@ for item in array
 end
 ```
 
+[Volver al índice](#indice)
+
+<a id="funciones-tipos-opcionales"></a>
+
 ## Funciones (tipos opcionales)
 ```ruby
 func suma(a, b)
@@ -65,6 +97,10 @@ end
 
 doble_l = fn(x) -> x * 2       # lambda (soporte parcial, ver examples/test_lambda.dash)
 ```
+
+[Volver al índice](#indice)
+
+<a id="arrays-y-strings"></a>
 
 ## Arrays y strings
 ```ruby
@@ -79,6 +115,10 @@ s = "Hola, " + nombre          # concatenación
 c = nombre[0]                  # carácter
 m = "Hola #{nombre}!"          # interpolación
 ```
+
+[Volver al índice](#indice)
+
+<a id="structs-con-métodos-y-enums"></a>
 
 ## Structs con métodos y enums
 ```ruby
@@ -102,6 +142,10 @@ end
 st = State.RUNNING
 ```
 
+[Volver al índice](#indice)
+
+<a id="ffi"></a>
+
 ## FFI
 ```ruby
 @extern("mylib.library")
@@ -113,6 +157,10 @@ func MyFunc(x: Int) -> Int
 """
 end
 ```
+
+[Volver al índice](#indice)
+
+<a id="ensamblador-en-línea-68000-sintaxis-de-motorola-docsasm_diseñomd"></a>
 
 ## Ensamblador en línea (68000, sintaxis de Motorola; docs/ASM_DISEÑO.md)
 ```ruby
@@ -137,6 +185,10 @@ end
 s = vblank_server(mi_vblank, datos)      # mi_vblank(datos) en cada VBlank; int_server_remove(s) o al salir
 ```
 
+[Volver al índice](#indice)
+
+<a id="ventanas-y-eventos"></a>
+
 ## Ventanas y eventos
 ```ruby
 MiVentana.open
@@ -153,12 +205,20 @@ end
 
 Comandos: `Print`, `Wait`, `Stop`.
 
+[Volver al índice](#indice)
+
+<a id="scope-léxico"></a>
+
 ## Scope léxico
 
 - Variables declaradas en bloques (if/while/for) son locales a ese bloque
 - Se puede acceder y modificar variables del scope padre
 - Las variables del bloque hijo NO son visibles en el padre
 - Funciones con prefijo `_` en un módulo importado son privadas
+
+[Volver al índice](#indice)
+
+<a id="qué-c-genera"></a>
 
 ## Qué C genera
 
@@ -169,3 +229,5 @@ Comandos: `Print`, `Wait`, `Stop`.
 | boolean | `BOOL` |
 | array | `DashArrayLong` (runtime, con bounds checking) |
 | struct | `struct` C con constructor generado |
+
+[Volver al índice](#indice)

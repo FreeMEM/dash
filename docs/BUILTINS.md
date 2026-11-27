@@ -9,6 +9,54 @@ usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
 Total: 1116 funciones, 1116 implementadas, 0 sin implementar.
 
+<a id="indice"></a>
+
+**Índice** de los grupos. En cada función explicada, su nombre lleva a la tabla de su grupo y el enlace "índice", aquí.
+
+- [Gráficos básicos](#graphics_basic) (30 funciones)
+- [Gráficos avanzados](#graphics_advanced) (91 funciones)
+- [Entrada (teclado, ratón, joystick)](#input_functions) (37 funciones)
+- [GadTools](#gadtools_functions) (19 funciones)
+- [Menús](#menu_functions) (10 funciones)
+- [Requesters ASL](#asl_functions) (5 funciones)
+- [ReAction](#reaction_functions) (79 funciones)
+- [Sistema y memoria](#system_functions) (32 funciones)
+- [Ficheros (DOS)](#dos_functions) (42 funciones)
+- [Buffers](#buffer_functions) (13 funciones)
+- [Texto](#text_functions) (19 funciones)
+- [Red (TCP)](#net_functions) (26 funciones)
+- [TLS (AmiSSL)](#tls_functions) (14 funciones)
+- [Fuentes y colores](#font_functions) (10 funciones)
+- [Transparencia y degradados](#blend_functions) (3 funciones)
+- [Imágenes RGB desde un buffer (vídeo)](#rgb_functions) (3 funciones)
+- [Tareas, reloj, traducciones y escritorio](#task_functions) (93 funciones)
+- [Imágenes (datatypes)](#image_functions) (8 funciones)
+- [Argumentos](#args_functions) (5 funciones)
+- [Compresión (zlib)](#zlib_functions) (23 funciones)
+- [Handlers de DOS (sistemas de archivos)](#handler_functions) (19 funciones)
+- [UTF-8](#utf8_functions) (8 funciones)
+- [Comparar y buscar en un búfer](#bufsearch_functions) (3 funciones)
+- [Double y texto](#double_functions) (2 funciones)
+- [Matemáticas de Double](#math_functions) (20 funciones)
+- [Expresiones regulares y comodines](#regex_functions) (11 funciones)
+- [Simular teclado y ratón](#siminput_functions) (10 funciones)
+- [Portapapeles](#clip_functions) (5 funciones)
+- [Ordenar textos según el idioma](#collate_functions) (1 funciones)
+- [Sistema y programa](#sysprog_functions) (49 funciones)
+- [JSON leído en C (para lib/json.dash)](#json_functions) (6 funciones)
+- [Depurador (el programa depurado, con dash --debug)](#debugger_functions) (32 funciones)
+- [Imágenes decodificadas por el programa (sin datatypes)](#imgdec_functions) (11 funciones)
+- [Fuentes TrueType, WOFF y WOFF2](#ttf_functions) (4 funciones)
+- [Red en una tarea aparte](#netbg_functions) (13 funciones)
+- [Ventanas de otros programas (pruebas)](#otherwin_functions) (12 funciones)
+- [Gestor de ventanas (las de todos los programas)](#wm_functions) (39 funciones)
+- [Audio](#audio_functions) (26 funciones)
+- [Intuition](#intuition_expanded) (60 funciones)
+- [RTG (CyberGraphX / Picasso96)](#rtg_functions) (21 funciones)
+- [MUI](#mui_functions) (126 funciones)
+- [3D con MiniGL](#gl_functions) (44 funciones)
+- [DashOS (solo con ./dash --dashos)](#dashos_functions) (32 funciones)
+
 <a id="graphics_basic"></a>
 
 ## Gráficos básicos
@@ -80,7 +128,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="graphics_basic_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -117,7 +167,7 @@ end
 
 <a id="gfx_pen"></a>
 
-### `gfx_pen(color)`
+### [`gfx_pen(color)`](#graphics_basic_table) · [índice](#indice)
 
 - `color`: el número de color de la paleta, de 0 al último de la pantalla (7 con profundidad 3, 31 con 5).
 
@@ -128,7 +178,7 @@ Ver también: [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_rgb`](#gfx_rgb), [`color_pen`](
 
 <a id="gfx_pen_bg"></a>
 
-### `gfx_pen_bg(color)`
+### [`gfx_pen_bg(color)`](#graphics_basic_table) · [índice](#indice)
 
 - `color`: un número de color de la paleta.
 
@@ -139,7 +189,7 @@ Ver también: [`gfx_pen`](#gfx_pen), [`gfx_mode`](#gfx_mode).
 
 <a id="gfx_pen_outline"></a>
 
-### `gfx_pen_outline(color)`
+### [`gfx_pen_outline(color)`](#graphics_basic_table) · [índice](#indice)
 
 - `color`: un número de color de la paleta.
 
@@ -149,7 +199,7 @@ Ver también: [`gfx_flood`](#gfx_flood).
 
 <a id="gfx_mode"></a>
 
-### `gfx_mode(mode)`
+### [`gfx_mode(mode)`](#graphics_basic_table) · [índice](#indice)
 
 - `mode`: 0 = JAM1, 1 = JAM2, 2 = COMPLEMENT, 4 = INVERSVID. Dash no tiene esas constantes: se pone el número.
 
@@ -162,7 +212,7 @@ Ver también: [`gfx_pen`](#gfx_pen), [`gfx_pen_bg`](#gfx_pen_bg), [`gfx_pattern`
 
 <a id="gfx_pattern"></a>
 
-### `gfx_pattern(pattern)`
+### [`gfx_pattern(pattern)`](#graphics_basic_table) · [índice](#indice)
 
 - `pattern`: 16 bits; cada bit a 1 es un píxel pintado. `0xFFFF` es la línea entera, `0xF0F0` discontinua y
   `0xAAAA` de puntos.
@@ -174,7 +224,7 @@ Ver también: [`gfx_line`](#gfx_line), [`gfx_mode`](#gfx_mode).
 
 <a id="gfx_rgb"></a>
 
-### `gfx_rgb(index, r, g, b)`
+### [`gfx_rgb(index, r, g, b)`](#graphics_basic_table) · [índice](#indice)
 
 - `index`: el color de la paleta que se cambia.
 - `r`, `g`, `b`: rojo, verde y azul, de 0 a 15.
@@ -187,7 +237,7 @@ Ver también: [`gfx_rgb8`](#gfx_rgb8), [`gfx_pen`](#gfx_pen), [`screen_open_cust
 
 <a id="gfx_rgb8"></a>
 
-### `gfx_rgb8(index, r, g, b)`
+### [`gfx_rgb8(index, r, g, b)`](#graphics_basic_table) · [índice](#indice)
 
 - `index`: el color de la paleta que se cambia.
 - `r`, `g`, `b`: rojo, verde y azul, de 0 a 255.
@@ -199,7 +249,7 @@ Ver también: [`gfx_rgb`](#gfx_rgb).
 
 <a id="gfx_move"></a>
 
-### `gfx_move(x, y)`
+### [`gfx_move(x, y)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el punto, en píxeles.
 
@@ -209,7 +259,7 @@ Ver también: [`gfx_draw`](#gfx_draw), [`gfx_text`](#gfx_text).
 
 <a id="gfx_draw"></a>
 
-### `gfx_draw(x, y)`
+### [`gfx_draw(x, y)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el final de la línea.
 
@@ -220,7 +270,7 @@ Ver también: [`gfx_move`](#gfx_move), [`gfx_line`](#gfx_line).
 
 <a id="gfx_line"></a>
 
-### `gfx_line(x1, y1, x2, y2)`
+### [`gfx_line(x1, y1, x2, y2)`](#graphics_basic_table) · [índice](#indice)
 
 - `x1`, `y1`: el principio.
 - `x2`, `y2`: el final.
@@ -231,7 +281,7 @@ Ver también: [`gfx_draw`](#gfx_draw), [`gfx_pattern`](#gfx_pattern), [`gfx_box`
 
 <a id="gfx_pixel"></a>
 
-### `gfx_pixel(x, y)`
+### [`gfx_pixel(x, y)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -242,7 +292,7 @@ Ver también: [`gfx_pixel_read`](#gfx_pixel_read), [`gfx_pens_draw`](#gfx_pens_d
 
 <a id="gfx_pixel_read"></a>
 
-### `gfx_pixel_read(x, y)` → `Int`
+### [`gfx_pixel_read(x, y)`](#graphics_basic_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -252,7 +302,7 @@ Ver también: [`gfx_pixel`](#gfx_pixel).
 
 <a id="gfx_rect"></a>
 
-### `gfx_rect(x1, y1, x2, y2)`
+### [`gfx_rect(x1, y1, x2, y2)`](#graphics_basic_table) · [índice](#indice)
 
 - `x1`, `y1`: la esquina de arriba a la izquierda.
 - `x2`, `y2`: la de abajo a la derecha, incluida.
@@ -264,7 +314,7 @@ Ver también: [`gfx_box`](#gfx_box), [`gfx_clear_color`](#gfx_clear_color).
 
 <a id="gfx_box"></a>
 
-### `gfx_box(x1, y1, x2, y2)`
+### [`gfx_box(x1, y1, x2, y2)`](#graphics_basic_table) · [índice](#indice)
 
 - `x1`, `y1`, `x2`, `y2`: dos esquinas opuestas, incluidas.
 
@@ -274,7 +324,7 @@ Ver también: [`gfx_rect`](#gfx_rect), [`gfx_line`](#gfx_line).
 
 <a id="gfx_ellipse"></a>
 
-### `gfx_ellipse(cx, cy, rx, ry)`
+### [`gfx_ellipse(cx, cy, rx, ry)`](#graphics_basic_table) · [índice](#indice)
 
 - `cx`, `cy`: el centro.
 - `rx`, `ry`: el radio horizontal y el vertical, en píxeles.
@@ -286,7 +336,7 @@ Ver también: [`gfx_ellipse_fill`](#gfx_ellipse_fill), [`gfx_circle`](#gfx_circl
 
 <a id="gfx_circle"></a>
 
-### `gfx_circle(cx, cy, r)`
+### [`gfx_circle(cx, cy, r)`](#graphics_basic_table) · [índice](#indice)
 
 - `cx`, `cy`: el centro.
 - `r`: el radio, en píxeles.
@@ -297,7 +347,7 @@ Ver también: [`gfx_circle_fill`](#gfx_circle_fill), [`gfx_ellipse`](#gfx_ellips
 
 <a id="gfx_ellipse_fill"></a>
 
-### `gfx_ellipse_fill(cx, cy, rx, ry)`
+### [`gfx_ellipse_fill(cx, cy, rx, ry)`](#graphics_basic_table) · [índice](#indice)
 
 - `cx`, `cy`: el centro.
 - `rx`, `ry`: los radios.
@@ -309,7 +359,7 @@ Ver también: [`gfx_ellipse`](#gfx_ellipse), [`gfx_circle_fill`](#gfx_circle_fil
 
 <a id="gfx_circle_fill"></a>
 
-### `gfx_circle_fill(cx, cy, r)`
+### [`gfx_circle_fill(cx, cy, r)`](#graphics_basic_table) · [índice](#indice)
 
 - `cx`, `cy`: el centro.
 - `r`: el radio.
@@ -320,7 +370,7 @@ Ver también: [`gfx_circle`](#gfx_circle), [`gfx_ellipse_fill`](#gfx_ellipse_fil
 
 <a id="gfx_flood"></a>
 
-### `gfx_flood(x, y, mode)`
+### [`gfx_flood(x, y, mode)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el punto donde empieza el relleno.
 - `mode`: 1 = rellena los píxeles vecinos que tienen el mismo color que el de `x`, `y`; 0 = rellena hasta
@@ -333,7 +383,7 @@ Ver también: [`gfx_pen_outline`](#gfx_pen_outline), [`gfx_poly_begin`](#gfx_pol
 
 <a id="gfx_text"></a>
 
-### `gfx_text(str)`
+### [`gfx_text(str)`](#graphics_basic_table) · [índice](#indice)
 
 - `str`: el texto.
 
@@ -345,7 +395,7 @@ Ver también: [`gfx_text_at`](#gfx_text_at), [`gfx_text_len`](#gfx_text_len), [`
 
 <a id="gfx_text_at"></a>
 
-### `gfx_text_at(x, y, str)`
+### [`gfx_text_at(x, y, str)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: dónde empieza el texto; `y` es la línea de base.
 - `str`: el texto.
@@ -357,7 +407,7 @@ Ver también: [`gfx_text`](#gfx_text), [`gfx_text_len`](#gfx_text_len), [`font_b
 
 <a id="gfx_text_len"></a>
 
-### `gfx_text_len(str)` → `Int`
+### [`gfx_text_len(str)`](#graphics_basic_table) → `Int` · [índice](#indice)
 
 - `str`: el texto.
 
@@ -368,7 +418,7 @@ Ver también: [`gfx_text`](#gfx_text), [`font_height`](#font_height).
 
 <a id="gfx_clear"></a>
 
-### `gfx_clear()`
+### [`gfx_clear()`](#graphics_basic_table) · [índice](#indice)
 
 Pinta todo el destino con el color 0. En una ventana es su interior.
 
@@ -376,7 +426,7 @@ Ver también: [`gfx_clear_color`](#gfx_clear_color).
 
 <a id="gfx_clear_color"></a>
 
-### `gfx_clear_color(color)`
+### [`gfx_clear_color(color)`](#graphics_basic_table) · [índice](#indice)
 
 - `color`: un número de color de la paleta.
 
@@ -386,7 +436,7 @@ Ver también: [`gfx_clear`](#gfx_clear), [`gfx_rect`](#gfx_rect).
 
 <a id="gfx_scroll"></a>
 
-### `gfx_scroll(dx, dy, x1, y1, x2, y2)`
+### [`gfx_scroll(dx, dy, x1, y1, x2, y2)`](#graphics_basic_table) · [índice](#indice)
 
 - `dx`, `dy`: cuántos píxeles se desplaza. Positivo mueve el contenido hacia la izquierda (`dx`) o hacia
   arriba (`dy`); negativo, al revés.
@@ -399,7 +449,7 @@ Ver también: [`gfx_copy`](#gfx_copy), [`gfx_pen_bg`](#gfx_pen_bg).
 
 <a id="gfx_poly_begin"></a>
 
-### `gfx_poly_begin(x, y)`
+### [`gfx_poly_begin(x, y)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el primer vértice.
 
@@ -410,7 +460,7 @@ Ver también: [`gfx_poly_add`](#gfx_poly_add), [`gfx_poly_end`](#gfx_poly_end).
 
 <a id="gfx_poly_add"></a>
 
-### `gfx_poly_add(x, y)`
+### [`gfx_poly_add(x, y)`](#graphics_basic_table) · [índice](#indice)
 
 - `x`, `y`: el siguiente vértice.
 
@@ -420,7 +470,7 @@ Ver también: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_end`](#gfx_poly_en
 
 <a id="gfx_poly_end"></a>
 
-### `gfx_poly_end()`
+### [`gfx_poly_end()`](#graphics_basic_table) · [índice](#indice)
 
 Cierra el polígono uniendo el último vértice con el primero y lo rellena con el lápiz.
 
@@ -428,7 +478,7 @@ Ver también: [`gfx_poly_begin`](#gfx_poly_begin), [`gfx_poly_add`](#gfx_poly_ad
 
 <a id="gfx_pens_draw"></a>
 
-### `gfx_pens_draw(buffer, width, height, x, y, zoom)`
+### [`gfx_pens_draw(buffer, width, height, x, y, zoom)`](#graphics_basic_table) · [índice](#indice)
 
 - `buffer`: un búfer (`buffer_alloc`) con un byte por píxel, el número de color, fila tras fila.
 - `width`, `height`: el tamaño de la imagen en píxeles. El búfer tiene que tener al menos `width * height` bytes.
@@ -442,7 +492,7 @@ Ver también: [`gfx_pixel`](#gfx_pixel), [`buffer_alloc`](#buffer_alloc), [`gfx_
 
 <a id="gfx_copy"></a>
 
-### `gfx_copy(sx, sy, w, h, dx, dy)`
+### [`gfx_copy(sx, sy, w, h, dx, dy)`](#graphics_basic_table) · [índice](#indice)
 
 - `sx`, `sy`: la esquina de arriba a la izquierda de la zona que se copia.
 - `w`, `h`: su ancho y alto.
@@ -452,6 +502,8 @@ Copia un rectángulo del destino a otro sitio del mismo destino. La zona de orig
 un bitmap fuera de pantalla están los `bitmap_*`.
 
 Ver también: [`gfx_scroll`](#gfx_scroll), [`bitmap_draw_to`](#bitmap_draw_to).
+
+[Volver al índice](#indice)
 
 <a id="graphics_advanced"></a>
 
@@ -643,7 +695,9 @@ end
 
 **Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los enseña en la ficha de cada función que usan): `tests/test_doc_sprite.dash`, `tests/test_doc_bob.dash`.
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="graphics_advanced_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -741,7 +795,7 @@ end
 
 <a id="sprite_load"></a>
 
-### `sprite_load(id, filename)` → `Bool`
+### [`sprite_load(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `filename`: una imagen IFF ILBM con los fotogramas de 16 píxeles de ancho uno al lado del otro; el alto de la
@@ -755,7 +809,7 @@ Ver también: [`sprite_load_colors`](#sprite_load_colors), [`sprite_frame`](#spr
 
 <a id="sprite_load_attached"></a>
 
-### `sprite_load_attached(id, filename)` → `Bool`
+### [`sprite_load_attached(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `filename`: una imagen IFF ILBM de hasta 16 colores, con los fotogramas de 16 píxeles de ancho.
@@ -768,7 +822,7 @@ Ver también: [`sprite_load`](#sprite_load), [`sprite_load_colors`](#sprite_load
 
 <a id="sprite_create"></a>
 
-### `sprite_create(id, width, height)` → `Bool`
+### [`sprite_create(id, width, height)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `width`: no cuenta: los sprites de hardware miden siempre 16 píxeles de ancho.
@@ -781,7 +835,7 @@ Ver también: [`sprite_set_row`](#sprite_set_row), [`sprite_load`](#sprite_load)
 
 <a id="sprite_pos"></a>
 
-### `sprite_pos(id, x, y)`
+### [`sprite_pos(id, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `x`, `y`: la posición de su esquina de arriba a la izquierda en la pantalla.
@@ -792,7 +846,7 @@ Ver también: [`sprite_show`](#sprite_show), [`sprite_collision`](#sprite_collis
 
 <a id="sprite_show"></a>
 
-### `sprite_show(id)`
+### [`sprite_show(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 
@@ -802,7 +856,7 @@ Ver también: [`sprite_hide`](#sprite_hide).
 
 <a id="sprite_hide"></a>
 
-### `sprite_hide(id)`
+### [`sprite_hide(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 
@@ -812,7 +866,7 @@ Ver también: [`sprite_show`](#sprite_show), [`sprite_free`](#sprite_free).
 
 <a id="sprite_color"></a>
 
-### `sprite_color(id, index, r, g, b)`
+### [`sprite_color(id, index, r, g, b)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `index`: el color del sprite, de 0 a 2 (sus colores 1 a 3); de 0 a 14 en una pareja acoplada.
@@ -824,7 +878,7 @@ Ver también: [`sprite_rgb8`](#sprite_rgb8), [`sprite_load_colors`](#sprite_load
 
 <a id="sprite_load_colors"></a>
 
-### `sprite_load_colors(id, filename)` → `Bool`
+### [`sprite_load_colors(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `filename`: una imagen IFF con paleta: la del sprite, normalmente.
@@ -836,7 +890,7 @@ Ver también: [`sprite_load`](#sprite_load), [`bob_load_colors`](#bob_load_color
 
 <a id="bob_load_colors"></a>
 
-### `bob_load_colors(filename, first)` → `Int`
+### [`bob_load_colors(filename, first)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `filename`: una imagen IFF con paleta.
 - `first`: desde qué color de la pantalla se ponen.
@@ -848,7 +902,7 @@ Ver también: [`bob_load`](#bob_load), [`gfx_rgb8`](#gfx_rgb8).
 
 <a id="sprite_rgb8"></a>
 
-### `sprite_rgb8(id, index, r, g, b)`
+### [`sprite_rgb8(id, index, r, g, b)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `index`: como en `sprite_color`.
@@ -860,7 +914,7 @@ Ver también: [`sprite_color`](#sprite_color).
 
 <a id="sprite_frame"></a>
 
-### `sprite_frame(id, frame)`
+### [`sprite_frame(id, frame)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `frame`: el fotograma, desde 0.
@@ -872,7 +926,7 @@ Ver también: [`sprite_load`](#sprite_load).
 
 <a id="sprite_free"></a>
 
-### `sprite_free(id)`
+### [`sprite_free(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 
@@ -882,7 +936,7 @@ Ver también: [`sprite_hide`](#sprite_hide).
 
 <a id="sprite_collision"></a>
 
-### `sprite_collision(id1, id2)` → `Bool`
+### [`sprite_collision(id1, id2)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id1`, `id2`: dos sprites.
 
@@ -893,7 +947,7 @@ Ver también: [`bob_collision`](#bob_collision).
 
 <a id="sprite_set_row"></a>
 
-### `sprite_set_row(id, row, plane0, plane1)`
+### [`sprite_set_row(id, row, plane0, plane1)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite, de 0 a 7.
 - `row`: la fila, desde 0.
@@ -906,7 +960,7 @@ Ver también: [`sprite_create`](#sprite_create).
 
 <a id="soft_sprite_create"></a>
 
-### `soft_sprite_create(id, width, height, depth)` → `Bool`
+### [`soft_sprite_create(id, width, height, depth)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 - `width`, `height`: el tamaño en píxeles.
@@ -919,7 +973,7 @@ Ver también: [`soft_sprite_pixel`](#soft_sprite_pixel), [`soft_sprite_show`](#s
 
 <a id="soft_sprite_free"></a>
 
-### `soft_sprite_free(id)`
+### [`soft_sprite_free(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 
@@ -929,7 +983,7 @@ Ver también: [`soft_sprite_hide`](#soft_sprite_hide).
 
 <a id="soft_sprite_pixel"></a>
 
-### `soft_sprite_pixel(id, x, y, color)`
+### [`soft_sprite_pixel(id, x, y, color)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 - `x`, `y`: el píxel dentro del sprite.
@@ -939,7 +993,7 @@ Ver también: [`soft_sprite_clear`](#soft_sprite_clear).
 
 <a id="soft_sprite_clear"></a>
 
-### `soft_sprite_clear(id, color)`
+### [`soft_sprite_clear(id, color)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 - `color`: el color; 0 lo deja todo transparente.
@@ -950,7 +1004,7 @@ Ver también: [`soft_sprite_pixel`](#soft_sprite_pixel).
 
 <a id="soft_sprite_row"></a>
 
-### `soft_sprite_row(id, row, plane0, plane1)`
+### [`soft_sprite_row(id, row, plane0, plane1)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 - `row`: la fila.
@@ -962,7 +1016,7 @@ Ver también: [`sprite_set_row`](#sprite_set_row).
 
 <a id="soft_sprite_show"></a>
 
-### `soft_sprite_show(id)`
+### [`soft_sprite_show(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 
@@ -972,7 +1026,7 @@ Ver también: [`soft_sprite_hide`](#soft_sprite_hide).
 
 <a id="soft_sprite_hide"></a>
 
-### `soft_sprite_hide(id)`
+### [`soft_sprite_hide(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 
@@ -982,7 +1036,7 @@ Ver también: [`soft_sprite_show`](#soft_sprite_show).
 
 <a id="soft_sprite_pos"></a>
 
-### `soft_sprite_pos(id, x, y)`
+### [`soft_sprite_pos(id, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 - `x`, `y`: la posición nueva.
@@ -994,7 +1048,7 @@ Ver también: [`soft_sprite_x`](#soft_sprite_x), [`soft_sprite_show`](#soft_spri
 
 <a id="soft_sprite_x"></a>
 
-### `soft_sprite_x(id)` → `Int`
+### [`soft_sprite_x(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 
@@ -1004,7 +1058,7 @@ Ver también: [`soft_sprite_y`](#soft_sprite_y).
 
 <a id="soft_sprite_y"></a>
 
-### `soft_sprite_y(id)` → `Int`
+### [`soft_sprite_y(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del sprite por software, de 0 a 15.
 
@@ -1014,7 +1068,7 @@ Ver también: [`soft_sprite_x`](#soft_sprite_x).
 
 <a id="bob_load"></a>
 
-### `bob_load(id, filename)` → `Bool`
+### [`bob_load(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `filename`: una imagen IFF ILBM. Si es más ancha que alta y su ancho es múltiplo del alto, son fotogramas
@@ -1027,7 +1081,7 @@ Ver también: [`bob_load_colors`](#bob_load_colors), [`bob_draw`](#bob_draw), [`
 
 <a id="bob_create"></a>
 
-### `bob_create(id, width, height, depth)` → `Bool`
+### [`bob_create(id, width, height, depth)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `width`, `height`: el tamaño de la imagen; si el ancho es múltiplo del alto, salen fotogramas cuadrados.
@@ -1040,7 +1094,7 @@ Ver también: [`bitmap_draw_to`](#bitmap_draw_to), [`bob_draw`](#bob_draw).
 
 <a id="bob_pos"></a>
 
-### `bob_pos(id, x, y)`
+### [`bob_pos(id, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `x`, `y`: la posición de su esquina en el destino.
@@ -1051,7 +1105,7 @@ Ver también: [`bob_draw`](#bob_draw).
 
 <a id="bob_draw"></a>
 
-### `bob_draw(id)`
+### [`bob_draw(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 Lo pinta en su posición y fotograma, guardando antes lo que tapa. Si ya estaba pintado, primero lo quita del sitio
@@ -1062,7 +1116,7 @@ Ver también: [`bob_erase`](#bob_erase), [`bob_paste`](#bob_paste), [`bob_pos`](
 
 <a id="bob_erase"></a>
 
-### `bob_erase(id)`
+### [`bob_erase(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 
@@ -1072,7 +1126,7 @@ Ver también: [`bob_draw`](#bob_draw).
 
 <a id="bob_frame"></a>
 
-### `bob_frame(id, frame)`
+### [`bob_frame(id, frame)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `frame`: el fotograma, desde 0; da la vuelta (con 4 fotogramas, el 5 es el 1).
@@ -1083,7 +1137,7 @@ Ver también: [`bob_frames`](#bob_frames), [`bob_frame_width`](#bob_frame_width)
 
 <a id="bob_frame_width"></a>
 
-### `bob_frame_width(id, width)`
+### [`bob_frame_width(id, width)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `width`: el ancho de cada fotograma en píxeles.
@@ -1094,7 +1148,7 @@ Ver también: [`bob_frame`](#bob_frame), [`bob_frames`](#bob_frames).
 
 <a id="bob_width"></a>
 
-### `bob_width(id)` → `Int`
+### [`bob_width(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 
@@ -1104,7 +1158,7 @@ Ver también: [`bob_height`](#bob_height).
 
 <a id="bob_height"></a>
 
-### `bob_height(id)` → `Int`
+### [`bob_height(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 
@@ -1114,7 +1168,7 @@ Ver también: [`bob_width`](#bob_width).
 
 <a id="bob_frames"></a>
 
-### `bob_frames(id)` → `Int`
+### [`bob_frames(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 
@@ -1124,7 +1178,7 @@ Ver también: [`bob_frame`](#bob_frame).
 
 <a id="bob_paste"></a>
 
-### `bob_paste(id, frame, x, y)`
+### [`bob_paste(id, frame, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 - `frame`: el fotograma.
@@ -1137,7 +1191,7 @@ Ver también: [`bob_draw`](#bob_draw), [`screen_double_buffer`](#screen_double_b
 
 <a id="bob_free"></a>
 
-### `bob_free(id)`
+### [`bob_free(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del BOB, de 0 a 31.
 
@@ -1147,7 +1201,7 @@ Ver también: [`bob_erase`](#bob_erase).
 
 <a id="tilemap_create"></a>
 
-### `tilemap_create(id, width, height, tile, layers)` → `Bool`
+### [`tilemap_create(id, width, height, tile, layers)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `width`, `height`: cuántas celdas de ancho y de alto, de 1 a 1024.
@@ -1161,7 +1215,7 @@ Ver también: [`tilemap_set`](#tilemap_set), [`tilemap_draw`](#tilemap_draw), [`
 
 <a id="tilemap_load"></a>
 
-### `tilemap_load(id, filename)` → `Bool`
+### [`tilemap_load(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `filename`: un fichero IFF FORM FMAP, el que guarda el editor de mapas de Forja o de la extensión de VS Code.
@@ -1172,7 +1226,7 @@ Ver también: [`tilemap_save`](#tilemap_save), [`tilemap_tileset`](#tilemap_tile
 
 <a id="tilemap_save"></a>
 
-### `tilemap_save(id, filename)` → `Bool`
+### [`tilemap_save(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `filename`: el fichero.
@@ -1183,7 +1237,7 @@ Ver también: [`tilemap_load`](#tilemap_load).
 
 <a id="tilemap_free"></a>
 
-### `tilemap_free(id)`
+### [`tilemap_free(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1191,7 +1245,7 @@ Libera el mapa. Al acabar el programa se liberan solos.
 
 <a id="tilemap_width"></a>
 
-### `tilemap_width(id)` → `Int`
+### [`tilemap_width(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1201,7 +1255,7 @@ Ver también: [`tilemap_height`](#tilemap_height).
 
 <a id="tilemap_height"></a>
 
-### `tilemap_height(id)` → `Int`
+### [`tilemap_height(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1211,7 +1265,7 @@ Ver también: [`tilemap_width`](#tilemap_width).
 
 <a id="tilemap_tile_size"></a>
 
-### `tilemap_tile_size(id)` → `Int`
+### [`tilemap_tile_size(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1219,7 +1273,7 @@ Devuelve el lado de sus tiles en píxeles: 8, 16 o 32.
 
 <a id="tilemap_layers"></a>
 
-### `tilemap_layers(id)` → `Int`
+### [`tilemap_layers(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1229,7 +1283,7 @@ Ver también: [`tilemap_layer_add`](#tilemap_layer_add).
 
 <a id="tilemap_get"></a>
 
-### `tilemap_get(id, layer, x, y)` → `Int`
+### [`tilemap_get(id, layer, x, y)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1243,7 +1297,7 @@ Ver también: [`tilemap_set`](#tilemap_set), [`tilemap_tile_size`](#tilemap_tile
 
 <a id="tilemap_set"></a>
 
-### `tilemap_set(id, layer, x, y, value)`
+### [`tilemap_set(id, layer, x, y, value)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1256,7 +1310,7 @@ Ver también: [`tilemap_get`](#tilemap_get).
 
 <a id="tilemap_tileset"></a>
 
-### `tilemap_tileset(id)` → `String`
+### [`tilemap_tileset(id)`](#graphics_advanced_table) → `String` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1266,7 +1320,7 @@ Ver también: [`tilemap_set_tileset`](#tilemap_set_tileset), [`bob_load`](#bob_l
 
 <a id="tilemap_set_tileset"></a>
 
-### `tilemap_set_tileset(id, filename)`
+### [`tilemap_set_tileset(id, filename)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `filename`: el fichero del tileset: una imagen IFF con un fotograma por tile, como la del editor de sprites de
@@ -1278,7 +1332,7 @@ Ver también: [`tilemap_tileset`](#tilemap_tileset).
 
 <a id="tilemap_layer_name"></a>
 
-### `tilemap_layer_name(id, layer)` → `String`
+### [`tilemap_layer_name(id, layer)`](#graphics_advanced_table) → `String` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1289,7 +1343,7 @@ Ver también: [`tilemap_layer_set`](#tilemap_layer_set).
 
 <a id="tilemap_layer_type"></a>
 
-### `tilemap_layer_type(id, layer)` → `Int`
+### [`tilemap_layer_type(id, layer)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1299,7 +1353,7 @@ Ver también: [`tilemap_layer_set`](#tilemap_layer_set).
 
 <a id="tilemap_layer_visible"></a>
 
-### `tilemap_layer_visible(id, layer)` → `Bool`
+### [`tilemap_layer_visible(id, layer)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1310,7 +1364,7 @@ Ver también: [`tilemap_layer_set`](#tilemap_layer_set).
 
 <a id="tilemap_layer_set"></a>
 
-### `tilemap_layer_set(id, layer, name, type, visible)`
+### [`tilemap_layer_set(id, layer, name, type, visible)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1322,7 +1376,7 @@ Ver también: [`tilemap_layer_name`](#tilemap_layer_name).
 
 <a id="tilemap_layer_add"></a>
 
-### `tilemap_layer_add(id)` → `Int`
+### [`tilemap_layer_add(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1332,7 +1386,7 @@ Ver también: [`tilemap_layer_remove`](#tilemap_layer_remove).
 
 <a id="tilemap_layer_remove"></a>
 
-### `tilemap_layer_remove(id, layer)` → `Bool`
+### [`tilemap_layer_remove(id, layer)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1343,7 +1397,7 @@ Ver también: [`tilemap_layer_add`](#tilemap_layer_add).
 
 <a id="tilemap_layer_move"></a>
 
-### `tilemap_layer_move(id, from, to)` → `Bool`
+### [`tilemap_layer_move(id, from, to)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `from`: la capa que se mueve.
@@ -1353,7 +1407,7 @@ Ver también: [`tilemap_layer_add`](#tilemap_layer_add).
 
 <a id="tilemap_resize"></a>
 
-### `tilemap_resize(id, width, height)` → `Bool`
+### [`tilemap_resize(id, width, height)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `width`, `height`: el tamaño nuevo en celdas.
@@ -1365,7 +1419,7 @@ Ver también: [`tilemap_create`](#tilemap_create).
 
 <a id="tilemap_draw"></a>
 
-### `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`
+### [`tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1381,7 +1435,7 @@ Ver también: [`tilemap_draw_masked`](#tilemap_draw_masked), [`bob_load`](#bob_l
 
 <a id="tilemap_draw_masked"></a>
 
-### `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`
+### [`tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `layer`: la capa, desde 0.
@@ -1394,7 +1448,7 @@ Ver también: [`tilemap_draw`](#tilemap_draw).
 
 <a id="tilemap_objects"></a>
 
-### `tilemap_objects(id)` → `Int`
+### [`tilemap_objects(id)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 
@@ -1404,7 +1458,7 @@ Ver también: [`tilemap_object_find`](#tilemap_object_find).
 
 <a id="tilemap_object_add"></a>
 
-### `tilemap_object_add(id, x, y, kind)` → `Int`
+### [`tilemap_object_add(id, x, y, kind)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `x`, `y`: dónde, en píxeles del mapa.
@@ -1416,7 +1470,7 @@ Ver también: [`tilemap_object_find`](#tilemap_object_find), [`tilemap_object_se
 
 <a id="tilemap_object_remove"></a>
 
-### `tilemap_object_remove(id, object)` → `Bool`
+### [`tilemap_object_remove(id, object)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1427,7 +1481,7 @@ Ver también: [`tilemap_object_add`](#tilemap_object_add).
 
 <a id="tilemap_object_x"></a>
 
-### `tilemap_object_x(id, object)` → `Int`
+### [`tilemap_object_x(id, object)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1438,7 +1492,7 @@ Ver también: [`tilemap_object_y`](#tilemap_object_y).
 
 <a id="tilemap_object_y"></a>
 
-### `tilemap_object_y(id, object)` → `Int`
+### [`tilemap_object_y(id, object)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1449,7 +1503,7 @@ Ver también: [`tilemap_object_x`](#tilemap_object_x).
 
 <a id="tilemap_object_move"></a>
 
-### `tilemap_object_move(id, object, x, y)`
+### [`tilemap_object_move(id, object, x, y)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1459,7 +1513,7 @@ Ver también: [`tilemap_object_x`](#tilemap_object_x).
 
 <a id="tilemap_object_kind"></a>
 
-### `tilemap_object_kind(id, object)` → `String`
+### [`tilemap_object_kind(id, object)`](#graphics_advanced_table) → `String` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1470,7 +1524,7 @@ Ver también: [`tilemap_object_find`](#tilemap_object_find).
 
 <a id="tilemap_object_name"></a>
 
-### `tilemap_object_name(id, object)` → `String`
+### [`tilemap_object_name(id, object)`](#graphics_advanced_table) → `String` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1481,7 +1535,7 @@ Ver también: [`tilemap_object_set`](#tilemap_object_set).
 
 <a id="tilemap_object_sprite"></a>
 
-### `tilemap_object_sprite(id, object)` → `String`
+### [`tilemap_object_sprite(id, object)`](#graphics_advanced_table) → `String` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1492,7 +1546,7 @@ Ver también: [`tilemap_object_set`](#tilemap_object_set).
 
 <a id="tilemap_object_set"></a>
 
-### `tilemap_object_set(id, object, kind, name, sprite)`
+### [`tilemap_object_set(id, object, kind, name, sprite)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `object`: el número del objeto, desde 0.
@@ -1503,7 +1557,7 @@ Ver también: [`tilemap_object_add`](#tilemap_object_add).
 
 <a id="tilemap_object_find"></a>
 
-### `tilemap_object_find(id, kind, from)` → `Int`
+### [`tilemap_object_find(id, kind, from)`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 - `id`: el número del mapa, de 0 a 7.
 - `kind`: la clase que se busca.
@@ -1517,7 +1571,7 @@ Ver también: [`tilemap_object_add`](#tilemap_object_add), [`tilemap_objects`](#
 
 <a id="bob_collision"></a>
 
-### `bob_collision(id1, id2)` → `Bool`
+### [`bob_collision(id1, id2)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id1`, `id2`: dos BOBs distintos.
 
@@ -1528,7 +1582,7 @@ Ver también: [`sprite_collision`](#sprite_collision).
 
 <a id="copper_create"></a>
 
-### `copper_create(size)` → `Bool`
+### [`copper_create(size)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `size`: cuántas instrucciones caben; 0 = 64. Cada `copper_wait`, `copper_move` o `copper_color` es una.
 
@@ -1540,7 +1594,7 @@ Ver también: [`copper_wait`](#copper_wait), [`copper_color`](#copper_color), [`
 
 <a id="copper_wait"></a>
 
-### `copper_wait(y, x)`
+### [`copper_wait(y, x)`](#graphics_advanced_table) · [índice](#indice)
 
 - `y`: la línea de la pantalla, contando desde arriba de la pantalla del programa.
 - `x`: la posición en la línea; 0 = el principio.
@@ -1552,7 +1606,7 @@ Ver también: [`copper_color`](#copper_color), [`copper_move`](#copper_move).
 
 <a id="copper_move"></a>
 
-### `copper_move(reg, value)`
+### [`copper_move(reg, value)`](#graphics_advanced_table) · [índice](#indice)
 
 - `reg`: el registro del chip de vídeo, como desplazamiento desde 0xDFF000: 0x180 es COLOR00.
 - `value`: el valor de 16 bits.
@@ -1564,7 +1618,7 @@ Ver también: [`copper_color`](#copper_color).
 
 <a id="copper_color"></a>
 
-### `copper_color(index, rgb)`
+### [`copper_color(index, rgb)`](#graphics_advanced_table) · [índice](#indice)
 
 - `index`: el color, de 0 a 31.
 - `rgb`: el color en 12 bits, `0xRGB`: `0xF00` rojo, `0x00F` azul.
@@ -1576,7 +1630,7 @@ Ver también: [`copper_wait`](#copper_wait), [`copper_move`](#copper_move).
 
 <a id="copper_end"></a>
 
-### `copper_end()`
+### [`copper_end()`](#graphics_advanced_table) · [índice](#indice)
 
 Cierra la lista. Va después de la última instrucción y antes de `copper_install`.
 
@@ -1584,7 +1638,7 @@ Ver también: [`copper_install`](#copper_install).
 
 <a id="copper_install"></a>
 
-### `copper_install()`
+### [`copper_install()`](#graphics_advanced_table) · [índice](#indice)
 
 Pone la lista en marcha en la pantalla del programa (o en la de la ventana, que puede ser el Workbench: mejor una
 pantalla propia). Funciona por el sistema, sin quitarle el control. Una instrucción de la lista instalada se cambia
@@ -1595,7 +1649,7 @@ Ver también: [`copper_free`](#copper_free), [`copper_create`](#copper_create), 
 
 <a id="copper_free"></a>
 
-### `copper_free()`
+### [`copper_free()`](#graphics_advanced_table) · [índice](#indice)
 
 Quita la lista de la pantalla y libera su memoria. Al acabar el programa se quita sola.
 
@@ -1603,7 +1657,7 @@ Ver también: [`copper_install`](#copper_install).
 
 <a id="copper_set"></a>
 
-### `copper_set(i, value)`
+### [`copper_set(i, value)`](#graphics_advanced_table) · [índice](#indice)
 
 - `i`: la instrucción, desde 0, en el orden en que se añadieron (`copper_wait`, `copper_move`, `copper_color` y
   `copper_end` cuentan una cada una). `copper_count()` antes de añadir una da su número.
@@ -1618,7 +1672,7 @@ Ver también: [`copper_count`](#copper_count), [`copper_install`](#copper_instal
 
 <a id="copper_count"></a>
 
-### `copper_count()` → `Int`
+### [`copper_count()`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 Devuelve cuántas instrucciones tiene la lista: el número que tendrá la siguiente, para `copper_set`.
 
@@ -1626,7 +1680,7 @@ Ver también: [`copper_set`](#copper_set).
 
 <a id="beam_line"></a>
 
-### `beam_line()` → `Int`
+### [`beam_line()`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 Devuelve la línea que dibuja ahora el haz de vídeo: 0 arriba de la imagen, hasta 312 en PAL (262 en NTSC). Lee
 `VPOSR` y `VHPOSR` hasta que salen de la misma línea: nunca medio número de una y medio de la siguiente. Para medir
@@ -1636,7 +1690,7 @@ Ver también: [`beam_lines`](#beam_lines), [`vblank_count`](#vblank_count).
 
 <a id="beam_lines"></a>
 
-### `beam_lines()` → `Int`
+### [`beam_lines()`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 Devuelve las líneas de una imagen de la pantalla: 313 en PAL, 263 en NTSC (las del monitor que usa graphics; si no,
 las de la máquina). Con `beam_line`, la parte de la imagen que se ha gastado.
@@ -1645,7 +1699,7 @@ Ver también: [`beam_line`](#beam_line), [`video_pal`](#video_pal).
 
 <a id="video_pal"></a>
 
-### `video_pal()` → `Bool`
+### [`video_pal()`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` en un Amiga PAL (50 imágenes por segundo) y `false` en uno NTSC (60).
 
@@ -1653,7 +1707,7 @@ Ver también: [`beam_lines`](#beam_lines).
 
 <a id="vblank_count"></a>
 
-### `vblank_count()` → `Int`
+### [`vblank_count()`](#graphics_advanced_table) → `Int` · [índice](#indice)
 
 Devuelve las imágenes mostradas (las interrupciones de VBlank) desde la primera llamada, que da 0: un servidor de
 interrupción las cuenta, y se quita al acabar el programa. Si un bucle de una imagen tarda más, la cuenta sube 2: así
@@ -1663,7 +1717,7 @@ Ver también: [`beam_line`](#beam_line), [`wait_vblank`](#wait_vblank).
 
 <a id="bitmap_create"></a>
 
-### `bitmap_create(id, width, height, depth)` → `Bool`
+### [`bitmap_create(id, width, height, depth)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 - `width`, `height`: el tamaño en píxeles.
@@ -1678,7 +1732,7 @@ Ver también: [`bitmap_draw_to`](#bitmap_draw_to), [`bitmap_blit`](#bitmap_blit)
 
 <a id="bitmap_load"></a>
 
-### `bitmap_load(id, filename)` → `Bool`
+### [`bitmap_load(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 - `filename`: una imagen IFF ILBM, comprimida o no.
@@ -1690,7 +1744,7 @@ Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_load_colors`](#bob_load_color
 
 <a id="bitmap_save"></a>
 
-### `bitmap_save(id, filename)` → `Bool`
+### [`bitmap_save(id, filename)`](#graphics_advanced_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 - `filename`: el fichero.
@@ -1703,7 +1757,7 @@ Ver también: [`bitmap_load`](#bitmap_load).
 
 <a id="bitmap_free"></a>
 
-### `bitmap_free(id)`
+### [`bitmap_free(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 
@@ -1713,7 +1767,7 @@ Ver también: [`bitmap_create`](#bitmap_create).
 
 <a id="bitmap_blit"></a>
 
-### `bitmap_blit(src_id, sx, sy, w, h, dx, dy)`
+### [`bitmap_blit(src_id, sx, sy, w, h, dx, dy)`](#graphics_advanced_table) · [índice](#indice)
 
 - `src_id`: el bitmap de origen.
 - `sx`, `sy`: la esquina de la parte que se copia, dentro del bitmap.
@@ -1727,7 +1781,7 @@ Ver también: [`bitmap_blit_mask`](#bitmap_blit_mask), [`bob_paste`](#bob_paste)
 
 <a id="bitmap_blit_mask"></a>
 
-### `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`
+### [`bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)`](#graphics_advanced_table) · [índice](#indice)
 
 - `src_id`: el bitmap de origen.
 - `mask_id`: un bitmap del mismo ancho que dice dónde se copia: los píxeles con el primer plano a 1 (color impar).
@@ -1740,7 +1794,7 @@ Ver también: [`bitmap_blit`](#bitmap_blit), [`bob_paste`](#bob_paste).
 
 <a id="bitmap_draw_to"></a>
 
-### `bitmap_draw_to(id)`
+### [`bitmap_draw_to(id)`](#graphics_advanced_table) · [índice](#indice)
 
 - `id`: el número del bitmap, de 0 a 31 (los mismos que los BOBs).
 Desde ahora los `gfx_*` dibujan en ese bitmap (o BOB) en vez de en la pantalla, hasta `bitmap_draw_screen`. Las
@@ -1750,11 +1804,13 @@ Ver también: [`bitmap_draw_screen`](#bitmap_draw_screen), [`bob_create`](#bob_c
 
 <a id="bitmap_draw_screen"></a>
 
-### `bitmap_draw_screen()`
+### [`bitmap_draw_screen()`](#graphics_advanced_table) · [índice](#indice)
 
 Los `gfx_*` vuelven a dibujar donde dibujaban antes del `bitmap_draw_to`: la ventana o la pantalla.
 
 Ver también: [`bitmap_draw_to`](#bitmap_draw_to).
+
+[Volver al índice](#indice)
 
 <a id="input_functions"></a>
 
@@ -1840,7 +1896,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="input_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -1884,7 +1942,7 @@ end
 
 <a id="key_pressed"></a>
 
-### `key_pressed()` → `Bool`
+### [`key_pressed()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si hay una tecla esperando en la ventana actual, sin sacarla: la recogen después `key_get` o
 `key_wait`. Cuentan también las teclas soltadas. Sin ventana, `false`. Dentro de un `EventLoop` las teclas van a
@@ -1894,7 +1952,7 @@ Ver también: [`key_get`](#key_get), [`key_wait`](#key_wait), [`key_down`](#key_
 
 <a id="key_get"></a>
 
-### `key_get()` → `Int`
+### [`key_get()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Saca la siguiente tecla de la cola de la ventana actual y devuelve su código en bruto, o 0 si no hay ninguna. Al
 soltar una tecla llega otra vez con 128 sumado (0x80): `if k < 128` se queda solo con las pulsaciones. La cola
@@ -1904,7 +1962,7 @@ Ver también: [`key_pressed`](#key_pressed), [`key_wait`](#key_wait), [`key_text
 
 <a id="key_wait"></a>
 
-### `key_wait()` → `Int`
+### [`key_wait()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Espera a que se pulse una tecla en la ventana actual y devuelve su código en bruto. No gasta CPU mientras espera.
 Las teclas soltadas no cuentan. Sin ventana devuelve 0 enseguida.
@@ -1913,7 +1971,7 @@ Ver también: [`key_get`](#key_get), [`wait_key`](#wait_key), [`key_text`](#key_
 
 <a id="key_raw"></a>
 
-### `key_raw()` → `Int`
+### [`key_raw()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código en bruto de la última tecla leída, con `key_get`, `key_wait` o un `On Key`. No mira el
 teclado: para saber si una tecla está pulsada ahora, `key_down`.
@@ -1922,7 +1980,7 @@ Ver también: [`key_get`](#key_get), [`key_down`](#key_down).
 
 <a id="key_down"></a>
 
-### `key_down(code)` → `Bool`
+### [`key_down(code)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `code`: el código en bruto de la tecla, de 0 a 127.
 
@@ -1934,7 +1992,7 @@ Ver también: [`joy_x`](#joy_x), [`key_get`](#key_get), [`check_esc`](#check_esc
 
 <a id="key_text"></a>
 
-### `key_text(keycode)` → `String`
+### [`key_text(keycode)`](#input_functions_table) → `String` · [índice](#indice)
 
 - `keycode`: un código en bruto de tecla.
 
@@ -1945,7 +2003,7 @@ Ver también: [`key_get`](#key_get), [`key_raw`](#key_raw).
 
 <a id="mouse_x"></a>
 
-### `mouse_x()` → `Int`
+### [`mouse_x()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la X del puntero contando desde la esquina de dentro de los bordes de la ventana actual, como los
 `gfx_*`. Puede ser negativa o pasar del ancho si el puntero está fuera. Sin ventana, 0.
@@ -1954,7 +2012,7 @@ Ver también: [`mouse_y`](#mouse_y), [`mouse_button`](#mouse_button), [`click_x`
 
 <a id="mouse_y"></a>
 
-### `mouse_y()` → `Int`
+### [`mouse_y()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la Y del puntero dentro de la ventana actual, como `mouse_x`. Sin ventana, 0.
 
@@ -1962,7 +2020,7 @@ Ver también: [`mouse_x`](#mouse_x).
 
 <a id="mouse_button"></a>
 
-### `mouse_button(btn)` → `Bool`
+### [`mouse_button(btn)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `btn`: 0 el izquierdo, 1 el derecho.
 
@@ -1973,7 +2031,7 @@ Ver también: [`mouse_x`](#mouse_x), [`check_lmb`](#check_lmb), [`wait_click`](#
 
 <a id="event_window"></a>
 
-### `event_window()` → `Int`
+### [`event_window()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Dentro de un `EventLoop`, devuelve de qué ventana vino el evento: el número de `window_create`, o 0 si fue de la
 ventana del propio bucle. Sirve para cerrar solo esa ventana en su `On Close`.
@@ -1982,7 +2040,7 @@ Ver también: [`window_create`](#window_create), [`gadget_id`](#gadget_id).
 
 <a id="window_check_close"></a>
 
-### `window_check_close()` → `Bool`
+### [`window_check_close()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si se pulsó el botón de cerrar de la ventana actual desde la última vez que se miró, sin esperar.
 Para un bucle propio, sin `EventLoop`: `while not window_check_close()`.
@@ -1991,7 +2049,7 @@ Ver también: [`close_window`](#close_window), [`key_get`](#key_get).
 
 <a id="close_window"></a>
 
-### `close_window()`
+### [`close_window()`](#input_functions_table) · [índice](#indice)
 
 Cierra la ventana actual, sea declarada o de `window_create`. Después no queda ventana actual.
 
@@ -1999,7 +2057,7 @@ Ver también: [`window_close`](#window_close), [`window_check_close`](#window_ch
 
 <a id="screen_open_mode"></a>
 
-### `screen_open_mode(mode, width, height, depth, title)` → `Bool`
+### [`screen_open_mode(mode, width, height, depth, title)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `mode`: el modo exacto: el de `dialog_screen_mode` (`screen_mode_id`), o uno conocido: 0x21000 PAL baja
   resolución, 0x29000 PAL alta.
@@ -2013,7 +2071,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_custom`
 
 <a id="screen_clone_wb"></a>
 
-### `screen_clone_wb(name)` → `Bool`
+### [`screen_clone_wb(name)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: el nombre público de la pantalla.
 
@@ -2026,7 +2084,7 @@ Ver también: [`screen_visitors`](#screen_visitors), [`screen_make_default`](#sc
 
 <a id="screen_visitors"></a>
 
-### `screen_visitors()` → `Int`
+### [`screen_visitors()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántas ventanas y bloqueos de otros programas hay en la pantalla pública del programa
 (`screen_clone_wb`); una ventana de MUI puede contar dos. 0 si no hay ninguno o no hay pantalla pública.
@@ -2035,7 +2093,7 @@ Ver también: [`screen_clone_wb`](#screen_clone_wb).
 
 <a id="screen_make_default"></a>
 
-### `screen_make_default()` → `Bool`
+### [`screen_make_default()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Hace de la pantalla pública del programa (`screen_clone_wb`) la pública por defecto: ahí se abren las ventanas que
 no dicen pantalla, como las de los programas que lance o una consola. `screen_close` deja la de antes. Devuelve
@@ -2045,7 +2103,7 @@ Ver también: [`screen_clone_wb`](#screen_clone_wb).
 
 <a id="screen_open"></a>
 
-### `screen_open(depth, title)` → `Bool`
+### [`screen_open(depth, title)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `depth`: la profundidad: 1 = 2 colores, 2 = 4, 3 = 8, 4 = 16, 5 = 32, 8 = 256 (AGA o tarjeta gráfica).
 - `title`: el título de la barra de la pantalla.
@@ -2058,7 +2116,7 @@ Ver también: [`screen_open_custom`](#screen_open_custom), [`screen_open_mode`](
 
 <a id="screen_double_buffer"></a>
 
-### `screen_double_buffer()` → `Bool`
+### [`screen_double_buffer()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Prepara dos imágenes para la pantalla propia: desde ahora los `gfx_*` dibujan en la escondida y `screen_flip` la
 enseña. Así se ve cada fotograma entero, sin parpadeo. Se dibuja sobre la pantalla, no en ventanas: es para juegos
@@ -2069,7 +2127,7 @@ Ver también: [`screen_flip`](#screen_flip), [`screen_open_custom`](#screen_open
 
 <a id="screen_flip"></a>
 
-### `screen_flip()` → `Bool`
+### [`screen_flip()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Enseña lo dibujado en la imagen escondida y pasa a dibujar en la otra. Espera a la pantalla, un fotograma como
 mucho, así que marca el ritmo del bucle: 50 vueltas por segundo en PAL. La imagen nueva tiene lo de hace dos
@@ -2079,7 +2137,7 @@ Ver también: [`screen_double_buffer`](#screen_double_buffer).
 
 <a id="screen_open_custom"></a>
 
-### `screen_open_custom(width, height, depth, title)` → `Bool`
+### [`screen_open_custom(width, height, depth, title)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `width`, `height`: el tamaño en píxeles: 320 x 256 es PAL de baja resolución, 640 x 256 la de alta.
 - `depth`: la profundidad, como en `screen_open`.
@@ -2092,7 +2150,7 @@ Ver también: [`screen_open`](#screen_open), [`screen_close`](#screen_close), [`
 
 <a id="screen_close"></a>
 
-### `screen_close()`
+### [`screen_close()`](#input_functions_table) · [índice](#indice)
 
 Cierra la pantalla propia. Antes hay que cerrar las ventanas que haya en ella. Sin pantalla propia no hace nada.
 
@@ -2100,7 +2158,7 @@ Ver también: [`screen_open`](#screen_open), [`window_close`](#window_close).
 
 <a id="screen_width"></a>
 
-### `screen_width()` → `Int`
+### [`screen_width()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el ancho en píxeles de la pantalla propia o, si no hay, de la pantalla de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana (el Workbench, por lo general): sirve para medir una ventana antes de abrirla.
 
@@ -2108,7 +2166,7 @@ Ver también: [`screen_height`](#screen_height).
 
 <a id="screen_height"></a>
 
-### `screen_height()` → `Int`
+### [`screen_height()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto en píxeles de la pantalla propia o de la de la ventana actual. Sin ninguna, el de la pantalla pública donde se abriría una ventana.
 
@@ -2116,7 +2174,7 @@ Ver también: [`screen_width`](#screen_width).
 
 <a id="check_lmb"></a>
 
-### `check_lmb()` → `Bool`
+### [`check_lmb()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si el botón izquierdo del ratón está pulsado ahora. Es `mouse_button(0)`.
 
@@ -2124,7 +2182,7 @@ Ver también: [`mouse_button`](#mouse_button), [`check_rmb`](#check_rmb).
 
 <a id="check_rmb"></a>
 
-### `check_rmb()` → `Bool`
+### [`check_rmb()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si el botón derecho del ratón está pulsado ahora. Es `mouse_button(1)`.
 
@@ -2132,7 +2190,7 @@ Ver también: [`mouse_button`](#mouse_button), [`check_lmb`](#check_lmb).
 
 <a id="check_mouse"></a>
 
-### `check_mouse()` → `Bool`
+### [`check_mouse()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si está pulsado alguno de los dos botones del ratón.
 
@@ -2140,7 +2198,7 @@ Ver también: [`mouse_button`](#mouse_button).
 
 <a id="check_esc"></a>
 
-### `check_esc()` → `Bool`
+### [`check_esc()`](#input_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si lo último que mandó el teclado fue Esc pulsada. Si a la vez se pulsa otra tecla, deja de verla:
 `key_down(0x45)` es más fiable.
@@ -2149,7 +2207,7 @@ Ver también: [`key_down`](#key_down).
 
 <a id="wait_click"></a>
 
-### `wait_click()` → `Int`
+### [`wait_click()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Espera a que se pulse y se suelte un botón del ratón, en cualquier sitio de la pantalla. Mira el ratón 50 veces
 por segundo. Devuelve 1. En un programa con ventana, `On Click` dice además dónde fue.
@@ -2158,7 +2216,7 @@ Ver también: [`mouse_button`](#mouse_button), [`wait_key`](#wait_key).
 
 <a id="wait_key"></a>
 
-### `wait_key()` → `Int`
+### [`wait_key()`](#input_functions_table) → `Int` · [índice](#indice)
 
 Espera a que se pulse una tecla en la ventana actual y devuelve su código en bruto. Los demás mensajes de la
 ventana (el botón de cerrar, por ejemplo) se pierden mientras espera. Sin ventana, espera un segundo y devuelve 0.
@@ -2167,7 +2225,7 @@ Ver también: [`key_wait`](#key_wait), [`wait_click`](#wait_click).
 
 <a id="joy_x"></a>
 
-### `joy_x(port)` → `Int`
+### [`joy_x(port)`](#input_functions_table) → `Int` · [índice](#indice)
 
 - `port`: 1 el puerto del joystick; 0 el del ratón.
 
@@ -2177,7 +2235,7 @@ Ver también: [`joy_y`](#joy_y), [`joy_fire`](#joy_fire), [`key_down`](#key_down
 
 <a id="joy_y"></a>
 
-### `joy_y(port)` → `Int`
+### [`joy_y(port)`](#input_functions_table) → `Int` · [índice](#indice)
 
 - `port`: 1 el puerto del joystick; 0 el del ratón.
 
@@ -2187,7 +2245,7 @@ Ver también: [`joy_x`](#joy_x).
 
 <a id="joy_button"></a>
 
-### `joy_button(port)` → `Bool`
+### [`joy_button(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: 1 el puerto del joystick; 0 el del ratón.
 
@@ -2197,7 +2255,7 @@ Ver también: [`joy_fire`](#joy_fire).
 
 <a id="joy_up"></a>
 
-### `joy_up(port)` → `Bool`
+### [`joy_up(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: el puerto, 1 normalmente.
 
@@ -2207,7 +2265,7 @@ Ver también: [`joy_y`](#joy_y).
 
 <a id="joy_down"></a>
 
-### `joy_down(port)` → `Bool`
+### [`joy_down(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: el puerto, 1 normalmente.
 
@@ -2217,7 +2275,7 @@ Ver también: [`joy_y`](#joy_y).
 
 <a id="joy_left"></a>
 
-### `joy_left(port)` → `Bool`
+### [`joy_left(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: el puerto, 1 normalmente.
 
@@ -2227,7 +2285,7 @@ Ver también: [`joy_x`](#joy_x).
 
 <a id="joy_right"></a>
 
-### `joy_right(port)` → `Bool`
+### [`joy_right(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: el puerto, 1 normalmente.
 
@@ -2237,13 +2295,15 @@ Ver también: [`joy_x`](#joy_x).
 
 <a id="joy_fire"></a>
 
-### `joy_fire(port)` → `Bool`
+### [`joy_fire(port)`](#input_functions_table) → `Bool` · [índice](#indice)
 
 - `port`: el puerto, 1 normalmente.
 
 Devuelve `true` si el botón de disparo está pulsado. Es `joy_button`.
 
 Ver también: [`joy_button`](#joy_button).
+
+[Volver al índice](#indice)
 
 <a id="gadtools_functions"></a>
 
@@ -2307,7 +2367,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="gadtools_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -2333,7 +2395,7 @@ end
 
 <a id="gt_init"></a>
 
-### `gt_init()` → `Bool`
+### [`gt_init()`](#gadtools_functions_table) → `Bool` · [índice](#indice)
 
 Prepara GadTools para la ventana actual, que tiene que estar abierta. Libera los gadgets y menús de un `gt_init`
 anterior. Devuelve `false` sin ventana o sin memoria.
@@ -2342,7 +2404,7 @@ Ver también: [`gt_attach`](#gt_attach), [`gt_cleanup`](#gt_cleanup).
 
 <a id="gt_cleanup"></a>
 
-### `gt_cleanup()`
+### [`gt_cleanup()`](#gadtools_functions_table) · [índice](#indice)
 
 Quita los gadgets y los menús de la ventana y los libera. Al acabar el programa se hace solo.
 
@@ -2350,7 +2412,7 @@ Ver también: [`gt_init`](#gt_init).
 
 <a id="gt_attach"></a>
 
-### `gt_attach()`
+### [`gt_attach()`](#gadtools_functions_table) · [índice](#indice)
 
 Pone en la ventana los gadgets creados desde `gt_init` y los dibuja. Va después del último `gt_*`.
 
@@ -2358,7 +2420,7 @@ Ver también: [`gt_init`](#gt_init), [`gt_wait_event`](#gt_wait_event).
 
 <a id="gt_button"></a>
 
-### `gt_button(x, y, w, h, label)` → `Int`
+### [`gt_button(x, y, w, h, label)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2370,7 +2432,7 @@ Ver también: [`gt_wait_event`](#gt_wait_event).
 
 <a id="gt_checkbox"></a>
 
-### `gt_checkbox(x, y, w, h, label, checked)` → `Int`
+### [`gt_checkbox(x, y, w, h, label, checked)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2383,7 +2445,7 @@ Ver también: [`gt_get_value`](#gt_get_value).
 
 <a id="gt_string"></a>
 
-### `gt_string(x, y, w, h, label, initial, maxchars)` → `Int`
+### [`gt_string(x, y, w, h, label, initial, maxchars)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2398,7 +2460,7 @@ Ver también: [`gt_get_string`](#gt_get_string), [`gt_set_text`](#gt_set_text).
 
 <a id="gt_integer"></a>
 
-### `gt_integer(x, y, w, h, label, initial)` → `Int`
+### [`gt_integer(x, y, w, h, label, initial)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2411,7 +2473,7 @@ Ver también: [`gt_get_value`](#gt_get_value).
 
 <a id="gt_slider"></a>
 
-### `gt_slider(x, y, w, h, label, min, max, level)` → `Int`
+### [`gt_slider(x, y, w, h, label, min, max, level)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2425,7 +2487,7 @@ Ver también: [`gt_get_value`](#gt_get_value), [`gt_set_value`](#gt_set_value).
 
 <a id="gt_palette"></a>
 
-### `gt_palette(x, y, w, h, label, depth, color)` → `Int`
+### [`gt_palette(x, y, w, h, label, depth, color)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2439,7 +2501,7 @@ Ver también: [`gt_get_value`](#gt_get_value).
 
 <a id="gt_text"></a>
 
-### `gt_text(x, y, w, h, label, text)` → `Int`
+### [`gt_text(x, y, w, h, label, text)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2452,7 +2514,7 @@ Ver también: [`gt_set_text`](#gt_set_text).
 
 <a id="gt_get_value"></a>
 
-### `gt_get_value(gad_id)` → `Int`
+### [`gt_get_value(gad_id)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 Devuelve su valor: 1 o 0 en una casilla; el nivel de un deslizador; el color de una paleta; el número de un campo
@@ -2462,7 +2524,7 @@ Ver también: [`gt_set_value`](#gt_set_value), [`gt_get_string`](#gt_get_string)
 
 <a id="gt_set_value"></a>
 
-### `gt_set_value(gad_id, value)`
+### [`gt_set_value(gad_id, value)`](#gadtools_functions_table) · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 - `value`: el valor nuevo, como en `gt_get_value`.
@@ -2473,7 +2535,7 @@ Ver también: [`gt_get_value`](#gt_get_value).
 
 <a id="gt_get_string"></a>
 
-### `gt_get_string(gad_id)` → `String`
+### [`gt_get_string(gad_id)`](#gadtools_functions_table) → `String` · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 
@@ -2483,7 +2545,7 @@ Ver también: [`gt_set_text`](#gt_set_text).
 
 <a id="gt_event"></a>
 
-### `gt_event()` → `Int`
+### [`gt_event()`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 Mira, sin esperar, si se usó un gadget. Devuelve su número, -1 si no hay nada o -2 si se pulsó el botón de
 cerrar. Los eventos de menú los deja para `menu_event`.
@@ -2492,7 +2554,7 @@ Ver también: [`gt_wait_event`](#gt_wait_event), [`menu_event`](#menu_event).
 
 <a id="gt_wait_event"></a>
 
-### `gt_wait_event()` → `Int`
+### [`gt_wait_event()`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 Espera, sin gastar CPU, a que se use un gadget y devuelve su número, o -2 si se pulsó el botón de cerrar.
 
@@ -2500,7 +2562,7 @@ Ver también: [`gt_event`](#gt_event).
 
 <a id="gt_cycle"></a>
 
-### `gt_cycle(x, y, w, h, label, options)` → `Int`
+### [`gt_cycle(x, y, w, h, label, options)`](#gadtools_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: la esquina, dentro de los bordes.
 - `w`, `h`: el tamaño.
@@ -2513,7 +2575,7 @@ Ver también: [`gt_get_value`](#gt_get_value).
 
 <a id="gt_enable"></a>
 
-### `gt_enable(gad_id)`
+### [`gt_enable(gad_id)`](#gadtools_functions_table) · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 
@@ -2523,7 +2585,7 @@ Ver también: [`gt_disable`](#gt_disable).
 
 <a id="gt_disable"></a>
 
-### `gt_disable(gad_id)`
+### [`gt_disable(gad_id)`](#gadtools_functions_table) · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 
@@ -2533,7 +2595,7 @@ Ver también: [`gt_enable`](#gt_enable).
 
 <a id="gt_set_text"></a>
 
-### `gt_set_text(gad_id, text)`
+### [`gt_set_text(gad_id, text)`](#gadtools_functions_table) · [índice](#indice)
 
 - `gad_id`: el número que dio su `gt_*`.
 - `text`: el texto nuevo.
@@ -2541,6 +2603,8 @@ Ver también: [`gt_enable`](#gt_enable).
 Cambia lo que enseña un `gt_text` o un `gt_string`.
 
 Ver también: [`gt_get_string`](#gt_get_string).
+
+[Volver al índice](#indice)
 
 <a id="menu_functions"></a>
 
@@ -2550,6 +2614,8 @@ Los menús de la barra de la pantalla para la ventana de `gt_init`. Se describen
 `menu_item`, el siguiente `menu_title`...) y `menu_attach()` los pone. Cada opción tiene un número del programa.
 Se leen con `menu_event()` en un bucle propio, o en el `On Menu` de un `EventLoop` con `menu_id()`. Los menús de
 MUI van aparte (`mui_menu_*`).
+
+<a id="menu_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -2566,7 +2632,7 @@ MUI van aparte (`mui_menu_*`).
 
 <a id="menu_title"></a>
 
-### `menu_title(label)`
+### [`menu_title(label)`](#menu_functions_table) · [índice](#indice)
 
 - `label`: el título en la barra.
 
@@ -2576,7 +2642,7 @@ Ver también: [`menu_item`](#menu_item), [`menu_attach`](#menu_attach).
 
 <a id="menu_item"></a>
 
-### `menu_item(label, shortcut, id)`
+### [`menu_item(label, shortcut, id)`](#menu_functions_table) · [índice](#indice)
 
 - `label`: el texto.
 - `shortcut`: la letra del atajo con Amiga (`"N"` = Amiga+N); `""` ninguno.
@@ -2588,7 +2654,7 @@ Ver también: [`menu_sub`](#menu_sub), [`menu_check_item`](#menu_check_item), [`
 
 <a id="menu_sub"></a>
 
-### `menu_sub(label, shortcut, id)`
+### [`menu_sub(label, shortcut, id)`](#menu_functions_table) · [índice](#indice)
 
 - `label`: el texto.
 - `shortcut`: la letra del atajo con Amiga (`"N"` = Amiga+N); `""` ninguno.
@@ -2600,7 +2666,7 @@ Ver también: [`menu_item`](#menu_item).
 
 <a id="menu_separator"></a>
 
-### `menu_separator()`
+### [`menu_separator()`](#menu_functions_table) · [índice](#indice)
 
 Añade una raya entre opciones.
 
@@ -2608,7 +2674,7 @@ Ver también: [`menu_item`](#menu_item).
 
 <a id="menu_attach"></a>
 
-### `menu_attach()` → `Bool`
+### [`menu_attach()`](#menu_functions_table) → `Bool` · [índice](#indice)
 
 Pone en la ventana los menús descritos. Va después de `gt_init` y del último `menu_*`. Otro `menu_attach`
 reemplaza los menús. Devuelve `false` si no se pudo.
@@ -2617,7 +2683,7 @@ Ver también: [`menu_title`](#menu_title), [`menu_event`](#menu_event).
 
 <a id="menu_event"></a>
 
-### `menu_event()` → `Int`
+### [`menu_event()`](#menu_functions_table) → `Int` · [índice](#indice)
 
 Mira, sin esperar, si se eligió una opción. Devuelve su número, -1 si no hay nada o -2 si se pulsó el botón de
 cerrar. Si se eligieron varias de una vez, salen una a una.
@@ -2626,7 +2692,7 @@ Ver también: [`menu_id`](#menu_id), [`gt_event`](#gt_event).
 
 <a id="menu_id"></a>
 
-### `menu_id()` → `Int`
+### [`menu_id()`](#menu_functions_table) → `Int` · [índice](#indice)
 
 Dentro del `On Menu` de un `EventLoop`, devuelve el número de la opción elegida.
 
@@ -2634,7 +2700,7 @@ Ver también: [`menu_event`](#menu_event).
 
 <a id="menu_check_item"></a>
 
-### `menu_check_item(label, shortcut, id)`
+### [`menu_check_item(label, shortcut, id)`](#menu_functions_table) · [índice](#indice)
 
 - `label`: el texto.
 - `shortcut`: la letra del atajo con Amiga (`"N"` = Amiga+N); `""` ninguno.
@@ -2646,7 +2712,7 @@ Ver también: [`menu_checked`](#menu_checked).
 
 <a id="menu_checked"></a>
 
-### `menu_checked(id)` → `Int`
+### [`menu_checked(id)`](#menu_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número de la opción.
 
@@ -2656,7 +2722,7 @@ Ver también: [`menu_check_item`](#menu_check_item).
 
 <a id="menu_enable"></a>
 
-### `menu_enable(id, enabled)`
+### [`menu_enable(id, enabled)`](#menu_functions_table) · [índice](#indice)
 
 - `id`: el número de la opción.
 - `enabled`: `false` la desactiva (en gris), `true` la activa.
@@ -2665,6 +2731,8 @@ Va después de `menu_attach`.
 
 Ver también: [`menu_attach`](#menu_attach).
 
+[Volver al índice](#indice)
+
 <a id="asl_functions"></a>
 
 ## Requesters ASL
@@ -2672,6 +2740,8 @@ Ver también: [`menu_attach`](#menu_attach).
 La petición de ficheros del sistema en dos pasos: `file_open_dialog` o `file_save_dialog` la enseñan, y después
 `file_get_path`, `file_get_name` y `file_fullpath` dicen qué se eligió. En un paso, `dialog_file` (grupo Intuition)
 devuelve ya la ruta entera. La petición recuerda el último cajón.
+
+<a id="asl_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -2683,7 +2753,7 @@ devuelve ya la ruta entera. La petición recuerda el último cajón.
 
 <a id="file_open_dialog"></a>
 
-### `file_open_dialog(title, pattern)` → `Bool`
+### [`file_open_dialog(title, pattern)`](#asl_functions_table) → `Bool` · [índice](#indice)
 
 - `title`: el título de la petición.
 - `pattern`: qué ficheros se ven, con comodines de AmigaDOS (`"#?.iff"`).
@@ -2694,7 +2764,7 @@ Ver también: [`file_fullpath`](#file_fullpath), [`file_save_dialog`](#file_save
 
 <a id="file_save_dialog"></a>
 
-### `file_save_dialog(title, pattern)` → `Bool`
+### [`file_save_dialog(title, pattern)`](#asl_functions_table) → `Bool` · [índice](#indice)
 
 - `title`, `pattern`: como en `file_open_dialog`.
 
@@ -2704,7 +2774,7 @@ Ver también: [`file_open_dialog`](#file_open_dialog), [`file_fullpath`](#file_f
 
 <a id="file_get_path"></a>
 
-### `file_get_path()` → `String`
+### [`file_get_path()`](#asl_functions_table) → `String` · [índice](#indice)
 
 Devuelve el cajón elegido en la última petición que se aceptó: `"Work:Imágenes"`.
 
@@ -2712,7 +2782,7 @@ Ver también: [`file_get_name`](#file_get_name), [`file_fullpath`](#file_fullpat
 
 <a id="file_get_name"></a>
 
-### `file_get_name()` → `String`
+### [`file_get_name()`](#asl_functions_table) → `String` · [índice](#indice)
 
 Devuelve el nombre del fichero elegido en la última petición que se aceptó, sin el cajón.
 
@@ -2720,11 +2790,13 @@ Ver también: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpat
 
 <a id="file_fullpath"></a>
 
-### `file_fullpath()` → `String`
+### [`file_fullpath()`](#asl_functions_table) → `String` · [índice](#indice)
 
 Devuelve la ruta entera de la última petición aceptada: el cajón y el nombre, con su `/` si hace falta.
 
 Ver también: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
+
+[Volver al índice](#indice)
 
 <a id="reaction_functions"></a>
 
@@ -2782,7 +2854,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="reaction_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -2868,7 +2942,7 @@ end
 
 <a id="ra_window_create"></a>
 
-### `ra_window_create(title, width, height)` → `Int`
+### [`ra_window_create(title, width, height)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `title`: el título.
 - `width`, `height`: el tamaño inicial.
@@ -2880,7 +2954,7 @@ Ver también: [`ra_window_open`](#ra_window_open), [`ra_window_use`](#ra_window_
 
 <a id="ra_window_use"></a>
 
-### `ra_window_use(window)`
+### [`ra_window_use(window)`](#reaction_functions_table) · [índice](#indice)
 
 - `window`: el número de `ra_window_create`.
 
@@ -2890,7 +2964,7 @@ Ver también: [`ra_event_window`](#ra_event_window).
 
 <a id="ra_event_window"></a>
 
-### `ra_event_window()` → `Int`
+### [`ra_event_window()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve de qué ventana vino el último evento: su número de `ra_window_create`.
 
@@ -2898,7 +2972,7 @@ Ver también: [`ra_window_use`](#ra_window_use).
 
 <a id="ra_window_open"></a>
 
-### `ra_window_open()` → `Int`
+### [`ra_window_open()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Abre la ventana actual, con los gadgets y menús añadidos. Devuelve 0 si no pudo.
 
@@ -2906,7 +2980,7 @@ Ver también: [`ra_wait_event`](#ra_wait_event).
 
 <a id="ra_window_close"></a>
 
-### `ra_window_close()`
+### [`ra_window_close()`](#reaction_functions_table) · [índice](#indice)
 
 Cierra la ventana actual y libera sus gadgets; si queda otra abierta, pasa a ser la actual.
 
@@ -2914,7 +2988,7 @@ Ver también: [`ra_window_open`](#ra_window_open).
 
 <a id="ra_window_sigmask"></a>
 
-### `ra_window_sigmask()` → `Int`
+### [`ra_window_sigmask()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal de la ventana, para esperar a la vez otras cosas con código propio.
 
@@ -2922,7 +2996,7 @@ Ver también: [`ra_handle_events`](#ra_handle_events).
 
 <a id="ra_handle_events"></a>
 
-### `ra_handle_events()` → `Int`
+### [`ra_handle_events()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Atiende los eventos pendientes sin esperar. Devuelve el número del gadget usado, `RA_EVENT_CLOSE()` si se cerró o `RA_EVENT_NONE()` si no hay nada.
 
@@ -2930,7 +3004,7 @@ Ver también: [`ra_wait_event`](#ra_wait_event).
 
 <a id="ra_wait_event"></a>
 
-### `ra_wait_event()` → `Int`
+### [`ra_wait_event()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Espera, sin gastar CPU, y devuelve el número del gadget usado, `RA_EVENT_CLOSE()` si se cerró la ventana o `RA_EVENT_MENU()` si se eligió un menú.
 
@@ -2938,7 +3012,7 @@ Ver también: [`ra_handle_events`](#ra_handle_events), [`ra_menu_id`](#ra_menu_i
 
 <a id="ra_add_button"></a>
 
-### `ra_add_button(id, label)` → `Int`
+### [`ra_add_button(id, label)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `label`: el texto.
@@ -2950,7 +3024,7 @@ Ver también: [`ra_wait_event`](#ra_wait_event), [`ra_set_text`](#ra_set_text).
 
 <a id="ra_add_string"></a>
 
-### `ra_add_string(id, initial, maxchars)` → `Int`
+### [`ra_add_string(id, initial, maxchars)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `initial`: el texto con el que empieza.
@@ -2963,7 +3037,7 @@ Ver también: [`ra_get_string`](#ra_get_string), [`ra_set_string`](#ra_set_strin
 
 <a id="ra_add_checkbox"></a>
 
-### `ra_add_checkbox(id, label, checked)` → `Int`
+### [`ra_add_checkbox(id, label, checked)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `label`: el texto.
@@ -2976,7 +3050,7 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_add_slider"></a>
 
-### `ra_add_slider(id, min, max, initial)` → `Int`
+### [`ra_add_slider(id, min, max, initial)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `min`, `max`: los extremos.
@@ -2989,7 +3063,7 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_add_integer"></a>
 
-### `ra_add_integer(id, initial, min, max)` → `Int`
+### [`ra_add_integer(id, initial, min, max)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `initial`: el número con el que empieza.
@@ -3002,7 +3076,7 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_add_label"></a>
 
-### `ra_add_label(text)` → `Int`
+### [`ra_add_label(text)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `text`: el texto.
 
@@ -3010,7 +3084,7 @@ Una etiqueta fija: no tiene número y no se puede cambiar. Devuelve 1, o 0 si no
 
 <a id="ra_get_value"></a>
 
-### `ra_get_value(id)` → `Int`
+### [`ra_get_value(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3020,7 +3094,7 @@ Ver también: [`ra_set_value`](#ra_set_value).
 
 <a id="ra_get_string"></a>
 
-### `ra_get_string(id)` → `String`
+### [`ra_get_string(id)`](#reaction_functions_table) → `String` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3030,7 +3104,7 @@ Ver también: [`ra_set_string`](#ra_set_string).
 
 <a id="ra_set_value"></a>
 
-### `ra_set_value(id, value)`
+### [`ra_set_value(id, value)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `value`: el valor nuevo, como en `ra_get_value`.
@@ -3039,13 +3113,13 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_refresh_layout"></a>
 
-### `ra_refresh_layout()`
+### [`ra_refresh_layout()`](#reaction_functions_table) · [índice](#indice)
 
 Rehace la colocación de la ventana después de añadir o cambiar gadgets con ella abierta.
 
 <a id="RA_EVENT_CLOSE"></a>
 
-### `RA_EVENT_CLOSE()` → `Int`
+### [`RA_EVENT_CLOSE()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código del evento de cerrar la ventana: -1.
 
@@ -3053,7 +3127,7 @@ Ver también: [`ra_wait_event`](#ra_wait_event).
 
 <a id="RA_EVENT_NONE"></a>
 
-### `RA_EVENT_NONE()` → `Int`
+### [`RA_EVENT_NONE()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código de ningún evento: -3 (un gadget puede tener el número 0).
 
@@ -3061,7 +3135,7 @@ Ver también: [`ra_handle_events`](#ra_handle_events).
 
 <a id="ra_get_rastport"></a>
 
-### `ra_get_rastport()` → `Int (dirección)`
+### [`ra_get_rastport()`](#reaction_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Devuelve el RastPort de la ventana actual y lo hace el destino de los `gfx_*`.
 
@@ -3069,7 +3143,7 @@ Ver también: [`ra_get_inner_left`](#ra_get_inner_left).
 
 <a id="ra_get_inner_left"></a>
 
-### `ra_get_inner_left()` → `Int`
+### [`ra_get_inner_left()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve dónde empieza por la izquierda el interior de la ventana.
 
@@ -3077,7 +3151,7 @@ Ver también: [`ra_get_inner_top`](#ra_get_inner_top).
 
 <a id="ra_get_inner_top"></a>
 
-### `ra_get_inner_top()` → `Int`
+### [`ra_get_inner_top()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve dónde empieza por arriba el interior de la ventana.
 
@@ -3085,7 +3159,7 @@ Ver también: [`ra_get_inner_left`](#ra_get_inner_left).
 
 <a id="ra_get_inner_width"></a>
 
-### `ra_get_inner_width()` → `Int`
+### [`ra_get_inner_width()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el ancho del interior de la ventana.
 
@@ -3093,7 +3167,7 @@ Ver también: [`ra_get_inner_height`](#ra_get_inner_height).
 
 <a id="ra_get_inner_height"></a>
 
-### `ra_get_inner_height()` → `Int`
+### [`ra_get_inner_height()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto del interior de la ventana.
 
@@ -3101,7 +3175,7 @@ Ver también: [`ra_get_inner_width`](#ra_get_inner_width).
 
 <a id="ra_add_palette"></a>
 
-### `ra_add_palette(id, depth, initial_color)` → `Int`
+### [`ra_add_palette(id, depth, initial_color)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `depth`: cuántos colores: 2 elevado a `depth`.
@@ -3114,7 +3188,7 @@ Ver también: [`ra_get_palette_color`](#ra_get_palette_color).
 
 <a id="ra_get_palette_color"></a>
 
-### `ra_get_palette_color(id)` → `Int`
+### [`ra_get_palette_color(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3124,7 +3198,7 @@ Ver también: [`ra_set_palette_color`](#ra_set_palette_color).
 
 <a id="ra_set_palette_color"></a>
 
-### `ra_set_palette_color(id, color)`
+### [`ra_set_palette_color(id, color)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `color`: el color.
@@ -3133,7 +3207,7 @@ Ver también: [`ra_get_palette_color`](#ra_get_palette_color).
 
 <a id="ra_add_chooser"></a>
 
-### `ra_add_chooser(id)` → `Int`
+### [`ra_add_chooser(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3144,7 +3218,7 @@ Ver también: [`ra_chooser_add_item`](#ra_chooser_add_item).
 
 <a id="ra_chooser_add_item"></a>
 
-### `ra_chooser_add_item(id, label)` → `Int`
+### [`ra_chooser_add_item(id, label)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `label`: la opción.
@@ -3155,7 +3229,7 @@ Ver también: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
 
 <a id="ra_get_chooser_selected"></a>
 
-### `ra_get_chooser_selected(id)` → `Int`
+### [`ra_get_chooser_selected(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3165,7 +3239,7 @@ Ver también: [`ra_set_chooser_selected`](#ra_set_chooser_selected).
 
 <a id="ra_set_chooser_selected"></a>
 
-### `ra_set_chooser_selected(id, index)`
+### [`ra_set_chooser_selected(id, index)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `index`: la opción, desde 0.
@@ -3174,7 +3248,7 @@ Ver también: [`ra_get_chooser_selected`](#ra_get_chooser_selected).
 
 <a id="ra_add_scroller"></a>
 
-### `ra_add_scroller(id, min, max, visible, initial)` → `Int`
+### [`ra_add_scroller(id, min, max, visible, initial)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `min`, `max`: el documento.
@@ -3188,7 +3262,7 @@ Ver también: [`ra_get_scroller`](#ra_get_scroller), [`ra_add_scroller_vert`](#r
 
 <a id="ra_add_scroller_vert"></a>
 
-### `ra_add_scroller_vert(id, min, max, visible, initial)` → `Int`
+### [`ra_add_scroller_vert(id, min, max, visible, initial)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `min`, `max`, `visible`, `initial`: como en `ra_add_scroller`.
@@ -3200,7 +3274,7 @@ Ver también: [`ra_add_scroller`](#ra_add_scroller).
 
 <a id="ra_get_scroller"></a>
 
-### `ra_get_scroller(id)` → `Int`
+### [`ra_get_scroller(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3210,7 +3284,7 @@ Ver también: [`ra_set_scroller`](#ra_set_scroller).
 
 <a id="ra_set_scroller"></a>
 
-### `ra_set_scroller(id, pos)`
+### [`ra_set_scroller(id, pos)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `pos`: la posición nueva.
@@ -3219,7 +3293,7 @@ Ver también: [`ra_get_scroller`](#ra_get_scroller).
 
 <a id="ra_enable_gadget"></a>
 
-### `ra_enable_gadget(id)`
+### [`ra_enable_gadget(id)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3229,7 +3303,7 @@ Ver también: [`ra_disable_gadget`](#ra_disable_gadget).
 
 <a id="ra_disable_gadget"></a>
 
-### `ra_disable_gadget(id)`
+### [`ra_disable_gadget(id)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3239,7 +3313,7 @@ Ver también: [`ra_enable_gadget`](#ra_enable_gadget).
 
 <a id="ra_set_string"></a>
 
-### `ra_set_string(id, text)`
+### [`ra_set_string(id, text)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `text`: el texto nuevo del campo.
@@ -3248,7 +3322,7 @@ Ver también: [`ra_get_string`](#ra_get_string).
 
 <a id="ra_set_text"></a>
 
-### `ra_set_text(id, text)`
+### [`ra_set_text(id, text)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `text`: el texto nuevo de un botón.
@@ -3257,7 +3331,7 @@ Ver también: [`ra_add_button`](#ra_add_button).
 
 <a id="ra_layout_hgroup_begin"></a>
 
-### `ra_layout_hgroup_begin()` → `Int`
+### [`ra_layout_hgroup_begin()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Empieza un grupo que pone sus gadgets uno al lado de otro, dentro del grupo abierto. Se acaba con `ra_layout_group_end`.
 
@@ -3265,7 +3339,7 @@ Ver también: [`ra_layout_vgroup_begin`](#ra_layout_vgroup_begin), [`ra_layout_g
 
 <a id="ra_layout_vgroup_begin"></a>
 
-### `ra_layout_vgroup_begin()` → `Int`
+### [`ra_layout_vgroup_begin()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Empieza un grupo que pone sus gadgets uno debajo de otro. Se acaba con `ra_layout_group_end`.
 
@@ -3273,7 +3347,7 @@ Ver también: [`ra_layout_group_end`](#ra_layout_group_end).
 
 <a id="ra_layout_group_end"></a>
 
-### `ra_layout_group_end()` → `Int`
+### [`ra_layout_group_end()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Acaba el último grupo abierto.
 
@@ -3281,7 +3355,7 @@ Ver también: [`ra_layout_hgroup_begin`](#ra_layout_hgroup_begin).
 
 <a id="ra_add_space"></a>
 
-### `ra_add_space()`
+### [`ra_add_space()`](#reaction_functions_table) · [índice](#indice)
 
 Un espacio que se estira entre gadgets de un grupo horizontal.
 
@@ -3289,7 +3363,7 @@ Ver también: [`ra_add_vspace`](#ra_add_vspace).
 
 <a id="ra_add_vspace"></a>
 
-### `ra_add_vspace()`
+### [`ra_add_vspace()`](#reaction_functions_table) · [índice](#indice)
 
 Un espacio que se estira entre gadgets de un grupo vertical.
 
@@ -3297,7 +3371,7 @@ Ver también: [`ra_add_space`](#ra_add_space).
 
 <a id="ra_layout_hgroup_weighted"></a>
 
-### `ra_layout_hgroup_weighted(weight)` → `Int`
+### [`ra_layout_hgroup_weighted(weight)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `weight`: cuánto espacio se lleva frente a sus vecinos.
 
@@ -3307,7 +3381,7 @@ Ver también: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
 
 <a id="ra_layout_vgroup_weighted"></a>
 
-### `ra_layout_vgroup_weighted(weight)` → `Int`
+### [`ra_layout_vgroup_weighted(weight)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `weight`: su peso.
 
@@ -3317,7 +3391,7 @@ Ver también: [`ra_layout_group_end_weighted`](#ra_layout_group_end_weighted).
 
 <a id="ra_layout_group_end_weighted"></a>
 
-### `ra_layout_group_end_weighted()` → `Int`
+### [`ra_layout_group_end_weighted()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Acaba un grupo con peso.
 
@@ -3325,7 +3399,7 @@ Ver también: [`ra_layout_hgroup_weighted`](#ra_layout_hgroup_weighted).
 
 <a id="ra_add_drawing_area"></a>
 
-### `ra_add_drawing_area(id, min_width, min_height)` → `Int`
+### [`ra_add_drawing_area(id, min_width, min_height)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `min_width`, `min_height`: el tamaño mínimo.
@@ -3337,7 +3411,7 @@ Ver también: [`ra_init_canvas_render`](#ra_init_canvas_render), [`ra_get_drawin
 
 <a id="ra_get_drawing_bounds"></a>
 
-### `ra_get_drawing_bounds(id)` → `Int`
+### [`ra_get_drawing_bounds(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3347,7 +3421,7 @@ Ver también: [`ra_drawing_left`](#ra_drawing_left).
 
 <a id="ra_drawing_left"></a>
 
-### `ra_drawing_left()` → `Int`
+### [`ra_drawing_left()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Tras `ra_get_drawing_bounds`, devuelve la izquierda de la zona de dibujo.
 
@@ -3355,7 +3429,7 @@ Ver también: [`ra_drawing_top`](#ra_drawing_top).
 
 <a id="ra_drawing_top"></a>
 
-### `ra_drawing_top()` → `Int`
+### [`ra_drawing_top()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Tras `ra_get_drawing_bounds`, devuelve su parte de arriba.
 
@@ -3363,7 +3437,7 @@ Ver también: [`ra_drawing_left`](#ra_drawing_left).
 
 <a id="ra_drawing_width"></a>
 
-### `ra_drawing_width()` → `Int`
+### [`ra_drawing_width()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Tras `ra_get_drawing_bounds`, devuelve su ancho.
 
@@ -3371,7 +3445,7 @@ Ver también: [`ra_drawing_height`](#ra_drawing_height).
 
 <a id="ra_drawing_height"></a>
 
-### `ra_drawing_height()` → `Int`
+### [`ra_drawing_height()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Tras `ra_get_drawing_bounds`, devuelve su alto.
 
@@ -3379,7 +3453,7 @@ Ver también: [`ra_drawing_width`](#ra_drawing_width).
 
 <a id="ra_calc_drawing_area"></a>
 
-### `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` → `Int`
+### [`ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `toolbar_h`, `timeline_h`: lo que ocupan arriba y abajo.
 - `left_w`, `right_w`: lo que ocupan a los lados.
@@ -3390,7 +3464,7 @@ Ver también: [`ra_get_drawing_bounds`](#ra_get_drawing_bounds).
 
 <a id="ra_refresh_canvas"></a>
 
-### `ra_refresh_canvas(id)`
+### [`ra_refresh_canvas(id)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3400,7 +3474,7 @@ Ver también: [`ra_init_canvas_render`](#ra_init_canvas_render).
 
 <a id="ra_canvas_left"></a>
 
-### `ra_canvas_left()` → `Int`
+### [`ra_canvas_left()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Dentro de la función de dibujo del lienzo, devuelve la izquierda del lienzo.
 
@@ -3408,7 +3482,7 @@ Ver también: [`ra_canvas_top`](#ra_canvas_top).
 
 <a id="ra_canvas_top"></a>
 
-### `ra_canvas_top()` → `Int`
+### [`ra_canvas_top()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Dentro de la función de dibujo del lienzo, devuelve su parte de arriba.
 
@@ -3416,7 +3490,7 @@ Ver también: [`ra_canvas_left`](#ra_canvas_left).
 
 <a id="ra_canvas_width"></a>
 
-### `ra_canvas_width()` → `Int`
+### [`ra_canvas_width()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Dentro de la función de dibujo del lienzo, devuelve su ancho.
 
@@ -3424,7 +3498,7 @@ Ver también: [`ra_canvas_height`](#ra_canvas_height).
 
 <a id="ra_canvas_height"></a>
 
-### `ra_canvas_height()` → `Int`
+### [`ra_canvas_height()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Dentro de la función de dibujo del lienzo, devuelve su alto.
 
@@ -3432,7 +3506,7 @@ Ver también: [`ra_canvas_width`](#ra_canvas_width).
 
 <a id="ra_init_canvas_render"></a>
 
-### `ra_init_canvas_render()`
+### [`ra_init_canvas_render()`](#reaction_functions_table) · [índice](#indice)
 
 Hace que la zona de dibujo se pinte con una función del programa llamada `render_canvas()`, que dibuja con los
 `gfx_*`: ReAction la llama cuando hace falta. Dentro, `ra_canvas_*` dicen dónde está el lienzo.
@@ -3441,7 +3515,7 @@ Ver también: [`ra_canvas_enable`](#ra_canvas_enable), [`ra_refresh_canvas`](#ra
 
 <a id="ra_canvas_enable"></a>
 
-### `ra_canvas_enable()`
+### [`ra_canvas_enable()`](#reaction_functions_table) · [índice](#indice)
 
 Activa el dibujo del lienzo, cuando todo lo que usa `render_canvas()` está preparado.
 
@@ -3449,7 +3523,7 @@ Ver también: [`ra_init_canvas_render`](#ra_init_canvas_render).
 
 <a id="ra_gadget_exists"></a>
 
-### `ra_gadget_exists(id)` → `Int`
+### [`ra_gadget_exists(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3457,7 +3531,7 @@ Devuelve 1 si hay un gadget con ese número en la ventana actual.
 
 <a id="ra_window_width"></a>
 
-### `ra_window_width()` → `Int`
+### [`ra_window_width()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el ancho de la ventana actual.
 
@@ -3465,7 +3539,7 @@ Ver también: [`ra_window_height`](#ra_window_height).
 
 <a id="ra_window_height"></a>
 
-### `ra_window_height()` → `Int`
+### [`ra_window_height()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto de la ventana actual.
 
@@ -3473,7 +3547,7 @@ Ver también: [`ra_window_width`](#ra_window_width).
 
 <a id="ra_window_is_open"></a>
 
-### `ra_window_is_open()` → `Int`
+### [`ra_window_is_open()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve 1 si la ventana actual está abierta.
 
@@ -3481,7 +3555,7 @@ Ver también: [`ra_window_open`](#ra_window_open).
 
 <a id="ra_add_listbrowser"></a>
 
-### `ra_add_listbrowser(id)` → `Int`
+### [`ra_add_listbrowser(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3492,7 +3566,7 @@ Ver también: [`ra_listbrowser_add`](#ra_listbrowser_add).
 
 <a id="ra_listbrowser_add"></a>
 
-### `ra_listbrowser_add(id, text)` → `Int`
+### [`ra_listbrowser_add(id, text)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `text`: la línea.
@@ -3503,7 +3577,7 @@ Ver también: [`ra_listbrowser_clear`](#ra_listbrowser_clear).
 
 <a id="ra_listbrowser_clear"></a>
 
-### `ra_listbrowser_clear(id)`
+### [`ra_listbrowser_clear(id)`](#reaction_functions_table) · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3513,7 +3587,7 @@ Ver también: [`ra_listbrowser_add`](#ra_listbrowser_add).
 
 <a id="ra_listbrowser_count"></a>
 
-### `ra_listbrowser_count(id)` → `Int`
+### [`ra_listbrowser_count(id)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 
@@ -3523,7 +3597,7 @@ Ver también: [`ra_listbrowser_add`](#ra_listbrowser_add).
 
 <a id="ra_add_radio"></a>
 
-### `ra_add_radio(id, options)` → `Int`
+### [`ra_add_radio(id, options)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `options`: separadas por `|`.
@@ -3535,7 +3609,7 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_add_clicktab"></a>
 
-### `ra_add_clicktab(id, titles)` → `Int`
+### [`ra_add_clicktab(id, titles)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `titles`: separados por `|`.
@@ -3547,7 +3621,7 @@ Ver también: [`ra_get_value`](#ra_get_value).
 
 <a id="ra_add_fuelgauge"></a>
 
-### `ra_add_fuelgauge(id, max)` → `Int`
+### [`ra_add_fuelgauge(id, max)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `max`: el valor de la barra llena.
@@ -3559,7 +3633,7 @@ Ver también: [`ra_set_value`](#ra_set_value).
 
 <a id="ra_menu_title"></a>
 
-### `ra_menu_title(label)`
+### [`ra_menu_title(label)`](#reaction_functions_table) · [índice](#indice)
 
 - `label`: el título.
 
@@ -3569,7 +3643,7 @@ Ver también: [`ra_menu_item`](#ra_menu_item).
 
 <a id="ra_menu_item"></a>
 
-### `ra_menu_item(label, key, id)`
+### [`ra_menu_item(label, key, id)`](#reaction_functions_table) · [índice](#indice)
 
 - `label`: el texto.
 - `key`: la letra con Amiga; `""` ninguna.
@@ -3581,7 +3655,7 @@ Ver también: [`ra_menu_id`](#ra_menu_id), [`RA_EVENT_MENU`](#RA_EVENT_MENU).
 
 <a id="ra_menu_separator"></a>
 
-### `ra_menu_separator()`
+### [`ra_menu_separator()`](#reaction_functions_table) · [índice](#indice)
 
 Añade una raya entre opciones.
 
@@ -3589,7 +3663,7 @@ Ver también: [`ra_menu_item`](#ra_menu_item).
 
 <a id="ra_menu_id"></a>
 
-### `ra_menu_id()` → `Int`
+### [`ra_menu_id()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Tras un `RA_EVENT_MENU()`, devuelve el número de la opción elegida.
 
@@ -3597,7 +3671,7 @@ Ver también: [`RA_EVENT_MENU`](#RA_EVENT_MENU).
 
 <a id="RA_EVENT_MENU"></a>
 
-### `RA_EVENT_MENU()` → `Int`
+### [`RA_EVENT_MENU()`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código del evento de menú; `ra_menu_id` dice qué opción.
 
@@ -3605,7 +3679,7 @@ Ver también: [`ra_menu_id`](#ra_menu_id).
 
 <a id="ra_add_getfile"></a>
 
-### `ra_add_getfile(id, title)` → `Int`
+### [`ra_add_getfile(id, title)`](#reaction_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el número del gadget, que elige el programa (de 0 a 63).
 - `title`: el título de la petición.
@@ -3614,6 +3688,8 @@ Un botón que abre la petición de ficheros; `ra_get_string(id)` da el elegido.
 Lo añade al grupo abierto de la ventana actual. Devuelve 1, o 0 si no pudo.
 
 Ver también: [`ra_get_string`](#ra_get_string).
+
+[Volver al índice](#indice)
 
 <a id="system_functions"></a>
 
@@ -3669,7 +3745,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="system_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -3708,14 +3786,14 @@ end
 
 <a id="debug_break"></a>
 
-### `debug_break()`
+### [`debug_break()`](#system_functions_table) · [índice](#indice)
 
 Para el programa en el depurador del emulador (`tools/emu_run.py --debug`). En un Amiga de verdad, o en un emulador
 sin ese depurador, no hace nada.
 
 <a id="mem_chip_free"></a>
 
-### `mem_chip_free()` → `Int`
+### [`mem_chip_free()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los bytes de memoria chip libres ahora.
 
@@ -3723,7 +3801,7 @@ Ver también: [`mem_chip_total`](#mem_chip_total), [`mem_fast_free`](#mem_fast_f
 
 <a id="mem_fast_free"></a>
 
-### `mem_fast_free()` → `Int`
+### [`mem_fast_free()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los bytes de memoria fast libres ahora; 0 en un Amiga sin fast.
 
@@ -3731,7 +3809,7 @@ Ver también: [`mem_fast_total`](#mem_fast_total), [`mem_chip_free`](#mem_chip_f
 
 <a id="mem_total"></a>
 
-### `mem_total()` → `Int`
+### [`mem_total()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los bytes libres sumando chip y fast. Es lo que queda, no el tamaño de la memoria.
 
@@ -3739,7 +3817,7 @@ Ver también: [`mem_chip_free`](#mem_chip_free).
 
 <a id="mem_chip_total"></a>
 
-### `mem_chip_total()` → `Int`
+### [`mem_chip_total()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el tamaño de la memoria chip en bytes, libre y en uso: algo menos de 2 MB en un A1200.
 
@@ -3747,7 +3825,7 @@ Ver también: [`mem_chip_free`](#mem_chip_free).
 
 <a id="mem_fast_total"></a>
 
-### `mem_fast_total()` → `Int`
+### [`mem_fast_total()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el tamaño de la memoria fast en bytes, libre y en uso.
 
@@ -3755,7 +3833,7 @@ Ver también: [`mem_fast_free`](#mem_fast_free).
 
 <a id="peek_byte"></a>
 
-### `peek_byte(addr)` → `Int`
+### [`peek_byte(addr)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `addr`: la dirección.
 
@@ -3765,7 +3843,7 @@ Ver también: [`poke_byte`](#poke_byte), [`buffer_get_byte`](#buffer_get_byte).
 
 <a id="peek_word"></a>
 
-### `peek_word(addr)` → `Int`
+### [`peek_word(addr)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `addr`: la dirección, par.
 
@@ -3775,7 +3853,7 @@ Ver también: [`poke_word`](#poke_word).
 
 <a id="peek_long"></a>
 
-### `peek_long(addr)` → `Int`
+### [`peek_long(addr)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `addr`: la dirección, par.
 
@@ -3785,7 +3863,7 @@ Ver también: [`poke_long`](#poke_long).
 
 <a id="poke_byte"></a>
 
-### `poke_byte(addr, value)`
+### [`poke_byte(addr, value)`](#system_functions_table) · [índice](#indice)
 
 - `addr`: la dirección.
 - `value`: el byte.
@@ -3796,7 +3874,7 @@ Ver también: [`peek_byte`](#peek_byte).
 
 <a id="poke_word"></a>
 
-### `poke_word(addr, value)`
+### [`poke_word(addr, value)`](#system_functions_table) · [índice](#indice)
 
 - `addr`: la dirección, par.
 - `value`: los 16 bits.
@@ -3805,7 +3883,7 @@ Ver también: [`peek_word`](#peek_word).
 
 <a id="amiga_alloc"></a>
 
-### `amiga_alloc(size)` → `Int`
+### [`amiga_alloc(size)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `size`: cuántos bytes.
 
@@ -3816,7 +3894,7 @@ Ver también: [`amiga_free`](#amiga_free), [`buffer_alloc`](#buffer_alloc).
 
 <a id="amiga_free"></a>
 
-### `amiga_free(addr, size)`
+### [`amiga_free(addr, size)`](#system_functions_table) · [índice](#indice)
 
 - `addr`: lo que dio `amiga_alloc`.
 - `size`: el mismo tamaño que se pidió.
@@ -3825,7 +3903,7 @@ Ver también: [`amiga_alloc`](#amiga_alloc).
 
 <a id="poke_long"></a>
 
-### `poke_long(addr, value)`
+### [`poke_long(addr, value)`](#system_functions_table) · [índice](#indice)
 
 - `addr`: la dirección, par.
 - `value`: los 32 bits.
@@ -3834,7 +3912,7 @@ Ver también: [`peek_long`](#peek_long).
 
 <a id="time_delay"></a>
 
-### `time_delay(ticks)`
+### [`time_delay(ticks)`](#system_functions_table) · [índice](#indice)
 
 - `ticks`: cuántos tics; hay 50 por segundo (`time_delay(50)` es un segundo).
 
@@ -3844,7 +3922,7 @@ Ver también: [`time_delay_ms`](#time_delay_ms), [`wait_vblank`](#wait_vblank).
 
 <a id="time_delay_ms"></a>
 
-### `time_delay_ms(ms)`
+### [`time_delay_ms(ms)`](#system_functions_table) · [índice](#indice)
 
 - `ms`: cuántos milisegundos.
 
@@ -3854,7 +3932,7 @@ Ver también: [`time_delay`](#time_delay).
 
 <a id="random"></a>
 
-### `random()` → `Int`
+### [`random()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve un número al azar de 0 a 32767. La serie es siempre la misma si no se cambia la semilla:
 `random_seed(time_ms())` al empezar da una distinta cada vez.
@@ -3863,7 +3941,7 @@ Ver también: [`random_range`](#random_range), [`random_seed`](#random_seed).
 
 <a id="random_range"></a>
 
-### `random_range(min, max)` → `Int`
+### [`random_range(min, max)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `min`, `max`: los extremos, los dos incluidos.
 
@@ -3874,7 +3952,7 @@ Ver también: [`random`](#random), [`random_seed`](#random_seed).
 
 <a id="random_seed"></a>
 
-### `random_seed(seed)`
+### [`random_seed(seed)`](#system_functions_table) · [índice](#indice)
 
 - `seed`: la semilla.
 
@@ -3884,7 +3962,7 @@ Ver también: [`random`](#random).
 
 <a id="wait_vblank"></a>
 
-### `wait_vblank()`
+### [`wait_vblank()`](#system_functions_table) · [índice](#indice)
 
 Espera al siguiente retrazado vertical: 50 veces por segundo en PAL, 60 en NTSC. En el bucle de un juego, una
 espera por vuelta lo hace ir al ritmo de la pantalla. Con `screen_flip` no hace falta.
@@ -3893,14 +3971,14 @@ Ver también: [`screen_flip`](#screen_flip), [`time_delay`](#time_delay).
 
 <a id="wait_blit"></a>
 
-### `wait_blit()`
+### [`wait_blit()`](#system_functions_table) · [índice](#indice)
 
 Espera a que el blitter acabe lo que está haciendo. Los builtins de Dash ya esperan cuando hace falta; sirve para
 código propio que lee memoria que el blitter está escribiendo.
 
 <a id="arena_new"></a>
 
-### `arena_new(size)` → `Int`
+### [`arena_new(size)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `size`: cuántos bytes.
 
@@ -3912,7 +3990,7 @@ Ver también: [`arena_alloc`](#arena_alloc), [`arena_reset`](#arena_reset), [`ar
 
 <a id="arena_alloc"></a>
 
-### `arena_alloc(arena, size)` → `Int`
+### [`arena_alloc(arena, size)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `arena`: la arena de `arena_new`.
 - `size`: cuántos bytes.
@@ -3924,7 +4002,7 @@ Ver también: [`arena_reset`](#arena_reset), [`arena_available`](#arena_availabl
 
 <a id="arena_reset"></a>
 
-### `arena_reset(arena)`
+### [`arena_reset(arena)`](#system_functions_table) · [índice](#indice)
 
 - `arena`: la arena de `arena_new`.
 
@@ -3934,7 +4012,7 @@ Ver también: [`arena_alloc`](#arena_alloc).
 
 <a id="arena_free"></a>
 
-### `arena_free(arena)`
+### [`arena_free(arena)`](#system_functions_table) · [índice](#indice)
 
 - `arena`: la arena de `arena_new`.
 
@@ -3944,7 +4022,7 @@ Ver también: [`arena_new`](#arena_new).
 
 <a id="arena_used"></a>
 
-### `arena_used(arena)` → `Int`
+### [`arena_used(arena)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `arena`: la arena de `arena_new`.
 
@@ -3954,7 +4032,7 @@ Ver también: [`arena_available`](#arena_available).
 
 <a id="arena_available"></a>
 
-### `arena_available(arena)` → `Int`
+### [`arena_available(arena)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `arena`: la arena de `arena_new`.
 
@@ -3964,7 +4042,7 @@ Ver también: [`arena_used`](#arena_used).
 
 <a id="refcount"></a>
 
-### `refcount(obj)` → `Int`
+### [`refcount(obj)`](#system_functions_table) → `Int` · [índice](#indice)
 
 - `obj`: una lista o un struct.
 
@@ -3975,7 +4053,7 @@ Ver también: [`retain`](#retain), [`release`](#release).
 
 <a id="retain"></a>
 
-### `retain(obj)`
+### [`retain(obj)`](#system_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 
@@ -3986,7 +4064,7 @@ Ver también: [`release`](#release), [`refcount`](#refcount).
 
 <a id="release"></a>
 
-### `release(obj)`
+### [`release(obj)`](#system_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 
@@ -3996,7 +4074,7 @@ Ver también: [`retain`](#retain).
 
 <a id="mem_trim"></a>
 
-### `mem_trim()` → `Int`
+### [`mem_trim()`](#system_functions_table) → `Int` · [índice](#indice)
 
 Devuelve al sistema los bloques de memoria pequeña de Dash (hasta 128 bytes) que han quedado del todo libres.
 Devuelve cuántos bytes devolvió. Útil tras soltar muchos datos en un programa que sigue en marcha.
@@ -4005,7 +4083,7 @@ Ver también: [`mem_puddle`](#mem_puddle).
 
 <a id="mem_puddle"></a>
 
-### `mem_puddle(bytes)` → `Bool`
+### [`mem_puddle(bytes)`](#system_functions_table) → `Bool` · [índice](#indice)
 
 - `bytes`: el tamaño de cada trozo que Dash pide al sistema para su memoria, de 1 KB a 1 MB; 4 KB si no se dice.
 
@@ -4013,6 +4091,8 @@ Solo vale antes de que el programa pida memoria: la primera línea de `Main`. Tr
 datos; pequeños, en un Amiga con poca memoria. Devuelve `false` si ya es tarde o el tamaño no vale.
 
 Ver también: [`mem_trim`](#mem_trim).
+
+[Volver al índice](#indice)
 
 <a id="dos_functions"></a>
 
@@ -4094,7 +4174,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="dos_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -4143,7 +4225,7 @@ end
 
 <a id="file_open"></a>
 
-### `file_open(filename, mode)` → `Int`
+### [`file_open(filename, mode)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `filename`: la ruta.
 - `mode`: 1005 = leer uno que existe; 1006 = crear uno nuevo, vaciándolo si existía; 1004 = leer y escribir uno
@@ -4156,7 +4238,7 @@ Ver también: [`file_close`](#file_close), [`file_read_line`](#file_read_line), 
 
 <a id="file_close"></a>
 
-### `file_close(handle)`
+### [`file_close(handle)`](#dos_functions_table) · [índice](#indice)
 
 - `handle`: el fichero de `file_open`.
 
@@ -4167,7 +4249,7 @@ Ver también: [`file_open`](#file_open).
 
 <a id="file_read_byte"></a>
 
-### `file_read_byte(handle)` → `Int`
+### [`file_read_byte(handle)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 
@@ -4177,7 +4259,7 @@ Ver también: [`file_eof`](#file_eof), [`file_read`](#file_read).
 
 <a id="file_read_line"></a>
 
-### `file_read_line(handle, buffer, maxlen)` → `String`
+### [`file_read_line(handle, buffer, maxlen)`](#dos_functions_table) → `String` · [índice](#indice)
 
 - `handle`: el fichero.
 - `buffer`: un búfer de `buffer_alloc` donde se lee la línea.
@@ -4190,7 +4272,7 @@ Ver también: [`file_write_line`](#file_write_line), [`file_read_text`](#file_re
 
 <a id="file_read"></a>
 
-### `file_read(handle, buffer, length)` → `Int`
+### [`file_read(handle, buffer, length)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 - `buffer`: dónde se leen los bytes.
@@ -4202,7 +4284,7 @@ Ver también: [`file_write`](#file_write), [`file_load`](#file_load), [`buffer_g
 
 <a id="file_eof"></a>
 
-### `file_eof(handle)` → `Bool`
+### [`file_eof(handle)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `handle`: el fichero.
 
@@ -4213,7 +4295,7 @@ Ver también: [`file_read_byte`](#file_read_byte).
 
 <a id="file_write_byte"></a>
 
-### `file_write_byte(handle, byte)` → `Int`
+### [`file_write_byte(handle, byte)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 - `byte`: el byte, de 0 a 255.
@@ -4224,7 +4306,7 @@ Ver también: [`file_read_byte`](#file_read_byte), [`file_write`](#file_write).
 
 <a id="file_write_line"></a>
 
-### `file_write_line(handle, str)` → `Int`
+### [`file_write_line(handle, str)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 - `str`: el texto.
@@ -4235,7 +4317,7 @@ Ver también: [`file_print`](#file_print), [`file_read_line`](#file_read_line), 
 
 <a id="file_write"></a>
 
-### `file_write(handle, buffer, length)` → `Int`
+### [`file_write(handle, buffer, length)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 - `buffer`: los bytes.
@@ -4247,7 +4329,7 @@ Ver también: [`file_read`](#file_read), [`file_save`](#file_save).
 
 <a id="file_print"></a>
 
-### `file_print(handle, str)`
+### [`file_print(handle, str)`](#dos_functions_table) · [índice](#indice)
 
 - `handle`: el fichero.
 - `str`: el texto.
@@ -4258,7 +4340,7 @@ Ver también: [`file_write_line`](#file_write_line).
 
 <a id="file_seek"></a>
 
-### `file_seek(handle, position, mode)` → `Int`
+### [`file_seek(handle, position, mode)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 - `position`: cuántos bytes.
@@ -4272,7 +4354,7 @@ Ver también: [`file_pos`](#file_pos).
 
 <a id="file_pos"></a>
 
-### `file_pos(handle)` → `Int`
+### [`file_pos(handle)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: el fichero.
 
@@ -4282,7 +4364,7 @@ Ver también: [`file_seek`](#file_seek).
 
 <a id="file_size"></a>
 
-### `file_size(filename)` → `Int`
+### [`file_size(filename)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `filename`: la ruta.
 
@@ -4292,7 +4374,7 @@ Ver también: [`file_exists`](#file_exists), [`dir_entry_size`](#dir_entry_size)
 
 <a id="file_exists"></a>
 
-### `file_exists(filename)` → `Bool`
+### [`file_exists(filename)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `filename`: la ruta.
 
@@ -4302,7 +4384,7 @@ Ver también: [`file_size`](#file_size).
 
 <a id="file_delete"></a>
 
-### `file_delete(filename)` → `Bool`
+### [`file_delete(filename)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `filename`: la ruta.
 
@@ -4312,7 +4394,7 @@ Ver también: [`file_rename`](#file_rename).
 
 <a id="file_rename"></a>
 
-### `file_rename(oldname, newname)` → `Bool`
+### [`file_rename(oldname, newname)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `oldname`, `newname`: la ruta de antes y la nueva.
 
@@ -4323,7 +4405,7 @@ Ver también: [`file_copy`](#file_copy), [`file_delete`](#file_delete).
 
 <a id="file_copy"></a>
 
-### `file_copy(src, dest)` → `Bool`
+### [`file_copy(src, dest)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `src`: el fichero que se copia.
 - `dest`: la copia; si existía, se reemplaza.
@@ -4334,7 +4416,7 @@ Ver también: [`file_rename`](#file_rename).
 
 <a id="dir_create"></a>
 
-### `dir_create(path)` → `Bool`
+### [`dir_create(path)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: la ruta del cajón nuevo.
 
@@ -4344,7 +4426,7 @@ Ver también: [`dir_read`](#dir_read), [`dir_change`](#dir_change).
 
 <a id="dir_change"></a>
 
-### `dir_change(path)` → `Bool`
+### [`dir_change(path)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: el cajón.
 
@@ -4355,7 +4437,7 @@ Ver también: [`dir_current`](#dir_current).
 
 <a id="dir_current"></a>
 
-### `dir_current()` → `String`
+### [`dir_current()`](#dos_functions_table) → `String` · [índice](#indice)
 
 Devuelve la ruta entera del cajón actual, con el nombre del volumen: `"Ram Disk:"`, `"Work:Proyectos"`.
 
@@ -4363,7 +4445,7 @@ Ver también: [`dir_change`](#dir_change).
 
 <a id="dir_read"></a>
 
-### `dir_read(path)` → `Int`
+### [`dir_read(path)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `path`: el cajón.
 
@@ -4375,7 +4457,7 @@ Ver también: [`dir_entry_name`](#dir_entry_name), [`dir_entry_is_dir`](#dir_ent
 
 <a id="dir_entry_name"></a>
 
-### `dir_entry_name(i)` → `String`
+### [`dir_entry_name(i)`](#dos_functions_table) → `String` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4385,7 +4467,7 @@ Ver también: [`dir_read`](#dir_read).
 
 <a id="dir_entry_size"></a>
 
-### `dir_entry_size(i)` → `Int`
+### [`dir_entry_size(i)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4395,7 +4477,7 @@ Ver también: [`dir_read`](#dir_read).
 
 <a id="dir_entry_is_dir"></a>
 
-### `dir_entry_is_dir(i)` → `Bool`
+### [`dir_entry_is_dir(i)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4405,7 +4487,7 @@ Ver también: [`dir_read`](#dir_read).
 
 <a id="dir_entry_date"></a>
 
-### `dir_entry_date(i)` → `Int`
+### [`dir_entry_date(i)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4416,7 +4498,7 @@ Ver también: [`dir_read`](#dir_read), [`time_unix`](#time_unix).
 
 <a id="dir_entry_protection"></a>
 
-### `dir_entry_protection(i)` → `Int`
+### [`dir_entry_protection(i)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4428,7 +4510,7 @@ Ver también: [`dir_read`](#dir_read), [`file_protection`](#file_protection).
 
 <a id="dir_entry_comment"></a>
 
-### `dir_entry_comment(i)` → `String`
+### [`dir_entry_comment(i)`](#dos_functions_table) → `String` · [índice](#indice)
 
 - `i`: la entrada, desde 0.
 
@@ -4438,7 +4520,7 @@ Ver también: [`dir_read`](#dir_read), [`file_comment`](#file_comment).
 
 <a id="file_protection"></a>
 
-### `file_protection(path)` → `Int`
+### [`file_protection(path)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 
@@ -4456,7 +4538,7 @@ Ver también: [`file_set_protection`](#file_set_protection), [`dir_entry_protect
 
 <a id="path_free_kb"></a>
 
-### `path_free_kb(path)` → `Int`
+### [`path_free_kb(path)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `path`: un fichero, un cajón o una asignación (`SYS:`, `PROGDIR:`, `RAM:T/`...).
 
@@ -4474,7 +4556,7 @@ Ver también: [`disk_free_kb`](#disk_free_kb), [`file_size`](#file_size).
 
 <a id="file_set_protection"></a>
 
-### `file_set_protection(path, bits)` → `Bool`
+### [`file_set_protection(path, bits)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 - `bits`: los bits, como los da `file_protection`.
@@ -4485,7 +4567,7 @@ Ver también: [`file_protection`](#file_protection).
 
 <a id="file_comment"></a>
 
-### `file_comment(path)` → `String`
+### [`file_comment(path)`](#dos_functions_table) → `String` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 
@@ -4495,7 +4577,7 @@ Ver también: [`file_set_comment`](#file_set_comment), [`dir_entry_comment`](#di
 
 <a id="file_set_comment"></a>
 
-### `file_set_comment(path, text)` → `Bool`
+### [`file_set_comment(path, text)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 - `text`: el comentario, hasta 79 letras; `""` lo quita.
@@ -4506,7 +4588,7 @@ Ver también: [`file_comment`](#file_comment).
 
 <a id="file_date"></a>
 
-### `file_date(path)` → `Int`
+### [`file_date(path)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 
@@ -4516,7 +4598,7 @@ Ver también: [`file_set_date`](#file_set_date), [`dir_entry_date`](#dir_entry_d
 
 <a id="file_set_date"></a>
 
-### `file_set_date(path, t)` → `Bool`
+### [`file_set_date(path, t)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: el fichero o cajón.
 - `t`: la fecha, como `time_unix`.
@@ -4527,7 +4609,7 @@ Ver también: [`file_date`](#file_date).
 
 <a id="file_copy_attrs"></a>
 
-### `file_copy_attrs(src, dest)` → `Bool`
+### [`file_copy_attrs(src, dest)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `src`: el original.
 - `dest`: la copia.
@@ -4539,7 +4621,7 @@ Ver también: [`file_copy`](#file_copy), [`file_copy_begin`](#file_copy_begin).
 
 <a id="file_copy_begin"></a>
 
-### `file_copy_begin(src, dest)` → `Int`
+### [`file_copy_begin(src, dest)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `src`: el fichero que se copia.
 - `dest`: la copia; si existía, se reemplaza.
@@ -4564,7 +4646,7 @@ Ver también: [`file_copy_step`](#file_copy_step), [`file_copy_end`](#file_copy_
 
 <a id="file_copy_step"></a>
 
-### `file_copy_step(n, most)` → `Int`
+### [`file_copy_step(n, most)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `n`: la copia de `file_copy_begin`.
 - `most`: cuántos bytes como mucho en este trozo.
@@ -4575,7 +4657,7 @@ Ver también: [`file_copy_begin`](#file_copy_begin), [`file_copy_end`](#file_cop
 
 <a id="file_copy_end"></a>
 
-### `file_copy_end(n, keep)` → `Bool`
+### [`file_copy_end(n, keep)`](#dos_functions_table) → `Bool` · [índice](#indice)
 
 - `n`: la copia de `file_copy_begin`.
 - `keep`: `true` para quedársela.
@@ -4588,7 +4670,7 @@ Ver también: [`file_copy_begin`](#file_copy_begin), [`file_copy_step`](#file_co
 
 <a id="console_read"></a>
 
-### `console_read(buffer, maxlen)` → `Int`
+### [`console_read(buffer, maxlen)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: dónde se lee.
 - `maxlen`: cuántos bytes como mucho.
@@ -4600,7 +4682,7 @@ Ver también: [`console_write`](#console_write).
 
 <a id="console_write"></a>
 
-### `console_write(str)`
+### [`console_write(str)`](#dos_functions_table) · [índice](#indice)
 
 - `str`: el texto.
 
@@ -4610,7 +4692,7 @@ Ver también: [`console_read`](#console_read).
 
 <a id="file_load"></a>
 
-### `file_load(filename, buffer, maxsize)` → `Int`
+### [`file_load(filename, buffer, maxsize)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `filename`: la ruta.
 - `buffer`: un búfer de `buffer_alloc`.
@@ -4623,7 +4705,7 @@ Ver también: [`file_save`](#file_save), [`file_size`](#file_size), [`file_read_
 
 <a id="file_save"></a>
 
-### `file_save(filename, buffer, size)` → `Int`
+### [`file_save(filename, buffer, size)`](#dos_functions_table) → `Int` · [índice](#indice)
 
 - `filename`: la ruta; si existía, se reemplaza.
 - `buffer`: los bytes.
@@ -4632,6 +4714,8 @@ Ver también: [`file_save`](#file_save), [`file_size`](#file_size), [`file_read_
 Guarda el búfer como el fichero entero. Devuelve los bytes escritos: si no es `size`, falló (0 si no pudo crearlo).
 
 Ver también: [`file_load`](#file_load), [`file_write_text`](#file_write_text).
+
+[Volver al índice](#indice)
 
 <a id="buffer_functions"></a>
 
@@ -4645,6 +4729,8 @@ libera solo: cada `buffer_alloc` necesita su `buffer_free`, o esa memoria se pie
 
 Los números de 16 y 32 bits van como en el 68000, el byte alto primero (big-endian), que es como los guardan los
 ficheros del Amiga (IFF).
+
+<a id="buffer_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -4664,7 +4750,7 @@ ficheros del Amiga (IFF).
 
 <a id="buffer_alloc"></a>
 
-### `buffer_alloc(size)` → `Int (dirección)`
+### [`buffer_alloc(size)`](#buffer_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `size`: cuántos bytes.
 
@@ -4675,7 +4761,7 @@ Ver también: [`buffer_free`](#buffer_free), [`file_load`](#file_load).
 
 <a id="buffer_free"></a>
 
-### `buffer_free(buffer)`
+### [`buffer_free(buffer)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer; 0 no hace nada.
 
@@ -4685,7 +4771,7 @@ Ver también: [`buffer_alloc`](#buffer_alloc).
 
 <a id="buffer_get_byte"></a>
 
-### `buffer_get_byte(buffer, offset)` → `Int`
+### [`buffer_get_byte(buffer, offset)`](#buffer_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4696,7 +4782,7 @@ Ver también: [`buffer_set_byte`](#buffer_set_byte).
 
 <a id="buffer_set_byte"></a>
 
-### `buffer_set_byte(buffer, offset, value)`
+### [`buffer_set_byte(buffer, offset, value)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4706,7 +4792,7 @@ Ver también: [`buffer_get_byte`](#buffer_get_byte).
 
 <a id="buffer_get_word"></a>
 
-### `buffer_get_word(buffer, offset)` → `Int`
+### [`buffer_get_word(buffer, offset)`](#buffer_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4717,7 +4803,7 @@ Ver también: [`buffer_set_word`](#buffer_set_word).
 
 <a id="buffer_set_word"></a>
 
-### `buffer_set_word(buffer, offset, value)`
+### [`buffer_set_word(buffer, offset, value)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4727,7 +4813,7 @@ Ver también: [`buffer_get_word`](#buffer_get_word).
 
 <a id="buffer_get_long"></a>
 
-### `buffer_get_long(buffer, offset)` → `Int`
+### [`buffer_get_long(buffer, offset)`](#buffer_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4738,7 +4824,7 @@ Ver también: [`buffer_set_long`](#buffer_set_long).
 
 <a id="buffer_set_float"></a>
 
-### `buffer_set_float(buffer, offset, value)`
+### [`buffer_set_float(buffer, offset, value)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4750,7 +4836,7 @@ Ver también: [`buffer_get_float`](#buffer_get_float), [`gl_draw_arrays`](#gl_dr
 
 <a id="buffer_get_float"></a>
 
-### `buffer_get_float(buffer, offset)` → `Double`
+### [`buffer_get_float(buffer, offset)`](#buffer_functions_table) → `Double` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4761,7 +4847,7 @@ Ver también: [`buffer_set_float`](#buffer_set_float).
 
 <a id="buffer_tex_span"></a>
 
-### `buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`
+### [`buffer_tex_span(dest, offset, count, texture, shift, u, v, du, dv, table)`](#buffer_functions_table) · [índice](#indice)
 
 - `dest`, `offset`: el búfer donde se escribe (un búfer de lápices de una pantalla, por ejemplo) y desde dónde.
 - `count`: cuántos bytes.
@@ -4779,7 +4865,7 @@ Ver también: [`buffer_fill`](#buffer_fill), [`gfx_pens_draw`](#gfx_pens_draw).
 
 <a id="buffer_set_long"></a>
 
-### `buffer_set_long(buffer, offset, value)`
+### [`buffer_set_long(buffer, offset, value)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4789,7 +4875,7 @@ Ver también: [`buffer_get_long`](#buffer_get_long).
 
 <a id="buffer_copy"></a>
 
-### `buffer_copy(dest, dest_offset, src, src_offset, length)`
+### [`buffer_copy(dest, dest_offset, src, src_offset, length)`](#buffer_functions_table) · [índice](#indice)
 
 - `dest`, `dest_offset`: adónde.
 - `src`, `src_offset`: de dónde.
@@ -4801,7 +4887,7 @@ Ver también: [`buffer_fill`](#buffer_fill).
 
 <a id="buffer_fill"></a>
 
-### `buffer_fill(buffer, offset, length, value)`
+### [`buffer_fill(buffer, offset, length, value)`](#buffer_functions_table) · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -4809,6 +4895,8 @@ Ver también: [`buffer_fill`](#buffer_fill).
 - `value`: el byte con el que se llenan.
 
 Ver también: [`buffer_copy`](#buffer_copy).
+
+[Volver al índice](#indice)
 
 <a id="text_functions"></a>
 
@@ -4869,7 +4957,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="text_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -4895,7 +4985,7 @@ end
 
 <a id="str_code"></a>
 
-### `str_code(s, i)` → `Int`
+### [`str_code(s, i)`](#text_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto.
 - `i`: la posición, desde 0.
@@ -4906,7 +4996,7 @@ Ver también: [`str_char`](#str_char).
 
 <a id="str_char"></a>
 
-### `str_char(code)` → `String`
+### [`str_char(code)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `code`: un código Latin-1, de 1 a 255.
 
@@ -4916,7 +5006,7 @@ Ver también: [`str_code`](#str_code).
 
 <a id="str_find"></a>
 
-### `str_find(s, sub)` → `Int`
+### [`str_find(s, sub)`](#text_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto.
 - `sub`: lo que se busca.
@@ -4927,7 +5017,7 @@ Ver también: [`str_find_from`](#str_find_from), [`str_contains`](#str_contains)
 
 <a id="str_find_from"></a>
 
-### `str_find_from(s, sub, start)` → `Int`
+### [`str_find_from(s, sub, start)`](#text_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto.
 - `sub`: lo que se busca.
@@ -4939,7 +5029,7 @@ Ver también: [`str_find`](#str_find).
 
 <a id="str_starts"></a>
 
-### `str_starts(s, prefix)` → `Bool`
+### [`str_starts(s, prefix)`](#text_functions_table) → `Bool` · [índice](#indice)
 
 - `s`: el texto.
 - `prefix`: el principio.
@@ -4950,7 +5040,7 @@ Ver también: [`str_ends`](#str_ends).
 
 <a id="str_ends"></a>
 
-### `str_ends(s, suffix)` → `Bool`
+### [`str_ends(s, suffix)`](#text_functions_table) → `Bool` · [índice](#indice)
 
 - `s`: el texto.
 - `suffix`: el final.
@@ -4961,7 +5051,7 @@ Ver también: [`str_starts`](#str_starts).
 
 <a id="str_lower"></a>
 
-### `str_lower(s)` → `String`
+### [`str_lower(s)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -4971,7 +5061,7 @@ Ver también: [`str_upper`](#str_upper).
 
 <a id="str_upper"></a>
 
-### `str_upper(s)` → `String`
+### [`str_upper(s)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -4981,7 +5071,7 @@ Ver también: [`str_lower`](#str_lower).
 
 <a id="str_trim"></a>
 
-### `str_trim(s)` → `String`
+### [`str_trim(s)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -4991,7 +5081,7 @@ Ver también: [`str_split`](#str_split).
 
 <a id="str_to_int"></a>
 
-### `str_to_int(s, base)` → `Int`
+### [`str_to_int(s, base)`](#text_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto.
 - `base`: la base, de 2 a 36; otra cuenta como 10.
@@ -5004,7 +5094,7 @@ Ver también: [`str_from_int`](#str_from_int).
 
 <a id="str_from_int"></a>
 
-### `str_from_int(n, base)` → `String`
+### [`str_from_int(n, base)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `n`: el número.
 - `base`: la base, de 2 a 36.
@@ -5016,7 +5106,7 @@ Ver también: [`str_to_int`](#str_to_int).
 
 <a id="str_replace"></a>
 
-### `str_replace(s, from, to)` → `String`
+### [`str_replace(s, from, to)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 - `from`: lo que se cambia.
@@ -5028,7 +5118,7 @@ Ver también: [`str_find`](#str_find).
 
 <a id="str_contains"></a>
 
-### `str_contains(s, sub)` → `Bool`
+### [`str_contains(s, sub)`](#text_functions_table) → `Bool` · [índice](#indice)
 
 - `s`: el texto.
 - `sub`: lo que se busca.
@@ -5039,7 +5129,7 @@ Ver también: [`str_find`](#str_find).
 
 <a id="str_join"></a>
 
-### `str_join(list, sep)` → `String`
+### [`str_join(list, sep)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `list`: una lista `[String]`.
 - `sep`: lo que va entre cada dos; `""`, nada.
@@ -5051,7 +5141,7 @@ Ver también: [`str_split`](#str_split).
 
 <a id="str_split"></a>
 
-### `str_split(s, sep)` → `[String]`
+### [`str_split(s, sep)`](#text_functions_table) → `[String]` · [índice](#indice)
 
 - `s`: el texto.
 - `sep`: el separador.
@@ -5063,7 +5153,7 @@ Ver también: [`str_join`](#str_join), [`str_trim`](#str_trim), [`file_read_text
 
 <a id="file_read_text"></a>
 
-### `file_read_text(filename)` → `String`
+### [`file_read_text(filename)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `filename`: la ruta.
 
@@ -5074,7 +5164,7 @@ Ver también: [`file_write_text`](#file_write_text), [`str_split`](#str_split).
 
 <a id="file_write_text"></a>
 
-### `file_write_text(filename, text)` → `Bool`
+### [`file_write_text(filename, text)`](#text_functions_table) → `Bool` · [índice](#indice)
 
 - `filename`: la ruta; si existía, se reemplaza.
 - `text`: el texto.
@@ -5085,7 +5175,7 @@ Ver también: [`file_read_text`](#file_read_text), [`file_write_line`](#file_wri
 
 <a id="str_from_buffer"></a>
 
-### `str_from_buffer(buffer, offset, length)` → `String`
+### [`str_from_buffer(buffer, offset, length)`](#text_functions_table) → `String` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -5097,7 +5187,7 @@ Ver también: [`str_to_buffer`](#str_to_buffer).
 
 <a id="str_to_buffer"></a>
 
-### `str_to_buffer(s, buffer, offset)` → `Int`
+### [`str_to_buffer(s, buffer, offset)`](#text_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto.
 - `buffer`: el búfer, con sitio para el texto.
@@ -5106,6 +5196,8 @@ Ver también: [`str_to_buffer`](#str_to_buffer).
 Copia los bytes del texto, sin el 0 del final, y devuelve cuántos copió.
 
 Ver también: [`str_from_buffer`](#str_from_buffer).
+
+[Volver al índice](#indice)
 
 <a id="net_functions"></a>
 
@@ -5160,7 +5252,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="net_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -5193,7 +5287,7 @@ end
 
 <a id="net_connect"></a>
 
-### `net_connect(host, port, timeout_ms)` → `Int`
+### [`net_connect(host, port, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `host`: el nombre (`"aminet.net"`) o la dirección (`"192.168.1.10"`).
 - `port`: el puerto: 80 web, 443 HTTPS, 21 FTP...
@@ -5205,7 +5299,7 @@ Ver también: [`net_send`](#net_send), [`net_recv`](#net_recv), [`net_close`](#n
 
 <a id="net_connect_start"></a>
 
-### `net_connect_start(host, port, timeout_ms)` → `Int`
+### [`net_connect_start(host, port, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `host`, `port`, `timeout_ms`: como en `net_connect`.
 
@@ -5216,7 +5310,7 @@ Ver también: [`net_connect_poll`](#net_connect_poll), [`net_connect_stage`](#ne
 
 <a id="net_connect_poll"></a>
 
-### `net_connect_poll(sock)` → `Int`
+### [`net_connect_poll(sock)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 Sigue con la conexión sin esperar. Devuelve 1 si ya está, 0 si aún no y -1 si falló (el socket se cierra solo;
@@ -5226,7 +5320,7 @@ Ver también: [`net_connect_start`](#net_connect_start).
 
 <a id="net_connect_stage"></a>
 
-### `net_connect_stage(sock)` → `Int`
+### [`net_connect_stage(sock)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 
@@ -5236,7 +5330,7 @@ Ver también: [`net_connect_poll`](#net_connect_poll).
 
 <a id="net_send"></a>
 
-### `net_send(sock, text)` → `Int`
+### [`net_send(sock, text)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `text`: lo que se envía, tal cual (los protocolos de texto suelen querer `"\r\n"` al final).
@@ -5247,7 +5341,7 @@ Ver también: [`net_recv`](#net_recv), [`net_send_buffer`](#net_send_buffer).
 
 <a id="net_send_buffer"></a>
 
-### `net_send_buffer(sock, buffer, length)` → `Int`
+### [`net_send_buffer(sock, buffer, length)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `buffer`: los bytes.
@@ -5259,7 +5353,7 @@ Ver también: [`net_send`](#net_send).
 
 <a id="net_recv"></a>
 
-### `net_recv(sock, max, timeout_ms)` → `String`
+### [`net_recv(sock, max, timeout_ms)`](#net_functions_table) → `String` · [índice](#indice)
 
 - `sock`: el socket.
 - `max`: cuántos bytes como mucho.
@@ -5272,7 +5366,7 @@ Ver también: [`net_recv_buffer`](#net_recv_buffer), [`net_wait`](#net_wait).
 
 <a id="net_recv_buffer"></a>
 
-### `net_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+### [`net_recv_buffer(sock, buffer, max, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `buffer`: dónde.
@@ -5285,7 +5379,7 @@ Ver también: [`net_recv`](#net_recv).
 
 <a id="net_wait"></a>
 
-### `net_wait(sock, timeout_ms)` → `Int`
+### [`net_wait(sock, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `timeout_ms`: cuánto esperar.
@@ -5296,7 +5390,7 @@ Ver también: [`net_recv`](#net_recv).
 
 <a id="net_close"></a>
 
-### `net_close(sock)`
+### [`net_close(sock)`](#net_functions_table) · [índice](#indice)
 
 - `sock`: el socket.
 
@@ -5306,7 +5400,7 @@ Ver también: [`net_connect`](#net_connect).
 
 <a id="net_resolve"></a>
 
-### `net_resolve(host)` → `String`
+### [`net_resolve(host)`](#net_functions_table) → `String` · [índice](#indice)
 
 - `host`: el nombre.
 
@@ -5316,7 +5410,7 @@ Ver también: [`net_connect`](#net_connect).
 
 <a id="net_error"></a>
 
-### `net_error()` → `String`
+### [`net_error()`](#net_functions_table) → `String` · [índice](#indice)
 
 Devuelve qué falló en la última llamada `net_*` o `tls_*`, en palabras: `"conexión rechazada"`.
 
@@ -5324,7 +5418,7 @@ Ver también: [`net_connect`](#net_connect).
 
 <a id="net_listen"></a>
 
-### `net_listen(port)` → `Int`
+### [`net_listen(port)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `port`: el puerto; 0 = uno libre cualquiera (`net_port` dice cuál).
 
@@ -5334,7 +5428,7 @@ Ver también: [`net_accept`](#net_accept), [`net_port`](#net_port).
 
 <a id="net_accept"></a>
 
-### `net_accept(sock, timeout_ms)` → `Int`
+### [`net_accept(sock, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket de `net_listen`.
 - `timeout_ms`: cuánto esperar; -1 lo que haga falta, 0 solo mirar.
@@ -5345,7 +5439,7 @@ Ver también: [`net_listen`](#net_listen), [`net_peer`](#net_peer).
 
 <a id="net_peer"></a>
 
-### `net_peer(sock)` → `String`
+### [`net_peer(sock)`](#net_functions_table) → `String` · [índice](#indice)
 
 - `sock`: el socket.
 
@@ -5355,7 +5449,7 @@ Ver también: [`net_accept`](#net_accept).
 
 <a id="net_port"></a>
 
-### `net_port(sock)` → `Int`
+### [`net_port(sock)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 
@@ -5365,7 +5459,7 @@ Ver también: [`net_listen`](#net_listen).
 
 <a id="net_udp_open"></a>
 
-### `net_udp_open(port)` → `Int`
+### [`net_udp_open(port)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `port`: el puerto donde recibe; 0 = uno libre.
 
@@ -5375,7 +5469,7 @@ Ver también: [`net_udp_send`](#net_udp_send), [`net_udp_recv`](#net_udp_recv).
 
 <a id="net_udp_send"></a>
 
-### `net_udp_send(sock, host, port, text)` → `Int`
+### [`net_udp_send(sock, host, port, text)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `host`, `port`: el destino; `"255.255.255.255"` es toda la red local.
@@ -5387,7 +5481,7 @@ Ver también: [`net_udp_recv`](#net_udp_recv).
 
 <a id="net_udp_send_buffer"></a>
 
-### `net_udp_send_buffer(sock, host, port, buffer, length)` → `Int`
+### [`net_udp_send_buffer(sock, host, port, buffer, length)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `host`, `port`: el destino.
@@ -5399,7 +5493,7 @@ Ver también: [`net_udp_send`](#net_udp_send).
 
 <a id="net_udp_recv"></a>
 
-### `net_udp_recv(sock, max, timeout_ms)` → `String`
+### [`net_udp_recv(sock, max, timeout_ms)`](#net_functions_table) → `String` · [índice](#indice)
 
 - `sock`: el socket.
 - `max`: cuántos bytes como mucho.
@@ -5412,7 +5506,7 @@ Ver también: [`net_udp_from`](#net_udp_from).
 
 <a id="net_udp_recv_buffer"></a>
 
-### `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` → `Int`
+### [`net_udp_recv_buffer(sock, buffer, max, timeout_ms)`](#net_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: el socket.
 - `buffer`, `max`, `timeout_ms`: dónde, cuánto y cuánto esperar.
@@ -5423,7 +5517,7 @@ Ver también: [`net_udp_recv`](#net_udp_recv).
 
 <a id="net_udp_from"></a>
 
-### `net_udp_from()` → `String`
+### [`net_udp_from()`](#net_functions_table) → `String` · [índice](#indice)
 
 Devuelve la dirección de quien envió el último datagrama recibido.
 
@@ -5431,7 +5525,7 @@ Ver también: [`net_udp_from_port`](#net_udp_from_port).
 
 <a id="net_udp_from_port"></a>
 
-### `net_udp_from_port()` → `Int`
+### [`net_udp_from_port()`](#net_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el puerto de quien envió el último datagrama, para contestarle.
 
@@ -5439,7 +5533,7 @@ Ver también: [`net_udp_from`](#net_udp_from).
 
 <a id="net_stack_running"></a>
 
-### `net_stack_running()` → `Bool`
+### [`net_stack_running()`](#net_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si hay una pila TCP/IP en marcha, sin cargar nada para saberlo. Para avisar al usuario antes de
 intentar conectar.
@@ -5448,19 +5542,21 @@ Ver también: [`net_connect`](#net_connect).
 
 <a id="net_release"></a>
 
-### `net_release()`
+### [`net_release()`](#net_functions_table) · [índice](#indice)
 
 Suelta la red ya: cierra los sockets, las conexiones TLS y la `bsdsocket.library`. La siguiente llamada `net_*` la
 vuelve a abrir. Para que el usuario pueda parar la pila sin cerrar el programa.
 
 <a id="net_signal"></a>
 
-### `net_signal()` → `Int`
+### [`net_signal()`](#net_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal que dan los sockets con cada novedad (conectado, datos, cerrado), para
 `mui_wait_event_signals(net_signal())`. 0 si la pila no lo permite. Se llama antes de cada espera.
 
 Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
+
+[Volver al índice](#indice)
 
 <a id="tls_functions"></a>
 
@@ -5475,6 +5571,8 @@ conexión, como debe. Para aceptarlo después de avisar al usuario, como hacen l
 da sus datos para enseñarlos, y si el usuario lo acepta, `tls_trust(tls_last_fingerprint(host))`. Desde ahí se acepta
 ese certificado, y solo ese, también por `net_bg_open_tls`. Dura lo que dure el programa: para recordarlo, el programa
 guarda la huella en sus ajustes y llama a `tls_trust` al arrancar.
+
+<a id="tls_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -5495,7 +5593,7 @@ guarda la huella en sus ajustes y llama a `tls_trust` al arrancar.
 
 <a id="tls_connect"></a>
 
-### `tls_connect(sock, host)` → `Int`
+### [`tls_connect(sock, host)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `sock`: un socket ya conectado con `net_connect`.
 - `host`: el nombre del servidor, para comprobar su certificado.
@@ -5507,7 +5605,7 @@ Ver también: [`tls_send`](#tls_send), [`tls_recv`](#tls_recv), [`tls_close`](#t
 
 <a id="tls_connect_start"></a>
 
-### `tls_connect_start(sock, host, timeout_ms)` → `Int`
+### [`tls_connect_start(sock, host, timeout_ms)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `sock`, `host`: como en `tls_connect`.
 - `timeout_ms`: cuánto puede durar el saludo.
@@ -5518,7 +5616,7 @@ Ver también: [`tls_connect_poll`](#tls_connect_poll).
 
 <a id="tls_connect_poll"></a>
 
-### `tls_connect_poll(tls)` → `Int`
+### [`tls_connect_poll(tls)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 
@@ -5528,7 +5626,7 @@ Ver también: [`tls_connect_start`](#tls_connect_start).
 
 <a id="tls_send"></a>
 
-### `tls_send(tls, text)` → `Int`
+### [`tls_send(tls, text)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 - `text`: lo que se envía.
@@ -5539,7 +5637,7 @@ Ver también: [`tls_recv`](#tls_recv).
 
 <a id="tls_send_buffer"></a>
 
-### `tls_send_buffer(tls, buffer, length)` → `Int`
+### [`tls_send_buffer(tls, buffer, length)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 - `buffer`, `length`: los bytes.
@@ -5550,7 +5648,7 @@ Ver también: [`tls_send`](#tls_send).
 
 <a id="tls_recv"></a>
 
-### `tls_recv(tls, max, timeout_ms)` → `String`
+### [`tls_recv(tls, max, timeout_ms)`](#tls_functions_table) → `String` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 - `max`, `timeout_ms`: como en `net_recv`.
@@ -5561,7 +5659,7 @@ Ver también: [`net_recv`](#net_recv).
 
 <a id="tls_recv_buffer"></a>
 
-### `tls_recv_buffer(tls, buffer, max, timeout_ms)` → `Int`
+### [`tls_recv_buffer(tls, buffer, max, timeout_ms)`](#tls_functions_table) → `Int` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 - `buffer`, `max`, `timeout_ms`: como en `net_recv_buffer`.
@@ -5570,7 +5668,7 @@ Ver también: [`net_recv_buffer`](#net_recv_buffer).
 
 <a id="tls_close"></a>
 
-### `tls_close(tls)`
+### [`tls_close(tls)`](#tls_functions_table) · [índice](#indice)
 
 - `tls`: la conexión TLS.
 
@@ -5580,7 +5678,7 @@ Ver también: [`net_close`](#net_close).
 
 <a id="tls_resumed"></a>
 
-### `tls_resumed(tls)` → `Bool`
+### [`tls_resumed(tls)`](#tls_functions_table) → `Bool` · [índice](#indice)
 
 - `tls`: la conexión TLS.
 
@@ -5588,7 +5686,7 @@ Devuelve `true` si retomó una sesión anterior con el mismo servidor, sin volve
 
 <a id="tls_last_cert"></a>
 
-### `tls_last_cert(host)` → `String`
+### [`tls_last_cert(host)`](#tls_functions_table) → `String` · [índice](#indice)
 
 - `host`: el servidor, como se le dio a `tls_connect` o `net_bg_open_tls`; `""`: el último que falló, sea cual sea.
 
@@ -5611,7 +5709,7 @@ Ver también: [`tls_last_fingerprint`](#tls_last_fingerprint), [`tls_trust`](#tl
 
 <a id="tls_last_fingerprint"></a>
 
-### `tls_last_fingerprint(host)` → `String`
+### [`tls_last_fingerprint(host)`](#tls_functions_table) → `String` · [índice](#indice)
 
 - `host`: como en `tls_last_cert`.
 
@@ -5622,7 +5720,7 @@ Ver también: [`tls_trust`](#tls_trust).
 
 <a id="tls_trust"></a>
 
-### `tls_trust(fingerprint)` → `Bool`
+### [`tls_trust(fingerprint)`](#tls_functions_table) → `Bool` · [índice](#indice)
 
 - `fingerprint`: la huella SHA-256 del certificado del servidor: 64 cifras hexadecimales, en mayúsculas o
   minúsculas, con dos puntos o sin ellos.
@@ -5642,7 +5740,7 @@ Ver también: [`tls_last_cert`](#tls_last_cert), [`tls_untrust`](#tls_untrust).
 
 <a id="tls_untrust"></a>
 
-### `tls_untrust(fingerprint)` → `Bool`
+### [`tls_untrust(fingerprint)`](#tls_functions_table) → `Bool` · [índice](#indice)
 
 - `fingerprint`: como en `tls_trust`.
 
@@ -5652,11 +5750,13 @@ Ver también: [`tls_trust`](#tls_trust), [`tls_trust_clear`](#tls_trust_clear).
 
 <a id="tls_trust_clear"></a>
 
-### `tls_trust_clear()`
+### [`tls_trust_clear()`](#tls_functions_table) · [índice](#indice)
 
 Deja de aceptar todos los certificados de `tls_trust`.
 
 Ver también: [`tls_untrust`](#tls_untrust).
+
+[Volver al índice](#indice)
 
 <a id="font_functions"></a>
 
@@ -5722,7 +5822,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="font_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -5739,7 +5841,7 @@ end
 
 <a id="font_open"></a>
 
-### `font_open(name, size)` → `Int`
+### [`font_open(name, size)`](#font_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre de la fuente con `.font`: `"helvetica.font"`, `"topaz.font"`.
 - `size`: el alto en píxeles, 2 como poco.
@@ -5751,7 +5853,7 @@ Ver también: [`font_use`](#font_use), [`font_close`](#font_close), [`font_from_
 
 <a id="font_use"></a>
 
-### `font_use(font)`
+### [`font_use(font)`](#font_functions_table) · [índice](#indice)
 
 - `font`: una fuente de `font_open` o `font_from_ttf`.
 
@@ -5761,7 +5863,7 @@ Ver también: [`font_open`](#font_open), [`font_style`](#font_style), [`gfx_text
 
 <a id="font_close"></a>
 
-### `font_close(font)`
+### [`font_close(font)`](#font_functions_table) · [índice](#indice)
 
 - `font`: la fuente.
 
@@ -5771,7 +5873,7 @@ Ver también: [`font_open`](#font_open).
 
 <a id="font_style"></a>
 
-### `font_style(style)`
+### [`font_style(style)`](#font_functions_table) · [índice](#indice)
 
 - `style`: sumados: 0 normal, 1 subrayado, 2 negrita, 4 cursiva (`2 + 4` negrita y cursiva).
 
@@ -5781,7 +5883,7 @@ Ver también: [`font_use`](#font_use).
 
 <a id="font_height"></a>
 
-### `font_height()` → `Int`
+### [`font_height()`](#font_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto en píxeles de la fuente puesta: lo que hay entre una línea de texto y la siguiente.
 
@@ -5789,7 +5891,7 @@ Ver también: [`font_baseline`](#font_baseline), [`font_text_width`](#font_text_
 
 <a id="font_baseline"></a>
 
-### `font_baseline()` → `Int`
+### [`font_baseline()`](#font_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos píxeles hay desde arriba de las letras hasta su línea de base. `gfx_text_at` escribe con la línea
 de base en `y`: para que la parte de arriba quede en `y`, se le suma esto.
@@ -5798,7 +5900,7 @@ Ver también: [`gfx_text_at`](#gfx_text_at), [`font_height`](#font_height).
 
 <a id="font_text_width"></a>
 
-### `font_text_width(text)` → `Int`
+### [`font_text_width(text)`](#font_functions_table) → `Int` · [índice](#indice)
 
 - `text`: el texto.
 
@@ -5808,7 +5910,7 @@ Ver también: [`gfx_text_len`](#gfx_text_len).
 
 <a id="font_size"></a>
 
-### `font_size(font)` → `Int`
+### [`font_size(font)`](#font_functions_table) → `Int` · [índice](#indice)
 
 - `font`: la fuente.
 
@@ -5818,7 +5920,7 @@ Ver también: [`font_open`](#font_open).
 
 <a id="color_pen"></a>
 
-### `color_pen(r, g, b)` → `Int`
+### [`color_pen(r, g, b)`](#font_functions_table) → `Int` · [índice](#indice)
 
 - `r`, `g`, `b`: el color, de 0 a 255.
 
@@ -5830,7 +5932,7 @@ Ver también: [`color_pen_free`](#color_pen_free), [`gfx_pen`](#gfx_pen).
 
 <a id="color_pen_free"></a>
 
-### `color_pen_free(pen)`
+### [`color_pen_free(pen)`](#font_functions_table) · [índice](#indice)
 
 - `pen`: lo que dio `color_pen`.
 
@@ -5838,12 +5940,16 @@ Avisa de que ese color ya no hace falta. Cuando no queda ningún uso, el sistema
 
 Ver también: [`color_pen`](#color_pen).
 
+[Volver al índice](#indice)
+
 <a id="blend_functions"></a>
 
 ## Transparencia y degradados
 
 Color semitransparente sobre lo ya dibujado. En pantallas de color verdadero (RTG de 15 bits o más) se mezcla de
 verdad; en las de paleta se imita con un tramado de puntos del color más cercano.
+
+<a id="blend_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -5853,7 +5959,7 @@ verdad; en las de paleta se imita con un tramado de puntos del color más cercan
 
 <a id="gfx_blend_rect"></a>
 
-### `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`
+### [`gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)`](#blend_functions_table) · [índice](#indice)
 
 - `x1`, `y1`, `x2`, `y2`: el rectángulo, esquinas incluidas.
 - `rgb`: el color, `0xRRGGBB`.
@@ -5866,7 +5972,7 @@ Ver también: [`gfx_gradient_rect`](#gfx_gradient_rect).
 
 <a id="gfx_gradient_rect"></a>
 
-### `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`
+### [`gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)`](#blend_functions_table) · [índice](#indice)
 
 - `x1`, `y1`, `x2`, `y2`: el rectángulo.
 - `rgb1`, `alpha1`: el color y la transparencia del principio.
@@ -5879,7 +5985,7 @@ Ver también: [`gfx_blend_rect`](#gfx_blend_rect).
 
 <a id="gfx_pixel_rgb"></a>
 
-### `gfx_pixel_rgb(x, y)` → `Int`
+### [`gfx_pixel_rgb(x, y)`](#blend_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -5887,12 +5993,16 @@ Devuelve el color de ese píxel como `0xRRGGBB`; en una pantalla de paleta, el d
 
 Ver también: [`gfx_pixel_read`](#gfx_pixel_read).
 
+[Volver al índice](#indice)
+
 <a id="rgb_functions"></a>
 
 ## Imágenes RGB desde un buffer (vídeo)
 
 Dibujar una imagen que el programa tiene en un búfer, con 3 bytes por píxel (rojo, verde, azul), como un fotograma
 de vídeo. En RTG va directa; en una pantalla de paleta cada píxel toma el color más cercano.
+
+<a id="rgb_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -5902,7 +6012,7 @@ de vídeo. En RTG va directa; en una pantalla de paleta cada píxel toma el colo
 
 <a id="gfx_rgb_draw"></a>
 
-### `gfx_rgb_draw(buffer, width, height, x, y)`
+### [`gfx_rgb_draw(buffer, width, height, x, y)`](#rgb_functions_table) · [índice](#indice)
 
 - `buffer`: los píxeles, 3 bytes cada uno (rojo, verde, azul), fila tras fila.
 - `width`, `height`: el tamaño de la imagen.
@@ -5914,7 +6024,7 @@ Ver también: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#
 
 <a id="gfx_pens_draw_rgb"></a>
 
-### `gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`
+### [`gfx_pens_draw_rgb(buffer, width, height, x, y, colors)`](#rgb_functions_table) · [índice](#indice)
 
 - `buffer`: un búfer con un byte por píxel, el número de color (lápiz), fila tras fila, como en `gfx_pens_draw`.
 - `width`, `height`: el tamaño de la imagen.
@@ -5929,7 +6039,7 @@ Ver también: [`gfx_pens_draw`](#gfx_pens_draw), [`gfx_rgb_draw`](#gfx_rgb_draw)
 
 <a id="gfx_rgb_draw_scaled"></a>
 
-### `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`
+### [`gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)`](#rgb_functions_table) · [índice](#indice)
 
 - `buffer`, `width`, `height`: como en `gfx_rgb_draw`.
 - `x`, `y`: dónde va.
@@ -5938,6 +6048,8 @@ Ver también: [`gfx_pens_draw`](#gfx_pens_draw), [`gfx_rgb_draw`](#gfx_rgb_draw)
 La dibuja agrandada o reducida, tomando para cada punto el píxel más cercano.
 
 Ver también: [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+[Volver al índice](#indice)
 
 <a id="task_functions"></a>
 
@@ -6003,7 +6115,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="task_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -6103,7 +6217,7 @@ end
 
 <a id="task_start"></a>
 
-### `task_start(func, arg)` → `Int`
+### [`task_start(func, arg)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `func`: una función `f(arg: Int) -> Int` de Dash, que solo use `Int`, `Bool`, `Float` y builtins que no den textos
   ni listas; o una de C (`@native`, `@extern`).
@@ -6116,7 +6230,7 @@ Ver también: [`task_done`](#task_done), [`task_result`](#task_result), [`task_f
 
 <a id="task_start_with"></a>
 
-### `task_start_with(func, arg, stack, priority)` → `Int`
+### [`task_start_with(func, arg, stack, priority)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `func`, `arg`: como en `task_start`.
 - `stack`: la pila en bytes; 0 = 128 KB.
@@ -6126,7 +6240,7 @@ Ver también: [`task_start`](#task_start).
 
 <a id="task_done"></a>
 
-### `task_done(task)` → `Bool`
+### [`task_done(task)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `task`: el número de `task_start`.
 
@@ -6136,7 +6250,7 @@ Ver también: [`task_result`](#task_result), [`task_signal`](#task_signal).
 
 <a id="desktop_canvas"></a>
 
-### `desktop_canvas(x, y, width, height)` → `Int (dirección)`
+### [`desktop_canvas(x, y, width, height)`](#task_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `x`, `y`: la esquina en el escritorio del Workbench, bajo la barra de la pantalla. Negativas cuentan desde el
   borde derecho o el de abajo.
@@ -6149,7 +6263,7 @@ Ver también: [`desktop_canvas_on_draw`](#desktop_canvas_on_draw), [`desktop_can
 
 <a id="desktop_canvas_on_draw"></a>
 
-### `desktop_canvas_on_draw(canvas, func)`
+### [`desktop_canvas_on_draw(canvas, func)`](#task_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 - `func`: una función `f(x, y, ancho, alto)` que dibuja con los `gfx_*` desde 0, 0.
@@ -6160,7 +6274,7 @@ Ver también: [`desktop_canvas_update`](#desktop_canvas_update).
 
 <a id="desktop_canvas_update"></a>
 
-### `desktop_canvas_update(canvas)`
+### [`desktop_canvas_update(canvas)`](#task_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 
@@ -6170,7 +6284,7 @@ Ver también: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
 
 <a id="desktop_canvas_update_area"></a>
 
-### `desktop_canvas_update_area(canvas, x, y, width, height)`
+### [`desktop_canvas_update_area(canvas, x, y, width, height)`](#task_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 - `x`, `y`, `width`, `height`: la parte.
@@ -6181,7 +6295,7 @@ Ver también: [`desktop_canvas_drawing`](#desktop_canvas_drawing).
 
 <a id="desktop_canvas_veil"></a>
 
-### `desktop_canvas_veil(canvas, rgb, alpha)`
+### [`desktop_canvas_veil(canvas, rgb, alpha)`](#task_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 - `rgb`: el color, `0xRRGGBB`.
@@ -6193,7 +6307,7 @@ Ver también: [`desktop_canvas_veil_rect`](#desktop_canvas_veil_rect).
 
 <a id="desktop_canvas_veil_rect"></a>
 
-### `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` → `Bool`
+### [`desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 - `x`, `y`, `width`, `height`: el rectángulo.
@@ -6205,7 +6319,7 @@ Ver también: [`desktop_canvas_veil`](#desktop_canvas_veil).
 
 <a id="desktop_canvas_drawing"></a>
 
-### `desktop_canvas_drawing(x, y, width, height)` → `Bool`
+### [`desktop_canvas_drawing(x, y, width, height)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `x`, `y`, `width`, `height`: un rectángulo.
 
@@ -6215,7 +6329,7 @@ Ver también: [`desktop_canvas_update_area`](#desktop_canvas_update_area).
 
 <a id="desktop_canvas_free"></a>
 
-### `desktop_canvas_free(canvas)`
+### [`desktop_canvas_free(canvas)`](#task_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de `desktop_canvas`.
 
@@ -6225,7 +6339,7 @@ Ver también: [`desktop_canvas`](#desktop_canvas).
 
 <a id="break_check"></a>
 
-### `break_check()` → `Bool`
+### [`break_check()`](#task_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si llegó un Ctrl-C (`Break` en el Shell, u otra copia del programa con `single_instance`), y lo borra. Para un bucle largo que se pueda parar.
 
@@ -6233,7 +6347,7 @@ Ver también: [`single_instance`](#single_instance).
 
 <a id="single_instance"></a>
 
-### `single_instance(name)` → `Bool`
+### [`single_instance(name)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: un nombre único para el programa.
 
@@ -6244,7 +6358,7 @@ Ver también: [`break_check`](#break_check).
 
 <a id="tooltype"></a>
 
-### `tooltype(name, default)` → `String`
+### [`tooltype(name, default)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `name`: el nombre: `"DELAY"`.
 - `default`: lo que devuelve si no está.
@@ -6257,7 +6371,7 @@ Ver también: [`arg`](#arg).
 
 <a id="cx_broker"></a>
 
-### `cx_broker(name, title, description, priority)` → `Bool`
+### [`cx_broker(name, title, description, priority)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: el nombre en Exchange, hasta 23 letras.
 - `title`, `description`: lo que enseña Exchange, hasta 39 letras cada uno.
@@ -6270,7 +6384,7 @@ Ver también: [`cx_hotkey`](#cx_hotkey), [`cx_wait`](#cx_wait), [`cx_command`](#
 
 <a id="cx_hotkey"></a>
 
-### `cx_hotkey(description)` → `Bool`
+### [`cx_hotkey(description)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `description`: la tecla, como la escribe Exchange: `"ctrl alt t"`; `""` la quita.
 
@@ -6280,7 +6394,7 @@ Ver también: [`cx_key_add`](#cx_key_add), [`cx_command`](#cx_command).
 
 <a id="cx_key_add"></a>
 
-### `cx_key_add(description, n)` → `Bool`
+### [`cx_key_add(description, n)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `description`: la tecla, o un botón del ratón (`"rawmouse lalt mouse_leftpress"`); `""` la quita.
 - `n`: su número, de 1 a 64.
@@ -6291,7 +6405,7 @@ Ver también: [`cx_hotkey`](#cx_hotkey).
 
 <a id="cx_watch_add"></a>
 
-### `cx_watch_add(description, n)` → `Bool`
+### [`cx_watch_add(description, n)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `description`: el evento, como en `cx_key_add` (`"rawmouse mouse_leftpress"`, `"rawmouse upstroke mouse_leftpress"`).
 - `n`: su número, de 1 a 64 (el mismo espacio que `cx_key_add`).
@@ -6304,7 +6418,7 @@ Ver también: [`cx_key_add`](#cx_key_add), [`cx_event_x`](#cx_event_x).
 
 <a id="cx_event_x"></a>
 
-### `cx_event_x()` → `Int`
+### [`cx_event_x()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve dónde estaba el puntero (x, en la pantalla del Workbench) en el último evento que dio `cx_command`, de `cx_key_add` o `cx_watch_add`.
 
@@ -6312,7 +6426,7 @@ Ver también: [`cx_event_y`](#cx_event_y), [`cx_event_ms`](#cx_event_ms).
 
 <a id="cx_event_y"></a>
 
-### `cx_event_y()` → `Int`
+### [`cx_event_y()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve dónde estaba el puntero (y) en el último evento que dio `cx_command`.
 
@@ -6320,7 +6434,7 @@ Ver también: [`cx_event_x`](#cx_event_x).
 
 <a id="cx_event_ms"></a>
 
-### `cx_event_ms()` → `Int`
+### [`cx_event_ms()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuándo fue el último evento que dio `cx_command`, en milisegundos. Solo vale la diferencia entre dos: con `wm_double_click_ms`, si dos clics son un doble clic.
 
@@ -6328,7 +6442,7 @@ Ver también: [`wm_double_click_ms`](#wm_double_click_ms).
 
 <a id="cx_command"></a>
 
-### `cx_command()` → `Int`
+### [`cx_command()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la siguiente orden de Exchange o de una tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 la tecla rápida, 100 + n las de `cx_key_add`.
 
@@ -6336,7 +6450,7 @@ Ver también: [`cx_wait`](#cx_wait).
 
 <a id="cx_wait"></a>
 
-### `cx_wait(ms)` → `Int`
+### [`cx_wait(ms)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `ms`: cuánto esperar como mucho.
 
@@ -6347,7 +6461,7 @@ Ver también: [`cx_command`](#cx_command), [`file_notify`](#file_notify).
 
 <a id="disks_read"></a>
 
-### `disks_read(ms)` → `Int`
+### [`disks_read(ms)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `ms`: cuánto esperar como mucho las respuestas.
 
@@ -6358,7 +6472,7 @@ Ver también: [`disk_name`](#disk_name), [`disk_free_kb`](#disk_free_kb).
 
 <a id="disk_name"></a>
 
-### `disk_name(i)` → `String`
+### [`disk_name(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: el volumen, desde 0, del último `disks_read`.
 
@@ -6368,7 +6482,7 @@ Ver también: [`disks_read`](#disks_read).
 
 <a id="disk_kb"></a>
 
-### `disk_kb(i)` → `Int`
+### [`disk_kb(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el volumen, desde 0, del último `disks_read`.
 
@@ -6378,7 +6492,7 @@ Ver también: [`disk_free_kb`](#disk_free_kb).
 
 <a id="disk_free_kb"></a>
 
-### `disk_free_kb(i)` → `Int`
+### [`disk_free_kb(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el volumen, desde 0, del último `disks_read`.
 
@@ -6388,7 +6502,7 @@ Ver también: [`disk_kb`](#disk_kb).
 
 <a id="net_ifs_read"></a>
 
-### `net_ifs_read()` → `Int`
+### [`net_ifs_read()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Lee las interfaces de red de Roadshow (también `lo0`), su estado y sus bytes, y devuelve cuántas hay; -1 sin pila TCP/IP o con una que no lo dice (AmiTCP, Miami).
 
@@ -6396,7 +6510,7 @@ Ver también: [`net_if_name`](#net_if_name), [`net_drivers_read`](#net_drivers_r
 
 <a id="net_if_name"></a>
 
-### `net_if_name(i)` → `String`
+### [`net_if_name(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: la interfaz, desde 0, del último `net_ifs_read`.
 
@@ -6406,7 +6520,7 @@ Ver también: [`net_ifs_read`](#net_ifs_read).
 
 <a id="net_if_up"></a>
 
-### `net_if_up(i)` → `Bool`
+### [`net_if_up(i)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `i`: la interfaz, desde 0, del último `net_ifs_read`.
 
@@ -6416,7 +6530,7 @@ Ver también: [`net_ifs_read`](#net_ifs_read).
 
 <a id="net_if_bytes_in"></a>
 
-### `net_if_bytes_in(i)` → `Int`
+### [`net_if_bytes_in(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la interfaz, desde 0, del último `net_ifs_read`.
 
@@ -6426,7 +6540,7 @@ Ver también: [`net_if_bytes_out`](#net_if_bytes_out).
 
 <a id="net_if_bytes_out"></a>
 
-### `net_if_bytes_out(i)` → `Int`
+### [`net_if_bytes_out(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la interfaz, desde 0, del último `net_ifs_read`.
 
@@ -6436,13 +6550,13 @@ Ver también: [`net_if_bytes_in`](#net_if_bytes_in).
 
 <a id="pistorm_temperature"></a>
 
-### `pistorm_temperature()` → `Int`
+### [`pistorm_temperature()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la temperatura de la Raspberry Pi de una PiStorm con Emu68, en décimas de grado (523 son 52,3); -1 sin Emu68.
 
 <a id="wifi_read"></a>
 
-### `wifi_read(interface, ms)` → `Int`
+### [`wifi_read(interface, ms)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `interface`: la interfaz de Roadshow.
 - `ms`: cuánto esperar como mucho.
@@ -6454,7 +6568,7 @@ Ver también: [`wifi_signal`](#wifi_signal), [`wifi_read_device`](#wifi_read_dev
 
 <a id="wifi_read_device"></a>
 
-### `wifi_read_device(driver, unit, ms)` → `Int`
+### [`wifi_read_device(driver, unit, ms)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `driver`: el driver SANA-II: `"wifipi.device"`.
 - `unit`: su unidad.
@@ -6467,7 +6581,7 @@ Ver también: [`wifi_read`](#wifi_read).
 
 <a id="net_drivers_read"></a>
 
-### `net_drivers_read()` → `Int`
+### [`net_drivers_read()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Lee los drivers de red SANA-II en uso (los de `DEVS:Networks` que algo tiene abiertos), con cualquier pila, y devuelve cuántos.
 
@@ -6475,7 +6589,7 @@ Ver también: [`net_driver_name`](#net_driver_name), [`net_driver_read`](#net_dr
 
 <a id="net_driver_name"></a>
 
-### `net_driver_name(i)` → `String`
+### [`net_driver_name(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: el driver, desde 0.
 
@@ -6485,7 +6599,7 @@ Ver también: [`net_drivers_read`](#net_drivers_read).
 
 <a id="net_driver_read"></a>
 
-### `net_driver_read(driver, unit, ms)` → `Int`
+### [`net_driver_read(driver, unit, ms)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `driver`, `unit`, `ms`: como en `wifi_read_device`.
 
@@ -6495,7 +6609,7 @@ Ver también: [`net_driver_packets_in`](#net_driver_packets_in), [`net_driver_ha
 
 <a id="net_driver_has_bytes"></a>
 
-### `net_driver_has_bytes()` → `Bool`
+### [`net_driver_has_bytes()`](#task_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si el driver del último `net_driver_read` cuenta también bytes.
 
@@ -6503,7 +6617,7 @@ Ver también: [`net_driver_bytes_in`](#net_driver_bytes_in).
 
 <a id="net_driver_bytes_in"></a>
 
-### `net_driver_bytes_in()` → `Int`
+### [`net_driver_bytes_in()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los bytes recibidos por el driver del último `net_driver_read` (32 bits bajos).
 
@@ -6511,7 +6625,7 @@ Ver también: [`net_driver_bytes_out`](#net_driver_bytes_out).
 
 <a id="net_driver_bytes_out"></a>
 
-### `net_driver_bytes_out()` → `Int`
+### [`net_driver_bytes_out()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los bytes enviados por el driver del último `net_driver_read`.
 
@@ -6519,7 +6633,7 @@ Ver también: [`net_driver_bytes_in`](#net_driver_bytes_in).
 
 <a id="net_driver_packets_in"></a>
 
-### `net_driver_packets_in()` → `Int`
+### [`net_driver_packets_in()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los paquetes recibidos por el driver del último `net_driver_read`.
 
@@ -6527,7 +6641,7 @@ Ver también: [`net_driver_packets_out`](#net_driver_packets_out).
 
 <a id="net_driver_packets_out"></a>
 
-### `net_driver_packets_out()` → `Int`
+### [`net_driver_packets_out()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los paquetes enviados por el driver del último `net_driver_read`.
 
@@ -6535,7 +6649,7 @@ Ver también: [`net_driver_packets_in`](#net_driver_packets_in).
 
 <a id="wifi_signal"></a>
 
-### `wifi_signal()` → `Int`
+### [`wifi_signal()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal del último `wifi_read` que dio 0, en dBm: -30 muy buena, -90 muy mala.
 
@@ -6543,7 +6657,7 @@ Ver también: [`wifi_noise`](#wifi_noise).
 
 <a id="wifi_noise"></a>
 
-### `wifi_noise()` → `Int`
+### [`wifi_noise()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el ruido del último `wifi_read` que dio 0, en dBm.
 
@@ -6551,7 +6665,7 @@ Ver también: [`wifi_signal`](#wifi_signal).
 
 <a id="usb_hid_read"></a>
 
-### `usb_hid_read()` → `Int`
+### [`usb_hid_read()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Lee los dispositivos USB que lleva la `hid.class` de Poseidon y devuelve cuántos; -1 sin `poseidon.library` 4.
 
@@ -6559,7 +6673,7 @@ Ver también: [`usb_hid_name`](#usb_hid_name), [`usb_hid_kind`](#usb_hid_kind).
 
 <a id="usb_hid_name"></a>
 
-### `usb_hid_name(i)` → `String`
+### [`usb_hid_name(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6569,7 +6683,7 @@ Ver también: [`usb_hid_maker`](#usb_hid_maker).
 
 <a id="usb_hid_maker"></a>
 
-### `usb_hid_maker(i)` → `String`
+### [`usb_hid_maker(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6579,7 +6693,7 @@ Ver también: [`usb_hid_name`](#usb_hid_name).
 
 <a id="usb_hid_vendor"></a>
 
-### `usb_hid_vendor(i)` → `Int`
+### [`usb_hid_vendor(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6589,7 +6703,7 @@ Ver también: [`usb_hid_product`](#usb_hid_product).
 
 <a id="usb_hid_product"></a>
 
-### `usb_hid_product(i)` → `Int`
+### [`usb_hid_product(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6599,7 +6713,7 @@ Ver también: [`usb_hid_vendor`](#usb_hid_vendor).
 
 <a id="usb_hid_kind"></a>
 
-### `usb_hid_kind(i)` → `Int`
+### [`usb_hid_kind(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6609,7 +6723,7 @@ Ver también: [`usb_hid_emitter`](#usb_hid_emitter).
 
 <a id="usb_hid_emitter"></a>
 
-### `usb_hid_emitter(i)` → `Int`
+### [`usb_hid_emitter(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el dispositivo, desde 0, del último `usb_hid_read`.
 
@@ -6619,7 +6733,7 @@ Ver también: [`mouse_curve`](#mouse_curve).
 
 <a id="mouse_curve"></a>
 
-### `mouse_curve(emitter, factors)` → `Bool`
+### [`mouse_curve(emitter, factors)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `emitter`: 0 el ratón del Amiga (y todo movimiento que no venga de un ratón USB); si no, uno de `usb_hid_emitter`.
 - `factors`: una lista de centésimas por velocidad (100 = tal cual, 200 = el doble).
@@ -6630,7 +6744,7 @@ Ver también: [`mouse_curves_off`](#mouse_curves_off), [`usb_hid_emitter`](#usb_
 
 <a id="mouse_curve_events"></a>
 
-### `mouse_curve_events(emitter)` → `Int`
+### [`mouse_curve_events(emitter)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `emitter`: el emisor.
 
@@ -6640,7 +6754,7 @@ Ver también: [`mouse_curve`](#mouse_curve).
 
 <a id="mouse_curves_off"></a>
 
-### `mouse_curves_off()`
+### [`mouse_curves_off()`](#task_functions_table) · [índice](#indice)
 
 Quita ya las curvas (al acabar el programa también); otro `mouse_curve` las vuelve a poner.
 
@@ -6648,7 +6762,7 @@ Ver también: [`mouse_curve`](#mouse_curve).
 
 <a id="mouse_patch_left"></a>
 
-### `mouse_patch_left()` → `Int`
+### [`mouse_patch_left()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos puentes quedaron en `input.device` bajo el parche de otro programa: dejan pasar todo, para siempre.
 
@@ -6656,7 +6770,7 @@ Ver también: [`mouse_curves_off`](#mouse_curves_off).
 
 <a id="mouse_prefs_ticks"></a>
 
-### `mouse_prefs_ticks()` → `Int`
+### [`mouse_prefs_ticks()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la velocidad del ratón de las preferencias de Input: 1 la más rápida, 2, 4 la más lenta.
 
@@ -6664,7 +6778,7 @@ Ver también: [`mouse_prefs_set`](#mouse_prefs_set).
 
 <a id="mouse_prefs_accel"></a>
 
-### `mouse_prefs_accel()` → `Bool`
+### [`mouse_prefs_accel()`](#task_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si está puesta la aceleración del ratón de las preferencias de Input.
 
@@ -6672,7 +6786,7 @@ Ver también: [`mouse_prefs_set`](#mouse_prefs_set).
 
 <a id="mouse_prefs_set"></a>
 
-### `mouse_prefs_set(ticks, accel)`
+### [`mouse_prefs_set(ticks, accel)`](#task_functions_table) · [índice](#indice)
 
 - `ticks`: 1, 2 o 4, como `mouse_prefs_ticks`.
 - `accel`: la aceleración.
@@ -6683,7 +6797,7 @@ Ver también: [`mouse_prefs_ticks`](#mouse_prefs_ticks).
 
 <a id="tr"></a>
 
-### `tr(id, text)` → `String`
+### [`tr(id, text)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `id`: el número del texto en el catálogo.
 - `text`: el texto en el idioma del programa.
@@ -6695,7 +6809,7 @@ Ver también: [`catalog_open`](#catalog_open), [`catalog_language`](#catalog_lan
 
 <a id="catalog_open"></a>
 
-### `catalog_open(name, version)` → `Bool`
+### [`catalog_open(name, version)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: el catálogo: `"X.catalog"`.
 - `version`: la versión; 0 cualquiera.
@@ -6706,7 +6820,7 @@ Ver también: [`tr`](#tr).
 
 <a id="catalog_language"></a>
 
-### `catalog_language()` → `String`
+### [`catalog_language()`](#task_functions_table) → `String` · [índice](#indice)
 
 Devuelve el idioma del catálogo en uso (`"english"`), o `""` si no hay.
 
@@ -6714,7 +6828,7 @@ Ver también: [`tr`](#tr).
 
 <a id="clock_read"></a>
 
-### `clock_read()`
+### [`clock_read()`](#task_functions_table) · [índice](#indice)
 
 Toma la fecha y la hora del reloj del sistema; `clock_year`, `clock_month` y las demás dan sus partes.
 
@@ -6722,7 +6836,7 @@ Ver también: [`clock_year`](#clock_year), [`date_text`](#date_text).
 
 <a id="clock_year"></a>
 
-### `clock_year()` → `Int`
+### [`clock_year()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el año del último `clock_read`.
 
@@ -6730,7 +6844,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_month"></a>
 
-### `clock_month()` → `Int`
+### [`clock_month()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el mes del último `clock_read`, de 1 a 12.
 
@@ -6738,7 +6852,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_day"></a>
 
-### `clock_day()` → `Int`
+### [`clock_day()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el día del mes del último `clock_read`, de 1 a 31.
 
@@ -6746,7 +6860,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_weekday"></a>
 
-### `clock_weekday()` → `Int`
+### [`clock_weekday()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el día de la semana del último `clock_read`: 0 domingo, 1 lunes... 6 sábado.
 
@@ -6754,7 +6868,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_hour"></a>
 
-### `clock_hour()` → `Int`
+### [`clock_hour()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la hora del último `clock_read`, de 0 a 23.
 
@@ -6762,7 +6876,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_minute"></a>
 
-### `clock_minute()` → `Int`
+### [`clock_minute()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el minuto del último `clock_read`.
 
@@ -6770,7 +6884,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="clock_second"></a>
 
-### `clock_second()` → `Int`
+### [`clock_second()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el segundo del último `clock_read`.
 
@@ -6778,7 +6892,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="date_text"></a>
 
-### `date_text(format)` → `String`
+### [`date_text(format)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `format`: el formato de `FormatDate`: `%A` el día de la semana, `%d-%m-%Y`, `%b` el mes abreviado, `%H:%M:%S`...
 
@@ -6788,7 +6902,7 @@ Ver también: [`clock_read`](#clock_read).
 
 <a id="locale_gmt_offset"></a>
 
-### `locale_gmt_offset()` → `Int`
+### [`locale_gmt_offset()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos minutos va el reloj del Amiga por delante de GMT, según Locale (60 en España en invierno); 0 sin `locale.library`.
 
@@ -6796,7 +6910,7 @@ Ver también: [`time_unix`](#time_unix).
 
 <a id="locale_decimal_point"></a>
 
-### `locale_decimal_point()` → `String`
+### [`locale_decimal_point()`](#task_functions_table) → `String` · [índice](#indice)
 
 Devuelve lo que va antes de los decimales en el país del usuario: `","` en España, `"."` en inglés.
 
@@ -6804,7 +6918,7 @@ Ver también: [`locale_group_separator`](#locale_group_separator).
 
 <a id="locale_group_separator"></a>
 
-### `locale_group_separator()` → `String`
+### [`locale_group_separator()`](#task_functions_table) → `String` · [índice](#indice)
 
 Devuelve lo que separa los miles en el país del usuario: `"."` en España, `","` en inglés; puede ser `""`.
 
@@ -6812,7 +6926,7 @@ Ver también: [`locale_decimal_point`](#locale_decimal_point).
 
 <a id="locale_date_order"></a>
 
-### `locale_date_order()` → `String`
+### [`locale_date_order()`](#task_functions_table) → `String` · [índice](#indice)
 
 Devuelve el orden de la fecha corta del usuario: `"DMY"`, `"MDY"` o `"YMD"`.
 
@@ -6820,13 +6934,13 @@ Ver también: [`date_text`](#date_text).
 
 <a id="program_version"></a>
 
-### `program_version()` → `String`
+### [`program_version()`](#task_functions_table) → `String` · [índice](#indice)
 
 Devuelve el nombre y la versión de `@version` (`"Trasfondo 0.7"`), o `""` si el programa no la tiene.
 
 <a id="file_notify"></a>
 
-### `file_notify(path)` → `Int`
+### [`file_notify(path)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `path`: el fichero; puede no existir aún.
 
@@ -6837,7 +6951,7 @@ Ver también: [`file_changed`](#file_changed), [`file_notify_end`](#file_notify_
 
 <a id="file_changed"></a>
 
-### `file_changed(n)` → `Bool`
+### [`file_changed(n)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `n`: el número de `file_notify`.
 
@@ -6847,7 +6961,7 @@ Ver también: [`file_notify`](#file_notify).
 
 <a id="file_notify_end"></a>
 
-### `file_notify_end(n)`
+### [`file_notify_end(n)`](#task_functions_table) · [índice](#indice)
 
 - `n`: el número de `file_notify`.
 
@@ -6857,7 +6971,7 @@ Ver también: [`file_notify`](#file_notify).
 
 <a id="file_notify_signal"></a>
 
-### `file_notify_signal()` → `Int`
+### [`file_notify_signal()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal de los ficheros vigilados, para `mui_wait_event_signals`; 0 antes de un `file_notify`.
 
@@ -6865,7 +6979,7 @@ Ver también: [`file_notify`](#file_notify).
 
 <a id="run_program"></a>
 
-### `run_program(command)` → `Bool`
+### [`run_program(command)`](#task_functions_table) → `Bool` · [índice](#indice)
 
 - `command`: la orden: `"SYS:Prefs/Font"`, `"\"Work:Mi Prog\" arg"`.
 
@@ -6876,7 +6990,7 @@ Ver también: [`run_command`](#run_command), [`wb_open`](#wb_open).
 
 <a id="program_relaunch"></a>
 
-### `program_relaunch()`
+### [`program_relaunch()`](#task_functions_table) · [índice](#indice)
 
 Al acabar, el programa vuelve a empezar como empezó, desde el Workbench o desde el Shell con sus argumentos, después
 de toda su limpieza. Para aplicar una actualización.
@@ -6885,7 +6999,7 @@ Ver también: [`program_exit`](#program_exit).
 
 <a id="dos_requesters"></a>
 
-### `dos_requesters(on)`
+### [`dos_requesters(on)`](#task_functions_table) · [índice](#indice)
 
 - `on`: `false` quita los requesters de "Inserta el volumen" y de errores de disco para este programa (la llamada
   falla en su lugar); `true` los vuelve a poner.
@@ -6896,7 +7010,7 @@ Ver también: [`file_exists`](#file_exists).
 
 <a id="base64_to_file"></a>
 
-### `base64_to_file(text, file)` → `Int`
+### [`base64_to_file(text, file)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `text`: el texto en base64; los espacios y saltos de línea no cuentan.
 - `file`: el fichero que se escribe.
@@ -6905,7 +7019,7 @@ Devuelve los bytes escritos, o -1 si el texto no es base64 (y entonces no se cre
 
 <a id="cpu_start"></a>
 
-### `cpu_start()` → `Bool`
+### [`cpu_start()`](#task_functions_table) → `Bool` · [índice](#indice)
 
 Empieza a medir la CPU que gasta cada tarea. Devuelve `false` antes de AmigaOS 2.04 o sin el reloj fino del sistema.
 
@@ -6913,7 +7027,7 @@ Ver también: [`cpu_sample`](#cpu_sample), [`cpu_stop`](#cpu_stop).
 
 <a id="cpu_sample"></a>
 
-### `cpu_sample()` → `Int`
+### [`cpu_sample()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Toma una muestra y devuelve cuántas tareas hay, ordenadas de la que más gastó desde la muestra anterior a la que menos.
 
@@ -6921,7 +7035,7 @@ Ver también: [`cpu_task_name`](#cpu_task_name), [`cpu_task_load`](#cpu_task_loa
 
 <a id="cpu_task_name"></a>
 
-### `cpu_task_name(i)` → `String`
+### [`cpu_task_name(i)`](#task_functions_table) → `String` · [índice](#indice)
 
 - `i`: la tarea, desde 0, de la última muestra.
 
@@ -6931,7 +7045,7 @@ Ver también: [`cpu_sample`](#cpu_sample).
 
 <a id="cpu_task_load"></a>
 
-### `cpu_task_load(i)` → `Int`
+### [`cpu_task_load(i)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la tarea, desde 0, de la última muestra.
 
@@ -6941,7 +7055,7 @@ Ver también: [`cpu_total`](#cpu_total).
 
 <a id="cpu_total"></a>
 
-### `cpu_total()` → `Int`
+### [`cpu_total()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la CPU de todas las tareas en la última muestra, en tanto por mil; lo demás es reposo.
 
@@ -6949,7 +7063,7 @@ Ver también: [`cpu_sample`](#cpu_sample).
 
 <a id="cpu_stop"></a>
 
-### `cpu_stop()`
+### [`cpu_stop()`](#task_functions_table) · [índice](#indice)
 
 Deja de medir. Al acabar el programa se hace solo.
 
@@ -6957,7 +7071,7 @@ Ver también: [`cpu_start`](#cpu_start).
 
 <a id="task_signal"></a>
 
-### `task_signal()` → `Int`
+### [`task_signal()`](#task_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal que cada tarea envía al programa al acabar, para `mui_wait_event_signals`: así la ventana sigue
 respondiendo y el programa se entera en cuanto acaba. 0 si no queda ninguna señal libre.
@@ -6966,7 +7080,7 @@ Ver también: [`task_done`](#task_done), [`mui_wait_event_signals`](#mui_wait_ev
 
 <a id="task_result"></a>
 
-### `task_result(task)` → `Int`
+### [`task_result(task)`](#task_functions_table) → `Int` · [índice](#indice)
 
 - `task`: el número de `task_start`.
 
@@ -6976,13 +7090,15 @@ Ver también: [`task_done`](#task_done).
 
 <a id="task_free"></a>
 
-### `task_free(task)`
+### [`task_free(task)`](#task_functions_table) · [índice](#indice)
 
 - `task`: el número de `task_start`.
 
 La olvida y deja libre su número; si sigue en marcha, espera a que acabe.
 
 Ver también: [`task_start`](#task_start).
+
+[Volver al índice](#indice)
 
 <a id="image_functions"></a>
 
@@ -6992,6 +7108,8 @@ Imágenes de fichero con los datatypes del sistema: ILBM siempre; PNG, GIF o JPE
 datatypes. La imagen se adapta a los colores de la pantalla donde se dibuja. Cada imagen es un número que se
 dibuja las veces que haga falta y se libera con `image_free` (al acabar, las que queden). Para decodificar sin
 datatypes, `image_decode`.
+
+<a id="image_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7006,7 +7124,7 @@ datatypes, `image_decode`.
 
 <a id="image_load"></a>
 
-### `image_load(file)` → `Int`
+### [`image_load(file)`](#image_functions_table) → `Int` · [índice](#indice)
 
 - `file`: la imagen: ILBM; PNG, GIF o JPEG si están sus datatypes.
 
@@ -7016,7 +7134,7 @@ Ver también: [`image_draw`](#image_draw), [`image_free`](#image_free), [`image_
 
 <a id="image_width"></a>
 
-### `image_width(image)` → `Int`
+### [`image_width(image)`](#image_functions_table) → `Int` · [índice](#indice)
 
 - `image`: la imagen.
 
@@ -7026,7 +7144,7 @@ Ver también: [`image_height`](#image_height).
 
 <a id="image_height"></a>
 
-### `image_height(image)` → `Int`
+### [`image_height(image)`](#image_functions_table) → `Int` · [índice](#indice)
 
 - `image`: la imagen.
 
@@ -7036,7 +7154,7 @@ Ver también: [`image_width`](#image_width).
 
 <a id="image_draw"></a>
 
-### `image_draw(image, x, y)`
+### [`image_draw(image, x, y)`](#image_functions_table) · [índice](#indice)
 
 - `image`: la imagen.
 - `x`, `y`: dónde va su esquina.
@@ -7047,7 +7165,7 @@ Ver también: [`image_draw_part`](#image_draw_part), [`image_scale`](#image_scal
 
 <a id="image_draw_part"></a>
 
-### `image_draw_part(image, sx, sy, x, y, w, h)`
+### [`image_draw_part(image, sx, sy, x, y, w, h)`](#image_functions_table) · [índice](#indice)
 
 - `image`: la imagen.
 - `sx`, `sy`: la esquina de la parte, dentro de la imagen.
@@ -7060,7 +7178,7 @@ Ver también: [`image_draw`](#image_draw).
 
 <a id="image_scale"></a>
 
-### `image_scale(image, w, h)` → `Int`
+### [`image_scale(image, w, h)`](#image_functions_table) → `Int` · [índice](#indice)
 
 - `image`: la imagen.
 - `w`, `h`: el tamaño nuevo.
@@ -7071,7 +7189,7 @@ Ver también: [`image_draw`](#image_draw).
 
 <a id="image_free"></a>
 
-### `image_free(image)`
+### [`image_free(image)`](#image_functions_table) · [índice](#indice)
 
 - `image`: la imagen.
 
@@ -7081,7 +7199,7 @@ Ver también: [`image_load`](#image_load).
 
 <a id="image_from_rgb"></a>
 
-### `image_from_rgb(buffer, width, height, alpha)` → `Int`
+### [`image_from_rgb(buffer, width, height, alpha)`](#image_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: los píxeles, fila tras fila: 3 bytes (RGB) o 4 (RGBA).
 - `width`, `height`: el tamaño.
@@ -7091,6 +7209,8 @@ Ver también: [`image_load`](#image_load).
 Devuelve una imagen con esos píxeles, para `image_draw`, o 0. En pantallas de paleta necesita AmigaOS 3.5 o más.
 
 Ver también: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decoded).
+
+[Volver al índice](#indice)
 
 <a id="args_functions"></a>
 
@@ -7143,7 +7263,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="args_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7155,7 +7277,7 @@ end
 
 <a id="arg_count"></a>
 
-### `arg_count()` → `Int`
+### [`arg_count()`](#args_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos argumentos recibió: las palabras tras el nombre en el Shell, o los iconos de proyecto con los que
 se abrió desde el Workbench (un doble clic en un documento, o Mayúsculas y clic en varios).
@@ -7164,7 +7286,7 @@ Ver también: [`arg`](#arg).
 
 <a id="arg"></a>
 
-### `arg(i)` → `String`
+### [`arg(i)`](#args_functions_table) → `String` · [índice](#indice)
 
 - `i`: el argumento, desde 0.
 
@@ -7175,7 +7297,7 @@ Ver también: [`arg_count`](#arg_count).
 
 <a id="click_x"></a>
 
-### `click_x()` → `Int`
+### [`click_x()`](#args_functions_table) → `Int` · [índice](#indice)
 
 Dentro de un `On Click`, devuelve la X del clic dentro de los bordes de la ventana.
 
@@ -7183,7 +7305,7 @@ Ver también: [`click_y`](#click_y).
 
 <a id="click_y"></a>
 
-### `click_y()` → `Int`
+### [`click_y()`](#args_functions_table) → `Int` · [índice](#indice)
 
 Dentro de un `On Click`, devuelve la Y del clic dentro de los bordes de la ventana.
 
@@ -7191,12 +7313,14 @@ Ver también: [`click_x`](#click_x).
 
 <a id="time_ms"></a>
 
-### `time_ms()` → `Int`
+### [`time_ms()`](#args_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los milisegundos desde que empezó el programa, con el reloj fino del sistema. Para medir cuánto tarda
 algo o mover las cosas de un juego al mismo ritmo en cualquier máquina.
 
 Ver también: [`time_delay`](#time_delay).
+
+[Volver al índice](#indice)
 
 <a id="zlib_functions"></a>
 
@@ -7204,6 +7328,8 @@ Ver también: [`time_delay`](#time_delay).
 
 Comprimir y descomprimir deflate, gzip y zlib (lo de ZIP, PNG y HTTP), sumas de comprobación (CRC-32, Adler-32) y
 SHA-1, todo sobre búferes. Es la zlib de siempre dentro del programa: no hace falta ninguna librería instalada.
+
+<a id="zlib_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7233,7 +7359,7 @@ SHA-1, todo sobre búferes. Es la zlib de siempre dentro del programa: no hace f
 
 <a id="inflate"></a>
 
-### `inflate(src, n, dest, max)` → `Int`
+### [`inflate(src, n, dest, max)`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 - `src`, `n`: el búfer comprimido y cuántos bytes tiene.
 - `dest`, `max`: dónde se descomprime y cuánto cabe.
@@ -7245,7 +7371,7 @@ Ver también: [`inflate_auto`](#inflate_auto), [`deflate`](#deflate), [`inflate_
 
 <a id="inflate_auto"></a>
 
-### `inflate_auto(src, n, dest, max)` → `Int`
+### [`inflate_auto(src, n, dest, max)`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 - `src`, `n`, `dest`, `max`: como en `inflate`.
 
@@ -7256,7 +7382,7 @@ Ver también: [`inflate`](#inflate).
 
 <a id="deflate"></a>
 
-### `deflate(src, n, dest, max, level)` → `Int`
+### [`deflate(src, n, dest, max, level)`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 - `src`, `n`: lo que se comprime.
 - `dest`, `max`: dónde y cuánto cabe.
@@ -7269,7 +7395,7 @@ Ver también: [`inflate`](#inflate).
 
 <a id="crc32"></a>
 
-### `crc32(buffer, n, crc)` → `Int`
+### [`crc32(buffer, n, crc)`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`, `n`: los bytes.
 - `crc`: el CRC de lo anterior, para seguir por partes; 0 para empezar.
@@ -7280,7 +7406,7 @@ Ver también: [`adler32`](#adler32).
 
 <a id="adler32"></a>
 
-### `adler32(buffer, n, a)` → `Int`
+### [`adler32(buffer, n, a)`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`, `n`: los bytes.
 - `a`: lo anterior; 1 para empezar.
@@ -7291,7 +7417,7 @@ Ver también: [`crc32`](#crc32).
 
 <a id="inflate_used"></a>
 
-### `inflate_used()` → `Int`
+### [`inflate_used()`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos bytes de entrada usó el último `inflate` o `inflate_auto`: dónde empieza lo siguiente si van
 varias cosas comprimidas seguidas (como en un pack de git).
@@ -7300,7 +7426,7 @@ Ver también: [`inflate`](#inflate).
 
 <a id="sha1"></a>
 
-### `sha1(buffer, n)` → `String`
+### [`sha1(buffer, n)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `buffer`, `n`: los bytes.
 
@@ -7310,7 +7436,7 @@ Ver también: [`sha1_text`](#sha1_text), [`sha1_new`](#sha1_new).
 
 <a id="sha1_text"></a>
 
-### `sha1_text(s)` → `String`
+### [`sha1_text(s)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -7320,7 +7446,7 @@ Ver también: [`sha1`](#sha1).
 
 <a id="sha1_new"></a>
 
-### `sha1_new()` → `Int`
+### [`sha1_new()`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 Empieza un SHA-1 por partes, para datos que no están todos juntos. Devuelve su número (1 a 8), o 0 si están todos
 en uso. Se le añade con `sha1_add*` y se acaba con `sha1_hex` o `sha1_bytes`.
@@ -7329,7 +7455,7 @@ Ver también: [`sha1_add`](#sha1_add), [`sha1_hex`](#sha1_hex).
 
 <a id="sha1_add"></a>
 
-### `sha1_add(sha, buffer, n)`
+### [`sha1_add(sha, buffer, n)`](#zlib_functions_table) · [índice](#indice)
 
 - `sha`: el número de `sha1_new`.
 - `buffer`, `n`: los bytes que se añaden.
@@ -7338,7 +7464,7 @@ Ver también: [`sha1_new`](#sha1_new).
 
 <a id="sha1_add_text"></a>
 
-### `sha1_add_text(sha, s)`
+### [`sha1_add_text(sha, s)`](#zlib_functions_table) · [índice](#indice)
 
 - `sha`: el número de `sha1_new`.
 - `s`: el texto que se añade.
@@ -7347,7 +7473,7 @@ Ver también: [`sha1_new`](#sha1_new).
 
 <a id="sha1_add_byte"></a>
 
-### `sha1_add_byte(sha, b)`
+### [`sha1_add_byte(sha, b)`](#zlib_functions_table) · [índice](#indice)
 
 - `sha`: el número de `sha1_new`.
 - `b`: el byte, de 0 a 255.
@@ -7356,7 +7482,7 @@ Ver también: [`sha1_new`](#sha1_new).
 
 <a id="sha1_hex"></a>
 
-### `sha1_hex(sha)` → `String`
+### [`sha1_hex(sha)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `sha`: el número de `sha1_new`.
 
@@ -7366,7 +7492,7 @@ Ver también: [`sha1_bytes`](#sha1_bytes).
 
 <a id="sha1_bytes"></a>
 
-### `sha1_bytes(sha, out)` → `Bool`
+### [`sha1_bytes(sha, out)`](#zlib_functions_table) → `Bool` · [índice](#indice)
 
 - `sha`: el número de `sha1_new`.
 - `out`: un búfer de 20 bytes.
@@ -7377,7 +7503,7 @@ Ver también: [`sha1_hex`](#sha1_hex).
 
 <a id="sha256"></a>
 
-### `sha256(buffer, n)` → `String`
+### [`sha256(buffer, n)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `buffer`, `n`: los bytes.
 
@@ -7387,7 +7513,7 @@ Ver también: [`sha256_text`](#sha256_text), [`sha256_new`](#sha256_new).
 
 <a id="sha256_text"></a>
 
-### `sha256_text(s)` → `String`
+### [`sha256_text(s)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -7397,7 +7523,7 @@ Ver también: [`sha256`](#sha256).
 
 <a id="sha256_new"></a>
 
-### `sha256_new()` → `Int`
+### [`sha256_new()`](#zlib_functions_table) → `Int` · [índice](#indice)
 
 Empieza un SHA-256 por partes, para un fichero que se lee a trozos. Devuelve su número (1 a 8), o 0 si están todos
 en uso. Se le añade con `sha256_add` y `sha256_add_text` y se acaba con `sha256_hex` o `sha256_bytes`.
@@ -7406,7 +7532,7 @@ Ver también: [`sha256_add`](#sha256_add), [`sha256_hex`](#sha256_hex).
 
 <a id="sha256_add"></a>
 
-### `sha256_add(sha, buffer, n)`
+### [`sha256_add(sha, buffer, n)`](#zlib_functions_table) · [índice](#indice)
 
 - `sha`: el número de `sha256_new`.
 - `buffer`, `n`: los bytes que se añaden.
@@ -7415,7 +7541,7 @@ Ver también: [`sha256_new`](#sha256_new).
 
 <a id="sha256_add_text"></a>
 
-### `sha256_add_text(sha, s)`
+### [`sha256_add_text(sha, s)`](#zlib_functions_table) · [índice](#indice)
 
 - `sha`: el número de `sha256_new`.
 - `s`: el texto que se añade.
@@ -7424,7 +7550,7 @@ Ver también: [`sha256_new`](#sha256_new).
 
 <a id="sha256_hex"></a>
 
-### `sha256_hex(sha)` → `String`
+### [`sha256_hex(sha)`](#zlib_functions_table) → `String` · [índice](#indice)
 
 - `sha`: el número de `sha256_new`.
 
@@ -7434,7 +7560,7 @@ Ver también: [`sha256_bytes`](#sha256_bytes).
 
 <a id="sha256_bytes"></a>
 
-### `sha256_bytes(sha, out)` → `Bool`
+### [`sha256_bytes(sha, out)`](#zlib_functions_table) → `Bool` · [índice](#indice)
 
 - `sha`: el número de `sha256_new`.
 - `out`: un búfer de 32 bytes.
@@ -7445,7 +7571,7 @@ Ver también: [`sha256_hex`](#sha256_hex).
 
 <a id="ed25519_verify"></a>
 
-### `ed25519_verify(key, signature, buffer, n)` → `Bool`
+### [`ed25519_verify(key, signature, buffer, n)`](#zlib_functions_table) → `Bool` · [índice](#indice)
 
 - `key`: la clave pública, 32 bytes en 64 cifras hexadecimales.
 - `signature`: la firma, 64 bytes en 128 cifras hexadecimales.
@@ -7459,7 +7585,7 @@ Ver también: [`ed25519_verify_text`](#ed25519_verify_text), [`sha256`](#sha256)
 
 <a id="ed25519_verify_text"></a>
 
-### `ed25519_verify_text(key, signature, s)` → `Bool`
+### [`ed25519_verify_text(key, signature, s)`](#zlib_functions_table) → `Bool` · [índice](#indice)
 
 - `key`, `signature`: como en `ed25519_verify`.
 - `s`: el texto firmado.
@@ -7467,6 +7593,8 @@ Ver también: [`ed25519_verify_text`](#ed25519_verify_text), [`sha256`](#sha256)
 Devuelve `true` si la firma es buena.
 
 Ver también: [`ed25519_verify`](#ed25519_verify).
+
+[Volver al índice](#indice)
 
 <a id="handler_functions"></a>
 
@@ -7484,6 +7612,8 @@ paquete, y `packet_reply(paquete, res1, res2)`. Sin consola: `Print` no va a nin
 error de ejecución va a ese registro. Un handler no debe pedir al DOS rutas de su propio volumen (se esperaría a sí
 mismo); las de otros volúmenes, sí. Si acaba (con error o no), el DOS carga una copia nueva en el siguiente acceso.
 Ejemplo completo: `examples/handler_ram.dash`, un disco en memoria. Más en la sección 28 del manual.
+
+<a id="handler_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7509,7 +7639,7 @@ Ejemplo completo: `examples/handler_ram.dash`, un disco en memoria. Más en la s
 
 <a id="handler_ready"></a>
 
-### `handler_ready(ok, error)`
+### [`handler_ready(ok, error)`](#handler_functions_table) · [índice](#indice)
 
 - `ok`: `true` si el handler está listo; `false` si no puede funcionar.
 - `error`: con `false`, el error que verá quien lo montó (`ERROR_NO_FREE_STORE`, `ERROR_NO_DISK`...).
@@ -7521,7 +7651,7 @@ Ver también: [`handler_wait`](#handler_wait), `handler_startup`.
 
 <a id="handler_wait"></a>
 
-### `handler_wait()` → `Int`
+### [`handler_wait()`](#handler_functions_table) → `Int` · [índice](#indice)
 
 Espera el siguiente paquete y devuelve su dirección: con `Ptr DosPacket(p)` (de `lib/amiga/handler.dash`) se leen
 `dp_Type` y `dp_Arg1`... Devuelve 0 si el handler recibe Ctrl-C (por ejemplo con `Break`). Antes de esperar,
@@ -7534,7 +7664,7 @@ Ver también: [`packet_reply`](#packet_reply), `handler_poll`.
 
 <a id="packet_reply"></a>
 
-### `packet_reply(packet, res1, res2)`
+### [`packet_reply(packet, res1, res2)`](#handler_functions_table) · [índice](#indice)
 
 - `packet`: lo que dio `handler_wait`.
 - `res1`: el resultado (`DOSTRUE`, `DOSFALSE`, un BPTR de cerradura, los bytes leídos, -1...).
@@ -7547,7 +7677,7 @@ Ver también: [`handler_wait`](#handler_wait).
 
 <a id="handler_log"></a>
 
-### `handler_log(path)` → `Bool`
+### [`handler_log(path)`](#handler_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: un fichero de otro volumen (`T:mi.log`); se vacía al abrirlo y se puede leer mientras el handler va.
 
@@ -7556,7 +7686,7 @@ abre un requester.
 
 <a id="handler_volume_add"></a>
 
-### `handler_volume_add(name, disk_type)` → `Int`
+### [`handler_volume_add(name, disk_type)`](#handler_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre del volumen, sin los dos puntos.
 - `disk_type`: lo que dirá `Info` (`ID_DOS_DISK`...).
@@ -7569,7 +7699,7 @@ Ver también: `handler_volume_remove`.
 
 <a id="bstr_put"></a>
 
-### `bstr_put(addr, text, max)`
+### [`bstr_put(addr, text, max)`](#handler_functions_table) · [índice](#indice)
 
 - `addr`: dónde escribirlo (el `fib_FileName` de un `FileInfoBlock`: `fib + offsetof(FileInfoBlock, fib_FileName)`).
 - `text`: el texto.
@@ -7581,7 +7711,7 @@ Ver también: `bstr_text`.
 
 <a id="dev_read"></a>
 
-### `dev_read(dev, block, block_size, buf, len)` → `Int`
+### [`dev_read(dev, block, block_size, buf, len)`](#handler_functions_table) → `Int` · [índice](#indice)
 
 - `dev`: lo que dio `dev_open` (o `fssm_open()` de `lib/amiga/handler.dash`, con el dispositivo del montaje).
 - `block`, `block_size`: desde qué bloque y de qué tamaño (el sitio en bytes es su producto, en 64 bits).
@@ -7592,6 +7722,8 @@ conoce, `NSCMD_TD_READ64`. `buf` debe ser memoria que el dispositivo pueda usar 
 
 Ver también: `dev_open`, `dev_write`, `dev_cmd`.
 
+[Volver al índice](#indice)
+
 <a id="utf8_functions"></a>
 
 ## UTF-8
@@ -7599,6 +7731,8 @@ Ver también: `dev_open`, `dev_write`, `dev_cmd`.
 Los textos de Dash son Latin-1, pero lo que llega de la red suele ser UTF-8, donde un carácter ocupa de 1 a 4
 bytes. Estas funciones recorren un texto UTF-8 carácter a carácter (las posiciones son bytes) y lo pasan a
 Latin-1 y al revés.
+
+<a id="utf8_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7613,7 +7747,7 @@ Latin-1 y al revés.
 
 <a id="utf8_next"></a>
 
-### `utf8_next(s, i)` → `Int`
+### [`utf8_next(s, i)`](#utf8_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto UTF-8.
 - `i`: la posición de un carácter, en bytes.
@@ -7624,7 +7758,7 @@ Ver también: [`utf8_prev`](#utf8_prev), [`utf8_code`](#utf8_code).
 
 <a id="utf8_prev"></a>
 
-### `utf8_prev(s, i)` → `Int`
+### [`utf8_prev(s, i)`](#utf8_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto UTF-8.
 - `i`: una posición en bytes.
@@ -7635,7 +7769,7 @@ Ver también: [`utf8_next`](#utf8_next).
 
 <a id="utf8_code"></a>
 
-### `utf8_code(s, i)` → `Int`
+### [`utf8_code(s, i)`](#utf8_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto UTF-8.
 - `i`: la posición del carácter.
@@ -7646,7 +7780,7 @@ Ver también: [`utf8_char`](#utf8_char).
 
 <a id="utf8_char"></a>
 
-### `utf8_char(code)` → `String`
+### [`utf8_char(code)`](#utf8_functions_table) → `String` · [índice](#indice)
 
 - `code`: un número Unicode.
 
@@ -7656,7 +7790,7 @@ Ver también: [`utf8_code`](#utf8_code).
 
 <a id="utf8_length"></a>
 
-### `utf8_length(s)` → `Int`
+### [`utf8_length(s)`](#utf8_functions_table) → `Int` · [índice](#indice)
 
 - `s`: el texto UTF-8.
 
@@ -7666,7 +7800,7 @@ Ver también: [`utf8_next`](#utf8_next).
 
 <a id="utf8_to_latin1"></a>
 
-### `utf8_to_latin1(s)` → `String`
+### [`utf8_to_latin1(s)`](#utf8_functions_table) → `String` · [índice](#indice)
 
 - `s`: el texto UTF-8.
 
@@ -7677,7 +7811,7 @@ Ver también: [`latin1_to_utf8`](#latin1_to_utf8).
 
 <a id="latin1_to_utf8"></a>
 
-### `latin1_to_utf8(s)` → `String`
+### [`latin1_to_utf8(s)`](#utf8_functions_table) → `String` · [índice](#indice)
 
 - `s`: un texto de Dash (Latin-1).
 
@@ -7687,7 +7821,7 @@ Ver también: [`utf8_to_latin1`](#utf8_to_latin1).
 
 <a id="utf8_check"></a>
 
-### `utf8_check(buffer, from, to)` → `Int`
+### [`utf8_check(buffer, from, to)`](#utf8_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `from`, `to`: de `from` a `to - 1`.
@@ -7696,11 +7830,15 @@ Devuelve la posición del primer byte que no es UTF-8 válido (o empieza un car�
 
 Ver también: [`utf8_to_latin1`](#utf8_to_latin1).
 
+[Volver al índice](#indice)
+
 <a id="bufsearch_functions"></a>
 
 ## Comparar y buscar en un búfer
 
 Comparar y buscar dentro de un búfer sin pasarlo a texto, para leer formatos o protocolos deprisa.
+
+<a id="bufsearch_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7710,7 +7848,7 @@ Comparar y buscar dentro de un búfer sin pasarlo a texto, para leer formatos o 
 
 <a id="buffer_equals"></a>
 
-### `buffer_equals(buffer, offset, n, s)` → `Bool`
+### [`buffer_equals(buffer, offset, n, s)`](#bufsearch_functions_table) → `Bool` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `offset`: la posición, en bytes desde el principio.
@@ -7724,7 +7862,7 @@ Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
 <a id="buffer_find_byte"></a>
 
-### `buffer_find_byte(buffer, from, to, byte)` → `Int`
+### [`buffer_find_byte(buffer, from, to, byte)`](#bufsearch_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `from`, `to`: dónde se busca, de `from` a `to - 1`.
@@ -7736,7 +7874,7 @@ Ver también: [`buffer_find_any`](#buffer_find_any).
 
 <a id="buffer_find_any"></a>
 
-### `buffer_find_any(buffer, from, to, bytes)` → `Int`
+### [`buffer_find_any(buffer, from, to, bytes)`](#bufsearch_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: el búfer.
 - `from`, `to`: de `from` a `to - 1`.
@@ -7746,11 +7884,15 @@ Devuelve la posición del primer byte que sea cualquiera de los de `bytes`, o -1
 
 Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
+[Volver al índice](#indice)
+
 <a id="double_functions"></a>
 
 ## Double y texto
 
 Pasar un `Double` (64 bits) a texto con los decimales que se quieran, y un texto a `Double`, sin perder cifras.
+
+<a id="double_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7759,7 +7901,7 @@ Pasar un `Double` (64 bits) a texto con los decimales que se quieran, y un texto
 
 <a id="str_from_double"></a>
 
-### `str_from_double(d, decimals)` → `String`
+### [`str_from_double(d, decimals)`](#double_functions_table) → `String` · [índice](#indice)
 
 - `d`: el número.
 - `decimals`: cuántos decimales; 0 ninguno; negativo, los justos para que se lea igual.
@@ -7770,7 +7912,7 @@ Ver también: [`str_to_double`](#str_to_double).
 
 <a id="str_to_double"></a>
 
-### `str_to_double(s)` → `Double`
+### [`str_to_double(s)`](#double_functions_table) → `Double` · [índice](#indice)
 
 - `s`: el texto.
 
@@ -7778,12 +7920,16 @@ Devuelve el número del principio del texto, exacto hasta 17 cifras; 0.0 si no h
 
 Ver también: [`str_from_double`](#str_from_double).
 
+[Volver al índice](#indice)
+
 <a id="math_functions"></a>
 
 ## Matemáticas de Double
 
 Las funciones matemáticas de siempre con `Double`. Los ángulos van en radianes (180 grados son 3.14159...). Un
 resultado imposible no para el programa: da `nan` (no es un número) o `inf`, que se miran con `is_nan` e `is_inf`.
+
+<a id="math_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -7810,7 +7956,7 @@ resultado imposible no para el programa: da `nan` (no es un número) o `inf`, qu
 
 <a id="sqrt"></a>
 
-### `sqrt(x)` → `Double`
+### [`sqrt(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7820,7 +7966,7 @@ Ver también: [`pow`](#pow).
 
 <a id="pow"></a>
 
-### `pow(x, y)` → `Double`
+### [`pow(x, y)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: la base.
 - `y`: el exponente.
@@ -7831,7 +7977,7 @@ Ver también: [`sqrt`](#sqrt), [`exp`](#exp).
 
 <a id="exp"></a>
 
-### `exp(x)` → `Double`
+### [`exp(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7841,7 +7987,7 @@ Ver también: [`log`](#log).
 
 <a id="log"></a>
 
-### `log(x)` → `Double`
+### [`log(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7851,7 +7997,7 @@ Ver también: [`log10`](#log10), [`exp`](#exp).
 
 <a id="log10"></a>
 
-### `log10(x)` → `Double`
+### [`log10(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7861,7 +8007,7 @@ Ver también: [`log`](#log).
 
 <a id="sin"></a>
 
-### `sin(x)` → `Double`
+### [`sin(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7871,7 +8017,7 @@ Ver también: [`cos`](#cos), [`asin`](#asin).
 
 <a id="cos"></a>
 
-### `cos(x)` → `Double`
+### [`cos(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7881,7 +8027,7 @@ Ver también: [`sin`](#sin).
 
 <a id="tan"></a>
 
-### `tan(x)` → `Double`
+### [`tan(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7891,7 +8037,7 @@ Ver también: [`atan`](#atan).
 
 <a id="asin"></a>
 
-### `asin(x)` → `Double`
+### [`asin(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7901,7 +8047,7 @@ Ver también: [`sin`](#sin).
 
 <a id="acos"></a>
 
-### `acos(x)` → `Double`
+### [`acos(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7911,7 +8057,7 @@ Ver también: [`cos`](#cos).
 
 <a id="atan"></a>
 
-### `atan(x)` → `Double`
+### [`atan(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7921,7 +8067,7 @@ Ver también: [`atan2`](#atan2).
 
 <a id="atan2"></a>
 
-### `atan2(y, x)` → `Double`
+### [`atan2(y, x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `y`, `x`: el punto (fíjate en el orden).
 
@@ -7931,7 +8077,7 @@ Ver también: [`atan`](#atan).
 
 <a id="floor"></a>
 
-### `floor(x)` → `Double`
+### [`floor(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7941,7 +8087,7 @@ Ver también: [`ceil`](#ceil), [`round`](#round), [`trunc`](#trunc).
 
 <a id="ceil"></a>
 
-### `ceil(x)` → `Double`
+### [`ceil(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7951,7 +8097,7 @@ Ver también: [`floor`](#floor).
 
 <a id="round"></a>
 
-### `round(x)` → `Double`
+### [`round(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7961,7 +8107,7 @@ Ver también: [`floor`](#floor), [`trunc`](#trunc).
 
 <a id="trunc"></a>
 
-### `trunc(x)` → `Double`
+### [`trunc(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7971,7 +8117,7 @@ Ver también: [`floor`](#floor).
 
 <a id="fmod"></a>
 
-### `fmod(x, y)` → `Double`
+### [`fmod(x, y)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`, `y`: los dos números.
 
@@ -7979,7 +8125,7 @@ Devuelve el resto de `x / y` con el signo de `x`; `nan` si `y` es 0.
 
 <a id="abs"></a>
 
-### `abs(x)` → `Double`
+### [`abs(x)`](#math_functions_table) → `Double` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7987,7 +8133,7 @@ Devuelve el valor absoluto, un `Double`.
 
 <a id="is_nan"></a>
 
-### `is_nan(x)` → `Bool`
+### [`is_nan(x)`](#math_functions_table) → `Bool` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
@@ -7997,13 +8143,15 @@ Ver también: [`is_inf`](#is_inf).
 
 <a id="is_inf"></a>
 
-### `is_inf(x)` → `Bool`
+### [`is_inf(x)`](#math_functions_table) → `Bool` · [índice](#indice)
 
 - `x`: el número, un `Double`.
 
 Devuelve `true` si `x` es `inf` o `-inf`, como `1.0 / 0.0`.
 
 Ver también: [`is_nan`](#is_nan).
+
+[Volver al índice](#indice)
 
 <a id="regex_functions"></a>
 
@@ -8012,6 +8160,8 @@ Ver también: [`is_nan`](#is_nan).
 Expresiones regulares (la sintaxis común de ICU) y comodines de hoja de cálculo sobre textos UTF-8; las
 posiciones y largos van en bytes. Un patrón mal escrito no para el programa: da `false` o -1 y `regex_error`
 dice por qué. La sintaxis entera, en el manual (sección 5).
+
+<a id="regex_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8029,7 +8179,7 @@ dice por qué. La sintaxis entera, en el manual (sección 5).
 
 <a id="regex_match"></a>
 
-### `regex_match(pattern, text, ignore_case)` → `Bool`
+### [`regex_match(pattern, text, ignore_case)`](#regex_functions_table) → `Bool` · [índice](#indice)
 
 - `pattern`: la expresión regular.
 - `text`: el texto, en UTF-8.
@@ -8041,7 +8191,7 @@ Ver también: [`regex_find`](#regex_find), [`wildcard_match`](#wildcard_match).
 
 <a id="regex_find"></a>
 
-### `regex_find(pattern, text, from, ignore_case)` → `Int`
+### [`regex_find(pattern, text, from, ignore_case)`](#regex_functions_table) → `Int` · [índice](#indice)
 
 - `pattern`, `text`, `ignore_case`: como en `regex_match`.
 - `from`: desde qué byte se busca.
@@ -8052,7 +8202,7 @@ Ver también: [`regex_length`](#regex_length), [`regex_match`](#regex_match).
 
 <a id="regex_length"></a>
 
-### `regex_length()` → `Int`
+### [`regex_length()`](#regex_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el largo en bytes de lo último que encajó; 0 si nada.
 
@@ -8060,7 +8210,7 @@ Ver también: [`regex_find`](#regex_find).
 
 <a id="regex_group"></a>
 
-### `regex_group(n)` → `String`
+### [`regex_group(n)`](#regex_functions_table) → `String` · [índice](#indice)
 
 - `n`: el número del grupo, del 1 en adelante por el orden de sus `(`; 0 es todo lo que encajó.
 
@@ -8072,7 +8222,7 @@ Ver también: [`regex_groups`](#regex_groups), [`regex_group_start`](#regex_grou
 
 <a id="regex_groups"></a>
 
-### `regex_groups()` → `[String]`
+### [`regex_groups()`](#regex_functions_table) → `[String]` · [índice](#indice)
 
 Devuelve un `[String]` nuevo con el texto de los grupos 1 a `regex_group_count()` de lo último que encajó, como
 `groups()` de Python; vacía si nada encajó. Los anidados salen en su sitio por el orden de su `(`, y
@@ -8082,7 +8232,7 @@ Ver también: [`regex_group`](#regex_group), [`regex_group_parent`](#regex_group
 
 <a id="regex_group_count"></a>
 
-### `regex_group_count()` → `Int`
+### [`regex_group_count()`](#regex_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos grupos que atrapan tiene el último patrón; `(?: )` no cuenta.
 
@@ -8090,7 +8240,7 @@ Ver también: [`regex_groups`](#regex_groups).
 
 <a id="regex_group_start"></a>
 
-### `regex_group_start(n)` → `Int`
+### [`regex_group_start(n)`](#regex_functions_table) → `Int` · [índice](#indice)
 
 - `n`: el grupo, como en `regex_group`.
 
@@ -8100,7 +8250,7 @@ Ver también: [`regex_group_length`](#regex_group_length), [`regex_group`](#rege
 
 <a id="regex_group_length"></a>
 
-### `regex_group_length(n)` → `Int`
+### [`regex_group_length(n)`](#regex_functions_table) → `Int` · [índice](#indice)
 
 - `n`: el grupo, como en `regex_group`.
 
@@ -8110,7 +8260,7 @@ Ver también: [`regex_group_start`](#regex_group_start).
 
 <a id="regex_group_parent"></a>
 
-### `regex_group_parent(n)` → `Int`
+### [`regex_group_parent(n)`](#regex_functions_table) → `Int` · [índice](#indice)
 
 - `n`: el grupo.
 
@@ -8121,7 +8271,7 @@ Ver también: [`regex_groups`](#regex_groups).
 
 <a id="regex_error"></a>
 
-### `regex_error()` → `String`
+### [`regex_error()`](#regex_functions_table) → `String` · [índice](#indice)
 
 Devuelve por qué está mal el último patrón, o `""` si está bien.
 
@@ -8129,7 +8279,7 @@ Ver también: [`regex_match`](#regex_match).
 
 <a id="wildcard_match"></a>
 
-### `wildcard_match(pattern, text, ignore_case)` → `Bool`
+### [`wildcard_match(pattern, text, ignore_case)`](#regex_functions_table) → `Bool` · [índice](#indice)
 
 - `pattern`: con comodines de hoja de cálculo: `*` cualquier cosa, `?` un carácter, `~` delante de uno lo toma tal
   cual (`~*`).
@@ -8138,6 +8288,8 @@ Ver también: [`regex_match`](#regex_match).
 Devuelve `true` si el texto entero encaja. Para los comodines de AmigaDOS (`#?`), `dialog_file`.
 
 Ver también: [`regex_match`](#regex_match).
+
+[Volver al índice](#indice)
 
 <a id="siminput_functions"></a>
 
@@ -8184,7 +8336,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="siminput_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8201,7 +8355,7 @@ end
 
 <a id="input_key"></a>
 
-### `input_key(code, qualifiers)`
+### [`input_key(code, qualifiers)`](#siminput_functions_table) · [índice](#indice)
 
 - `code`: el código en bruto de la tecla (0x44 Return, 0x45 Esc, 0x4C arriba...).
 - `qualifiers`: las teclas que van pulsadas alrededor: 1 Mayúsculas, 2 Ctrl, 4 Alt, 8 Amiga, sumadas; 0 ninguna.
@@ -8212,7 +8366,7 @@ Ver también: [`input_text`](#input_text), [`key_text`](#key_text).
 
 <a id="input_text"></a>
 
-### `input_text(text)`
+### [`input_text(text)`](#siminput_functions_table) · [índice](#indice)
 
 - `text`: el texto.
 
@@ -8222,7 +8376,7 @@ Ver también: [`input_key`](#input_key).
 
 <a id="input_move"></a>
 
-### `input_move(x, y)`
+### [`input_move(x, y)`](#siminput_functions_table) · [índice](#indice)
 
 - `x`, `y`: el punto, desde la esquina de la ventana activa.
 
@@ -8232,7 +8386,7 @@ Ver también: [`input_click`](#input_click).
 
 <a id="input_click"></a>
 
-### `input_click(x, y, qualifiers)`
+### [`input_click(x, y, qualifiers)`](#siminput_functions_table) · [índice](#indice)
 
 - `x`, `y`: el punto, desde la esquina de fuera de la ventana activa (con los bordes).
 - `qualifiers`: las teclas pulsadas durante el clic: 1 Mayúsculas, 2 Ctrl, 4 Alt.
@@ -8243,7 +8397,7 @@ Ver también: [`input_drag`](#input_drag), [`gadget_x`](#gadget_x).
 
 <a id="input_button"></a>
 
-### `input_button(button, down)`
+### [`input_button(button, down)`](#siminput_functions_table) · [índice](#indice)
 
 - `button`: 1 izquierdo, 2 derecho (los menús), 3 central.
 - `down`: `true` lo pulsa, `false` lo suelta.
@@ -8254,7 +8408,7 @@ Ver también: [`input_menu`](#input_menu).
 
 <a id="input_drag"></a>
 
-### `input_drag(x1, y1, x2, y2)`
+### [`input_drag(x1, y1, x2, y2)`](#siminput_functions_table) · [índice](#indice)
 
 - `x1`, `y1`: donde se pulsa.
 - `x2`, `y2`: donde se suelta.
@@ -8265,7 +8419,7 @@ Ver también: [`input_click`](#input_click).
 
 <a id="input_qualifiers"></a>
 
-### `input_qualifiers()` → `Int`
+### [`input_qualifiers()`](#siminput_functions_table) → `Int` · [índice](#indice)
 
 Devuelve las teclas pulsadas ahora, sumadas: 1 y 2 Mayúsculas, 8 Ctrl, 16 y 32 Alt, 64 y 128 Amiga (izquierda y derecha); 0 si no se puede.
 
@@ -8273,7 +8427,7 @@ Ver también: [`input_key`](#input_key).
 
 <a id="input_menu"></a>
 
-### `input_menu(menu, item, hold)` → `Bool`
+### [`input_menu(menu, item, hold)`](#siminput_functions_table) → `Bool` · [índice](#indice)
 
 - `menu`: el menú, desde 0.
 - `item`: la opción, desde 0, contando los separadores.
@@ -8286,7 +8440,7 @@ Ver también: [`input_button`](#input_button).
 
 <a id="input_move_screen"></a>
 
-### `input_move_screen(x, y, buttons)`
+### [`input_move_screen(x, y, buttons)`](#siminput_functions_table) · [índice](#indice)
 
 - `x`, `y`: el punto en la pantalla.
 - `buttons`: los botones pulsados durante el camino: 1 izquierdo, 2 derecho, 0 ninguno.
@@ -8297,11 +8451,13 @@ Ver también: [`input_move`](#input_move).
 
 <a id="input_active_title"></a>
 
-### `input_active_title()` → `String`
+### [`input_active_title()`](#siminput_functions_table) → `String` · [índice](#indice)
 
 Devuelve el título de la ventana activa, o `""`. Para esperar a que se abra la del programa que se prueba.
 
 Ver también: [`window_find`](#window_find).
+
+[Volver al índice](#indice)
 
 <a id="clip_functions"></a>
 
@@ -8309,6 +8465,8 @@ Ver también: [`window_find`](#window_find).
 
 El portapapeles del sistema: copiar y pegar texto con los demás programas, y bloques propios que solo entiende el
 programa (unas celdas, un dibujo) unidos a ese texto.
+
+<a id="clip_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8320,7 +8478,7 @@ programa (unas celdas, un dibujo) unidos a ese texto.
 
 <a id="clip_write_text"></a>
 
-### `clip_write_text(s)` → `Bool`
+### [`clip_write_text(s)`](#clip_functions_table) → `Bool` · [índice](#indice)
 
 - `s`: el texto, en UTF-8 (un texto normal de Dash vale si no tiene acentos; si los tiene, `latin1_to_utf8` antes).
 
@@ -8330,7 +8488,7 @@ Ver también: [`clip_read_text`](#clip_read_text).
 
 <a id="clip_read_text"></a>
 
-### `clip_read_text()` → `String`
+### [`clip_read_text()`](#clip_functions_table) → `String` · [índice](#indice)
 
 Devuelve el texto del portapapeles en UTF-8 (`utf8_to_latin1` para enseñarlo); `""` si está vacío o no tiene texto.
 
@@ -8338,7 +8496,7 @@ Ver también: [`clip_write_text`](#clip_write_text).
 
 <a id="clip_write_block"></a>
 
-### `clip_write_block(unit, type, buffer, n)` → `Bool`
+### [`clip_write_block(unit, type, buffer, n)`](#clip_functions_table) → `Bool` · [índice](#indice)
 
 - `unit`: una unidad del portapapeles, de 1 a 255.
 - `type`: un tipo de 4 letras propio (`"CELD"`).
@@ -8351,7 +8509,7 @@ Ver también: [`clip_read_block`](#clip_read_block), [`clip_block_size`](#clip_b
 
 <a id="clip_block_size"></a>
 
-### `clip_block_size(unit, type)` → `Int`
+### [`clip_block_size(unit, type)`](#clip_functions_table) → `Int` · [índice](#indice)
 
 - `unit`, `type`: como en `clip_write_block`.
 
@@ -8361,7 +8519,7 @@ Ver también: [`clip_read_block`](#clip_read_block).
 
 <a id="clip_read_block"></a>
 
-### `clip_read_block(unit, type, dest, max)` → `Int`
+### [`clip_read_block(unit, type, dest, max)`](#clip_functions_table) → `Int` · [índice](#indice)
 
 - `unit`, `type`: como en `clip_write_block`.
 - `dest`, `max`: dónde y cuánto cabe.
@@ -8370,11 +8528,15 @@ Copia el bloque. Devuelve sus bytes, -1 si no hay, -2 si no cabe.
 
 Ver también: [`clip_block_size`](#clip_block_size).
 
+[Volver al índice](#indice)
+
 <a id="collate_functions"></a>
 
 ## Ordenar textos según el idioma
 
 Ordenar textos como lo hace el idioma del usuario, no por el código de cada letra.
+
+<a id="collate_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8382,13 +8544,15 @@ Ordenar textos como lo hace el idioma del usuario, no por el código de cada let
 
 <a id="str_compare_locale"></a>
 
-### `str_compare_locale(a, b, ignore_case)` → `Int`
+### [`str_compare_locale(a, b, ignore_case)`](#collate_functions_table) → `Int` · [índice](#indice)
 
 - `a`, `b`: los dos textos, en UTF-8.
 - `ignore_case`: `true` para no distinguir mayúsculas.
 
 Devuelve -1 si `a` va antes, 0 si son iguales y 1 si va antes `b`, en el orden del idioma del usuario: los acentos
 y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco").
+
+[Volver al índice](#indice)
 
 <a id="sysprog_functions"></a>
 
@@ -8438,7 +8602,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="sysprog_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8494,7 +8660,7 @@ end
 
 <a id="time_unix"></a>
 
-### `time_unix()` → `Int`
+### [`time_unix()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la hora del reloj del sistema en segundos desde el 1 de enero de 1970, como las fechas de Internet.
 
@@ -8502,7 +8668,7 @@ Ver también: [`clock_days`](#clock_days), [`dir_entry_date`](#dir_entry_date).
 
 <a id="clock_days"></a>
 
-### `clock_days()` → `Int`
+### [`clock_days()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los días desde el 1 de enero de 1978, la fecha cero del Amiga, según el reloj del sistema.
 
@@ -8510,7 +8676,7 @@ Ver también: [`time_unix`](#time_unix).
 
 <a id="mem_largest"></a>
 
-### `mem_largest()` → `Int`
+### [`mem_largest()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el bloque de memoria libre más grande, chip o fast. Lo más grande que se puede pedir de una vez.
 
@@ -8518,7 +8684,7 @@ Ver también: [`mem_total`](#mem_total).
 
 <a id="program_exit"></a>
 
-### `program_exit(rc)`
+### [`program_exit(rc)`](#sysprog_functions_table) · [índice](#indice)
 
 - `rc`: el código de retorno: 0 bien, 5 aviso, 10 error, 20 fallo.
 
@@ -8527,7 +8693,7 @@ memoria. Un script del Shell puede mirar el código con `If WARN` o `If ERROR`.
 
 <a id="run_command"></a>
 
-### `run_command(command)` → `Int`
+### [`run_command(command)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `command`: la orden, como en el Shell: `"Copy RAM:a TO RAM:b"`.
 
@@ -8538,7 +8704,7 @@ Ver también: [`run_capture`](#run_capture), [`run_start`](#run_start).
 
 <a id="wb_open"></a>
 
-### `wb_open(path)` → `Bool`
+### [`wb_open(path)`](#sysprog_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: un cajón, un programa o un documento.
 
@@ -8552,19 +8718,19 @@ Ver también: [`run_command`](#run_command), [`window_find`](#window_find), [`ru
 
 <a id="program_path"></a>
 
-### `program_path()` → `String`
+### [`program_path()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve la ruta entera del programa (`"Work:Juegos/Nave"`), arranque desde el Shell o desde el Workbench.
 
 <a id="locale_language"></a>
 
-### `locale_language()` → `String`
+### [`locale_language()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve el primer idioma de las preferencias de Locale del usuario (`"español"`), o `""` si no hay.
 
 <a id="cpu_model"></a>
 
-### `cpu_model()` → `Int`
+### [`cpu_model()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el procesador: 68000, 68010, 68020, 68030, 68040 o 68060.
 
@@ -8572,7 +8738,7 @@ Ver también: [`fpu_model`](#fpu_model).
 
 <a id="fpu_model"></a>
 
-### `fpu_model()` → `Int`
+### [`fpu_model()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el coprocesador matemático: 68881, 68882, 68040 o 68060 (el del procesador); 0 si no hay.
 
@@ -8580,7 +8746,7 @@ Ver también: [`cpu_model`](#cpu_model).
 
 <a id="chipset_model"></a>
 
-### `chipset_model()` → `String`
+### [`chipset_model()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve el chipset del Amiga: `"AGA"` (A1200, A4000, CD32), `"ECS"` (A500+, A600, A3000) u `"OCS"` (los primeros
 A500 y A2000). Un A500 con Agnus de ECS y Denise antigua da `"ECS"`. Para avisar antes de abrir una pantalla de 256
@@ -8590,7 +8756,7 @@ Ver también: [`cpu_model`](#cpu_model), [`fpu_model`](#fpu_model).
 
 <a id="library_version"></a>
 
-### `library_version(name)` → `Int`
+### [`library_version(name)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre de la librería: `"muimaster.library"`.
 
@@ -8601,7 +8767,7 @@ Ver también: [`library_revision`](#library_revision).
 
 <a id="library_revision"></a>
 
-### `library_revision(name)` → `Int`
+### [`library_revision(name)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre de la librería.
 
@@ -8611,7 +8777,7 @@ Ver también: [`library_version`](#library_version).
 
 <a id="resident_version"></a>
 
-### `resident_version(name)` → `Int`
+### [`resident_version(name)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre de un módulo residente.
 
@@ -8621,7 +8787,7 @@ Ver también: [`library_version`](#library_version).
 
 <a id="task_priority"></a>
 
-### `task_priority(n)` → `Int`
+### [`task_priority(n)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `n`: la prioridad nueva, de -128 a 127; el Shell da 0.
 
@@ -8629,7 +8795,7 @@ Cambia la prioridad del programa y devuelve la que tenía. Con -1, un trabajo la
 
 <a id="build_date"></a>
 
-### `build_date()` → `String`
+### [`build_date()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve la fecha en que se compiló el programa: `"2026-10-28"`.
 
@@ -8637,7 +8803,7 @@ Ver también: [`build_time`](#build_time).
 
 <a id="build_time"></a>
 
-### `build_time()` → `String`
+### [`build_time()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve la hora en que se compiló: `"20:45:10"`.
 
@@ -8645,7 +8811,7 @@ Ver también: [`build_date`](#build_date).
 
 <a id="console_flush"></a>
 
-### `console_flush()`
+### [`console_flush()`](#sysprog_functions_table) · [índice](#indice)
 
 Saca ya lo que `Print` dejó en el búfer de la salida: para una línea de progreso que se escribe a trozos.
 
@@ -8653,7 +8819,7 @@ Ver también: [`console_write`](#console_write).
 
 <a id="run_capture"></a>
 
-### `run_capture(command, timeout_ms)` → `String`
+### [`run_capture(command, timeout_ms)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `command`: la orden.
 - `timeout_ms`: tiempo máximo; al pasarlo la orden recibe Ctrl-C (y otro cada segundo hasta que acaba). 0 = sin
@@ -8666,7 +8832,7 @@ Ver también: [`run_rc`](#run_rc), [`run_start`](#run_start).
 
 <a id="run_start"></a>
 
-### `run_start(command, timeout_ms)` → `Int`
+### [`run_start(command, timeout_ms)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `command`, `timeout_ms`: como en `run_capture`.
 
@@ -8677,7 +8843,7 @@ Ver también: [`run_ready`](#run_ready), [`run_finish`](#run_finish).
 
 <a id="run_ready"></a>
 
-### `run_ready(run)` → `Bool`
+### [`run_ready(run)`](#sysprog_functions_table) → `Bool` · [índice](#indice)
 
 - `run`: el número de `run_start`.
 
@@ -8687,7 +8853,7 @@ Ver también: [`run_finish`](#run_finish).
 
 <a id="run_break"></a>
 
-### `run_break(run)`
+### [`run_break(run)`](#sysprog_functions_table) · [índice](#indice)
 
 - `run`: el número de `run_start`.
 
@@ -8697,7 +8863,7 @@ Ver también: [`run_start`](#run_start).
 
 <a id="run_finish"></a>
 
-### `run_finish(run)` → `String`
+### [`run_finish(run)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `run`: el número de `run_start`.
 
@@ -8707,7 +8873,7 @@ Ver también: [`run_rc`](#run_rc).
 
 <a id="run_rc"></a>
 
-### `run_rc()` → `Int`
+### [`run_rc()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código de retorno del último `run_capture` o `run_finish`; -1 si no pudo empezar, -2 si se le acabó el tiempo.
 
@@ -8715,7 +8881,7 @@ Ver también: [`run_capture`](#run_capture).
 
 <a id="env_get"></a>
 
-### `env_get(name)` → `String`
+### [`env_get(name)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `name`: el nombre: `"Language"`, `"Forja/ejecutables"`.
 
@@ -8725,7 +8891,7 @@ Ver también: [`env_set`](#env_set), [`env_get_text`](#env_get_text).
 
 <a id="env_get_text"></a>
 
-### `env_get_text(name)` → `String`
+### [`env_get_text(name)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `name`: el nombre, como en `env_get`.
 
@@ -8735,7 +8901,7 @@ Ver también: [`env_get`](#env_get), [`env_set`](#env_set).
 
 <a id="env_set"></a>
 
-### `env_set(name, value, save)` → `Bool`
+### [`env_set(name, value, save)`](#sysprog_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: el nombre; con `/` va en un cajón de `ENV:`.
 - `value`: el valor.
@@ -8747,7 +8913,7 @@ Ver también: [`env_get`](#env_get).
 
 <a id="rexx_send"></a>
 
-### `rexx_send(port, command)` → `String`
+### [`rexx_send(port, command)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `port`: el puerto ARexx de otro programa (`"MULTIVIEW.1"`); `"REXX"` ejecuta un script.
 - `command`: la orden.
@@ -8759,7 +8925,7 @@ Ver también: [`rexx_rc`](#rexx_rc), [`rexx_send_wait`](#rexx_send_wait), [`port
 
 <a id="rexx_send_wait"></a>
 
-### `rexx_send_wait(port, command, ms)` → `String`
+### [`rexx_send_wait(port, command, ms)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `port`: el puerto ARexx de otro programa.
 - `command`: la orden.
@@ -8774,7 +8940,7 @@ Ver también: [`rexx_send`](#rexx_send), [`rexx_rc`](#rexx_rc).
 
 <a id="rexx_rc"></a>
 
-### `rexx_rc()` → `Int`
+### [`rexx_rc()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el RC del último `rexx_send` o `rexx_send_wait`: 0 bien, 5, 10, 20 los del programa; -1 si no existe el puerto, -2 sin `rexxsyslib.library`, -3 si no contestó a tiempo.
 
@@ -8782,7 +8948,7 @@ Ver también: [`rexx_send`](#rexx_send), [`rexx_send_wait`](#rexx_send_wait).
 
 <a id="rexx_port"></a>
 
-### `rexx_port(name)` → `Bool`
+### [`rexx_port(name)`](#sysprog_functions_table) → `Bool` · [índice](#indice)
 
 - `name`: el nombre del puerto, en mayúsculas.
 
@@ -8793,7 +8959,7 @@ Ver también: [`rexx_get`](#rexx_get), [`rexx_reply`](#rexx_reply).
 
 <a id="rexx_get"></a>
 
-### `rexx_get()` → `String`
+### [`rexx_get()`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 Devuelve la siguiente orden que llegó al puerto de `rexx_port`, o `""` si ninguna. No espera. Quien la mandó espera
 la respuesta: `rexx_reply` (si no, el siguiente `rexx_get` la contesta con RC 0).
@@ -8802,7 +8968,7 @@ Ver también: [`rexx_reply`](#rexx_reply), [`rexx_signal`](#rexx_signal).
 
 <a id="rexx_signal"></a>
 
-### `rexx_signal()` → `Int`
+### [`rexx_signal()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la máscara de la señal que recibe el programa cuando llega una orden al puerto de `rexx_port`, o 0 si no lo
 ha abierto. Sirve para esperar órdenes sin gastar CPU: `mui_wait_event_signals(rexx_signal())` vuelve con 0 al
@@ -8813,7 +8979,7 @@ Ver también: [`rexx_port`](#rexx_port), [`rexx_get`](#rexx_get), [`mui_wait_eve
 
 <a id="rexx_reply"></a>
 
-### `rexx_reply(rc, result)`
+### [`rexx_reply(rc, result)`](#sysprog_functions_table) · [índice](#indice)
 
 - `rc`: 0 bien, 5 aviso, 10 error, 20 fallo.
 - `result`: con `rc` 0, el RESULT que recibe quien la mandó; `""` ninguno.
@@ -8822,7 +8988,7 @@ Ver también: [`rexx_get`](#rexx_get).
 
 <a id="notify"></a>
 
-### `notify(title, text)` → `Bool`
+### [`notify(title, text)`](#sysprog_functions_table) → `Bool` · [índice](#indice)
 
 - `title`: el título del aviso.
 - `text`: el texto.
@@ -8832,7 +8998,7 @@ lista, que enseña al arrancar. Devuelve `false` si no llegó a ninguno de los d
 
 <a id="ports_read"></a>
 
-### `ports_read()` → `Int`
+### [`ports_read()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos) y devuelve cuántos hay.
 
@@ -8840,7 +9006,7 @@ Ver también: [`port_name`](#port_name).
 
 <a id="port_name"></a>
 
-### `port_name(i)` → `String`
+### [`port_name(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8850,7 +9016,7 @@ Ver también: [`ports_read`](#ports_read).
 
 <a id="tasks_read"></a>
 
-### `tasks_read()` → `Int`
+### [`tasks_read()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Lee las tareas y procesos del sistema (el primero, el propio programa) y devuelve cuántos hay.
 
@@ -8858,7 +9024,7 @@ Ver también: [`task_entry_name`](#task_entry_name).
 
 <a id="task_entry_name"></a>
 
-### `task_entry_name(i)` → `String`
+### [`task_entry_name(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8868,7 +9034,7 @@ Ver también: [`tasks_read`](#tasks_read).
 
 <a id="task_entry_command"></a>
 
-### `task_entry_command(i)` → `String`
+### [`task_entry_command(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8878,7 +9044,7 @@ Ver también: [`tasks_read`](#tasks_read).
 
 <a id="task_entry_state"></a>
 
-### `task_entry_state(i)` → `String`
+### [`task_entry_state(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8888,7 +9054,7 @@ Ver también: [`tasks_read`](#tasks_read).
 
 <a id="task_entry_priority"></a>
 
-### `task_entry_priority(i)` → `Int`
+### [`task_entry_priority(i)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8898,7 +9064,7 @@ Ver también: [`tasks_read`](#tasks_read).
 
 <a id="task_entry_cli"></a>
 
-### `task_entry_cli(i)` → `Int`
+### [`task_entry_cli(i)`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8908,7 +9074,7 @@ Ver también: [`tasks_read`](#tasks_read).
 
 <a id="assigns_read"></a>
 
-### `assigns_read()` → `Int`
+### [`assigns_read()`](#sysprog_functions_table) → `Int` · [índice](#indice)
 
 Lee las asignaciones (`C:`, `LIBS:`, las de `Assign`) y devuelve cuántas hay.
 
@@ -8916,7 +9082,7 @@ Ver también: [`assign_name`](#assign_name).
 
 <a id="assign_name"></a>
 
-### `assign_name(i)` → `String`
+### [`assign_name(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8926,7 +9092,7 @@ Ver también: [`assign_path`](#assign_path).
 
 <a id="assign_path"></a>
 
-### `assign_path(i)` → `String`
+### [`assign_path(i)`](#sysprog_functions_table) → `String` · [índice](#indice)
 
 - `i`: el número, desde 0.
 
@@ -8934,12 +9100,16 @@ Devuelve adónde apunta: un cajón (`"Workbench:C"`), varios separados por `;`, 
 
 Ver también: [`assign_name`](#assign_name).
 
+[Volver al índice](#indice)
+
 <a id="json_functions"></a>
 
 ## JSON leído en C (para lib/json.dash)
 
 La parte en C del lector de JSON. Para usar JSON en un programa, mejor el módulo `lib/json.dash`, que hace con
 esto un árbol cómodo de recorrer.
+
+<a id="json_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -8952,7 +9122,7 @@ esto un árbol cómodo de recorrer.
 
 <a id="json_scan"></a>
 
-### `json_scan(text)` → `Int`
+### [`json_scan(text)`](#json_functions_table) → `Int` · [índice](#indice)
 
 - `text`: el JSON.
 
@@ -8963,7 +9133,7 @@ Ver también: [`json_scan_kind`](#json_scan_kind), [`json_scan_error`](#json_sca
 
 <a id="json_scan_error"></a>
 
-### `json_scan_error()` → `String`
+### [`json_scan_error()`](#json_functions_table) → `String` · [índice](#indice)
 
 Devuelve por qué el último `json_scan` dio -1 y en qué byte.
 
@@ -8971,7 +9141,7 @@ Ver también: [`json_scan`](#json_scan).
 
 <a id="json_scan_kind"></a>
 
-### `json_scan_kind(i)` → `Int`
+### [`json_scan_kind(i)`](#json_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el nodo, desde 0.
 
@@ -8981,7 +9151,7 @@ Ver también: [`json_scan_count`](#json_scan_count).
 
 <a id="json_scan_count"></a>
 
-### `json_scan_count(i)` → `Int`
+### [`json_scan_count(i)`](#json_functions_table) → `Int` · [índice](#indice)
 
 - `i`: el nodo, desde 0.
 
@@ -8991,7 +9161,7 @@ Ver también: [`json_scan_kind`](#json_scan_kind).
 
 <a id="json_scan_text"></a>
 
-### `json_scan_text(i)` → `String`
+### [`json_scan_text(i)`](#json_functions_table) → `String` · [índice](#indice)
 
 - `i`: el nodo, desde 0.
 
@@ -9001,13 +9171,15 @@ Ver también: [`json_scan_name`](#json_scan_name).
 
 <a id="json_scan_name"></a>
 
-### `json_scan_name(i)` → `String`
+### [`json_scan_name(i)`](#json_functions_table) → `String` · [índice](#indice)
 
 - `i`: el nodo, desde 0.
 
 Devuelve su nombre dentro de su objeto; `""` en una lista o arriba del todo.
 
 Ver también: [`json_scan_text`](#json_scan_text).
+
+[Volver al índice](#indice)
 
 <a id="debugger_functions"></a>
 
@@ -9062,7 +9234,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="debugger_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9101,7 +9275,7 @@ end
 
 <a id="dbg_start"></a>
 
-### `dbg_start(program, args)` → `Bool`
+### [`dbg_start(program, args)`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 - `program`: el ejecutable, compilado con `dash --debug`.
 - `args`: sus argumentos, como en el Shell.
@@ -9113,7 +9287,7 @@ Ver también: [`dbg_break`](#dbg_break), [`dbg_continue`](#dbg_continue), [`dbg_
 
 <a id="dbg_error"></a>
 
-### `dbg_error()` → `String`
+### [`dbg_error()`](#debugger_functions_table) → `String` · [índice](#indice)
 
 Devuelve por qué falló el último `dbg_start`.
 
@@ -9121,7 +9295,7 @@ Ver también: [`dbg_start`](#dbg_start).
 
 <a id="dbg_state"></a>
 
-### `dbg_state()` → `Int`
+### [`dbg_state()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cómo está el programa: 0 no hay ninguno, 1 en pausa antes de empezar, 2 corriendo, 3 parado en una línea, 4 acabado.
 
@@ -9129,7 +9303,7 @@ Ver también: [`dbg_wait`](#dbg_wait).
 
 <a id="dbg_signal"></a>
 
-### `dbg_signal()` → `Int`
+### [`dbg_signal()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la señal que recibe el depurador cuando el programa para o acaba, para `mui_wait_event_signals`.
 
@@ -9137,7 +9311,7 @@ Ver también: [`dbg_wait`](#dbg_wait), [`mui_wait_event_signals`](#mui_wait_even
 
 <a id="dbg_wait"></a>
 
-### `dbg_wait(ms)` → `Int`
+### [`dbg_wait(ms)`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 - `ms`: cuánto esperar como mucho; 0 sin tope.
 
@@ -9147,7 +9321,7 @@ Ver también: [`dbg_state`](#dbg_state).
 
 <a id="dbg_break"></a>
 
-### `dbg_break(file, line)` → `Bool`
+### [`dbg_break(file, line)`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 - `file`: el fichero, por el final de su ruta: `"juego.dash"`.
 - `line`: la línea.
@@ -9158,7 +9332,7 @@ Ver también: [`dbg_unbreak`](#dbg_unbreak), [`dbg_continue`](#dbg_continue).
 
 <a id="dbg_unbreak"></a>
 
-### `dbg_unbreak(file, line)` → `Bool`
+### [`dbg_unbreak(file, line)`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 - `file`, `line`: como en `dbg_break`.
 
@@ -9168,7 +9342,7 @@ Ver también: [`dbg_break`](#dbg_break).
 
 <a id="dbg_continue"></a>
 
-### `dbg_continue()` → `Bool`
+### [`dbg_continue()`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 Sigue, desde el principio o desde una parada, hasta un punto de parada o el final. Devuelve `false` si no hay un programa en pausa o parado. No espera: `dbg_wait`.
 
@@ -9176,7 +9350,7 @@ Ver también: [`dbg_step`](#dbg_step), [`dbg_wait`](#dbg_wait).
 
 <a id="dbg_step"></a>
 
-### `dbg_step()` → `Bool`
+### [`dbg_step()`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 Sigue hasta la línea siguiente, entrando en las funciones a las que llama. Devuelve `false` si no hay un programa en pausa o parado. No espera: `dbg_wait`.
 
@@ -9184,7 +9358,7 @@ Ver también: [`dbg_next`](#dbg_next), [`dbg_out`](#dbg_out).
 
 <a id="dbg_next"></a>
 
-### `dbg_next()` → `Bool`
+### [`dbg_next()`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 Sigue hasta la línea siguiente de esta función, sin entrar en las que llama (o hasta la que la llamó si acaba). Devuelve `false` si no hay un programa en pausa o parado. No espera: `dbg_wait`.
 
@@ -9192,7 +9366,7 @@ Ver también: [`dbg_step`](#dbg_step).
 
 <a id="dbg_out"></a>
 
-### `dbg_out()` → `Bool`
+### [`dbg_out()`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 Sigue hasta que la función vuelve: la línea siguiente de la que la llamó. Devuelve `false` si no hay un programa en pausa o parado. No espera: `dbg_wait`.
 
@@ -9200,7 +9374,7 @@ Ver también: [`dbg_step`](#dbg_step).
 
 <a id="dbg_pause"></a>
 
-### `dbg_pause()` → `Bool`
+### [`dbg_pause()`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 Para el programa en marcha en la siguiente línea que ejecute. Devuelve `false` si no estaba corriendo.
 
@@ -9208,7 +9382,7 @@ Ver también: [`dbg_continue`](#dbg_continue).
 
 <a id="dbg_end"></a>
 
-### `dbg_end(ms)` → `Bool`
+### [`dbg_end(ms)`](#debugger_functions_table) → `Bool` · [índice](#indice)
 
 - `ms`: cuánto esperar como mucho.
 
@@ -9219,7 +9393,7 @@ Ver también: [`dbg_rc`](#dbg_rc).
 
 <a id="dbg_rc"></a>
 
-### `dbg_rc()` → `Int`
+### [`dbg_rc()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el código de retorno del programa acabado.
 
@@ -9227,7 +9401,7 @@ Ver también: [`dbg_output`](#dbg_output).
 
 <a id="dbg_file"></a>
 
-### `dbg_file()` → `String`
+### [`dbg_file()`](#debugger_functions_table) → `String` · [índice](#indice)
 
 Devuelve el fichero, con su ruta entera, de la línea donde paró.
 
@@ -9235,7 +9409,7 @@ Ver también: [`dbg_line`](#dbg_line).
 
 <a id="dbg_line"></a>
 
-### `dbg_line()` → `Int`
+### [`dbg_line()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la línea donde paró; 0 si no está parado.
 
@@ -9243,7 +9417,7 @@ Ver también: [`dbg_file`](#dbg_file), [`dbg_function`](#dbg_function).
 
 <a id="dbg_function"></a>
 
-### `dbg_function()` → `String`
+### [`dbg_function()`](#debugger_functions_table) → `String` · [índice](#indice)
 
 Devuelve la función donde paró: `"Main"`, `"Punto.mover"`.
 
@@ -9251,7 +9425,7 @@ Ver también: [`dbg_frames`](#dbg_frames).
 
 <a id="dbg_frames"></a>
 
-### `dbg_frames()` → `Int`
+### [`dbg_frames()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántas llamadas hay abiertas donde paró: 1 en `Main`, 2 en una función que llamó `Main`...; 0 si no está parado.
 
@@ -9259,7 +9433,7 @@ Ver también: [`dbg_frame_function`](#dbg_frame_function).
 
 <a id="dbg_frame_function"></a>
 
-### `dbg_frame_function(i)` → `String`
+### [`dbg_frame_function(i)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 
@@ -9269,7 +9443,7 @@ Ver también: [`dbg_frame_line`](#dbg_frame_line).
 
 <a id="dbg_frame_line"></a>
 
-### `dbg_frame_line(i)` → `Int`
+### [`dbg_frame_line(i)`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 
@@ -9279,7 +9453,7 @@ Ver también: [`dbg_frame_file`](#dbg_frame_file).
 
 <a id="dbg_frame_file"></a>
 
-### `dbg_frame_file(i)` → `String`
+### [`dbg_frame_file(i)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 
@@ -9289,7 +9463,7 @@ Ver también: [`dbg_frame_line`](#dbg_frame_line).
 
 <a id="dbg_vars"></a>
 
-### `dbg_vars(i)` → `Int`
+### [`dbg_vars(i)`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 
@@ -9299,7 +9473,7 @@ Ver también: [`dbg_var_name`](#dbg_var_name), [`dbg_value`](#dbg_value).
 
 <a id="dbg_var_name"></a>
 
-### `dbg_var_name(i, k)` → `String`
+### [`dbg_var_name(i, k)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 - `k`: la variable, desde 0.
@@ -9310,7 +9484,7 @@ Ver también: [`dbg_var_type`](#dbg_var_type).
 
 <a id="dbg_var_type"></a>
 
-### `dbg_var_type(i, k)` → `String`
+### [`dbg_var_type(i, k)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 - `k`: la variable.
@@ -9321,7 +9495,7 @@ Ver también: [`dbg_var_name`](#dbg_var_name).
 
 <a id="dbg_globals"></a>
 
-### `dbg_globals()` → `Int`
+### [`dbg_globals()`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántas variables globales tiene el programa.
 
@@ -9329,7 +9503,7 @@ Ver también: [`dbg_global_name`](#dbg_global_name).
 
 <a id="dbg_global_name"></a>
 
-### `dbg_global_name(g)` → `String`
+### [`dbg_global_name(g)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `g`: la global, desde 0.
 
@@ -9339,7 +9513,7 @@ Ver también: [`dbg_globals`](#dbg_globals).
 
 <a id="dbg_value"></a>
 
-### `dbg_value(i, expr)` → `String`
+### [`dbg_value(i, expr)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 - `expr`: una variable de esa llamada o una global, con `.campo` y `[n]` detrás: `"p.hijos[0].x"`.
@@ -9351,7 +9525,7 @@ Ver también: [`dbg_value_type`](#dbg_value_type), [`dbg_vars`](#dbg_vars).
 
 <a id="dbg_value_type"></a>
 
-### `dbg_value_type(i, expr)` → `String`
+### [`dbg_value_type(i, expr)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 - `expr`: como en `dbg_value`.
@@ -9362,7 +9536,7 @@ Ver también: [`dbg_value`](#dbg_value).
 
 <a id="dbg_set"></a>
 
-### `dbg_set(i, expr, value)` → `String`
+### [`dbg_set(i, expr, value)`](#debugger_functions_table) → `String` · [índice](#indice)
 
 - `i`: la llamada: 0 donde paró, 1 la que la llamó...
 - `expr`: como en `dbg_value`: una variable de esa llamada o una global, con `.campo` y `[n]` detrás.
@@ -9377,7 +9551,7 @@ Ver también: [`dbg_value`](#dbg_value).
 
 <a id="dbg_reg"></a>
 
-### `dbg_reg(n)` → `Int`
+### [`dbg_reg(n)`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 - `n`: 0 a 7 los registros d0 a d7, 8 a 15 a0 a a7, 16 el contador de programa.
 
@@ -9387,7 +9561,7 @@ Ver también: [`dbg_peek`](#dbg_peek).
 
 <a id="dbg_peek"></a>
 
-### `dbg_peek(addr, size)` → `Int`
+### [`dbg_peek(addr, size)`](#debugger_functions_table) → `Int` · [índice](#indice)
 
 - `addr`: la dirección.
 - `size`: 1, 2 o 4 bytes.
@@ -9398,11 +9572,13 @@ Ver también: [`dbg_reg`](#dbg_reg).
 
 <a id="dbg_output"></a>
 
-### `dbg_output()` → `String`
+### [`dbg_output()`](#debugger_functions_table) → `String` · [índice](#indice)
 
 Devuelve todo lo que el programa ha escrito hasta ahora, su salida y sus errores.
 
 Ver también: [`dbg_rc`](#dbg_rc).
+
+[Volver al índice](#indice)
 
 <a id="imgdec_functions"></a>
 
@@ -9412,6 +9588,8 @@ Decodificar JPEG, WebP, PNG, GIF, BMP y SVG con código del propio programa, sin
 El resultado son píxeles RGB o RGBA en memoria (`image_decoded_*`); `image_from_decoded` los convierte en una
 imagen para `image_draw`. Decodificar una imagen grande tarda: `image_decode_start` lo hace en otro proceso para
 que la ventana siga respondiendo.
+
+<a id="imgdec_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9429,7 +9607,7 @@ que la ventana siga respondiendo.
 
 <a id="image_decode"></a>
 
-### `image_decode(file, maxw, maxh)` → `Int`
+### [`image_decode(file, maxw, maxh)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `file`: la imagen: JPEG, WebP, PNG, GIF, BMP o SVG.
 - `maxw`, `maxh`: el tamaño máximo; se reduce hasta que no pase mucho de él. 0, 0 = su tamaño.
@@ -9441,7 +9619,7 @@ Ver también: [`image_decode_start`](#image_decode_start), [`image_from_decoded`
 
 <a id="image_decode_start"></a>
 
-### `image_decode_start(file, maxw, maxh)` → `Int`
+### [`image_decode_start(file, maxw, maxh)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `file`, `maxw`, `maxh`: como en `image_decode`.
 
@@ -9455,7 +9633,7 @@ Ver también: [`image_decode_ready`](#image_decode_ready), [`image_decode_finish
 
 <a id="image_decode_ready"></a>
 
-### `image_decode_ready(t)` → `Bool`
+### [`image_decode_ready(t)`](#imgdec_functions_table) → `Bool` · [índice](#indice)
 
 - `t`: el número de `image_decode_start`.
 
@@ -9465,7 +9643,7 @@ Ver también: [`image_decode_finish`](#image_decode_finish).
 
 <a id="image_decode_finish"></a>
 
-### `image_decode_finish(t)` → `Int`
+### [`image_decode_finish(t)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `t`: el número de `image_decode_start`.
 
@@ -9476,7 +9654,7 @@ Ver también: [`image_decode_start`](#image_decode_start).
 
 <a id="image_decoded_width"></a>
 
-### `image_decoded_width(d)` → `Int`
+### [`image_decoded_width(d)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9486,7 +9664,7 @@ Ver también: [`image_decoded_height`](#image_decoded_height).
 
 <a id="image_decoded_height"></a>
 
-### `image_decoded_height(d)` → `Int`
+### [`image_decoded_height(d)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9496,7 +9674,7 @@ Ver también: [`image_decoded_width`](#image_decoded_width).
 
 <a id="image_decoded_alpha"></a>
 
-### `image_decoded_alpha(d)` → `Bool`
+### [`image_decoded_alpha(d)`](#imgdec_functions_table) → `Bool` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9506,7 +9684,7 @@ Ver también: [`image_decoded_pixels`](#image_decoded_pixels).
 
 <a id="image_decoded_pixels"></a>
 
-### `image_decoded_pixels(d)` → `Int (dirección)`
+### [`image_decoded_pixels(d)`](#imgdec_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9516,7 +9694,7 @@ Ver también: [`image_decoded_alpha`](#image_decoded_alpha).
 
 <a id="image_decoded_free"></a>
 
-### `image_decoded_free(d)`
+### [`image_decoded_free(d)`](#imgdec_functions_table) · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9526,7 +9704,7 @@ Ver también: [`image_decode`](#image_decode).
 
 <a id="image_from_decoded"></a>
 
-### `image_from_decoded(d)` → `Int`
+### [`image_from_decoded(d)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 
@@ -9536,7 +9714,7 @@ Ver también: [`image_from_decoded_size`](#image_from_decoded_size), [`image_fro
 
 <a id="image_from_decoded_size"></a>
 
-### `image_from_decoded_size(d, w, h)` → `Int`
+### [`image_from_decoded_size(d, w, h)`](#imgdec_functions_table) → `Int` · [índice](#indice)
 
 - `d`: la imagen decodificada.
 - `w`, `h`: el tamaño de la imagen nueva.
@@ -9545,6 +9723,8 @@ Como `image_from_decoded`, a ese tamaño y con los bordes suaves: cada punto es 
 
 Ver también: [`image_from_decoded`](#image_from_decoded).
 
+[Volver al índice](#indice)
+
 <a id="ttf_functions"></a>
 
 ## Fuentes TrueType, WOFF y WOFF2
@@ -9552,6 +9732,8 @@ Ver también: [`image_from_decoded`](#image_from_decoded).
 Fuentes TrueType (TTF, OTF con contornos TrueType, WOFF y WOFF2) convertidas a una fuente del Amiga de un tamaño,
 con sus caracteres Latin-1. Se escribe con ellas con `font_use` como con cualquier otra. Las usa Tachyon para las
 fuentes de las páginas web.
+
+<a id="ttf_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9562,7 +9744,7 @@ fuentes de las páginas web.
 
 <a id="font_from_ttf"></a>
 
-### `font_from_ttf(file, size, width)` → `Int`
+### [`font_from_ttf(file, size, width)`](#ttf_functions_table) → `Int` · [índice](#indice)
 
 - `file`: el fichero de la fuente.
 - `size`: el tamaño en píxeles.
@@ -9575,7 +9757,7 @@ Ver también: [`font_use`](#font_use), [`font_ttf_free`](#font_ttf_free).
 
 <a id="font_ttf_icon"></a>
 
-### `font_ttf_icon(file, size, code)` → `Int`
+### [`font_ttf_icon(file, size, code)`](#ttf_functions_table) → `Int` · [índice](#indice)
 
 - `file`: una fuente de iconos (de las que usan las webs).
 - `size`: el tamaño.
@@ -9587,7 +9769,7 @@ Ver también: [`font_from_ttf`](#font_from_ttf).
 
 <a id="font_ttf_free"></a>
 
-### `font_ttf_free(font)`
+### [`font_ttf_free(font)`](#ttf_functions_table) · [índice](#indice)
 
 - `font`: una fuente de `font_from_ttf`.
 
@@ -9597,7 +9779,7 @@ Ver también: [`font_from_ttf`](#font_from_ttf).
 
 <a id="font_ttf_forget"></a>
 
-### `font_ttf_forget(file)`
+### [`font_ttf_forget(file)`](#ttf_functions_table) · [índice](#indice)
 
 - `file`: el fichero.
 
@@ -9605,6 +9787,8 @@ Ver también: [`font_from_ttf`](#font_from_ttf).
 olvida. Para cuando el fichero ha cambiado.
 
 Ver también: [`font_from_ttf`](#font_from_ttf).
+
+[Volver al índice](#indice)
 
 <a id="netbg_functions"></a>
 
@@ -9614,6 +9798,8 @@ Conexiones que abre y atiende una tarea propia de Dash, mientras el programa dib
 la vez, con o sin TLS. El programa pide la conexión (`net_bg_open`), deja lo que quiere enviar (`net_bg_send`) y
 recoge lo que llega cuando quiere (`net_bg_recv`), sin esperar nunca. `task_signal` despierta al programa cuando
 llega algo. Así carga Tachyon las imágenes de una página.
+
+<a id="netbg_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9633,7 +9819,7 @@ llega algo. Así carga Tachyon las imágenes de una página.
 
 <a id="net_bg_open"></a>
 
-### `net_bg_open(host, port, timeout_ms)` → `Int`
+### [`net_bg_open(host, port, timeout_ms)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `host`, `port`, `timeout_ms`: como en `net_connect`.
 
@@ -9644,7 +9830,7 @@ Ver también: [`net_bg_state`](#net_bg_state), [`net_bg_send`](#net_bg_send), [`
 
 <a id="net_bg_open_tls"></a>
 
-### `net_bg_open_tls(host, port, timeout_ms)` → `Int`
+### [`net_bg_open_tls(host, port, timeout_ms)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `host`, `port`, `timeout_ms`: como en `net_connect`.
 
@@ -9654,7 +9840,7 @@ Ver también: [`net_bg_open`](#net_bg_open).
 
 <a id="net_bg_state"></a>
 
-### `net_bg_state(c)` → `Int`
+### [`net_bg_state(c)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9664,7 +9850,7 @@ Ver también: [`net_bg_error`](#net_bg_error), [`net_bg_stage`](#net_bg_stage).
 
 <a id="net_bg_stage"></a>
 
-### `net_bg_stage(c)` → `Int`
+### [`net_bg_stage(c)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9674,7 +9860,7 @@ Ver también: [`net_bg_state`](#net_bg_state).
 
 <a id="net_bg_peer"></a>
 
-### `net_bg_peer(c)` → `String`
+### [`net_bg_peer(c)`](#netbg_functions_table) → `String` · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9684,7 +9870,7 @@ Ver también: [`net_bg_state`](#net_bg_state), [`net_resolve`](#net_resolve).
 
 <a id="net_bg_error"></a>
 
-### `net_bg_error(c)` → `String`
+### [`net_bg_error(c)`](#netbg_functions_table) → `String` · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9694,7 +9880,7 @@ Ver también: [`net_bg_state`](#net_bg_state).
 
 <a id="net_bg_send"></a>
 
-### `net_bg_send(c, text)` → `Bool`
+### [`net_bg_send(c, text)`](#netbg_functions_table) → `Bool` · [índice](#indice)
 
 - `c`: el número de la conexión.
 - `text`: lo que se envía.
@@ -9705,7 +9891,7 @@ Ver también: [`net_bg_recv`](#net_bg_recv).
 
 <a id="net_bg_send_buffer"></a>
 
-### `net_bg_send_buffer(c, buffer, n)` → `Bool`
+### [`net_bg_send_buffer(c, buffer, n)`](#netbg_functions_table) → `Bool` · [índice](#indice)
 
 - `c`: el número de la conexión.
 - `buffer`, `n`: los bytes.
@@ -9716,7 +9902,7 @@ Ver también: [`net_bg_send`](#net_bg_send).
 
 <a id="net_bg_recv"></a>
 
-### `net_bg_recv(c, buffer, max)` → `Int`
+### [`net_bg_recv(c, buffer, max)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `c`: el número de la conexión.
 - `buffer`: dónde.
@@ -9728,7 +9914,7 @@ Ver también: [`net_bg_pending`](#net_bg_pending), [`task_signal`](#task_signal)
 
 <a id="net_bg_pending"></a>
 
-### `net_bg_pending(c)` → `Int`
+### [`net_bg_pending(c)`](#netbg_functions_table) → `Int` · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9738,7 +9924,7 @@ Ver también: [`net_bg_recv`](#net_bg_recv).
 
 <a id="net_bg_close"></a>
 
-### `net_bg_close(c)`
+### [`net_bg_close(c)`](#netbg_functions_table) · [índice](#indice)
 
 - `c`: el número de la conexión.
 
@@ -9748,7 +9934,7 @@ Ver también: [`net_bg_open`](#net_bg_open).
 
 <a id="net_bg_idle"></a>
 
-### `net_bg_idle(ms)`
+### [`net_bg_idle(ms)`](#netbg_functions_table) · [índice](#indice)
 
 - `ms`: cuántos milisegundos sin tráfico; 2000 si no se dice.
 
@@ -9758,11 +9944,13 @@ Ver también: [`net_bg_stop`](#net_bg_stop).
 
 <a id="net_bg_stop"></a>
 
-### `net_bg_stop()`
+### [`net_bg_stop()`](#netbg_functions_table) · [índice](#indice)
 
 Acaba la tarea de la red ya, cerrando lo que esté abierto, y la espera. Al acabar el programa se hace solo.
 
 Ver también: [`net_bg_idle`](#net_bg_idle).
+
+[Volver al índice](#indice)
 
 <a id="otherwin_functions"></a>
 
@@ -9770,6 +9958,8 @@ Ver también: [`net_bg_idle`](#net_bg_idle).
 
 Encontrar la ventana de otro programa por su título, ponerla delante, saber dónde están sus gadgets y leer los
 colores de la pantalla. Con los `input_*`, para manejar otro programa como lo haría el usuario.
+
+<a id="otherwin_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9788,7 +9978,7 @@ colores de la pantalla. Con los `input_*`, para manejar otro programa como lo ha
 
 <a id="window_find"></a>
 
-### `window_find(title)` → `Int`
+### [`window_find(title)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `title`: el principio del título.
 
@@ -9799,7 +9989,7 @@ Ver también: [`window_found_activate`](#window_found_activate), [`gadget_index`
 
 <a id="window_found_activate"></a>
 
-### `window_found_activate(win)`
+### [`window_found_activate(win)`](#otherwin_functions_table) · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 
@@ -9809,7 +9999,7 @@ Ver también: [`window_find`](#window_find).
 
 <a id="window_found_box"></a>
 
-### `window_found_box(win, what)` → `Int`
+### [`window_found_box(win, what)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 - `what`: 0 izquierda, 1 arriba (en su pantalla), 2 ancho, 3 alto, 4 borde izquierdo, 5 borde de arriba.
@@ -9818,7 +10008,7 @@ Ver también: [`window_find`](#window_find).
 
 <a id="gadget_index"></a>
 
-### `gadget_index(win, text)` → `Int`
+### [`gadget_index(win, text)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 - `text`: el texto del gadget.
@@ -9830,7 +10020,7 @@ Ver también: [`gadget_x`](#gadget_x), [`gadget_selected`](#gadget_selected).
 
 <a id="gadget_x"></a>
 
-### `gadget_x(win, n)` → `Int`
+### [`gadget_x(win, n)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 - `n`: el sitio del gadget.
@@ -9841,7 +10031,7 @@ Ver también: [`gadget_y`](#gadget_y), [`input_click`](#input_click).
 
 <a id="gadget_y"></a>
 
-### `gadget_y(win, n)` → `Int`
+### [`gadget_y(win, n)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 - `n`: el sitio del gadget.
@@ -9852,7 +10042,7 @@ Ver también: [`gadget_x`](#gadget_x).
 
 <a id="gadget_selected"></a>
 
-### `gadget_selected(win, n)` → `Bool`
+### [`gadget_selected(win, n)`](#otherwin_functions_table) → `Bool` · [índice](#indice)
 
 - `win`: la ventana de `window_find`.
 - `n`: el sitio del gadget.
@@ -9863,7 +10053,7 @@ Ver también: [`gadget_index`](#gadget_index).
 
 <a id="screen_pixel"></a>
 
-### `screen_pixel(x, y)` → `Int`
+### [`screen_pixel(x, y)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -9873,7 +10063,7 @@ Ver también: [`screen_pixel_rgb`](#screen_pixel_rgb).
 
 <a id="screen_pixel_rgb"></a>
 
-### `screen_pixel_rgb(x, y)` → `Int`
+### [`screen_pixel_rgb(x, y)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -9883,7 +10073,7 @@ Ver también: [`screen_pixel`](#screen_pixel).
 
 <a id="screen_pen_rgb"></a>
 
-### `screen_pen_rgb(n)` → `Int`
+### [`screen_pen_rgb(n)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `n`: el lápiz del Workbench: 0 detalle, 1 bloque, 2 texto, 3 brillo, 4 sombra, 5 relleno (la barra de título
   activa), 6 texto del relleno, 7 fondo, 8 texto resaltado, 9 a 11 los de la barra.
@@ -9894,7 +10084,7 @@ Ver también: [`color_pen`](#color_pen).
 
 <a id="screen_save_png"></a>
 
-### `screen_save_png(filename)` → `Bool`
+### [`screen_save_png(filename)`](#otherwin_functions_table) → `Bool` · [índice](#indice)
 
 - `filename`: el fichero, por ejemplo `"RAM:captura.png"`.
 
@@ -9907,12 +10097,14 @@ Ver también: [`screen_pixel_rgb`](#screen_pixel_rgb), [`bitmap_save`](#bitmap_s
 
 <a id="cx_send"></a>
 
-### `cx_send(name, command)` → `Int`
+### [`cx_send(name, command)`](#otherwin_functions_table) → `Int` · [índice](#indice)
 
 - `name`: el nombre de la commodity.
 - `command`: como Exchange: 15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar.
 
 Devuelve 0 si se hizo, -1 si no hay esa commodity, -2 si no tiene puerto, -99 sin `commodities.library`.
+
+[Volver al índice](#indice)
 
 <a id="wm_functions"></a>
 
@@ -9924,6 +10116,8 @@ dibujarlos o recibir los que se sueltan sobre una ventana.
 
 `wm_read` lee una foto de las ventanas, de delante atrás; las demás `wm_*` dan cada una por número, desde 0. Para
 cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
+
+<a id="wm_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -9969,7 +10163,7 @@ cambiarlas se usa su id (`wm_id`), que sigue valiendo aunque cambie el orden.
 
 <a id="wm_read"></a>
 
-### `wm_read()` → `Int`
+### [`wm_read()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Lee las ventanas de la pantalla del Workbench, de delante atrás, hasta 64, y devuelve cuántas.
 
@@ -9977,7 +10171,7 @@ Ver también: [`wm_id`](#wm_id), [`wm_title`](#wm_title).
 
 <a id="wm_id"></a>
 
-### `wm_id(i)` → `Int`
+### [`wm_id(i)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
@@ -9987,7 +10181,7 @@ Ver también: [`wm_read`](#wm_read).
 
 <a id="wm_title"></a>
 
-### `wm_title(i)` → `String`
+### [`wm_title(i)`](#wm_functions_table) → `String` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
@@ -9997,7 +10191,7 @@ Ver también: [`wm_task`](#wm_task).
 
 <a id="wm_task"></a>
 
-### `wm_task(i)` → `String`
+### [`wm_task(i)`](#wm_functions_table) → `String` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
@@ -10007,7 +10201,7 @@ Ver también: [`wm_path`](#wm_path).
 
 <a id="wm_path"></a>
 
-### `wm_path(i)` → `String`
+### [`wm_path(i)`](#wm_functions_table) → `String` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
@@ -10017,7 +10211,7 @@ Ver también: [`file_real_path`](#file_real_path).
 
 <a id="wm_box"></a>
 
-### `wm_box(i, what)` → `Int`
+### [`wm_box(i, what)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 - `what`: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 y 5 el mínimo, 6 y 7 el máximo (0 o 65535: sin límite), 8 a 11 sus bordes (izquierda, arriba, derecha, abajo), 12 y 13 dónde empieza y acaba la parte libre de su barra de título (sin botones: la que se arrastra), 14 y 15 el centro de su botón de cerrar (-1 sin él); estos, desde la esquina de la ventana.
@@ -10028,7 +10222,7 @@ Ver también: [`wm_set_box`](#wm_set_box).
 
 <a id="wm_flags"></a>
 
-### `wm_flags(i)` → `Int`
+### [`wm_flags(i)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la ventana, desde 0, del último `wm_read`.
 
@@ -10038,7 +10232,7 @@ Ver también: [`wm_box`](#wm_box).
 
 <a id="wm_set_box"></a>
 
-### `wm_set_box(id, x, y, width, height)` → `Bool`
+### [`wm_set_box(id, x, y, width, height)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 - `x`, `y`, `width`, `height`: la caja nueva.
@@ -10049,7 +10243,7 @@ Ver también: [`wm_box`](#wm_box).
 
 <a id="wm_front"></a>
 
-### `wm_front(id)` → `Bool`
+### [`wm_front(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10059,7 +10253,7 @@ Ver también: [`wm_back`](#wm_back).
 
 <a id="wm_back"></a>
 
-### `wm_back(id)` → `Bool`
+### [`wm_back(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10069,7 +10263,7 @@ Ver también: [`wm_front`](#wm_front).
 
 <a id="wm_activate"></a>
 
-### `wm_activate(id)` → `Bool`
+### [`wm_activate(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10079,7 +10273,7 @@ Ver también: [`wm_active`](#wm_active).
 
 <a id="wm_zip"></a>
 
-### `wm_zip(id)` → `Bool`
+### [`wm_zip(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10089,7 +10283,7 @@ Ver también: [`wm_set_box`](#wm_set_box).
 
 <a id="wm_hide"></a>
 
-### `wm_hide(id)` → `Bool`
+### [`wm_hide(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10099,7 +10293,7 @@ Ver también: [`wm_show`](#wm_show), [`wm_can_hide`](#wm_can_hide).
 
 <a id="wm_show"></a>
 
-### `wm_show(id)` → `Bool`
+### [`wm_show(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10109,7 +10303,7 @@ Ver también: [`wm_hide`](#wm_hide).
 
 <a id="wm_can_hide"></a>
 
-### `wm_can_hide()` → `Bool`
+### [`wm_can_hide()`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si el sistema puede esconder ventanas: AmigaOS 3.2 o posterior (Intuition 46). En 3.1, `wm_hide` y `wm_show` no hacen nada y dan `false`.
 
@@ -10117,7 +10311,7 @@ Ver también: [`wm_hide`](#wm_hide).
 
 <a id="wm_box_now"></a>
 
-### `wm_box_now(id, what)` → `Int`
+### [`wm_box_now(id, what)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 - `what`: lo mismo que en `wm_box`, de 0 a 15.
@@ -10128,7 +10322,7 @@ Ver también: [`wm_box`](#wm_box).
 
 <a id="wm_close"></a>
 
-### `wm_close(id)` → `Bool`
+### [`wm_close(id)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el id de la ventana (`wm_id`).
 
@@ -10138,7 +10332,7 @@ Ver también: [`wm_box`](#wm_box).
 
 <a id="wm_double_click_ms"></a>
 
-### `wm_double_click_ms()` → `Int`
+### [`wm_double_click_ms()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el tiempo máximo entre los dos clics de un doble clic, en milisegundos, el de las preferencias de Input.
 
@@ -10146,7 +10340,7 @@ Ver también: [`cx_event_ms`](#cx_event_ms).
 
 <a id="wm_active"></a>
 
-### `wm_active()` → `Int`
+### [`wm_active()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el id de la ventana activa si está en la pantalla del Workbench; 0 si no.
 
@@ -10154,7 +10348,7 @@ Ver también: [`wm_activate`](#wm_activate).
 
 <a id="wm_at"></a>
 
-### `wm_at(x, y)` → `Int`
+### [`wm_at(x, y)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: un punto de la pantalla del Workbench.
 
@@ -10164,7 +10358,7 @@ Ver también: [`wm_pointer_x`](#wm_pointer_x).
 
 <a id="wm_pointer_x"></a>
 
-### `wm_pointer_x()` → `Int`
+### [`wm_pointer_x()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la x del puntero en la pantalla del Workbench.
 
@@ -10172,7 +10366,7 @@ Ver también: [`wm_pointer_y`](#wm_pointer_y).
 
 <a id="wm_pointer_y"></a>
 
-### `wm_pointer_y()` → `Int`
+### [`wm_pointer_y()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la y del puntero en la pantalla del Workbench.
 
@@ -10180,19 +10374,19 @@ Ver también: [`wm_pointer_x`](#wm_pointer_x).
 
 <a id="wm_bar_height"></a>
 
-### `wm_bar_height()` → `Int`
+### [`wm_bar_height()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto de la barra de título de la pantalla del Workbench, donde suelen empezar las ventanas.
 
 <a id="wm_bar_gadgets"></a>
 
-### `wm_bar_gadgets()` → `Int`
+### [`wm_bar_gadgets()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve a qué distancia del borde derecho de la barra de la pantalla empiezan sus botones del sistema; 0 si no lo sabe.
 
 <a id="screen_show_title"></a>
 
-### `screen_show_title(on)`
+### [`screen_show_title(on)`](#wm_functions_table) · [índice](#indice)
 
 - `on`: `true` para que la barra de título de la pantalla vaya delante de sus ventanas de fondo (como viene), `false`
   para que vaya detrás.
@@ -10206,7 +10400,7 @@ Ver también: [`window_next_backdrop`](#window_next_backdrop), [`wm_bar_height`]
 
 <a id="window_next_backdrop"></a>
 
-### `window_next_backdrop(on)`
+### [`window_next_backdrop(on)`](#wm_functions_table) · [índice](#indice)
 
 - `on`: `true` para que la próxima ventana declarada (`Window ... end`) que se abra con `.open` sea de fondo.
 
@@ -10218,7 +10412,7 @@ Ver también: [`screen_show_title`](#screen_show_title).
 
 <a id="file_real_path"></a>
 
-### `file_real_path(path)` → `String`
+### [`file_real_path(path)`](#wm_functions_table) → `String` · [índice](#indice)
 
 - `path`: un fichero o cajón.
 
@@ -10228,7 +10422,7 @@ Ver también: [`wm_path`](#wm_path).
 
 <a id="app_window"></a>
 
-### `app_window(handle)` → `Bool`
+### [`app_window(handle)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `handle`: la ventana: 0 la actual, o un número de `window_create`.
 
@@ -10238,7 +10432,7 @@ Ver también: [`app_drop`](#app_drop), [`mui_on_drop`](#mui_on_drop).
 
 <a id="app_drop"></a>
 
-### `app_drop()` → `String`
+### [`app_drop()`](#wm_functions_table) → `String` · [índice](#indice)
 
 Devuelve la ruta del siguiente icono soltado en una `app_window`, o `""` si no hay; se mira desde un `On Timer`. Varios iconos salen uno a uno.
 
@@ -10246,7 +10440,7 @@ Ver también: [`app_drop_x`](#app_drop_x), [`app_window`](#app_window).
 
 <a id="app_drop_x"></a>
 
-### `app_drop_x()` → `Int`
+### [`app_drop_x()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la x de donde cayó el último icono, desde la esquina de la ventana.
 
@@ -10254,7 +10448,7 @@ Ver también: [`app_drop_y`](#app_drop_y).
 
 <a id="app_drop_y"></a>
 
-### `app_drop_y()` → `Int`
+### [`app_drop_y()`](#wm_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la y de donde cayó el último icono.
 
@@ -10262,7 +10456,7 @@ Ver también: [`app_drop_x`](#app_drop_x).
 
 <a id="icon_load"></a>
 
-### `icon_load(path)` → `Int`
+### [`icon_load(path)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `path`: el programa, cajón o fichero, sin `.info`.
 
@@ -10273,7 +10467,7 @@ Ver también: [`icon_draw`](#icon_draw), [`icon_free`](#icon_free).
 
 <a id="icon_draw"></a>
 
-### `icon_draw(icon, x, y)`
+### [`icon_draw(icon, x, y)`](#wm_functions_table) · [índice](#indice)
 
 - `icon`: el icono de `icon_load`.
 - `x`, `y`: su esquina.
@@ -10284,7 +10478,7 @@ Ver también: [`icon_draw_size`](#icon_draw_size).
 
 <a id="icon_draw_size"></a>
 
-### `icon_draw_size(icon, x, y, width, height)`
+### [`icon_draw_size(icon, x, y, width, height)`](#wm_functions_table) · [índice](#indice)
 
 - `icon`: el icono de `icon_load`.
 - `x`, `y`, `width`, `height`: el recuadro.
@@ -10295,7 +10489,7 @@ Ver también: [`icon_draw`](#icon_draw).
 
 <a id="icon_width"></a>
 
-### `icon_width(icon)` → `Int`
+### [`icon_width(icon)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `icon`: el icono de `icon_load`.
 
@@ -10305,7 +10499,7 @@ Ver también: [`icon_height`](#icon_height).
 
 <a id="icon_height"></a>
 
-### `icon_height(icon)` → `Int`
+### [`icon_height(icon)`](#wm_functions_table) → `Int` · [índice](#indice)
 
 - `icon`: el icono de `icon_load`.
 
@@ -10315,7 +10509,7 @@ Ver también: [`icon_width`](#icon_width).
 
 <a id="icon_free"></a>
 
-### `icon_free(icon)`
+### [`icon_free(icon)`](#wm_functions_table) · [índice](#indice)
 
 - `icon`: el icono de `icon_load`.
 
@@ -10325,7 +10519,7 @@ Ver también: [`icon_load`](#icon_load).
 
 <a id="icon_save"></a>
 
-### `icon_save(path, base, type, tool, tooltypes)` → `Bool`
+### [`icon_save(path, base, type, tool, tooltypes)`](#wm_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: el fichero cuyo icono se escribe, sin `.info`.
 - `base`: otro fichero (con o sin `.info`) cuyo icono se copia; con `""`, el de su tipo que trae icon.library.
@@ -10340,6 +10534,8 @@ escribió. Así, el icono de un proyecto que se abre con un programa:
 `icon_save("Trabajo:juego", "Trabajo:juego_viejo", 0, "Trabajo:Juego", "")`.
 
 Ver también: [`icon_load`](#icon_load), [`tooltype`](#tooltype).
+
+[Volver al índice](#indice)
 
 <a id="audio_functions"></a>
 
@@ -10389,7 +10585,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="audio_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -10422,7 +10620,7 @@ end
 
 <a id="sound_load"></a>
 
-### `sound_load(id, filename)` → `Bool`
+### [`sound_load(id, filename)`](#audio_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 - `filename`: un fichero IFF 8SVX sin comprimir.
@@ -10434,7 +10632,7 @@ Ver también: [`sound_play`](#sound_play), [`sound_free`](#sound_free).
 
 <a id="sound_sample"></a>
 
-### `sound_sample(id, index, value)`
+### [`sound_sample(id, index, value)`](#audio_functions_table) · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 - `index`: la muestra, desde 0.
@@ -10447,7 +10645,7 @@ Ver también: [`sound_create`](#sound_create).
 
 <a id="sound_create"></a>
 
-### `sound_create(id, length, rate)` → `Bool`
+### [`sound_create(id, length, rate)`](#audio_functions_table) → `Bool` · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 - `length`: cuántas muestras, 2 como poco.
@@ -10459,7 +10657,7 @@ Ver también: [`sound_sample`](#sound_sample), [`sound_play`](#sound_play).
 
 <a id="sound_free"></a>
 
-### `sound_free(id)`
+### [`sound_free(id)`](#audio_functions_table) · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 
@@ -10469,7 +10667,7 @@ Ver también: [`sound_stop`](#sound_stop).
 
 <a id="sound_play"></a>
 
-### `sound_play(id, channel)`
+### [`sound_play(id, channel)`](#audio_functions_table) · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 - `channel`: el canal, de 0 a 3.
@@ -10480,7 +10678,7 @@ Ver también: [`sound_loop`](#sound_loop), [`sound_playing`](#sound_playing), [`
 
 <a id="sound_stop"></a>
 
-### `sound_stop(channel)`
+### [`sound_stop(channel)`](#audio_functions_table) · [índice](#indice)
 
 - `channel`: el canal, de 0 a 3.
 
@@ -10490,7 +10688,7 @@ Ver también: [`sound_play`](#sound_play).
 
 <a id="sound_loop"></a>
 
-### `sound_loop(id, channel)`
+### [`sound_loop(id, channel)`](#audio_functions_table) · [índice](#indice)
 
 - `id`: el número del sonido, de 0 a 31.
 - `channel`: el canal, de 0 a 3.
@@ -10501,7 +10699,7 @@ Ver también: [`sound_stop`](#sound_stop), [`sound_play`](#sound_play).
 
 <a id="sound_playing"></a>
 
-### `sound_playing(channel)` → `Bool`
+### [`sound_playing(channel)`](#audio_functions_table) → `Bool` · [índice](#indice)
 
 - `channel`: el canal, de 0 a 3.
 
@@ -10511,7 +10709,7 @@ Ver también: [`sound_play`](#sound_play).
 
 <a id="sound_volume"></a>
 
-### `sound_volume(channel, vol)`
+### [`sound_volume(channel, vol)`](#audio_functions_table) · [índice](#indice)
 
 - `channel`: el canal, de 0 a 3.
 - `vol`: de 0 (nada) a 64 (todo).
@@ -10522,7 +10720,7 @@ Ver también: [`sound_period`](#sound_period).
 
 <a id="sound_period"></a>
 
-### `sound_period(channel, period)`
+### [`sound_period(channel, period)`](#audio_functions_table) · [índice](#indice)
 
 - `channel`: el canal, de 0 a 3.
 - `period`: el periodo, de 124 a 65535: la frecuencia es 3546895 dividido por él en PAL. Cuanto más bajo, más
@@ -10534,7 +10732,7 @@ Ver también: [`sound_volume`](#sound_volume).
 
 <a id="music_load"></a>
 
-### `music_load(filename)` → `Bool`
+### [`music_load(filename)`](#audio_functions_table) → `Bool` · [índice](#indice)
 
 - `filename`: un módulo de ProTracker de 4 canales y 31 instrumentos (M.K., M!K!, FLT4, 4CHN).
 
@@ -10545,7 +10743,7 @@ Ver también: [`music_play`](#music_play), [`music_free`](#music_free).
 
 <a id="music_play"></a>
 
-### `music_play()`
+### [`music_play()`](#audio_functions_table) · [índice](#indice)
 
 Empieza a tocar la música desde el principio. Calla los sonidos que hubiera: los canales pasan a ser suyos.
 
@@ -10553,7 +10751,7 @@ Ver también: [`music_stop`](#music_stop), [`music_pause`](#music_pause).
 
 <a id="music_stop"></a>
 
-### `music_stop()`
+### [`music_stop()`](#audio_functions_table) · [índice](#indice)
 
 Para la música y devuelve los canales a los `sound_*`.
 
@@ -10561,7 +10759,7 @@ Ver también: [`music_play`](#music_play).
 
 <a id="music_pause"></a>
 
-### `music_pause()`
+### [`music_pause()`](#audio_functions_table) · [índice](#indice)
 
 La deja callada donde está; `music_resume` sigue desde ahí.
 
@@ -10569,7 +10767,7 @@ Ver también: [`music_resume`](#music_resume).
 
 <a id="music_resume"></a>
 
-### `music_resume()`
+### [`music_resume()`](#audio_functions_table) · [índice](#indice)
 
 Sigue tocando después de un `music_pause`.
 
@@ -10577,7 +10775,7 @@ Ver también: [`music_pause`](#music_pause).
 
 <a id="music_volume"></a>
 
-### `music_volume(vol)`
+### [`music_volume(vol)`](#audio_functions_table) · [índice](#indice)
 
 - `vol`: de 0 a 64.
 
@@ -10587,7 +10785,7 @@ Ver también: [`music_play`](#music_play).
 
 <a id="music_position"></a>
 
-### `music_position(pos)`
+### [`music_position(pos)`](#audio_functions_table) · [índice](#indice)
 
 - `pos`: la posición en la lista de orden de la canción, desde 0; fuera de ella, 0.
 
@@ -10598,7 +10796,7 @@ Ver también: [`music_pos`](#music_pos), [`music_row`](#music_row), [`music_seek
 
 <a id="music_pos"></a>
 
-### `music_pos()` → `Int`
+### [`music_pos()`](#audio_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la posición de la lista de orden que suena ahora.
 
@@ -10606,7 +10804,7 @@ Ver también: [`music_row`](#music_row), [`music_position`](#music_position).
 
 <a id="music_row"></a>
 
-### `music_row()` → `Int`
+### [`music_row()`](#audio_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la fila del patrón que suena, de 0 a 63. Para sincronizar algo con la música.
 
@@ -10614,7 +10812,7 @@ Ver también: [`music_pos`](#music_pos).
 
 <a id="music_seek"></a>
 
-### `music_seek(pos, row)`
+### [`music_seek(pos, row)`](#audio_functions_table) · [índice](#indice)
 
 - `pos`: la posición en la lista de orden, desde 0; fuera de ella, 0.
 - `row`: la fila del patrón, de 0 a 63; fuera, 0.
@@ -10627,7 +10825,7 @@ Ver también: [`music_position`](#music_position), [`music_pos`](#music_pos), [`
 
 <a id="music_tick"></a>
 
-### `music_tick()` → `Int`
+### [`music_tick()`](#audio_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántos tics de la fila que suena ya han sonado, de 0 a `music_speed() - 1`. `music_tick()` dividido por
 `music_speed()` es la parte de la fila que ya pasó: para mover algo suave entre una fila y la siguiente. Un tic es
@@ -10637,7 +10835,7 @@ Ver también: [`music_speed`](#music_speed), [`music_row`](#music_row), [`music_
 
 <a id="music_speed"></a>
 
-### `music_speed()` → `Int`
+### [`music_speed()`](#audio_functions_table) → `Int` · [índice](#indice)
 
 Devuelve los tics que dura una fila: la velocidad de la canción (sus efectos `F` menores de 32), 6 al empezar.
 
@@ -10645,7 +10843,7 @@ Ver también: [`music_tick`](#music_tick), [`music_bpm`](#music_bpm).
 
 <a id="music_bpm"></a>
 
-### `music_bpm()` → `Int`
+### [`music_bpm()`](#audio_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el tempo de la canción (sus efectos `F` desde 32), 125 al empezar. Con 125 hay un tic en cada imagen en
 PAL; con otro, `bpm / 125` tics por imagen.
@@ -10654,7 +10852,7 @@ Ver también: [`music_speed`](#music_speed), [`music_tick`](#music_tick).
 
 <a id="music_playing"></a>
 
-### `music_playing()` → `Bool`
+### [`music_playing()`](#audio_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` mientras la música suena: tras `music_play` y sin `music_stop` ni `music_pause`.
 
@@ -10662,7 +10860,7 @@ Ver también: [`music_play`](#music_play), [`music_pause`](#music_pause).
 
 <a id="music_free"></a>
 
-### `music_free()`
+### [`music_free()`](#audio_functions_table) · [índice](#indice)
 
 Para la música si sonaba y libera su memoria.
 
@@ -10670,7 +10868,7 @@ Ver también: [`music_load`](#music_load).
 
 <a id="tone_play"></a>
 
-### `tone_play(channel, freq, vol, duration)`
+### [`tone_play(channel, freq, vol, duration)`](#audio_functions_table) · [índice](#indice)
 
 - `channel`: el canal, de 0 a 3.
 - `freq`: la frecuencia en hercios: 440 es el La.
@@ -10681,6 +10879,8 @@ Toca un tono puro (una onda senoidal) y vuelve enseguida, sin esperar a que acab
 ningún fichero.
 
 Ver también: [`sound_play`](#sound_play).
+
+[Volver al índice](#indice)
 
 <a id="intuition_expanded"></a>
 
@@ -10761,7 +10961,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="intuition_expanded_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -10828,7 +11030,7 @@ end
 
 <a id="window_create"></a>
 
-### `window_create(title, x, y, w, h, flags)` → `Int`
+### [`window_create(title, x, y, w, h, flags)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `title`: el título. Con `""`, sin flag 1 y con los flags 2 y 4, la ventana no tiene barra de título.
 - `x`, `y`: la posición en la pantalla.
@@ -10844,7 +11046,7 @@ Ver también: [`window_close`](#window_close), [`window_use`](#window_use), [`sc
 
 <a id="window_border_top"></a>
 
-### `window_border_top()` → `Int`
+### [`window_border_top()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el grosor del borde de arriba de la ventana actual, con la barra de título, en píxeles; 0 sin ventana.
 Depende de la fuente de la pantalla. Hace falta para calcular el tamaño de fuera de una ventana; con el flag 8 de
@@ -10854,7 +11056,7 @@ Ver también: [`window_border_bottom`](#window_border_bottom), [`window_border_l
 
 <a id="window_border_bottom"></a>
 
-### `window_border_bottom()` → `Int`
+### [`window_border_bottom()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el grosor del borde de abajo de la ventana actual, en píxeles; 0 sin ventana.
 
@@ -10862,7 +11064,7 @@ Ver también: [`window_border_top`](#window_border_top).
 
 <a id="window_border_left"></a>
 
-### `window_border_left()` → `Int`
+### [`window_border_left()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el grosor del borde izquierdo de la ventana actual, en píxeles; 0 sin ventana.
 
@@ -10870,7 +11072,7 @@ Ver también: [`window_border_top`](#window_border_top).
 
 <a id="window_border_right"></a>
 
-### `window_border_right()` → `Int`
+### [`window_border_right()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el grosor del borde derecho de la ventana actual, en píxeles; 0 sin ventana.
 
@@ -10878,7 +11080,7 @@ Ver también: [`window_border_top`](#window_border_top).
 
 <a id="screen_font_height"></a>
 
-### `screen_font_height()` → `Int`
+### [`screen_font_height()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el alto en píxeles de la fuente de la pantalla: la del programa, la de la ventana actual o, sin ninguna,
 la del Workbench. Es la fuente de las barras de título y de los gadgets. Una fila de gadgets cómoda mide
@@ -10888,7 +11090,7 @@ Ver también: [`screen_font_text_width`](#screen_font_text_width), [`window_crea
 
 <a id="screen_font_text_width"></a>
 
-### `screen_font_text_width(text)` → `Int`
+### [`screen_font_text_width(text)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `text`: el texto.
 
@@ -10899,7 +11101,7 @@ Ver también: [`screen_font_height`](#screen_font_height), [`gfx_text_len`](#gfx
 
 <a id="window_close"></a>
 
-### `window_close(handle)`
+### [`window_close(handle)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 
@@ -10910,7 +11112,7 @@ Ver también: [`window_create`](#window_create), [`window_use`](#window_use), [`
 
 <a id="window_title"></a>
 
-### `window_title(handle, title)`
+### [`window_title(handle, title)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 - `title`: el título nuevo.
@@ -10921,7 +11123,7 @@ Ver también: [`window_create`](#window_create).
 
 <a id="window_move"></a>
 
-### `window_move(handle, x, y)`
+### [`window_move(handle, x, y)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 - `x`, `y`: la posición nueva en la pantalla (no un desplazamiento).
@@ -10933,7 +11135,7 @@ Ver también: [`window_resize`](#window_resize), [`window_create`](#window_creat
 
 <a id="window_resize"></a>
 
-### `window_resize(handle, w, h)`
+### [`window_resize(handle, w, h)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 - `w`, `h`: el tamaño nuevo, de fuera (con los bordes).
@@ -10944,7 +11146,7 @@ Ver también: [`window_move`](#window_move), [`window_border_top`](#window_borde
 
 <a id="window_to_front"></a>
 
-### `window_to_front(handle)`
+### [`window_to_front(handle)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 
@@ -10954,7 +11156,7 @@ Ver también: [`window_to_back`](#window_to_back), [`window_activate`](#window_a
 
 <a id="window_to_back"></a>
 
-### `window_to_back(handle)`
+### [`window_to_back(handle)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 
@@ -10964,7 +11166,7 @@ Ver también: [`window_to_front`](#window_to_front).
 
 <a id="window_activate"></a>
 
-### `window_activate(handle)`
+### [`window_activate(handle)`](#intuition_expanded_table) · [índice](#indice)
 
 - `handle`: el número de la ventana; 0, la actual.
 
@@ -10974,7 +11176,7 @@ Ver también: [`window_to_front`](#window_to_front).
 
 <a id="window_use"></a>
 
-### `window_use(handle)` → `Bool`
+### [`window_use(handle)`](#intuition_expanded_table) → `Bool` · [índice](#indice)
 
 - `handle`: el número de una ventana de `window_create`, o 0 para la ventana declarada (`Window X ... end`) abierta
   la última.
@@ -10986,7 +11188,7 @@ Ver también: [`window_create`](#window_create), [`gfx_pen`](#gfx_pen).
 
 <a id="screen_to_front"></a>
 
-### `screen_to_front()`
+### [`screen_to_front()`](#intuition_expanded_table) · [índice](#indice)
 
 Pone delante la pantalla del programa (la de `screen_open`). Sin pantalla propia no hace nada.
 
@@ -10994,7 +11196,7 @@ Ver también: [`screen_to_back`](#screen_to_back), [`screen_open`](#screen_open)
 
 <a id="screen_to_back"></a>
 
-### `screen_to_back()`
+### [`screen_to_back()`](#intuition_expanded_table) · [índice](#indice)
 
 Pone detrás la pantalla del programa, y se ve la de debajo (el Workbench). Sin pantalla propia no hace nada.
 
@@ -11002,7 +11204,7 @@ Ver también: [`screen_to_front`](#screen_to_front).
 
 <a id="gadget_id"></a>
 
-### `gadget_id()` → `Int`
+### [`gadget_id()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el número del último gadget usado. Se mira en el `On Gadget` del `EventLoop` y se compara con lo que
 devolvió su `*_create`.
@@ -11011,7 +11213,7 @@ Ver también: [`button_create`](#button_create), [`event_window`](#event_window)
 
 <a id="gadget_width"></a>
 
-### `gadget_width(gadget)` → `Int`
+### [`gadget_width(gadget)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gadget`: el número del gadget.
 
@@ -11021,7 +11223,7 @@ Ver también: [`gadget_height`](#gadget_height).
 
 <a id="gadget_height"></a>
 
-### `gadget_height(gadget)` → `Int`
+### [`gadget_height(gadget)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gadget`: el número del gadget.
 
@@ -11031,7 +11233,7 @@ Ver también: [`gadget_width`](#gadget_width).
 
 <a id="button_create"></a>
 
-### `button_create(win, x, y, w, h, label)` → `Int`
+### [`button_create(win, x, y, w, h, label)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`: la esquina de arriba a la izquierda.
@@ -11045,7 +11247,7 @@ Ver también: [`button_disable`](#button_disable), [`gadget_id`](#gadget_id).
 
 <a id="button_enable"></a>
 
-### `button_enable(gad)`
+### [`button_enable(gad)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del gadget.
 
@@ -11055,7 +11257,7 @@ Ver también: [`button_disable`](#button_disable).
 
 <a id="button_disable"></a>
 
-### `button_disable(gad)`
+### [`button_disable(gad)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del gadget.
 
@@ -11065,7 +11267,7 @@ Ver también: [`button_enable`](#button_enable).
 
 <a id="textfield_create"></a>
 
-### `textfield_create(win, x, y, w, h, maxlen)` → `Int`
+### [`textfield_create(win, x, y, w, h, maxlen)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño; 0 lo mide Dash (diez letras de ancho).
@@ -11078,7 +11280,7 @@ Ver también: [`textfield_get`](#textfield_get), [`textfield_set`](#textfield_se
 
 <a id="textfield_get"></a>
 
-### `textfield_get(gad)` → `String`
+### [`textfield_get(gad)`](#intuition_expanded_table) → `String` · [índice](#indice)
 
 - `gad`: el número del campo.
 
@@ -11088,7 +11290,7 @@ Ver también: [`textfield_set`](#textfield_set).
 
 <a id="textfield_set"></a>
 
-### `textfield_set(gad, text)`
+### [`textfield_set(gad, text)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del campo.
 - `text`: el texto nuevo.
@@ -11099,7 +11301,7 @@ Ver también: [`textfield_get`](#textfield_get).
 
 <a id="checkbox_create"></a>
 
-### `checkbox_create(win, x, y, label)` → `Int`
+### [`checkbox_create(win, x, y, label)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`: dónde va la casilla; el texto va a su derecha.
@@ -11111,7 +11313,7 @@ Ver también: [`checkbox_get`](#checkbox_get), [`checkbox_set`](#checkbox_set).
 
 <a id="checkbox_get"></a>
 
-### `checkbox_get(gad)` → `Bool`
+### [`checkbox_get(gad)`](#intuition_expanded_table) → `Bool` · [índice](#indice)
 
 - `gad`: el número de la casilla.
 
@@ -11121,7 +11323,7 @@ Ver también: [`checkbox_set`](#checkbox_set).
 
 <a id="checkbox_set"></a>
 
-### `checkbox_set(gad, state)`
+### [`checkbox_set(gad, state)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número de la casilla.
 - `state`: `true` la marca, `false` la desmarca.
@@ -11132,7 +11334,7 @@ Ver también: [`checkbox_get`](#checkbox_get).
 
 <a id="slider_create"></a>
 
-### `slider_create(win, x, y, w, h, min, max, value)` → `Int`
+### [`slider_create(win, x, y, w, h, min, max, value)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño. Más ancho que alto es horizontal.
@@ -11145,7 +11347,7 @@ Ver también: [`slider_get`](#slider_get), [`slider_set`](#slider_set).
 
 <a id="slider_get"></a>
 
-### `slider_get(gad)` → `Int`
+### [`slider_get(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número del deslizador.
 
@@ -11155,7 +11357,7 @@ Ver también: [`slider_set`](#slider_set).
 
 <a id="slider_set"></a>
 
-### `slider_set(gad, value)`
+### [`slider_set(gad, value)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del deslizador.
 - `value`: el valor nuevo.
@@ -11166,7 +11368,7 @@ Ver también: [`slider_get`](#slider_get).
 
 <a id="listview_create"></a>
 
-### `listview_create(win, x, y, w, h)` → `Int`
+### [`listview_create(win, x, y, w, h)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño.
@@ -11178,7 +11380,7 @@ Ver también: [`listview_add`](#listview_add), [`listview_selected`](#listview_s
 
 <a id="listview_add"></a>
 
-### `listview_add(gad, text)`
+### [`listview_add(gad, text)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número de la lista.
 - `text`: la línea.
@@ -11189,7 +11391,7 @@ Ver también: [`listview_clear`](#listview_clear).
 
 <a id="listview_clear"></a>
 
-### `listview_clear(gad)`
+### [`listview_clear(gad)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número de la lista.
 
@@ -11199,7 +11401,7 @@ Ver también: [`listview_add`](#listview_add).
 
 <a id="listview_selected"></a>
 
-### `listview_selected(gad)` → `Int`
+### [`listview_selected(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número de la lista.
 
@@ -11209,7 +11411,7 @@ Ver también: [`listview_create`](#listview_create).
 
 <a id="cycle_create"></a>
 
-### `cycle_create(win, x, y, w, h, options)` → `Int`
+### [`cycle_create(win, x, y, w, h, options)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño; 0 lo mide Dash con la opción más larga.
@@ -11222,7 +11424,7 @@ Ver también: [`cycle_get`](#cycle_get), [`cycle_set`](#cycle_set), [`radio_crea
 
 <a id="cycle_get"></a>
 
-### `cycle_get(gad)` → `Int`
+### [`cycle_get(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número del gadget.
 
@@ -11232,7 +11434,7 @@ Ver también: [`cycle_set`](#cycle_set).
 
 <a id="cycle_set"></a>
 
-### `cycle_set(gad, index)`
+### [`cycle_set(gad, index)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del gadget.
 - `index`: la opción, desde 0.
@@ -11243,7 +11445,7 @@ Ver también: [`cycle_get`](#cycle_get).
 
 <a id="radio_create"></a>
 
-### `radio_create(win, x, y, options)` → `Int`
+### [`radio_create(win, x, y, options)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`: dónde va el primer botón; los demás van debajo, con su texto a la derecha.
@@ -11256,7 +11458,7 @@ Ver también: [`radio_get`](#radio_get), [`radio_set`](#radio_set), [`cycle_crea
 
 <a id="radio_get"></a>
 
-### `radio_get(gad)` → `Int`
+### [`radio_get(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número del grupo.
 
@@ -11266,7 +11468,7 @@ Ver también: [`radio_set`](#radio_set).
 
 <a id="radio_set"></a>
 
-### `radio_set(gad, index)`
+### [`radio_set(gad, index)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del grupo.
 - `index`: el botón, desde 0.
@@ -11277,7 +11479,7 @@ Ver también: [`radio_get`](#radio_get).
 
 <a id="integer_create"></a>
 
-### `integer_create(win, x, y, w, h, value)` → `Int`
+### [`integer_create(win, x, y, w, h, value)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño.
@@ -11289,7 +11491,7 @@ Ver también: [`integer_get`](#integer_get), [`integer_set`](#integer_set), [`te
 
 <a id="integer_get"></a>
 
-### `integer_get(gad)` → `Int`
+### [`integer_get(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número del campo.
 
@@ -11299,7 +11501,7 @@ Ver también: [`integer_set`](#integer_set).
 
 <a id="integer_set"></a>
 
-### `integer_set(gad, value)`
+### [`integer_set(gad, value)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del campo.
 - `value`: el número nuevo.
@@ -11310,7 +11512,7 @@ Ver también: [`integer_get`](#integer_get).
 
 <a id="palette_create"></a>
 
-### `palette_create(win, x, y, w, h, depth)` → `Int`
+### [`palette_create(win, x, y, w, h, depth)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño.
@@ -11322,7 +11524,7 @@ Ver también: [`palette_get`](#palette_get), [`palette_set`](#palette_set), [`di
 
 <a id="palette_get"></a>
 
-### `palette_get(gad)` → `Int`
+### [`palette_get(gad)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `gad`: el número del gadget.
 
@@ -11332,7 +11534,7 @@ Ver también: [`palette_set`](#palette_set).
 
 <a id="palette_set"></a>
 
-### `palette_set(gad, color)`
+### [`palette_set(gad, color)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del gadget.
 - `color`: el color.
@@ -11343,7 +11545,7 @@ Ver también: [`palette_get`](#palette_get).
 
 <a id="number_create"></a>
 
-### `number_create(win, x, y, w, h, value)` → `Int`
+### [`number_create(win, x, y, w, h, value)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana; 0, la actual.
 - `x`, `y`, `w`, `h`: posición y tamaño.
@@ -11355,7 +11557,7 @@ Ver también: [`number_set`](#number_set).
 
 <a id="number_set"></a>
 
-### `number_set(gad, value)`
+### [`number_set(gad, value)`](#intuition_expanded_table) · [índice](#indice)
 
 - `gad`: el número del gadget.
 - `value`: el número nuevo.
@@ -11366,7 +11568,7 @@ Ver también: [`number_create`](#number_create).
 
 <a id="dialog_file"></a>
 
-### `dialog_file(title, pattern, save_mode)` → `String`
+### [`dialog_file(title, pattern, save_mode)`](#intuition_expanded_table) → `String` · [índice](#indice)
 
 - `title`: el título de la petición.
 - `pattern`: qué ficheros se ven, con los comodines de AmigaDOS: `"#?.dash"`; `""` = todos.
@@ -11379,7 +11581,7 @@ Ver también: [`dialog_file_at`](#dialog_file_at), [`file_open_dialog`](#file_op
 
 <a id="dialog_file_at"></a>
 
-### `dialog_file_at(title, pattern, save_mode, drawer, file)` → `String`
+### [`dialog_file_at(title, pattern, save_mode, drawer, file)`](#intuition_expanded_table) → `String` · [índice](#indice)
 
 - `title`, `pattern`, `save_mode`: como en `dialog_file`.
 - `drawer`: el cajón donde se abre; `""` = el de la última vez.
@@ -11392,7 +11594,7 @@ Ver también: [`dialog_file`](#dialog_file), [`dialog_drawer`](#dialog_drawer).
 
 <a id="dialog_drawer"></a>
 
-### `dialog_drawer(title, initial)` → `String`
+### [`dialog_drawer(title, initial)`](#intuition_expanded_table) → `String` · [índice](#indice)
 
 - `title`: el título de la petición.
 - `initial`: el cajón donde se abre (`"Work:"`); `""` = el actual.
@@ -11404,7 +11606,7 @@ Ver también: [`dialog_file`](#dialog_file).
 
 <a id="dialog_color"></a>
 
-### `dialog_color(title, initial)` → `Int`
+### [`dialog_color(title, initial)`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 - `title`: el título de la ventana.
 - `initial`: el color que sale elegido.
@@ -11416,7 +11618,7 @@ Ver también: [`palette_create`](#palette_create).
 
 <a id="dialog_screen_mode"></a>
 
-### `dialog_screen_mode(title)` → `Bool`
+### [`dialog_screen_mode(title)`](#intuition_expanded_table) → `Bool` · [índice](#indice)
 
 - `title`: el título de la petición.
 
@@ -11428,7 +11630,7 @@ Ver también: [`screen_mode_id`](#screen_mode_id), [`screen_open_mode`](#screen_
 
 <a id="screen_mode_id"></a>
 
-### `screen_mode_id()` → `Int`
+### [`screen_mode_id()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el modo elegido en el último `dialog_screen_mode`, el número que pide `screen_open_mode`.
 
@@ -11436,7 +11638,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode), [`screen_open_mode`](
 
 <a id="screen_mode_width"></a>
 
-### `screen_mode_width()` → `Int`
+### [`screen_mode_width()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el ancho elegido en el último `dialog_screen_mode`.
 
@@ -11444,7 +11646,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode).
 
 <a id="screen_mode_height"></a>
 
-### `screen_mode_height()` → `Int`
+### [`screen_mode_height()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve el alto elegido en el último `dialog_screen_mode`.
 
@@ -11452,7 +11654,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode).
 
 <a id="screen_mode_depth"></a>
 
-### `screen_mode_depth()` → `Int`
+### [`screen_mode_depth()`](#intuition_expanded_table) → `Int` · [índice](#indice)
 
 Devuelve la profundidad elegida en el último `dialog_screen_mode`: 3 son 8 colores, 8 son 256.
 
@@ -11460,7 +11662,7 @@ Ver también: [`dialog_screen_mode`](#dialog_screen_mode).
 
 <a id="dialog_font"></a>
 
-### `dialog_font(title)` → `String`
+### [`dialog_font(title)`](#intuition_expanded_table) → `String` · [índice](#indice)
 
 - `title`: el título de la petición.
 
@@ -11468,6 +11670,8 @@ Abre la petición de fuentes del sistema y espera. Devuelve la fuente elegida co
 (`"topaz.font/8"`), o `""` si se canceló. Para abrirla, el nombre y el tamaño van por separado en `font_open`.
 
 Ver también: [`font_open`](#font_open).
+
+[Volver al índice](#indice)
 
 <a id="rtg_functions"></a>
 
@@ -11502,7 +11706,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="rtg_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -11530,7 +11736,7 @@ end
 
 <a id="rtg_available"></a>
 
-### `rtg_available()` → `Bool`
+### [`rtg_available()`](#rtg_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si está instalada CyberGraphX o Picasso96 (su `cybergraphics.library`).
 
@@ -11538,7 +11744,7 @@ Ver también: [`rtg_is_active`](#rtg_is_active).
 
 <a id="rtg_is_active"></a>
 
-### `rtg_is_active()` → `Bool`
+### [`rtg_is_active()`](#rtg_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` si la pantalla donde se dibuja es de una tarjeta gráfica y de color verdadero.
 
@@ -11546,7 +11752,7 @@ Ver también: [`rtg_available`](#rtg_available).
 
 <a id="rtg_get_depth"></a>
 
-### `rtg_get_depth()` → `Int`
+### [`rtg_get_depth()`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la profundidad en bits de la pantalla del programa o, si no hay, del Workbench: 8 de paleta, 16, 24 o 32 de color verdadero.
 
@@ -11554,7 +11760,7 @@ Ver también: [`rtg_get_width`](#rtg_get_width).
 
 <a id="rtg_get_width"></a>
 
-### `rtg_get_width()` → `Int`
+### [`rtg_get_width()`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el ancho de la pantalla del programa o, si no hay, del Workbench.
 
@@ -11562,7 +11768,7 @@ Ver también: [`rtg_get_height`](#rtg_get_height).
 
 <a id="rtg_get_height"></a>
 
-### `rtg_get_height()` → `Int`
+### [`rtg_get_height()`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el alto de la pantalla del programa o, si no hay, del Workbench.
 
@@ -11570,7 +11776,7 @@ Ver también: [`rtg_get_width`](#rtg_get_width).
 
 <a id="rtg_alloc_bitmap"></a>
 
-### `rtg_alloc_bitmap(width, height, depth)` → `Int (dirección)`
+### [`rtg_alloc_bitmap(width, height, depth)`](#rtg_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `width`, `height`: el tamaño.
 - `depth`: la profundidad en bits.
@@ -11582,7 +11788,7 @@ Ver también: [`rtg_free_bitmap`](#rtg_free_bitmap), [`rtg_blit`](#rtg_blit).
 
 <a id="rtg_free_bitmap"></a>
 
-### `rtg_free_bitmap(bitmap)`
+### [`rtg_free_bitmap(bitmap)`](#rtg_functions_table) · [índice](#indice)
 
 - `bitmap`: el de `rtg_alloc_bitmap`.
 
@@ -11592,7 +11798,7 @@ Ver también: [`rtg_alloc_bitmap`](#rtg_alloc_bitmap).
 
 <a id="rtg_write_pixel"></a>
 
-### `rtg_write_pixel(x, y, rgb)`
+### [`rtg_write_pixel(x, y, rgb)`](#rtg_functions_table) · [índice](#indice)
 
 - `x`, `y`: el punto.
 - `rgb`: el color `0xRRGGBB`.
@@ -11603,7 +11809,7 @@ Ver también: [`rtg_read_pixel`](#rtg_read_pixel), [`rtg_fill_rect`](#rtg_fill_r
 
 <a id="rtg_read_pixel"></a>
 
-### `rtg_read_pixel(x, y)` → `Int`
+### [`rtg_read_pixel(x, y)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el punto.
 
@@ -11613,7 +11819,7 @@ Ver también: [`rtg_write_pixel`](#rtg_write_pixel), [`gfx_pixel_rgb`](#gfx_pixe
 
 <a id="rtg_fill_rect"></a>
 
-### `rtg_fill_rect(x, y, w, h, rgb)`
+### [`rtg_fill_rect(x, y, w, h, rgb)`](#rtg_functions_table) · [índice](#indice)
 
 - `x`, `y`: la esquina.
 - `w`, `h`: el tamaño.
@@ -11625,7 +11831,7 @@ Ver también: [`rtg_write_pixel`](#rtg_write_pixel).
 
 <a id="rtg_write_array"></a>
 
-### `rtg_write_array(buffer, bpr, x, y, w, h)`
+### [`rtg_write_array(buffer, bpr, x, y, w, h)`](#rtg_functions_table) · [índice](#indice)
 
 - `buffer`: los píxeles, 4 bytes cada uno (alfa, rojo, verde, azul).
 - `bpr`: los bytes de cada fila del búfer (normalmente `w * 4`).
@@ -11638,7 +11844,7 @@ Ver también: [`rtg_read_array`](#rtg_read_array), [`gfx_rgb_draw`](#gfx_rgb_dra
 
 <a id="rtg_read_array"></a>
 
-### `rtg_read_array(buffer, bpr, x, y, w, h)`
+### [`rtg_read_array(buffer, bpr, x, y, w, h)`](#rtg_functions_table) · [índice](#indice)
 
 - `buffer`, `bpr`, `x`, `y`, `w`, `h`: como en `rtg_write_array`.
 
@@ -11648,7 +11854,7 @@ Ver también: [`rtg_write_array`](#rtg_write_array).
 
 <a id="rtg_rgb"></a>
 
-### `rtg_rgb(r, g, b)` → `Int`
+### [`rtg_rgb(r, g, b)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `r`, `g`, `b`: de 0 a 255.
 
@@ -11658,7 +11864,7 @@ Ver también: [`rtg_rgb_r`](#rtg_rgb_r), [`rtg_argb`](#rtg_argb).
 
 <a id="rtg_argb"></a>
 
-### `rtg_argb(a, r, g, b)` → `Int`
+### [`rtg_argb(a, r, g, b)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `a`, `r`, `g`, `b`: de 0 a 255; `a` es la opacidad.
 
@@ -11668,7 +11874,7 @@ Ver también: [`rtg_rgb`](#rtg_rgb).
 
 <a id="rtg_rgb_r"></a>
 
-### `rtg_rgb_r(color)` → `Int`
+### [`rtg_rgb_r(color)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `color`: un color `0xRRGGBB`.
 
@@ -11678,7 +11884,7 @@ Ver también: [`rtg_rgb_g`](#rtg_rgb_g), [`rtg_rgb_b`](#rtg_rgb_b).
 
 <a id="rtg_rgb_g"></a>
 
-### `rtg_rgb_g(color)` → `Int`
+### [`rtg_rgb_g(color)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `color`: un color `0xRRGGBB`.
 
@@ -11688,7 +11894,7 @@ Ver también: [`rtg_rgb_r`](#rtg_rgb_r).
 
 <a id="rtg_rgb_b"></a>
 
-### `rtg_rgb_b(color)` → `Int`
+### [`rtg_rgb_b(color)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `color`: un color `0xRRGGBB`.
 
@@ -11698,7 +11904,7 @@ Ver también: [`rtg_rgb_r`](#rtg_rgb_r).
 
 <a id="rtg_best_mode"></a>
 
-### `rtg_best_mode(width, height, depth)` → `Int`
+### [`rtg_best_mode(width, height, depth)`](#rtg_functions_table) → `Int` · [índice](#indice)
 
 - `width`, `height`, `depth`: lo que se quiere.
 
@@ -11708,7 +11914,7 @@ Ver también: [`rtg_open_screen`](#rtg_open_screen), [`screen_open_mode`](#scree
 
 <a id="rtg_open_screen"></a>
 
-### `rtg_open_screen(width, height, depth, title)` → `Bool`
+### [`rtg_open_screen(width, height, depth, title)`](#rtg_functions_table) → `Bool` · [índice](#indice)
 
 - `width`, `height`: el tamaño.
 - `depth`: 16, 24 o 32 bits.
@@ -11721,7 +11927,7 @@ Ver también: [`rtg_best_mode`](#rtg_best_mode), [`screen_close`](#screen_close)
 
 <a id="rtg_blit"></a>
 
-### `rtg_blit(src, sx, sy, dx, dy, w, h)`
+### [`rtg_blit(src, sx, sy, dx, dy, w, h)`](#rtg_functions_table) · [índice](#indice)
 
 - `src`: un bitmap de `rtg_alloc_bitmap`.
 - `sx`, `sy`: la esquina de origen.
@@ -11734,7 +11940,7 @@ Ver también: [`rtg_scale_blit`](#rtg_scale_blit).
 
 <a id="rtg_scale_blit"></a>
 
-### `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`
+### [`rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)`](#rtg_functions_table) · [índice](#indice)
 
 - `src`: un bitmap de `rtg_alloc_bitmap`.
 - `sx`, `sy`, `sw`, `sh`: la parte de origen.
@@ -11743,6 +11949,8 @@ Ver también: [`rtg_scale_blit`](#rtg_scale_blit).
 Como `rtg_blit`, agrandando o reduciendo.
 
 Ver también: [`rtg_blit`](#rtg_blit).
+
+[Volver al índice](#indice)
 
 <a id="mui_functions"></a>
 
@@ -11880,7 +12088,9 @@ end
 
 **Más ejemplos**, pequeños, de unas funciones (también son tests; la ayuda del Amiga los enseña en la ficha de cada función que usan): `tests/test_doc_mui_boton.dash`, `tests/test_doc_mui_formulario.dash`, `tests/test_doc_mui_lista.dash`.
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="mui_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -12013,7 +12223,7 @@ end
 
 <a id="mui_app_begin"></a>
 
-### `mui_app_begin(title, base)` → `Int (dirección)`
+### [`mui_app_begin(title, base)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el nombre de la aplicación, el que enseña MUI en sus preferencias y en Exchange.
 - `base`: el nombre de su puerto ARexx, en mayúsculas (`"MIPROG"`); el puerto es `base` más `.1`.
@@ -12025,7 +12235,7 @@ Ver también: [`mui_app_end`](#mui_app_end), [`mui_window_begin`](#mui_window_be
 
 <a id="mui_text_editor"></a>
 
-### `mui_text_editor(lines)` → `Int (dirección)`
+### [`mui_text_editor(lines)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `lines`: cuántas líneas de alto; `0` = tan alto como deje la ventana, que crece con ella.
 
@@ -12037,7 +12247,7 @@ Ver también: [`mui_string`](#mui_string).
 
 <a id="mui_window_open_back"></a>
 
-### `mui_window_open_back(win)` → `Int`
+### [`mui_window_open_back(win)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12047,7 +12257,7 @@ Ver también: [`mui_window_open`](#mui_window_open).
 
 <a id="mui_window_activate"></a>
 
-### `mui_window_activate(win)`
+### [`mui_window_activate(win)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12057,7 +12267,7 @@ Ver también: [`mui_window_active`](#mui_window_active).
 
 <a id="mui_window_dispose"></a>
 
-### `mui_window_dispose(window)`
+### [`mui_window_dispose(window)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12068,7 +12278,7 @@ Ver también: [`mui_window_close`](#mui_window_close).
 
 <a id="mui_request"></a>
 
-### `mui_request(window, title, text, buttons)` → `Int`
+### [`mui_request(window, title, text, buttons)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
 - `title`: el título.
@@ -12082,7 +12292,7 @@ Ver también: [`mui_request_text`](#mui_request_text), [`mui_window_begin`](#mui
 
 <a id="mui_request_text"></a>
 
-### `mui_request_text(window, title, text, initial, buttons)` → `String`
+### [`mui_request_text(window, title, text, initial, buttons)`](#mui_functions_table) → `String` · [índice](#indice)
 
 - `window`: la ventana sobre la que sale; 0 = sobre la aplicación.
 - `title`: el título.
@@ -12099,7 +12309,7 @@ Ver también: [`mui_request`](#mui_request), [`mui_string`](#mui_string).
 
 <a id="mui_set_background"></a>
 
-### `mui_set_background(obj, r, g, b)`
+### [`mui_set_background(obj, r, g, b)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un grupo, un texto, una etiqueta, un botón, una lista o una ventana.
 - `r`, `g`, `b`: el color, de 0 a 255.
@@ -12110,7 +12320,7 @@ Ver también: [`mui_set_text_pen`](#mui_set_text_pen).
 
 <a id="mui_set_text_pen"></a>
 
-### `mui_set_text_pen(obj, r, g, b)`
+### [`mui_set_text_pen(obj, r, g, b)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un texto, una etiqueta o un botón.
 - `r`, `g`, `b`: el color, de 0 a 255.
@@ -12121,7 +12331,7 @@ Ver también: [`mui_set_background`](#mui_set_background).
 
 <a id="mui_app_field_colors"></a>
 
-### `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`
+### [`mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)`](#mui_functions_table) · [índice](#indice)
 
 - `r`, `g`, `b`: el fondo de los campos sin el cursor (0 a 255).
 - `active_r`, `active_g`, `active_b`: el fondo del campo con el cursor.
@@ -12134,7 +12344,7 @@ Ver también: [`mui_set_background`](#mui_set_background).
 
 <a id="mui_app_rexx"></a>
 
-### `mui_app_rexx(app, func)`
+### [`mui_app_rexx(app, func)`](#mui_functions_table) · [índice](#indice)
 
 - `app`: la aplicación (lo que devolvió `mui_app_begin`).
 - `func`: una función `f(orden: String) -> String`.
@@ -12146,7 +12356,7 @@ Ver también: [`mui_rexx_fail`](#mui_rexx_fail).
 
 <a id="mui_app_iconify"></a>
 
-### `mui_app_iconify(on)`
+### [`mui_app_iconify(on)`](#mui_functions_table) · [índice](#indice)
 
 - `on`: `true` para iconificar, `false` para volver.
 
@@ -12165,7 +12375,7 @@ Ver también: [`mui_app_iconified`](#mui_app_iconified), [`mui_app_icon`](#mui_a
 
 <a id="mui_app_iconified"></a>
 
-### `mui_app_iconified()` → `Bool`
+### [`mui_app_iconified()`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 `true` mientras la aplicación está iconificada: sus ventanas cerradas y su icono en el Workbench. Las ventanas siguen
 contando como abiertas para MUI (vuelven al salir del icono).
@@ -12174,7 +12384,7 @@ Ver también: [`mui_app_iconify`](#mui_app_iconify).
 
 <a id="mui_app_icon"></a>
 
-### `mui_app_icon(path)` → `Bool`
+### [`mui_app_icon(path)`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 - `path`: la ruta del icono sin ".info", como `"PROGDIR:Programa"`.
 
@@ -12186,7 +12396,7 @@ Ver también: [`mui_app_iconify`](#mui_app_iconify).
 
 <a id="mui_rexx_fail"></a>
 
-### `mui_rexx_fail(rc)`
+### [`mui_rexx_fail(rc)`](#mui_functions_table) · [índice](#indice)
 
 - `rc`: el código: 5 aviso, 10 error, 20 fallo.
 
@@ -12196,7 +12406,7 @@ Ver también: [`mui_app_rexx`](#mui_app_rexx).
 
 <a id="mui_app_end"></a>
 
-### `mui_app_end()`
+### [`mui_app_end()`](#mui_functions_table) · [índice](#indice)
 
 Deshace la aplicación con todas sus ventanas y objetos y cierra MUI. Si el programa no la llama, se hace sola al
 acabar. Después ningún objeto de MUI sirve.
@@ -12205,7 +12415,7 @@ Ver también: [`mui_app_begin`](#mui_app_begin).
 
 <a id="mui_window_begin"></a>
 
-### `mui_window_begin(title, id)` → `Int (dirección)`
+### [`mui_window_begin(title, id)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el título.
 - `id`: de 1 a 255 para que MUI recuerde su tamaño y su sitio de una vez a otra (cada ventana el suyo); 0 =
@@ -12218,7 +12428,7 @@ Ver también: [`mui_window_end`](#mui_window_end), [`mui_window_open`](#mui_wind
 
 <a id="mui_window_end"></a>
 
-### `mui_window_end()`
+### [`mui_window_end()`](#mui_functions_table) · [índice](#indice)
 
 Acaba la ventana empezada con `mui_window_begin` y la añade a la aplicación. Los grupos abiertos dentro tienen que
 estar cerrados con su `mui_group_end`. La ventana no se ve hasta `mui_window_open`.
@@ -12227,7 +12437,7 @@ Ver también: [`mui_window_begin`](#mui_window_begin).
 
 <a id="mui_window_open"></a>
 
-### `mui_window_open(win)` → `Int`
+### [`mui_window_open(win)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12237,7 +12447,7 @@ Ver también: [`mui_window_close`](#mui_window_close), [`mui_window_open_back`](
 
 <a id="mui_window_close"></a>
 
-### `mui_window_close(win)`
+### [`mui_window_close(win)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12247,7 +12457,7 @@ Ver también: [`mui_window_open`](#mui_window_open), [`mui_window_dispose`](#mui
 
 <a id="mui_window_modal"></a>
 
-### `mui_window_modal(win)`
+### [`mui_window_modal(win)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana que será modal.
 
@@ -12270,7 +12480,7 @@ Ver también: [`mui_window_open`](#mui_window_open), [`mui_window_close`](#mui_w
 
 <a id="mui_window_active"></a>
 
-### `mui_window_active(win)` → `Int`
+### [`mui_window_active(win)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12281,7 +12491,7 @@ Ver también: [`mui_window_activate`](#mui_window_activate).
 
 <a id="mui_vgroup_begin"></a>
 
-### `mui_vgroup_begin()` → `Int (dirección)`
+### [`mui_vgroup_begin()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Empieza un grupo que pone sus objetos uno debajo de otro, dentro del grupo abierto. Se acaba con `mui_group_end`.
 Devuelve el grupo, para `mui_set_visible`, `mui_weight` o `mui_set_background`.
@@ -12290,7 +12500,7 @@ Ver también: [`mui_hgroup_begin`](#mui_hgroup_begin), [`mui_group_end`](#mui_gr
 
 <a id="mui_hgroup_begin"></a>
 
-### `mui_hgroup_begin()` → `Int (dirección)`
+### [`mui_hgroup_begin()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Empieza un grupo que pone sus objetos uno al lado de otro. Se acaba con `mui_group_end`. Devuelve el grupo.
 
@@ -12298,7 +12508,7 @@ Ver también: [`mui_vgroup_begin`](#mui_vgroup_begin), [`mui_group_end`](#mui_gr
 
 <a id="mui_group_end"></a>
 
-### `mui_group_end()`
+### [`mui_group_end()`](#mui_functions_table) · [índice](#indice)
 
 Acaba el último grupo abierto (de cualquier clase: `mui_vgroup_begin`, `mui_frame_begin`, `mui_register_begin`...).
 Los siguientes objetos van otra vez en el grupo de fuera.
@@ -12307,7 +12517,7 @@ Ver también: [`mui_vgroup_begin`](#mui_vgroup_begin).
 
 <a id="mui_text"></a>
 
-### `mui_text(text)` → `Int (dirección)`
+### [`mui_text(text)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `text`: el texto. Admite los códigos de MUI: `"\33c"` centrado, `"\33r"` a la derecha, `"\33b"` negrita.
 
@@ -12317,7 +12527,7 @@ Ver también: [`mui_label`](#mui_label), [`mui_set_text`](#mui_set_text).
 
 <a id="mui_button"></a>
 
-### `mui_button(label)` → `Int (dirección)`
+### [`mui_button(label)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `label`: el texto; una `_` delante de una letra la hace su tecla.
 
@@ -12327,7 +12537,7 @@ Ver también: [`mui_on_press`](#mui_on_press), [`mui_image_button`](#mui_image_b
 
 <a id="mui_on_press"></a>
 
-### `mui_on_press(obj, id)`
+### [`mui_on_press(obj, id)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un botón (o un botón con imagen).
 - `id`: el número de evento, mayor que 0.
@@ -12338,7 +12548,7 @@ Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_press`](#mui_press).
 
 <a id="mui_on_close"></a>
 
-### `mui_on_close(win, id)`
+### [`mui_on_close(win, id)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 - `id`: el número de evento.
@@ -12350,7 +12560,7 @@ Ver también: [`mui_window_close`](#mui_window_close), [`mui_wait_event`](#mui_w
 
 <a id="mui_on_activate"></a>
 
-### `mui_on_activate(win, id)`
+### [`mui_on_activate(win, id)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 - `id`: el número de evento.
@@ -12363,7 +12573,7 @@ Ver también: [`mui_on_deactivate`](#mui_on_deactivate), [`mui_window_active`](#
 
 <a id="mui_on_deactivate"></a>
 
-### `mui_on_deactivate(win, id)`
+### [`mui_on_deactivate(win, id)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 - `id`: el número de evento.
@@ -12375,7 +12585,7 @@ Ver también: [`mui_on_activate`](#mui_on_activate), [`mui_window_active`](#mui_
 
 <a id="mui_on_drop"></a>
 
-### `mui_on_drop(obj, id)`
+### [`mui_on_drop(obj, id)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto, o una ventana (en cualquier sitio de ella).
 - `id`: el número de evento.
@@ -12386,7 +12596,7 @@ Ver también: [`app_drop`](#app_drop).
 
 <a id="mui_press"></a>
 
-### `mui_press(obj)`
+### [`mui_press(obj)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un botón.
 
@@ -12396,7 +12606,7 @@ Ver también: [`mui_on_press`](#mui_on_press).
 
 <a id="mui_label"></a>
 
-### `mui_label(text)` → `Int (dirección)`
+### [`mui_label(text)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `text`: el texto.
 
@@ -12407,7 +12617,7 @@ Ver también: [`mui_columns_begin`](#mui_columns_begin), [`mui_text`](#mui_text)
 
 <a id="mui_string"></a>
 
-### `mui_string(initial, maxlen)` → `Int (dirección)`
+### [`mui_string(initial, maxlen)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `initial`: el texto con el que empieza.
 - `maxlen`: cuántas letras caben como mucho.
@@ -12420,7 +12630,7 @@ Ver también: [`mui_get_text`](#mui_get_text), [`mui_on_ack`](#mui_on_ack), [`mu
 
 <a id="mui_checkbox"></a>
 
-### `mui_checkbox(checked)` → `Int (dirección)`
+### [`mui_checkbox(checked)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `checked`: si empieza marcada.
 
@@ -12430,7 +12640,7 @@ Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_chang
 
 <a id="mui_cycle"></a>
 
-### `mui_cycle(options)` → `Int (dirección)`
+### [`mui_cycle(options)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `options`: las opciones separadas por `|`: `"Baja|Media|Alta"`.
 
@@ -12440,7 +12650,7 @@ Ver también: [`mui_get_value`](#mui_get_value), [`mui_register_begin`](#mui_reg
 
 <a id="mui_slider"></a>
 
-### `mui_slider(min, max, value)` → `Int (dirección)`
+### [`mui_slider(min, max, value)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `min`, `max`: los extremos.
 - `value`: el valor con el que empieza.
@@ -12451,7 +12661,7 @@ Ver también: [`mui_gauge`](#mui_gauge), [`mui_get_value`](#mui_get_value).
 
 <a id="mui_gauge"></a>
 
-### `mui_gauge(max)` → `Int (dirección)`
+### [`mui_gauge(max)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `max`: el valor de la barra llena.
 
@@ -12461,7 +12671,7 @@ Ver también: [`mui_set_value`](#mui_set_value).
 
 <a id="mui_get_value"></a>
 
-### `mui_get_value(obj)` → `Int`
+### [`mui_get_value(obj)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `obj`: el objeto.
 
@@ -12473,7 +12683,7 @@ Ver también: [`mui_set_value`](#mui_set_value), [`mui_get_text`](#mui_get_text)
 
 <a id="mui_set_value"></a>
 
-### `mui_set_value(obj, value)`
+### [`mui_set_value(obj, value)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 - `value`: el valor nuevo, como en `mui_get_value`.
@@ -12484,7 +12694,7 @@ Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_change`](#mui_on_chang
 
 <a id="mui_get_text"></a>
 
-### `mui_get_text(obj)` → `String`
+### [`mui_get_text(obj)`](#mui_functions_table) → `String` · [índice](#indice)
 
 - `obj`: un campo de texto, un texto, un botón o una ventana.
 
@@ -12494,7 +12704,7 @@ Ver también: [`mui_set_text`](#mui_set_text), [`mui_get_value`](#mui_get_value)
 
 <a id="mui_set_text"></a>
 
-### `mui_set_text(obj, text)`
+### [`mui_set_text(obj, text)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un campo de texto, un texto, un botón, una opción de menú, una imagen o una ventana.
 - `text`: el texto nuevo (en una imagen, el fichero).
@@ -12505,7 +12715,7 @@ Ver también: [`mui_get_text`](#mui_get_text).
 
 <a id="mui_active_object"></a>
 
-### `mui_active_object(win)` → `Int (dirección)`
+### [`mui_active_object(win)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `win`: la ventana.
 
@@ -12518,7 +12728,7 @@ Ver también: [`mui_set_active`](#mui_set_active), [`mui_string_pos`](#mui_strin
 
 <a id="mui_string_pos"></a>
 
-### `mui_string_pos(obj)` → `Int`
+### [`mui_string_pos(obj)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `obj`: un campo de texto o un desplegable con texto.
 
@@ -12529,7 +12739,7 @@ Ver también: [`mui_set_string_pos`](#mui_set_string_pos), [`mui_active_object`]
 
 <a id="mui_set_string_pos"></a>
 
-### `mui_set_string_pos(obj, pos)`
+### [`mui_set_string_pos(obj, pos)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un campo de texto o un desplegable con texto.
 - `pos`: la posición, como en `mui_string_pos`. Un número mayor que el largo lo deja al final y uno negativo, al
@@ -12541,7 +12751,7 @@ Ver también: [`mui_string_pos`](#mui_string_pos), [`mui_set_text`](#mui_set_tex
 
 <a id="mui_set_enabled"></a>
 
-### `mui_set_enabled(obj, enabled)`
+### [`mui_set_enabled(obj, enabled)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un objeto, una opción de menú o un menú entero.
 - `enabled`: `false` lo desactiva (en gris, no responde); `true` lo vuelve a activar.
@@ -12550,7 +12760,7 @@ Ver también: [`mui_set_visible`](#mui_set_visible).
 
 <a id="mui_on_change"></a>
 
-### `mui_on_change(obj, id)`
+### [`mui_on_change(obj, id)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 - `id`: el número de evento.
@@ -12562,7 +12772,7 @@ Ver también: [`mui_get_value`](#mui_get_value), [`mui_on_ack`](#mui_on_ack).
 
 <a id="mui_on_ack"></a>
 
-### `mui_on_ack(obj, id)`
+### [`mui_on_ack(obj, id)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: un campo de texto, un `mui_text_editor` o un `mui_combo`.
 - `id`: el número de evento.
@@ -12574,7 +12784,7 @@ Ver también: [`mui_on_change`](#mui_on_change), [`mui_string`](#mui_string).
 
 <a id="mui_list"></a>
 
-### `mui_list()` → `Int (dirección)`
+### [`mui_list()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Una lista de textos con su barra de desplazamiento. Su valor (`mui_get_value`) es la línea elegida, desde 0, o -1
 si no hay ninguna; `mui_on_change` avisa al elegir y `mui_on_double` con un doble clic.
@@ -12583,7 +12793,7 @@ Ver también: [`mui_list_add`](#mui_list_add), [`mui_on_double`](#mui_on_double)
 
 <a id="mui_list_add"></a>
 
-### `mui_list_add(list, text)`
+### [`mui_list_add(list, text)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista (o un `mui_combo`).
 - `text`: la línea; la lista guarda su copia.
@@ -12594,7 +12804,7 @@ Ver también: [`mui_list_add_lines`](#mui_list_add_lines), [`mui_list_insert`](#
 
 <a id="mui_list_add_lines"></a>
 
-### `mui_list_add_lines(list, text)`
+### [`mui_list_add_lines(list, text)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista (o un `mui_combo`).
 - `text`: las líneas, separadas por saltos de línea (`\n`; un `\r` delante también vale). Un salto al final no
@@ -12609,7 +12819,7 @@ Ver también: [`mui_list_add`](#mui_list_add), [`mui_list_quiet`](#mui_list_quie
 
 <a id="mui_list_insert"></a>
 
-### `mui_list_insert(list, pos, text)`
+### [`mui_list_insert(list, pos, text)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista.
 - `pos`: dónde, desde 0; las de después bajan.
@@ -12619,7 +12829,7 @@ Ver también: [`mui_list_add`](#mui_list_add).
 
 <a id="mui_list_remove"></a>
 
-### `mui_list_remove(list, pos)`
+### [`mui_list_remove(list, pos)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista.
 - `pos`: la línea que se quita, desde 0.
@@ -12628,7 +12838,7 @@ Ver también: [`mui_list_clear`](#mui_list_clear).
 
 <a id="mui_list_clear"></a>
 
-### `mui_list_clear(list)`
+### [`mui_list_clear(list)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista.
 
@@ -12638,7 +12848,7 @@ Ver también: [`mui_list_remove`](#mui_list_remove).
 
 <a id="mui_list_count"></a>
 
-### `mui_list_count(list)` → `Int`
+### [`mui_list_count(list)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `list`: la lista.
 
@@ -12648,7 +12858,7 @@ Ver también: [`mui_list_get`](#mui_list_get).
 
 <a id="mui_list_get"></a>
 
-### `mui_list_get(list, pos)` → `String`
+### [`mui_list_get(list, pos)`](#mui_functions_table) → `String` · [índice](#indice)
 
 - `list`: la lista.
 - `pos`: la línea, desde 0.
@@ -12659,7 +12869,7 @@ Ver también: [`mui_list_count`](#mui_list_count), [`mui_get_value`](#mui_get_va
 
 <a id="mui_list_quiet"></a>
 
-### `mui_list_quiet(list, quiet)`
+### [`mui_list_quiet(list, quiet)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista.
 - `quiet`: `true` deja de redibujarla; `false` la redibuja con todo lo nuevo.
@@ -12670,7 +12880,7 @@ Ver también: [`mui_list_add`](#mui_list_add), [`mui_list_add_lines`](#mui_list_
 
 <a id="mui_list_stripes"></a>
 
-### `mui_list_stripes(list, on)`
+### [`mui_list_stripes(list, on)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista (o un `mui_combo`).
 - `on`: `true` para filas de colores alternos, `false` para quitarlas.
@@ -12681,7 +12891,7 @@ Ver también: [`mui_list`](#mui_list), [`mui_list_quiet`](#mui_list_quiet).
 
 <a id="mui_on_double"></a>
 
-### `mui_on_double(list, id)`
+### [`mui_on_double(list, id)`](#mui_functions_table) · [índice](#indice)
 
 - `list`: la lista.
 - `id`: el número de evento.
@@ -12692,7 +12902,7 @@ Ver también: [`mui_list`](#mui_list).
 
 <a id="mui_frame_begin"></a>
 
-### `mui_frame_begin(title, horizontal)` → `Int (dirección)`
+### [`mui_frame_begin(title, horizontal)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el título del marco; `""` = sin título.
 - `horizontal`: `true` pone los objetos uno al lado de otro; `false`, uno debajo de otro.
@@ -12703,7 +12913,7 @@ Ver también: [`mui_group_end`](#mui_group_end).
 
 <a id="mui_columns_begin"></a>
 
-### `mui_columns_begin(columns)` → `Int (dirección)`
+### [`mui_columns_begin(columns)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `columns`: cuántas columnas.
 
@@ -12714,7 +12924,7 @@ Ver también: [`mui_label`](#mui_label), [`mui_group_end`](#mui_group_end).
 
 <a id="mui_register_begin"></a>
 
-### `mui_register_begin(titles)` → `Int (dirección)`
+### [`mui_register_begin(titles)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `titles`: los títulos de las pestañas separados por `|`: `"General|Avanzado"`.
 
@@ -12725,7 +12935,7 @@ Ver también: [`mui_group_end`](#mui_group_end), [`mui_on_change`](#mui_on_chang
 
 <a id="mui_scroll_begin"></a>
 
-### `mui_scroll_begin()` → `Int (dirección)`
+### [`mui_scroll_begin()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Empieza una zona con barras de desplazamiento, para un contenido más grande que la ventana. Se acaba con
 `mui_group_end`.
@@ -12734,7 +12944,7 @@ Ver también: [`mui_group_end`](#mui_group_end).
 
 <a id="mui_space"></a>
 
-### `mui_space()` → `Int (dirección)`
+### [`mui_space()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Un espacio vacío que se estira y ocupa lo que sobra. Entre dos botones de un grupo horizontal, los separa a los
 extremos.
@@ -12743,7 +12953,7 @@ Ver también: [`mui_weight`](#mui_weight).
 
 <a id="mui_balance"></a>
 
-### `mui_balance()` → `Int (dirección)`
+### [`mui_balance()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Una barra entre dos objetos que el usuario arrastra para repartir el sitio entre ellos (una lista y un texto, por
 ejemplo).
@@ -12752,7 +12962,7 @@ Ver también: [`mui_weight`](#mui_weight).
 
 <a id="mui_weight"></a>
 
-### `mui_weight(obj, weight)`
+### [`mui_weight(obj, weight)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 - `weight`: su peso; 100 por defecto.
@@ -12763,7 +12973,7 @@ Ver también: [`mui_space`](#mui_space), [`mui_balance`](#mui_balance).
 
 <a id="mui_set_visible"></a>
 
-### `mui_set_visible(obj, visible)`
+### [`mui_set_visible(obj, visible)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto o el grupo.
 - `visible`: `false` lo oculta, `true` lo enseña.
@@ -12774,7 +12984,7 @@ Ver también: [`mui_set_enabled`](#mui_set_enabled).
 
 <a id="mui_menu_begin"></a>
 
-### `mui_menu_begin(title)` → `Int (dirección)`
+### [`mui_menu_begin(title)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el título del menú en la barra.
 
@@ -12785,7 +12995,7 @@ Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_end`](#mui_menu_end)
 
 <a id="mui_menu_item"></a>
 
-### `mui_menu_item(title, key, id)` → `Int (dirección)`
+### [`mui_menu_item(title, key, id)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el texto de la opción.
 - `key`: la letra del atajo con Amiga (`"S"` = Amiga+S); `""` ninguna.
@@ -12797,7 +13007,7 @@ Ver también: [`mui_menu_check`](#mui_menu_check), [`mui_menu_separator`](#mui_m
 
 <a id="mui_menu_check"></a>
 
-### `mui_menu_check(title, key, id, checked)` → `Int (dirección)`
+### [`mui_menu_check(title, key, id, checked)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`, `key`, `id`: como en `mui_menu_item`.
 - `checked`: si empieza marcada.
@@ -12808,7 +13018,7 @@ Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_radio`](#mui_menu_ra
 
 <a id="mui_menu_radio"></a>
 
-### `mui_menu_radio(title, key, id, checked)` → `Int (dirección)`
+### [`mui_menu_radio(title, key, id, checked)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`, `key`, `id`: como en `mui_menu_item`.
 - `checked`: si empieza marcada.
@@ -12822,7 +13032,7 @@ Ver también: [`mui_menu_check`](#mui_menu_check), [`mui_menu_item`](#mui_menu_i
 
 <a id="mui_submenu_begin"></a>
 
-### `mui_submenu_begin(title)` → `Int (dirección)`
+### [`mui_submenu_begin(title)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el texto de la opción que abre el submenú.
 
@@ -12832,7 +13042,7 @@ Ver también: [`mui_submenu_end`](#mui_submenu_end).
 
 <a id="mui_submenu_end"></a>
 
-### `mui_submenu_end()`
+### [`mui_submenu_end()`](#mui_functions_table) · [índice](#indice)
 
 Acaba el submenú.
 
@@ -12840,7 +13050,7 @@ Ver también: [`mui_submenu_begin`](#mui_submenu_begin).
 
 <a id="mui_menu_separator"></a>
 
-### `mui_menu_separator()` → `Int (dirección)`
+### [`mui_menu_separator()`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 Una raya entre opciones del menú. Devuelve la raya: `mui_menu_remove` la quita.
 
@@ -12848,7 +13058,7 @@ Ver también: [`mui_menu_item`](#mui_menu_item), [`mui_menu_remove`](#mui_menu_r
 
 <a id="mui_context_menu_begin"></a>
 
-### `mui_context_menu_begin(title)` → `Int (dirección)`
+### [`mui_context_menu_begin(title)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `title`: el título del menú.
 
@@ -12859,7 +13069,7 @@ Ver también: [`mui_set_context_menu`](#mui_set_context_menu), [`mui_menu_item`]
 
 <a id="mui_set_context_menu"></a>
 
-### `mui_set_context_menu(object, menu)`
+### [`mui_set_context_menu(object, menu)`](#mui_functions_table) · [índice](#indice)
 
 - `object`: el objeto.
 - `menu`: el menú de `mui_context_menu_begin`; 0 = ninguno.
@@ -12871,7 +13081,7 @@ Ver también: [`mui_context_menu_begin`](#mui_context_menu_begin).
 
 <a id="mui_menu_end"></a>
 
-### `mui_menu_end()`
+### [`mui_menu_end()`](#mui_functions_table) · [índice](#indice)
 
 Acaba el menú abierto, o el menú contextual (también los de `mui_menu_add` y `mui_menu_extend`).
 
@@ -12879,7 +13089,7 @@ Ver también: [`mui_menu_begin`](#mui_menu_begin), [`mui_context_menu_begin`](#m
 
 <a id="mui_menu_add"></a>
 
-### `mui_menu_add(win, title)` → `Int (dirección)`
+### [`mui_menu_add(win, title)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `win`: la ventana, ya hecha (abierta o no).
 - `title`: el título del menú.
@@ -12895,7 +13105,7 @@ Ver también: [`mui_menu_extend`](#mui_menu_extend), [`mui_menu_remove`](#mui_me
 
 <a id="mui_menu_extend"></a>
 
-### `mui_menu_extend(menu)`
+### [`mui_menu_extend(menu)`](#mui_functions_table) · [índice](#indice)
 
 - `menu`: un menú (de `mui_menu_begin`, `mui_menu_add` o `mui_context_menu_begin`) o un submenú (de
   `mui_submenu_begin`).
@@ -12907,7 +13117,7 @@ Ver también: [`mui_menu_add`](#mui_menu_add), [`mui_menu_remove`](#mui_menu_rem
 
 <a id="mui_menu_remove"></a>
 
-### `mui_menu_remove(obj)`
+### [`mui_menu_remove(obj)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: una opción, un submenú o un menú entero.
 
@@ -12918,7 +13128,7 @@ Ver también: [`mui_menu_add`](#mui_menu_add), [`mui_menu_extend`](#mui_menu_ext
 
 <a id="mui_canvas"></a>
 
-### `mui_canvas(min_width, min_height)` → `Int (dirección)`
+### [`mui_canvas(min_width, min_height)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `min_width`, `min_height`: el tamaño mínimo en píxeles; crece con la ventana.
 
@@ -12930,7 +13140,7 @@ Ver también: [`mui_canvas_on_draw`](#mui_canvas_on_draw), [`mui_canvas_redraw`]
 
 <a id="mui_canvas_on_draw"></a>
 
-### `mui_canvas_on_draw(canvas, func)`
+### [`mui_canvas_on_draw(canvas, func)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `func`: una función `f(x: Int, y: Int, ancho: Int, alto: Int)`.
@@ -12942,7 +13152,7 @@ Ver también: [`mui_canvas`](#mui_canvas), [`mui_canvas_redraw`](#mui_canvas_red
 
 <a id="mui_canvas_on_input"></a>
 
-### `mui_canvas_on_input(canvas, id)`
+### [`mui_canvas_on_input(canvas, id)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `id`: el número de evento.
@@ -12955,7 +13165,7 @@ Ver también: [`mui_canvas_button`](#mui_canvas_button), [`mui_canvas_key`](#mui
 
 <a id="mui_canvas_redraw"></a>
 
-### `mui_canvas_redraw(canvas)`
+### [`mui_canvas_redraw(canvas)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -12966,7 +13176,7 @@ Ver también: [`mui_canvas_update`](#mui_canvas_update), [`mui_canvas_on_draw`](
 
 <a id="mui_canvas_buffered"></a>
 
-### `mui_canvas_buffered(canvas, on)`
+### [`mui_canvas_buffered(canvas, on)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `on`: `true` lo enciende.
@@ -12978,7 +13188,7 @@ Ver también: [`mui_canvas_update_area`](#mui_canvas_update_area).
 
 <a id="mui_canvas_update"></a>
 
-### `mui_canvas_update(canvas)`
+### [`mui_canvas_update(canvas)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -12989,7 +13199,7 @@ Ver también: [`mui_canvas_updating`](#mui_canvas_updating), [`mui_canvas_update
 
 <a id="mui_canvas_update_area"></a>
 
-### `mui_canvas_update_area(canvas, x, y, w, h)`
+### [`mui_canvas_update_area(canvas, x, y, w, h)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `x`, `y`, `w`, `h`: la parte que se repinta, contando desde la esquina de la zona.
@@ -13001,7 +13211,7 @@ Ver también: [`mui_canvas_update`](#mui_canvas_update).
 
 <a id="mui_canvas_updating"></a>
 
-### `mui_canvas_updating()` → `Bool`
+### [`mui_canvas_updating()`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 Dentro de la función de dibujo, devuelve `true` si la llamó `mui_canvas_update` (lo de antes sigue en la zona) y
 `false` si hay que dibujarla entera.
@@ -13010,7 +13220,7 @@ Ver también: [`mui_canvas_update`](#mui_canvas_update).
 
 <a id="mui_canvas_on_move"></a>
 
-### `mui_canvas_on_move(canvas, id)`
+### [`mui_canvas_on_move(canvas, id)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `id`: el número de evento.
@@ -13022,7 +13232,7 @@ Ver también: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x), [`mui_canvas_poin
 
 <a id="mui_canvas_pointer_x"></a>
 
-### `mui_canvas_pointer_x(canvas)` → `Int`
+### [`mui_canvas_pointer_x(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13032,7 +13242,7 @@ Ver también: [`mui_canvas_pointer_y`](#mui_canvas_pointer_y), [`mui_canvas_on_m
 
 <a id="mui_canvas_pointer_y"></a>
 
-### `mui_canvas_pointer_y(canvas)` → `Int`
+### [`mui_canvas_pointer_y(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13042,7 +13252,7 @@ Ver también: [`mui_canvas_pointer_x`](#mui_canvas_pointer_x).
 
 <a id="mui_canvas_pointer_inside"></a>
 
-### `mui_canvas_pointer_inside(canvas)` → `Bool`
+### [`mui_canvas_pointer_inside(canvas)`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13052,7 +13262,7 @@ Ver también: [`mui_canvas_on_move`](#mui_canvas_on_move).
 
 <a id="mui_canvas_set_pointer"></a>
 
-### `mui_canvas_set_pointer(canvas, shape)`
+### [`mui_canvas_set_pointer(canvas, shape)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `shape`: 0 normal, 1 texto (una I), 2 cambiar de tamaño a los lados, 3 arriba y abajo, 4 ocupado.
@@ -13063,7 +13273,7 @@ Ver también: [`mui_canvas_pointer_inside`](#mui_canvas_pointer_inside).
 
 <a id="mui_canvas_take_tab"></a>
 
-### `mui_canvas_take_tab(canvas, on)`
+### [`mui_canvas_take_tab(canvas, on)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `on`: `true` lo enciende.
@@ -13075,7 +13285,7 @@ Ver también: [`mui_canvas_key`](#mui_canvas_key).
 
 <a id="mui_canvas_take_keys"></a>
 
-### `mui_canvas_take_keys(canvas, on)`
+### [`mui_canvas_take_keys(canvas, on)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `on`: `true` lo enciende.
@@ -13089,7 +13299,7 @@ Ver también: [`mui_canvas_key`](#mui_canvas_key), [`mui_canvas_take_tab`](#mui_
 
 <a id="mui_canvas_mouse_x"></a>
 
-### `mui_canvas_mouse_x(canvas)` → `Int`
+### [`mui_canvas_mouse_x(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13099,7 +13309,7 @@ Ver también: [`mui_canvas_mouse_y`](#mui_canvas_mouse_y), [`mui_canvas_pointer_
 
 <a id="mui_canvas_mouse_y"></a>
 
-### `mui_canvas_mouse_y(canvas)` → `Int`
+### [`mui_canvas_mouse_y(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13109,7 +13319,7 @@ Ver también: [`mui_canvas_mouse_x`](#mui_canvas_mouse_x).
 
 <a id="mui_canvas_button"></a>
 
-### `mui_canvas_button(canvas)` → `Int`
+### [`mui_canvas_button(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13119,7 +13329,7 @@ Ver también: [`mui_canvas_on_input`](#mui_canvas_on_input).
 
 <a id="mui_canvas_wheel"></a>
 
-### `mui_canvas_wheel(canvas)` → `Int`
+### [`mui_canvas_wheel(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13129,7 +13339,7 @@ Ver también: [`mui_canvas_on_input`](#mui_canvas_on_input).
 
 <a id="mui_canvas_key"></a>
 
-### `mui_canvas_key(canvas)` → `Int`
+### [`mui_canvas_key(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13140,7 +13350,7 @@ Ver también: [`mui_canvas_char`](#mui_canvas_char), [`mui_canvas_qualifiers`](#
 
 <a id="mui_canvas_on_drag"></a>
 
-### `mui_canvas_on_drag(canvas, id)`
+### [`mui_canvas_on_drag(canvas, id)`](#mui_functions_table) · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 - `id`: el número de evento.
@@ -13154,7 +13364,7 @@ Ver también: [`mui_canvas_drag`](#mui_canvas_drag).
 
 <a id="mui_canvas_drag"></a>
 
-### `mui_canvas_drag(canvas)` → `Int`
+### [`mui_canvas_drag(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13164,7 +13374,7 @@ Ver también: [`mui_canvas_on_drag`](#mui_canvas_on_drag).
 
 <a id="mui_canvas_qualifiers"></a>
 
-### `mui_canvas_qualifiers(canvas)` → `Int`
+### [`mui_canvas_qualifiers(canvas)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13175,7 +13385,7 @@ Ver también: [`mui_canvas_key`](#mui_canvas_key).
 
 <a id="mui_canvas_char"></a>
 
-### `mui_canvas_char(canvas)` → `String`
+### [`mui_canvas_char(canvas)`](#mui_functions_table) → `String` · [índice](#indice)
 
 - `canvas`: la zona de dibujo.
 
@@ -13186,7 +13396,7 @@ Ver también: [`mui_canvas_key`](#mui_canvas_key).
 
 <a id="mui_scrollbar"></a>
 
-### `mui_scrollbar(vertical)` → `Int (dirección)`
+### [`mui_scrollbar(vertical)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `vertical`: `true` vertical, `false` horizontal.
 
@@ -13197,7 +13407,7 @@ Ver también: [`mui_set_range`](#mui_set_range), [`mui_canvas`](#mui_canvas).
 
 <a id="mui_set_range"></a>
 
-### `mui_set_range(scrollbar, total, visible)`
+### [`mui_set_range(scrollbar, total, visible)`](#mui_functions_table) · [índice](#indice)
 
 - `scrollbar`: la barra.
 - `total`: el tamaño del documento (líneas, píxeles...).
@@ -13209,7 +13419,7 @@ Ver también: [`mui_scrollbar`](#mui_scrollbar).
 
 <a id="mui_wait_event_signals"></a>
 
-### `mui_wait_event_signals(mask)` → `Int`
+### [`mui_wait_event_signals(mask)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `mask`: las señales que también despiertan: `net_signal()` (red), `task_signal()` (tareas),
   `file_notify_signal()` (ficheros vigilados), sumadas con `|`.
@@ -13220,7 +13430,7 @@ Ver también: [`mui_signals`](#mui_signals), [`mui_wait_event`](#mui_wait_event)
 
 <a id="mui_signals"></a>
 
-### `mui_signals()` → `Int`
+### [`mui_signals()`](#mui_functions_table) → `Int` · [índice](#indice)
 
 Devuelve las señales de la máscara que despertaron al último `mui_wait_event_signals`: se mira con `&`.
 
@@ -13228,7 +13438,7 @@ Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
 <a id="mui_timer"></a>
 
-### `mui_timer(ms, id)`
+### [`mui_timer(ms, id)`](#mui_functions_table) · [índice](#indice)
 
 - `ms`: dentro de cuántos milisegundos; 0 anula el que hubiera.
 - `id`: el número de evento.
@@ -13239,7 +13449,7 @@ Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_post_event`](#mui_post_
 
 <a id="mui_post_event"></a>
 
-### `mui_post_event(id)`
+### [`mui_post_event(id)`](#mui_functions_table) · [índice](#indice)
 
 - `id`: el número de evento, mayor que 0.
 
@@ -13251,7 +13461,7 @@ Ver también: [`mui_wait_event`](#mui_wait_event), [`mui_timer`](#mui_timer).
 
 <a id="mui_image"></a>
 
-### `mui_image(file)` → `Int (dirección)`
+### [`mui_image(file)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `file`: el fichero de la imagen: ILBM siempre; PNG, JPEG o GIF si están sus datatypes.
 
@@ -13261,7 +13471,7 @@ Ver también: [`mui_image_button`](#mui_image_button), [`image_load`](#image_loa
 
 <a id="mui_image_button"></a>
 
-### `mui_image_button(file)` → `Int (dirección)`
+### [`mui_image_button(file)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `file`: el fichero de la imagen.
 
@@ -13272,7 +13482,7 @@ Ver también: [`mui_image_toggle`](#mui_image_toggle), [`mui_on_press`](#mui_on_
 
 <a id="mui_image_toggle"></a>
 
-### `mui_image_toggle(file, group, selected)` → `Int (dirección)`
+### [`mui_image_toggle(file, group, selected)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `file`: el fichero de la imagen.
 - `group`: 0 = suelto; mayor que 0 = pulsar uno suelta los demás del mismo grupo (como la alineación).
@@ -13285,7 +13495,7 @@ Ver también: [`mui_image_button`](#mui_image_button), [`mui_on_change`](#mui_on
 
 <a id="mui_combo"></a>
 
-### `mui_combo(text, options)` → `Int (dirección)`
+### [`mui_combo(text, options)`](#mui_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `text`: el texto con el que empieza.
 - `options`: las líneas de la lista, separadas por `|`.
@@ -13297,7 +13507,7 @@ Ver también: [`mui_string`](#mui_string), [`mui_on_ack`](#mui_on_ack), [`mui_li
 
 <a id="mui_help"></a>
 
-### `mui_help(obj, text)`
+### [`mui_help(obj, text)`](#mui_functions_table) · [índice](#indice)
 
 - `obj`: el objeto.
 - `text`: la ayuda.
@@ -13306,7 +13516,7 @@ Una burbuja con el texto, que sale cuando el puntero se para un momento sobre el
 
 <a id="mui_window_move"></a>
 
-### `mui_window_move(win, dx, dy)`
+### [`mui_window_move(win, dx, dy)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: una ventana abierta.
 - `dx`, `dy`: cuántos píxeles se mueve.
@@ -13317,7 +13527,7 @@ Ver también: [`mui_window_size`](#mui_window_size).
 
 <a id="mui_set_active"></a>
 
-### `mui_set_active(win, obj)`
+### [`mui_set_active(win, obj)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana.
 - `obj`: un objeto de ella, normalmente un campo de texto.
@@ -13329,7 +13539,7 @@ Ver también: [`mui_string`](#mui_string), [`mui_active_object`](#mui_active_obj
 
 <a id="mui_window_size"></a>
 
-### `mui_window_size(win, width_pct, height_pct)`
+### [`mui_window_size(win, width_pct, height_pct)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana, antes de abrirla.
 - `width_pct`, `height_pct`: su tamaño en tanto por ciento de la pantalla visible.
@@ -13340,7 +13550,7 @@ Ver también: [`mui_window_fullscreen`](#mui_window_fullscreen), [`mui_window_be
 
 <a id="mui_window_fullscreen"></a>
 
-### `mui_window_fullscreen(win)`
+### [`mui_window_fullscreen(win)`](#mui_functions_table) · [índice](#indice)
 
 - `win`: la ventana, antes de abrirla.
 
@@ -13350,7 +13560,7 @@ Ver también: [`mui_window_own_screen`](#mui_window_own_screen).
 
 <a id="mui_window_screen"></a>
 
-### `mui_window_screen(win, name)` → `Bool`
+### [`mui_window_screen(win, name)`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 - `win`: la ventana, antes de abrirla.
 - `name`: el nombre de una pantalla pública: la de `screen_clone_wb` u otra.
@@ -13361,7 +13571,7 @@ Ver también: [`screen_clone_wb`](#screen_clone_wb), [`mui_window_own_screen`](#
 
 <a id="mui_window_own_screen"></a>
 
-### `mui_window_own_screen(win)` → `Bool`
+### [`mui_window_own_screen(win)`](#mui_functions_table) → `Bool` · [índice](#indice)
 
 - `win`: la ventana, antes de abrirla.
 
@@ -13372,7 +13582,7 @@ Ver también: [`mui_window_fullscreen`](#mui_window_fullscreen).
 
 <a id="mui_width"></a>
 
-### `mui_width(obj)` → `Int`
+### [`mui_width(obj)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `obj`: el objeto.
 
@@ -13382,7 +13592,7 @@ Ver también: [`mui_height`](#mui_height).
 
 <a id="mui_height"></a>
 
-### `mui_height(obj)` → `Int`
+### [`mui_height(obj)`](#mui_functions_table) → `Int` · [índice](#indice)
 
 - `obj`: el objeto.
 
@@ -13392,7 +13602,7 @@ Ver también: [`mui_width`](#mui_width).
 
 <a id="mui_wait_event"></a>
 
-### `mui_wait_event()` → `Int`
+### [`mui_wait_event()`](#mui_functions_table) → `Int` · [índice](#indice)
 
 Espera, sin gastar CPU, hasta el siguiente evento y devuelve su número; -1 para salir (el botón de cerrar de la
 primera ventana sin `mui_on_close`, la orden ARexx QUIT, Exchange). Va en el bucle principal:
@@ -13402,12 +13612,14 @@ Ver también: [`mui_poll_event`](#mui_poll_event), [`mui_wait_event_signals`](#m
 
 <a id="mui_poll_event"></a>
 
-### `mui_poll_event()` → `Int`
+### [`mui_poll_event()`](#mui_functions_table) → `Int` · [índice](#indice)
 
 Como `mui_wait_event` sin esperar: devuelve 0 si no hay evento. Para un bucle que hace otras cosas a la vez; si
 solo espera, `mui_wait_event` o `mui_timer` gastan menos.
 
 Ver también: [`mui_wait_event`](#mui_wait_event).
+
+[Volver al índice](#indice)
 
 <a id="gl_functions"></a>
 
@@ -13462,7 +13674,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="gl_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -13513,7 +13727,7 @@ end
 
 <a id="gl_open"></a>
 
-### `gl_open(width, height)` → `Bool`
+### [`gl_open(width, height)`](#gl_functions_table) → `Bool` · [índice](#indice)
 
 - `width`, `height`: el tamaño del dibujo en píxeles.
 
@@ -13529,7 +13743,7 @@ Ver también: `gl_open_screen`, `gl_close`, [`gl_swap`](#gl_swap), [`gl_closed`]
 
 <a id="gl_swap"></a>
 
-### `gl_swap()`
+### [`gl_swap()`](#gl_functions_table) · [índice](#indice)
 
 Enseña lo dibujado desde el último `gl_swap` y deja el otro búfer para el fotograma siguiente. Espera al refresco de
 la pantalla (`gl_vsync`), así que un bucle de dibujo va como mucho a 50 o 60 fotogramas por segundo.
@@ -13538,7 +13752,7 @@ Ver también: `gl_vsync`, `gl_clear`.
 
 <a id="gl_closed"></a>
 
-### `gl_closed()` → `Bool`
+### [`gl_closed()`](#gl_functions_table) → `Bool` · [índice](#indice)
 
 Devuelve `true` desde que se pulsó el botón de cerrar de la ventana. Para el bucle de dibujo:
 `while not gl_closed()`. En `gl_open_screen` no hay botón: la salida va con `gl_key` o `key_down`.
@@ -13547,7 +13761,7 @@ Ver también: `gl_key`, [`key_down`](#key_down).
 
 <a id="gl_begin"></a>
 
-### `gl_begin(mode)`
+### [`gl_begin(mode)`](#gl_functions_table) · [índice](#indice)
 
 - `mode`: la figura, con los números de OpenGL (`lib/amiga/gl.dash`): `GL_POINTS` 0, `GL_LINES` 1, `GL_LINE_LOOP` 2,
   `GL_LINE_STRIP` 3, `GL_TRIANGLES` 4, `GL_TRIANGLE_STRIP` 5, `GL_TRIANGLE_FAN` 6, `GL_QUADS` 7, `GL_QUAD_STRIP` 8,
@@ -13560,7 +13774,7 @@ Ver también: `gl_vertex`, `gl_end`, `gl_color`.
 
 <a id="gl_draw_arrays"></a>
 
-### `gl_draw_arrays(mode, vertices, colors, first, count)`
+### [`gl_draw_arrays(mode, vertices, colors, first, count)`](#gl_functions_table) · [índice](#indice)
 
 - `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
 - `vertices`: un búfer con 3 `float` por esquina (x, y, z), puestos con `buffer_set_float` o leídos de un fichero.
@@ -13578,7 +13792,7 @@ Ver también: [`gl_begin`](#gl_begin), [`buffer_set_float`](#buffer_set_float), 
 
 <a id="gl_draw_elements"></a>
 
-### `gl_draw_elements(mode, vertices, colors, nverts, indices, count)`
+### [`gl_draw_elements(mode, vertices, colors, nverts, indices, count)`](#gl_functions_table) · [índice](#indice)
 
 - `mode`: la figura, como en `gl_begin` (`GL_TRIANGLES`...).
 - `vertices`, `colors`: como en `gl_draw_arrays` (`colors` puede ser 0).
@@ -13596,7 +13810,7 @@ Ver también: [`gl_draw_arrays`](#gl_draw_arrays), [`gl_mult_matrix`](#gl_mult_m
 
 <a id="gl_mult_matrix"></a>
 
-### `gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`
+### [`gl_mult_matrix(a, b, c, tx, d, e, f, ty, g, h, i, tz)`](#gl_functions_table) · [índice](#indice)
 
 - `a`, `b`, `c`, `tx`: la primera fila de la matriz.
 - `d`, `e`, `f`, `ty`: la segunda.
@@ -13610,7 +13824,7 @@ Ver también: `gl_push_matrix`, [`gl_draw_arrays`](#gl_draw_arrays), `gl_transla
 
 <a id="gl_texture"></a>
 
-### `gl_texture(d)` → `Int`
+### [`gl_texture(d)`](#gl_functions_table) → `Int` · [índice](#indice)
 
 - `d`: una imagen decodificada con `image_decode` (PNG, JPEG, GIF, BMP, WebP).
 
@@ -13622,7 +13836,7 @@ Ver también: `gl_texture_bind`, `gl_tex_coord`, `gl_texture_free`, [`image_deco
 
 <a id="gl_light"></a>
 
-### `gl_light(n, x, y, z)`
+### [`gl_light(n, x, y, z)`](#gl_functions_table) · [índice](#indice)
 
 - `n`: la luz, de 0 a 7.
 - `x`, `y`, `z`: de dónde llega la luz (una dirección, como el sol).
@@ -13634,7 +13848,7 @@ Ver también: `gl_light_color`, `gl_ambient`, `gl_normal`.
 
 <a id="gl_fog"></a>
 
-### `gl_fog(start, end, r, g, b)`
+### [`gl_fog(start, end, r, g, b)`](#gl_functions_table) · [índice](#indice)
 
 - `start`, `end`: dónde empieza y dónde lo tapa todo, en distancia desde el ojo.
 - `r`, `g`, `b`: su color, de 0.0 a 1.0.
@@ -13645,7 +13859,7 @@ Ver también: `gl_disable`.
 
 <a id="gl_read_pixel"></a>
 
-### `gl_read_pixel(x, y)` → `Int`
+### [`gl_read_pixel(x, y)`](#gl_functions_table) → `Int` · [índice](#indice)
 
 - `x`, `y`: el píxel, desde la esquina de arriba a la izquierda.
 
@@ -13653,6 +13867,8 @@ Devuelve el color de ese píxel del dibujo en curso, antes de `gl_swap`, como `0
 para pruebas o para saber qué hay bajo el ratón, no para cada píxel.
 
 Ver también: [`gl_swap`](#gl_swap).
+
+[Volver al índice](#indice)
 
 <a id="dashos_functions"></a>
 
@@ -13739,7 +13955,9 @@ Main
 end
 ```
 
-**Índice.** Las que tienen enlace están explicadas más abajo.
+**Las funciones del grupo.** Las que tienen enlace están explicadas más abajo.
+
+<a id="dashos_functions_table"></a>
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
@@ -13778,7 +13996,7 @@ end
 
 <a id="channel_create"></a>
 
-### `channel_create()` → `Int`
+### [`channel_create()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Crea un canal y devuelve la llave de uno de sus lados (el otro, `channel_other`), o un error negativo.
 
@@ -13786,7 +14004,7 @@ Ver también: [`channel_other`](#channel_other), [`channel_send`](#channel_send)
 
 <a id="channel_other"></a>
 
-### `channel_other()` → `Int`
+### [`channel_other()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la llave del otro lado del último `channel_create`.
 
@@ -13794,7 +14012,7 @@ Ver también: [`channel_create`](#channel_create).
 
 <a id="channel_pass"></a>
 
-### `channel_pass(handle)` → `Int`
+### [`channel_pass(handle)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 
@@ -13804,7 +14022,7 @@ Ver también: [`channel_send`](#channel_send), [`channel_handles`](#channel_hand
 
 <a id="channel_send"></a>
 
-### `channel_send(handle, text)` → `Int`
+### [`channel_send(handle, text)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 - `text`: hasta 256 bytes.
@@ -13815,7 +14033,7 @@ Ver también: [`channel_receive`](#channel_receive).
 
 <a id="channel_send_buffer"></a>
 
-### `channel_send_buffer(handle, buffer, length)` → `Int`
+### [`channel_send_buffer(handle, buffer, length)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 - `buffer`, `length`: hasta 256 bytes.
@@ -13826,7 +14044,7 @@ Ver también: [`channel_send`](#channel_send).
 
 <a id="channel_receive"></a>
 
-### `channel_receive(handle)` → `String`
+### [`channel_receive(handle)`](#dashos_functions_table) → `String` · [índice](#indice)
 
 - `handle`: la llave.
 
@@ -13836,7 +14054,7 @@ Ver también: [`channel_handles`](#channel_handles), [`channel_mark`](#channel_m
 
 <a id="channel_receive_buffer"></a>
 
-### `channel_receive_buffer(handle, buffer, max)` → `Int`
+### [`channel_receive_buffer(handle, buffer, max)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 - `buffer`, `max`: dónde y cuánto cabe (con 256 basta).
@@ -13847,7 +14065,7 @@ Ver también: [`channel_receive`](#channel_receive).
 
 <a id="channel_handles"></a>
 
-### `channel_handles()` → `Int`
+### [`channel_handles()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cuántas llaves llegaron con el último mensaje recibido.
 
@@ -13855,7 +14073,7 @@ Ver también: [`channel_handle`](#channel_handle).
 
 <a id="channel_handle"></a>
 
-### `channel_handle(i)` → `Int`
+### [`channel_handle(i)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `i`: la llave, desde 0.
 
@@ -13865,7 +14083,7 @@ Ver también: [`channel_handles`](#channel_handles).
 
 <a id="channel_mark"></a>
 
-### `channel_mark()` → `Int`
+### [`channel_mark()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve la marca de la llave con la que se escribió el último mensaje (`handle_copy`): quién lo mandó. 0 sin marca o del núcleo (los temporizadores).
 
@@ -13873,7 +14091,7 @@ Ver también: [`handle_copy`](#handle_copy).
 
 <a id="channel_error"></a>
 
-### `channel_error()` → `Int`
+### [`channel_error()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el error del último `channel_receive`: 0 ninguno, -4 el otro lado se cerró.
 
@@ -13881,7 +14099,7 @@ Ver también: [`channel_receive`](#channel_receive).
 
 <a id="handle_copy"></a>
 
-### `handle_copy(handle, rights, mark)` → `Int`
+### [`handle_copy(handle, rights, mark)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 - `rights`: los derechos de la copia, iguales o menos: 1 leer, 2 escribir, 4 pasar, sumados.
@@ -13893,7 +14111,7 @@ Ver también: [`channel_mark`](#channel_mark), [`handle_close`](#handle_close).
 
 <a id="handle_close"></a>
 
-### `handle_close(handle)` → `Int`
+### [`handle_close(handle)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 
@@ -13903,7 +14121,7 @@ Ver también: [`handle_copy`](#handle_copy).
 
 <a id="handle_revocable"></a>
 
-### `handle_revocable(handle)` → `Int`
+### [`handle_revocable(handle)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 
@@ -13913,7 +14131,7 @@ Ver también: [`handle_revoker`](#handle_revoker), [`handle_revoke`](#handle_rev
 
 <a id="handle_revoker"></a>
 
-### `handle_revoker()` → `Int`
+### [`handle_revoker()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve el revocador del último `handle_revocable`.
 
@@ -13921,7 +14139,7 @@ Ver también: [`handle_revoke`](#handle_revoke).
 
 <a id="handle_revoke"></a>
 
-### `handle_revoke(revoker)` → `Int`
+### [`handle_revoke(revoker)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `revoker`: el revocador.
 
@@ -13931,7 +14149,7 @@ Ver también: [`handle_revocable`](#handle_revocable).
 
 <a id="timer_create"></a>
 
-### `timer_create(handle, first_ms, period_ms)` → `Int`
+### [`timer_create(handle, first_ms, period_ms)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: un lado de un canal.
 - `first_ms`: cuándo llega el primer mensaje.
@@ -13944,7 +14162,7 @@ Ver también: [`channel_receive`](#channel_receive).
 
 <a id="memory_create"></a>
 
-### `memory_create(size)` → `Int`
+### [`memory_create(size)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `size`: hasta 4 MB.
 
@@ -13954,7 +14172,7 @@ Ver también: [`memory_map`](#memory_map).
 
 <a id="memory_map"></a>
 
-### `memory_map(handle, writable)` → `Int (dirección)`
+### [`memory_map(handle, writable)`](#dashos_functions_table) → `Int (dirección)` · [índice](#indice)
 
 - `handle`: la llave.
 - `writable`: `true` para escribir.
@@ -13965,7 +14183,7 @@ Ver también: [`memory_unmap`](#memory_unmap), [`buffer_get_byte`](#buffer_get_b
 
 <a id="memory_unmap"></a>
 
-### `memory_unmap(buffer)` → `Int`
+### [`memory_unmap(buffer)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`: lo que dio `memory_map`.
 
@@ -13975,7 +14193,7 @@ Ver también: [`memory_map`](#memory_map).
 
 <a id="process_give"></a>
 
-### `process_give(handle)` → `Int`
+### [`process_give(handle)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `handle`: la llave.
 
@@ -13985,7 +14203,7 @@ Ver también: [`process_start`](#process_start).
 
 <a id="process_group"></a>
 
-### `process_group(group)`
+### [`process_group(group)`](#dashos_functions_table) · [índice](#indice)
 
 - `group`: el grupo de los siguientes procesos; 0 el de este programa.
 
@@ -13993,7 +14211,7 @@ Ver también: [`group_create`](#group_create).
 
 <a id="process_start"></a>
 
-### `process_start(memory, size)` → `Int`
+### [`process_start(memory, size)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `memory`: un objeto de memoria con el programa (ELF).
 - `size`: sus primeros bytes que lo forman.
@@ -14004,7 +14222,7 @@ Ver también: [`process_wait`](#process_wait), [`process_start_buffer`](#process
 
 <a id="process_start_buffer"></a>
 
-### `process_start_buffer(buffer, length)` → `Int`
+### [`process_start_buffer(buffer, length)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `buffer`, `length`: el ELF, hasta 4 MB.
 
@@ -14014,7 +14232,7 @@ Ver también: [`process_start`](#process_start).
 
 <a id="process_kill"></a>
 
-### `process_kill(process)` → `Int`
+### [`process_kill(process)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `process`: el proceso.
 
@@ -14024,7 +14242,7 @@ Ver también: [`process_wait`](#process_wait).
 
 <a id="process_wait"></a>
 
-### `process_wait(process)` → `Int`
+### [`process_wait(process)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `process`: el proceso.
 
@@ -14034,7 +14252,7 @@ Ver también: [`process_end`](#process_end).
 
 <a id="process_end"></a>
 
-### `process_end()` → `Int`
+### [`process_end()`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 Devuelve cómo acabó el proceso del último `process_wait`: 0 salió, 1 lo mataron, 2 falló.
 
@@ -14042,7 +14260,7 @@ Ver también: [`process_wait`](#process_wait).
 
 <a id="group_create"></a>
 
-### `group_create(bytes)` → `Int`
+### [`group_create(bytes)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `bytes`: el presupuesto, sacado del de este programa.
 
@@ -14052,7 +14270,7 @@ Ver también: [`process_group`](#process_group), [`group_kill`](#group_kill).
 
 <a id="group_kill"></a>
 
-### `group_kill(group)` → `Int`
+### [`group_kill(group)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `group`: el grupo.
 
@@ -14062,7 +14280,7 @@ Ver también: [`group_create`](#group_create).
 
 <a id="group_used"></a>
 
-### `group_used(group)` → `Int`
+### [`group_used(group)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `group`: el grupo; 0 el de este programa.
 
@@ -14072,7 +14290,7 @@ Ver también: [`group_limit`](#group_limit).
 
 <a id="group_limit"></a>
 
-### `group_limit(group)` → `Int`
+### [`group_limit(group)`](#dashos_functions_table) → `Int` · [índice](#indice)
 
 - `group`: el grupo; 0 el de este programa.
 
@@ -14082,8 +14300,10 @@ Ver también: [`group_used`](#group_used).
 
 <a id="dashos_error_text"></a>
 
-### `dashos_error_text(code)` → `String`
+### [`dashos_error_text(code)`](#dashos_functions_table) → `String` · [índice](#indice)
 
 - `code`: un error negativo de DashOS.
 
 Devuelve qué quiere decir, como texto.
+
+[Volver al índice](#indice)

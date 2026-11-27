@@ -8,6 +8,26 @@ This is the language guide: what it is, how you work with it, and a tour of ever
 examples. The full reference for each function is in the [reference manual](MANUAL_REFERENCIA.en.md),
 the list of builtins in [BUILTINS.md](BUILTINS.en.md) and the cheat sheet in [QUICK_REFERENCE.md](QUICK_REFERENCE.en.md).
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [1. What Dash is](#1-what-dash-is)
+- [2. How it works](#2-how-it-works)
+- [3. Getting started](#3-getting-started)
+- [4. The language](#4-the-language)
+- [5. The Amiga](#5-the-amiga)
+- [6. Graphical user interfaces](#6-graphical-user-interfaces)
+- [7. C from Dash](#7-c-from-dash)
+- [8. Tools](#8-tools)
+- [9. The generated C](#9-the-generated-c)
+- [10. Program requirements](#10-program-requirements)
+- [11. What it does not have](#11-what-it-does-not-have)
+<!-- /indice -->
+
+<a id="1-what-dash-is"></a>
+
 ## 1. What Dash is
 
 Dash is a high-level language for the **Commodore Amiga** that is translated to C and compiled with GCC into a
@@ -28,6 +48,10 @@ Programs made with Dash: [Tachyon](https://github.com/FreeMEM/tachyon) (a web br
 
 You write code on a PC (Linux or macOS) and test it in an emulator or on the Amiga.
 
+[Back to the index](#index)
+
+<a id="2-how-it-works"></a>
+
 ## 2. How it works
 
 ```
@@ -46,6 +70,10 @@ runs on the Amiga. The language, the builtins and the runtime are the same. What
 inside the program (`@native`, `@c`, `@header`), which `./dash1` still compiles, nor the options `-O0`, `-O`,
 `--small`, `--multifile` and `--no-hunk`. The options in section 3 are those of `./dash1`. All about dashc in
 [section 24 of the manual](MANUAL_REFERENCIA.en.md#24-dash-20-the-dashc-compiler).
+
+[Back to the index](#index)
+
+<a id="3-getting-started"></a>
 
 ## 3. Getting started
 
@@ -68,6 +96,10 @@ Main
     Print "Hola, Amiga"
 end
 ```
+
+[Back to the index](#index)
+
+<a id="4-the-language"></a>
 
 ## 4. The language
 
@@ -300,6 +332,10 @@ Dash has no garbage collector. It frees memory like this:
 `./dash --memcheck` builds a version that reports use after free, double frees and whatever is
 still alive on exit. For special cases: `retain`, `release`, `refcount` and arenas (`arena_*`).
 
+[Back to the index](#index)
+
+<a id="5-the-amiga"></a>
+
 ## 5. The Amiga
 
 ### 5.1 Windows and events
@@ -404,6 +440,10 @@ end
   text in the user's language or, if there is none, the program's own). `tools/catalogo.py` extracts the strings
   and builds the `.catalog` without FlexCat; in a `.dashui` the strings carry `"tr"`.
 
+[Back to the index](#index)
+
+<a id="6-graphical-user-interfaces"></a>
+
 ## 6. Graphical user interfaces
 
 | | GadTools | ReAction | MUI |
@@ -461,6 +501,10 @@ end
 ```
 
 API design: [MUI_DISEÑO.md](MUI_DISEÑO.en.md); format and editor: [MUI_EDITOR.md](MUI_EDITOR.en.md).
+
+[Back to the index](#index)
+
+<a id="7-c-from-dash"></a>
 
 ## 7. C from Dash
 
@@ -520,6 +564,10 @@ end
 The full C of this example, the types one by one and what the C finds of libc are in
 [section 24 of the manual](MANUAL_REFERENCIA.en.md#24-dash-20-the-dashc-compiler).
 
+[Back to the index](#index)
+
+<a id="8-tools"></a>
+
 ## 8. Tools
 
 - **Emulator:** `tools/emu_run.py` runs programs in FS-UAE without a window and returns their output; with
@@ -533,11 +581,19 @@ The full C of this example, the types one by one and what the C finds of libc ar
   over the network) and the MUI visual editor. Video tutorial: https://youtu.be/_UTJ_0s3xLc
 - **Catalogs:** `tools/catalogo.py` (section 5.6).
 
+[Back to the index](#index)
+
+<a id="9-the-generated-c"></a>
+
 ## 9. The generated C
 
 A Dash program is a single C file (`build/programa.c`, or one per module with `--multifile`): first the runtime
 it uses, then its structs and functions (`static`) and finally `main`. It is readable: the program's names are
 preserved. See the equivalence table in the [manual](MANUAL_REFERENCIA.en.md).
+
+[Back to the index](#index)
+
+<a id="10-program-requirements"></a>
 
 ## 10. Program requirements
 
@@ -545,9 +601,15 @@ preserved. See the equivalence table in the [manual](MANUAL_REFERENCIA.en.md).
 - MUI 5 and TLS (AmiSSL 5.1 or later) need a 68020 or better; ReAction needs AmigaOS 3.2 (or 3.5+).
 - The program's strings are written in UTF-8 and reach the Amiga as Latin-1.
 
+[Back to the index](#index)
+
+<a id="11-what-it-does-not-have"></a>
+
 ## 11. What it does not have
 
 - Classes with inheritance (there are structs with methods) or macros: these are open questions.
 - Closures: a lambda cannot see local variables from outside.
 - `export`: not needed, everything is public except what starts with `_` (decision made).
 - An HTTP builtin, raw sockets and raw SANA-II frames.
+
+[Back to the index](#index)

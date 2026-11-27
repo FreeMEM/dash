@@ -15,6 +15,31 @@ Las dos primeras generan el mismo ejecutable, byte a byte. La tercera hace falta
 dentro (`@native`, `@c`, `@header`) y para las opciones de gcc (`-O`, `--small`...): `./dash` pasa esos programas
 por C él solo, si el gcc de Amiga está instalado.
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Requisitos del Amiga](#requisitos-del-amiga)
+- [Instalar en el Amiga](#instalar-en-el-amiga)
+- [Instalar en el PC, directo a hunk](#instalar-en-el-pc-directo-a-hunk)
+- [En el PC, por C con gcc: pasos 1 a 5](#en-el-pc-por-c-con-gcc-pasos-1-a-5)
+- [Paso 1: Instalar Python y Dependencias de Dash](#paso-1-instalar-python-y-dependencias-de-dash)
+- [Paso 2: Instalar Dependencias del Cross-Compiler](#paso-2-instalar-dependencias-del-cross-compiler)
+- [Paso 3: Compilar el Cross-Compiler (m68k-amigaos-gcc)](#paso-3-compilar-el-cross-compiler-m68k-amigaos-gcc)
+- [Paso 4: elf2hunk (normalmente no hace falta)](#paso-4-elf2hunk-normalmente-no-hace-falta)
+- [Paso 5: Verificación Final](#paso-5-verificación-final)
+- [Paso 6: Probar en un emulador (opcional)](#paso-6-probar-en-un-emulador-opcional)
+- [Paso 7: MUI (opcional)](#paso-7-mui-opcional)
+- [Paso 8: Red y HTTPS (opcional)](#paso-8-red-y-https-opcional)
+- [Paso 8b: Catálogos de idioma (opcional)](#paso-8b-catálogos-de-idioma-opcional)
+- [Paso 9: Extensión de VS Code (opcional)](#paso-9-extensión-de-vs-code-opcional)
+- [Solución de Problemas](#solución-de-problemas)
+- [Siguiente Paso](#siguiente-paso)
+<!-- /indice -->
+
+<a id="requisitos-del-amiga"></a>
+
 ## Requisitos del Amiga
 
 Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
@@ -28,6 +53,10 @@ Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
 - **Interfaces de red y WiFi** (`net_ifs_read`, `wifi_read`): Roadshow. **USB** (`usb_hid_*`): Poseidon.
 
 La lista completa está en `REQUERIMIENTOS_SISTEMA.md`.
+
+[Volver al índice](#indice)
+
+<a id="instalar-en-el-amiga"></a>
 
 ## Instalar en el Amiga
 
@@ -76,6 +105,10 @@ en el PC.
 Forja, en `DASH:Forja`, compila con esa misma orden `dash` (o con la que digas en sus preferencias, que guarda en
 `ENV:Forja/dashc`).
 
+[Volver al índice](#indice)
+
+<a id="instalar-en-el-pc-directo-a-hunk"></a>
+
 ## Instalar en el PC, directo a hunk
 
 Basta un compilador de C del PC, `make` y Python 3:
@@ -97,6 +130,10 @@ make -C dashc                      # el compilador de Dash, en unos segundos
 El ejecutable que sale se copia al Amiga y se ejecuta. Para probarlo sin Amiga, el [Paso 6](#paso-6-probar-en-un-emulador-opcional)
 (FS-UAE). Si solo vas a compilar así, no necesitas los pasos 1 a 5.
 
+[Volver al índice](#indice)
+
+<a id="en-el-pc-por-c-con-gcc-pasos-1-a-5"></a>
+
 ## En el PC, por C con gcc: pasos 1 a 5
 
 Lo que sigue instala el camino por C (`./dash --gcc`): el gcc de Amiga de bebbo y el parser Lark. Hace falta para
@@ -109,6 +146,10 @@ los programas con C dentro y para las opciones de gcc.
 - **Disco:** Mínimo 10GB libres para el toolchain
 - **CPU:** Multi-core recomendado (la compilación usa todos los núcleos)
 
+[Volver al índice](#indice)
+
+<a id="paso-1-instalar-python-y-dependencias-de-dash"></a>
+
 ## Paso 1: Instalar Python y Dependencias de Dash
 
 Dash utiliza un transpilador escrito en Python. Se requiere Python 3.10 o superior.
@@ -120,6 +161,10 @@ python3 --version
 # Instalar la librería lark (parser)
 pip install lark --break-system-packages
 ```
+
+[Volver al índice](#indice)
+
+<a id="paso-2-instalar-dependencias-del-cross-compiler"></a>
 
 ## Paso 2: Instalar Dependencias del Cross-Compiler
 
@@ -222,6 +267,10 @@ que el depurador de la extensión necesita con Python.
 # Instalar Homebrew primero: https://brew.sh/
 brew install bash wget make lhasa gmp mpfr libmpc flex gettext gnu-sed texinfo gcc@12 autoconf bison
 ```
+
+[Volver al índice](#indice)
+
+<a id="paso-3-compilar-el-cross-compiler-m68k-amigaos-gcc"></a>
 
 ## Paso 3: Compilar el Cross-Compiler (m68k-amigaos-gcc)
 
@@ -337,6 +386,10 @@ make branch branch=amiga13.4 mod=gcc
 make all -j$(nproc)
 ```
 
+[Volver al índice](#indice)
+
+<a id="paso-4-elf2hunk-normalmente-no-hace-falta"></a>
+
 ## Paso 4: elf2hunk (normalmente no hace falta)
 
 El cross-compiler de bebbo (`m68k-amigaos-gcc`, el de esta guía) ya genera ejecutables en formato Hunk, el que
@@ -367,6 +420,10 @@ make
 sudo cp elf2hunk /opt/amiga/bin/
 ```
 
+[Volver al índice](#indice)
+
+<a id="paso-5-verificación-final"></a>
+
 ## Paso 5: Verificación Final
 
 Ejecuta este script para verificar que todo está correctamente instalado:
@@ -396,6 +453,10 @@ Y un programa de prueba: `./dash --gcc examples/hola.dash -o bin/hola`.
 
 `./dash --gcc` compila con `gcc -O2` (opciones en `compiler/cflags.py`). `DASH_CFLAGS` añade opciones a gcc, para
 probar: `DASH_CFLAGS="-Os" ./dash --gcc prog.dash -o bin/prog`.
+
+[Volver al índice](#indice)
+
+<a id="paso-6-probar-en-un-emulador-opcional"></a>
 
 ## Paso 6: Probar en un emulador (opcional)
 
@@ -442,6 +503,10 @@ Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests
 - `--debug ORDEN`: el depurador del emulador desde un `debug_break()` del programa (ver el manual de referencia).
 - `--gdbserver PUERTO`: el programa bajo `bgdbserver`, para `m68k-amigaos-gdb` (lo usa la extensión, paso 9).
 
+[Volver al índice](#indice)
+
+<a id="paso-7-mui-opcional"></a>
+
 ## Paso 7: MUI (opcional)
 
 Los programas con `mui_*` necesitan el SDK de MUI 5 para compilar (no se puede copiar al repositorio por su
@@ -472,6 +537,10 @@ píxeles) y el de la versión de muimaster.
 
 En el Amiga, MUI 3.8 (muimaster.library V19) o MUI 5 instalado y un 68020 o superior.
 
+[Volver al índice](#indice)
+
+<a id="paso-8-red-y-https-opcional"></a>
+
 ## Paso 8: Red y HTTPS (opcional)
 
 `net_*` usa la `bsdsocket.library` del sistema (en FS-UAE, la que emula con la red del PC). `tls_*` necesita
@@ -491,6 +560,10 @@ Lo demás de la red (servidor TCP, UDP, interfaces de Roadshow, drivers SANA-II,
 compilar. En FS-UAE se prueba con su `bsdsocket`; los sucesos de sockets (`net_signal`), con Amiberry
 (`--emulator amiberry`).
 
+[Volver al índice](#indice)
+
+<a id="paso-8b-catálogos-de-idioma-opcional"></a>
+
 ## Paso 8b: Catálogos de idioma (opcional)
 
 Los programas con `@catalog` y `tr(id, texto)` usan `locale.library`. Los ficheros de traducción se hacen con
@@ -501,6 +574,10 @@ python3 tools/catalogo.py cd programa.dash ventana.dashui -o Programa.cd        
 python3 tools/catalogo.py ct Programa.cd --language english --name Programa.catalog -o english.ct
 python3 tools/catalogo.py catalog english.ct -o Catalogs/english/Programa.catalog  # el catálogo para el Amiga
 ```
+
+[Volver al índice](#indice)
+
+<a id="paso-9-extensión-de-vs-code-opcional"></a>
 
 ## Paso 9: Extensión de VS Code (opcional)
 
@@ -554,6 +631,10 @@ npm test
 npm run package                                        # dash-mui-editor-<versión>.vsix
 ```
 
+[Volver al índice](#indice)
+
+<a id="solución-de-problemas"></a>
+
 ## Solución de Problemas
 
 ### Error en GDB durante la compilación (pero GCC se instala)
@@ -606,6 +687,10 @@ Solo sale con un GCC que genera ELF (el de bebbo de esta guía genera Hunk). Pon
 
 Usa `sudo` o compila con un PREFIX diferente en tu directorio home (y `DASH_TOOLCHAIN`, paso 3.4).
 
+[Volver al índice](#indice)
+
+<a id="siguiente-paso"></a>
+
 ## Siguiente Paso
 
 Una vez instalado el entorno, consulta la documentación de Dash para empezar a programar:
@@ -613,3 +698,5 @@ Una vez instalado el entorno, consulta la documentación de Dash para empezar a 
 - `docs/QUICK_REFERENCE.md` - Referencia rápida
 - `docs/MANUAL_REFERENCIA.md` - Manual de referencia
 - `docs/BUILTINS.md` - Lista de builtins
+
+[Volver al índice](#indice)

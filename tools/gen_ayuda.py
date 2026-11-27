@@ -27,6 +27,7 @@ import compiler.amiga_builtins as ab  # noqa: E402
 from compiler import builtins_doc  # noqa: E402
 from compiler.builtins_es import DESC_ES  # noqa: E402
 from gen_builtins_doc import GROUPS, TEXTS, example, ret_type  # noqa: E402
+from doc_indices import quitar as sin_indice  # noqa: E402  (el índice y los enlaces de vuelta, fuera)
 
 ANCHO = 76                 # columnas del texto (con el prefijo de línea, 77; una ventana de 80 en topaz 8)
 FORMATO = 1                # versión del formato del .ayuda (docs/AYUDA_FORMATO.md)
@@ -433,7 +434,7 @@ def clave_capitulo(titulo, n):
 def fichas_manual(lang, tx):
     """Una ficha por capítulo (su introducción y la lista de apartados) y otra por apartado"""
     nombre = "MANUAL_REFERENCIA.md" if lang == "es" else "MANUAL_REFERENCIA.en.md"
-    caps = [c for c in secciones_md((RAIZ / "docs" / nombre).read_text())
+    caps = [c for c in secciones_md(sin_indice((RAIZ / "docs" / nombre).read_text()))
             if not re.match(r"(tabla de contenidos|table of contents)", c[0], re.I)]
     fichas, secciones = [], []
     raiz = Ficha("manual", "I", latin1(tx["manual"]))
@@ -487,14 +488,15 @@ def generar(lang: str):
     v = compiler.__version__
     inicio = Ficha("inicio", "I", tx["inicio"].format(v=v))
     sint = Ficha("sintaxis", "S", latin1(tx["sintaxis"]))
-    sint.lineas = md_lineas((RAIZ / "docs" / ("SINTAXIS.md" if lang == "es" else "SINTAXIS.en.md")).read_text())
+    sint_md = (RAIZ / "docs" / ("SINTAXIS.md" if lang == "es" else "SINTAXIS.en.md")).read_text()
+    sint.lineas = md_lineas(sin_indice(sint_md))
     if sint.lineas and sint.lineas[0].tipo == "H":     # (su título: el de la ficha)
         sint.lineas = sint.lineas[1:]
     sint.lineas += [Linea("B"), Linea("L", tx["volver"], "inicio")]
     fb, grupos = fichas_builtins(lang, tx)
     raiz_m, fm, secciones, caps = fichas_manual(lang, tx)
     raiz_m.lineas += [Linea("B"), Linea("L", tx["volver"], "inicio")]
-    caps_es = secciones_md((RAIZ / "docs/MANUAL_REFERENCIA.md").read_text())
+    caps_es = secciones_md(sin_indice((RAIZ / "docs/MANUAL_REFERENCIA.md").read_text()))
     caps_es = [c for c in caps_es if not re.match(r"tabla de contenidos", c[0], re.I)]
     if [len(c[2]) for c in caps_es] != [len(c[2]) for c in caps]:
         raise SystemExit("tools/gen_ayuda.py: MANUAL_REFERENCIA.md y .en.md no tienen los mismos apartados")

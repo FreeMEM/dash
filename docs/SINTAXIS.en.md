@@ -3,6 +3,26 @@
 An up-to-date summary of the language for writing Dash code. Full reference: `docs/QUICK_REFERENCE.en.md` and
 `docs/MANUAL_REFERENCIA.en.md`; the real list of builtins is `docs/BUILTINS.en.md`.
 
+<!-- indice -->
+<a id="index"></a>
+
+**Index**
+
+- [Structure of a program](#structure-of-a-program)
+- [Variables and types (the first assignment declares)](#variables-and-types-the-first-assignment-declares)
+- [Control flow](#control-flow)
+- [Functions (optional types)](#functions-optional-types)
+- [Arrays and strings](#arrays-and-strings)
+- [Structs with methods, and enums](#structs-with-methods-and-enums)
+- [FFI](#ffi)
+- [Inline assembler (68000, Motorola syntax; docs/ASM_DISEÑO.md)](#inline-assembler-68000-motorola-syntax-docsasm_diseñomd)
+- [Windows and events](#windows-and-events)
+- [Lexical scope](#lexical-scope)
+- [What C it makes](#what-c-it-makes)
+<!-- /indice -->
+
+<a id="structure-of-a-program"></a>
+
 ## Structure of a program
 ```ruby
 import "lib/math_utils.dash"   # imports (relative paths)
@@ -18,6 +38,10 @@ Main
 end
 ```
 
+[Back to the index](#index)
+
+<a id="variables-and-types-the-first-assignment-declares"></a>
+
 ## Variables and types (the first assignment declares)
 ```ruby
 x = 10
@@ -30,6 +54,10 @@ f = Fixed(1.5)                 # 16.16 fixed point (DashFixed): Fixed*Int intege
 x = 1.5                        # Float (in software, runtime/softfloat)
 c = 0xDFF000                   # hex and binary literals (0b1010)
 ```
+
+[Back to the index](#index)
+
+<a id="control-flow"></a>
 
 ## Control flow
 ```ruby
@@ -53,6 +81,10 @@ for item in array
 end
 ```
 
+[Back to the index](#index)
+
+<a id="functions-optional-types"></a>
+
 ## Functions (optional types)
 ```ruby
 func add(a, b)
@@ -65,6 +97,10 @@ end
 
 double_l = fn(x) -> x * 2      # lambda (partial support, see examples/test_lambda.dash)
 ```
+
+[Back to the index](#index)
+
+<a id="arrays-and-strings"></a>
 
 ## Arrays and strings
 ```ruby
@@ -79,6 +115,10 @@ s = "Hello, " + name           # concatenation
 c = name[0]                    # character
 m = "Hello #{name}!"           # interpolation
 ```
+
+[Back to the index](#index)
+
+<a id="structs-with-methods-and-enums"></a>
 
 ## Structs with methods, and enums
 ```ruby
@@ -102,6 +142,10 @@ end
 st = State.RUNNING
 ```
 
+[Back to the index](#index)
+
+<a id="ffi"></a>
+
 ## FFI
 ```ruby
 @extern("mylib.library")
@@ -113,6 +157,10 @@ func MyFunc(x: Int) -> Int
 """
 end
 ```
+
+[Back to the index](#index)
+
+<a id="inline-assembler-68000-motorola-syntax-docsasm_diseñomd"></a>
 
 ## Inline assembler (68000, Motorola syntax; docs/ASM_DISEÑO.md)
 ```ruby
@@ -137,6 +185,10 @@ end
 s = vblank_server(my_vblank, data)       # my_vblank(data) on each VBlank; int_server_remove(s) or at exit
 ```
 
+[Back to the index](#index)
+
+<a id="windows-and-events"></a>
+
 ## Windows and events
 ```ruby
 MyWindow.open
@@ -153,12 +205,20 @@ end
 
 Commands: `Print`, `Wait`, `Stop`.
 
+[Back to the index](#index)
+
+<a id="lexical-scope"></a>
+
 ## Lexical scope
 
 - Variables declared in blocks (if/while/for) are local to that block
 - Variables of the parent scope can be read and changed
 - The variables of a child block are NOT visible in the parent
 - Functions with a `_` prefix in an imported module are private
+
+[Back to the index](#index)
+
+<a id="what-c-it-makes"></a>
 
 ## What C it makes
 
@@ -169,3 +229,5 @@ Commands: `Print`, `Wait`, `Stop`.
 | boolean | `BOOL` |
 | array | `DashArrayLong` (runtime, with bounds checking) |
 | struct | C `struct` with a generated constructor |
+
+[Back to the index](#index)

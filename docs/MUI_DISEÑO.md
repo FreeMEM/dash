@@ -5,6 +5,19 @@
 Funciona con MUI 3.8 (muimaster.library V19) o MUI 5. La lista completa de los builtins `mui_` está en
 `docs/BUILTINS.md`.
 
+<!-- indice -->
+<a id="indice"></a>
+
+**Índice**
+
+- [Decisiones](#decisiones)
+- [API](#api)
+- [Ejemplo: la ventana del navegador](#ejemplo-la-ventana-del-navegador)
+- [Por dentro](#por-dentro)
+<!-- /indice -->
+
+<a id="decisiones"></a>
+
 ## Decisiones
 
 1. **Builtins `mui_`**, sin sintaxis nueva por ahora. Los objetos MUI son valores que el programa
@@ -21,6 +34,10 @@ Funciona con MUI 3.8 (muimaster.library V19) o MUI 5. La lista completa de los b
 5. **Formato declarativo: `.dashui`** (decidido en la tarea 19). Un fichero JSON que hace el editor visual y que
    el programa usa con `import "ventana.dashui"`; `compiler/dashui.py` lo convierte en código Dash con estos
    builtins. Formato y reglas en `docs/MUI_EDITOR.md`.
+
+[Volver al índice](#indice)
+
+<a id="api"></a>
 
 ## API
 
@@ -164,6 +181,10 @@ La clase propia (`MUI_CreateCustomClass` sobre `Area`) implementa `MUIM_AskMinMa
 lleva el programa con una `mui_scrollbar` al lado: el navegador pinta desde la línea que diga la barra. Es más
 rápido y más simple que meter la zona en un `Virtgroup`.
 
+[Volver al índice](#indice)
+
+<a id="ejemplo-la-ventana-del-navegador"></a>
+
 ## Ejemplo: la ventana del navegador
 
 ```ruby
@@ -230,6 +251,10 @@ Main
 end
 ```
 
+[Volver al índice](#indice)
+
+<a id="por-dentro"></a>
+
 ## Por dentro
 
 - **Cabeceras:** el runtime define `NO_INLINE_STDARG` antes de `proto/muimaster.h` y usa macros propias con
@@ -251,3 +276,5 @@ end
   `--autoclose`: al cumplirse el tiempo `mui_wait_event` devuelve -1, como al cerrar, y el programa sale por su camino (lo de después del bucle se ejecuta); si sigue sin acabar 5 s después, se cierra en seco.
 - **Cadena de errores:** sin muimaster, ventana que no abre o 68000 → mensaje por la salida estándar y
   `mui_app_begin` devuelve 0; el programa decide.
+
+[Volver al índice](#indice)
