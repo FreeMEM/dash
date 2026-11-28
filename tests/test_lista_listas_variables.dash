@@ -1,0 +1,34 @@
+# Test: una lista hecha con variables que son listas ([a, b] con a, b: [String]) es una [[String]]: al recorrer
+# grupos[k] salen textos. Por C daba la dirección del texto (lo vio la sesión de Hangar; el directo ya lo hacía bien).
+# expect-out: - uno
+# expect-out: - dos
+# expect-out: uno
+# expect-out: dos
+# expect-out: tres
+# expect-out: 4
+
+Main
+    var a: [String] = []
+    var b: [String] = []
+    a.push("uno")
+    b.push("dos")
+    grupos = [a, b]
+    k = 0
+    while k < 2
+        for t in grupos[k]
+            Print "- " + t
+        end
+        k = k + 1
+    end
+    c = ["uno"]
+    d = ["dos", "tres"]
+    for g in [c, d]
+        for t in g
+            Print t
+        end
+    end
+    n1 = [1, 2]
+    n2 = [3]
+    nums = [n1, n2]
+    Print str_from_int(nums[1][0] + 1, 10)
+end
