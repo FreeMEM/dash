@@ -24949,8 +24949,10 @@ static Object *_dash_mui_picture(STRPTR file, LONG frame, ULONG mode, LONG selec
     /* (MUI 3.8 does not give MUIA_Dtpic_Name back: the name also goes in the Dtpic's MUIA_UserData) */
     file = _dash_mui_keep(file);
     if (!(pic = _DASH_MUI_NEW(MUIC_Dtpic, MUIA_Dtpic_Name, (IPTR)file, MUIA_UserData, (IPTR)file))) return NULL;
+    /* (MUII_ImageButtonBack is MUI 4's: 3.8 takes the 43 for the address of a spec and reads $2B, which
+       Pancho / PAL - N Studios saw with MuForce in Hangar; there, the background of a button) */
     return frame ? _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Spacing, 0,
-                       MUIA_Frame, MUIV_Frame_ImageButton, MUIA_Background, MUII_ImageButtonBack,
+                       MUIA_Frame, MUIV_Frame_ImageButton, MUIA_Background, MUII_ButtonBack,
                        MUIA_InputMode, mode, MUIA_Selected, selected ? TRUE : FALSE, MUIA_CycleChain, 1,
                        MUIA_Group_Child, (IPTR)pic)
                  : _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Spacing, 0, MUIA_InnerLeft, 0, MUIA_InnerRight, 0,
