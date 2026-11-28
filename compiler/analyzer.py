@@ -1629,6 +1629,8 @@ class SemanticAnalyzer(ASTVisitor):
                 kinds.add("String")
             elif isinstance(e, NumberLiteral) and isinstance(e.value, int):
                 kinds.add("Int")
+            elif self._declared_list_type(e):   # [a, b] with a, b: [String] (lo vio la sesión de Hangar)
+                kinds.add(self._declared_list_type(e))
             else:
                 return None
         if len(kinds) != 1 or None in kinds:

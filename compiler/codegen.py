@@ -32650,6 +32650,11 @@ static {ret_type} {method_name}({params_str}) {{
                 kinds.add("String")
             elif isinstance(e, NumberLiteral) and isinstance(e.value, int):
                 kinds.add("Int")
+            elif list_elem_type(self._declared_type_of(e)) is not None:
+                # [a, b] with a, b: [String] (lo vio la sesión de Hangar)
+                kinds.add(self._declared_type_of(e))
+            elif isinstance(e, VarRef) and self.var_types.get(e.name) == "array:string":
+                kinds.add("[String]")
             else:
                 return None
         if len(kinds) != 1 or None in kinds:
